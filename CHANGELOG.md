@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Consolidated output-discard checkpoint tests: removed duplicate generic tests under MoE v2 and parameterized linear-chain coverage while retaining 3D-view, Python-fallback, native-storage, and router-specific checks.
+
 - `OLMoDDPModel.apply_ddp()` now raises `NotImplementedError` directing callers to `apply_dp()`, including under `python -O`. Removed its unreachable legacy DDP implementation.
 
 - `OLMoDDPTrainModuleConfig.max_grad_norm` now overrides the optimizer clipping threshold when set, matching the train-module configuration API used by `TransformerTrainModuleConfig`. When unset, the optimizer threshold is retained. Previously this field was ignored, so old configs with differing values now use the train-module value. The supplied optimizer config is not mutated. Removed the unused `OLMoDDPTrainModule.max_grad_norm` constructor argument and attribute; clipping remains inside the DDP optimizer.
