@@ -15,13 +15,13 @@ def compute_loss(
     loss_fn: CrossEntropyLoss,
     logits: torch.Tensor,
     labels: torch.Tensor,
-    batch_num_tokens_for_loss: torch.Tensor,
+    batch_num_tokens_for_loss: Optional[torch.Tensor],
 ) -> torch.Tensor:
     ce_loss, z_loss = loss_fn(logits, labels, batch_num_tokens_for_loss)
 
     loss = ce_loss
     if z_loss is not None:
-        loss += z_loss
+        loss = loss + z_loss
 
     if loss_fn.reduction != "none":
         assert loss.shape == tuple(), f"{loss}"
@@ -38,7 +38,7 @@ def run_cross_entropy_loss_parallel(
     z_loss_multiplier: Optional[float],
     logits: torch.Tensor,
     labels: torch.Tensor,
-    batch_num_tokens_for_loss: torch.Tensor,
+    batch_num_tokens_for_loss: Optional[torch.Tensor],
     grad: torch.Tensor,
     expected_loss: torch.Tensor,
 ):
@@ -54,7 +54,8 @@ def run_cross_entropy_loss_parallel(
     labels = distribute_tensor(
         labels.to(device=get_default_device()), device_mesh=tp_mesh, placements=(Shard(1),)
     )
-    batch_num_tokens_for_loss = batch_num_tokens_for_loss.to(device=get_default_device())
+    if batch_num_tokens_for_loss is not None:
+        batch_num_tokens_for_loss = batch_num_tokens_for_loss.to(device=get_default_device())
     grad = distribute_tensor(
         grad.to(device=get_default_device()), device_mesh=tp_mesh, placements=(Shard(1),)
     )
@@ -87,11 +88,14 @@ def run_cross_entropy_loss_parallel(
         pytest.param(False, "none", id="default-none"),
     ],
 )
+@pytest.mark.parametrize("normalize_loss", [False, True])
+@pytest.mark.parametrize("z_loss_multiplier", [None, 1e-4])
 @requires_multi_gpu
 def test_cross_entropy_loss_parallel(
     compile: bool,
     reduction: Literal["sum", "mean", "none"],
-    z_loss_multiplier: Optional[float] = None,
+    normalize_loss: bool,
+    z_loss_multiplier: Optional[float],
 ):
     B, S, V = 4, 16, 256
 
@@ -104,7 +108,7 @@ def test_cross_entropy_loss_parallel(
     labels[0][2] = -100
     labels[2][9] = -100
     labels[3][12] = -100
-    batch_num_tokens_for_loss = (labels != -100).sum()
+    batch_num_tokens_for_loss = (labels != -100).sum() if normalize_loss else None
 
     # Get loss.
     loss = compute_loss(loss_fn, logits, labels, batch_num_tokens_for_loss)
@@ -124,7 +128,9 @@ def test_cross_entropy_loss_parallel(
             z_loss_multiplier,
             logits.detach().cpu(),
             labels.detach().cpu(),
-            batch_num_tokens_for_loss.detach().cpu(),
+            batch_num_tokens_for_loss.detach().cpu()
+            if batch_num_tokens_for_loss is not None
+            else None,
             logits.grad.detach().cpu(),
             loss.detach().cpu(),
         ),

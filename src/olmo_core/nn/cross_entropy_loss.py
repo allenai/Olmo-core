@@ -4,7 +4,7 @@ from typing import Literal, Optional, Tuple
 import torch
 import torch.nn as nn
 from torch.distributed import DeviceMesh
-from torch.distributed.tensor import Placement, Replicate, Shard
+from torch.distributed.tensor import Partial, Placement, Replicate, Shard
 from torch.distributed.tensor.parallel import (
     PrepareModuleInput,
     PrepareModuleOutput,
@@ -193,7 +193,9 @@ class CrossEntropyLoss(nn.Module):
             ),
         )
 
-        expected_output_layout = Shard(shard_dimension) if self.reduction == "none" else Replicate()
+        # Reducing a sharded loss produces a partial sum, which must be reduced across ranks
+        # before returning a replicated (or local) loss. Declaring it replicated skips that step.
+        expected_output_layout = Shard(shard_dimension) if self.reduction == "none" else Partial()
         desired_output_layout = output_layout or Replicate()
         parallelize_module(
             self,
