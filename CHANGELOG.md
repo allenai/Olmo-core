@@ -67,6 +67,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve serialized tokenizer behavior during HF export, including source BOS settings when the training config leaves BOS unspecified.
 - Preserve FP32 router probabilities and accumulation when combining BF16 experts in the HF reference model.
 - Avoid graph breaks from no-op profiling decorators, including compiled router load-balancing collectives.
+
+- The tensor-parallel cross-entropy test now compares its computed loss against the unsharded reference instead of inadvertently comparing it to itself.
+
 - `dispatch_flash_attn_4` passed `cu_seqlens_q`, `cu_seqlens_k`, `max_seqlen_q` and `max_seqlen_k` positionally. flash-attn 4 inserted a `qv` parameter at position 3 (present from ~`4.0.0b19` onward), which shifts every following argument by one, so `max_seqlen_q` — an `int` — lands where `cu_seqlens_k` is expected and the call fails with `AttributeError: 'int' object has no attribute 'shape'`. These are now passed by keyword; the parameter names are unchanged across flash-attn 4 releases, so this is correct against both old and new versions. Only reachable on Blackwell, where `has_flash_attn_4()` returns True.
 
 ### Changed
