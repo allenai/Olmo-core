@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Shared DDP test block construction, mesh setup, initialization, and routing helpers across no-EP, no-sync, and parity suites, preserving their distinct defaults and FP8 overrides.
+
 - Consolidated synchronous and rowwise EP/no-EP parity tests into one parameterized suite, sharing block/router setup and preserving backend-specific dtypes, tolerances, GPU requirements, and zero-drop checks.
 
 - Consolidated output-discard checkpoint tests: removed duplicate generic tests under MoE v2 and parameterized linear-chain coverage while retaining 3D-view, Python-fallback, native-storage, and router-specific checks.

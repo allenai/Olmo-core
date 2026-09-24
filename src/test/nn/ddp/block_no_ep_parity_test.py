@@ -6,7 +6,7 @@ from olmo_core.distributed.utils import unhide_from_torch
 from olmo_core.testing import requires_multi_gpu, run_distributed_test
 from olmo_core.testing.utils import SYMM_MEM_VDEV2D_MARKS
 
-from .block_no_sync_test import (
+from .helpers import (
     _build_block,
     _build_ep_mesh,
     _init_block_params,
