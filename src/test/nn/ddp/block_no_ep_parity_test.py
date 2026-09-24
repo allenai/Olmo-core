@@ -1,14 +1,10 @@
-from typing import Any
-
+import pytest
 import torch
 import torch.distributed as dist
 
 from olmo_core.distributed.utils import unhide_from_torch
-from olmo_core.testing import (
-    requires_multi_gpu,
-    requires_symm_mem_vdev2d,
-    run_distributed_test,
-)
+from olmo_core.testing import requires_multi_gpu, run_distributed_test
+from olmo_core.testing.utils import SYMM_MEM_VDEV2D_MARKS
 
 from .block_no_sync_test import (
     _build_block,
@@ -65,12 +61,8 @@ def _assert_expert_grad_matches_no_ep_global_sum(
 def _run_dropless_path_matches_no_ep(
     *,
     rowwise: bool,
-    shared: bool = False,
 ):
     ep_mesh = _build_ep_mesh()
-    shared_kwargs: dict[str, Any] = (
-        {"num_shared_experts": 1, "shared_hidden_size": 512} if shared else {}
-    )
 
     no_ep_block = _build_block(
         ep_no_sync=False,
@@ -79,7 +71,6 @@ def _run_dropless_path_matches_no_ep(
         num_experts=8,
         top_k=2,
         uniform_expert_assignment=False,
-        **shared_kwargs,
     )
     ep_block = _build_block(
         ep_no_sync=rowwise,
@@ -90,8 +81,13 @@ def _run_dropless_path_matches_no_ep(
         num_experts=8,
         top_k=2,
         uniform_expert_assignment=False,
-        **shared_kwargs,
     )
+    if rowwise:
+        # Configure the rowwise kernels before apply_ep creates their runtime buffers.
+        ep_block.ep.rowwise_get_nblocks = 128
+        ep_block.ep.rowwise_put_nblocks = 128
+        ep_block.ep.rowwise_weighted_put_nblocks = 128
+        ep_block.ep.validate()
     ep_block.apply_ep(ep_mesh)
 
     _init_block_params(no_ep_block)
@@ -100,10 +96,6 @@ def _run_dropless_path_matches_no_ep(
     _install_deterministic_topk_router(ep_block)
 
     if rowwise:
-        ep_block.ep.rowwise_get_nblocks = 128
-        ep_block.ep.rowwise_put_nblocks = 128
-        ep_block.ep.rowwise_weighted_put_nblocks = 128
-        ep_block.ep.validate()
         # The rowwise weighted combine backward is bf16/fp16-only, so run both blocks in bf16
         # (the path's production dtype). Cast after the identical param copy so the two stay in
         # sync. The synced path (rowwise=False) keeps fp32 and its tight tolerances.
@@ -115,7 +107,8 @@ def _run_dropless_path_matches_no_ep(
 
     # bf16 rounding in the rowwise comm needs looser tolerances than the exact fp32 synced path.
     out_tol = 2e-2 if rowwise else 5e-4
-    grad_tol = 2e-2 if rowwise else 1e-3
+    input_grad_tol = 2e-2 if rowwise else 5e-4
+    expert_grad_tol = 2e-2 if rowwise else 1e-3
 
     x = torch.randn(
         1,
@@ -142,31 +135,28 @@ def _run_dropless_path_matches_no_ep(
     loss_no_ep.backward()
     loss_ep.backward()
 
-    torch.testing.assert_close(x_ep.grad, x.grad, atol=grad_tol, rtol=grad_tol)
+    torch.testing.assert_close(x_ep.grad, x.grad, atol=input_grad_tol, rtol=input_grad_tol)
     _assert_expert_grad_matches_no_ep_global_sum(
         no_ep_block,
         ep_block,
-        atol=grad_tol,
-        rtol=grad_tol,
+        atol=expert_grad_tol,
+        rtol=expert_grad_tol,
     )
 
 
+@pytest.mark.parametrize(
+    "rowwise",
+    [
+        pytest.param(False, id="sync"),
+        pytest.param(True, id="rowwise", marks=SYMM_MEM_VDEV2D_MARKS),
+    ],
+)
 @requires_multi_gpu
-def test_v2_synced_ep_dropless_matches_no_ep():
+def test_v2_ep_dropless_matches_no_ep(rowwise):
+    """Both EP backends preserve no-EP outputs, input grads, and summed expert grads."""
     run_distributed_test(
         _run_dropless_path_matches_no_ep,
-        func_kwargs={"rowwise": False},
-        backend="nccl",
-        start_method="spawn",
-    )
-
-
-@requires_multi_gpu
-@requires_symm_mem_vdev2d
-def test_v2_rowwise_ep_dropless_matches_no_ep():
-    run_distributed_test(
-        _run_dropless_path_matches_no_ep,
-        func_kwargs={"rowwise": True},
+        func_kwargs={"rowwise": rowwise},
         backend="nccl",
         start_method="spawn",
     )
