@@ -11,7 +11,7 @@ from torch.distributed.tensor.parallel import (
     parallelize_module,
 )
 
-from olmo_core.distributed.utils import get_local_tensor
+from olmo_core.distributed.utils import get_full_tensor, get_local_tensor
 
 from .functional import cross_entropy_loss
 
@@ -52,7 +52,7 @@ class _CELossFnWrapper(nn.Module):
             logits_for_loss,
             labels_for_loss,
             ignore_index=self.ignore_index,
-            reduction=self.reduction,
+            reduction="sum" if self.tp_enabled and self.reduction == "mean" else self.reduction,
             compute_z_loss=self.z_loss_multiplier is not None,
             z_loss_multiplier=self.z_loss_multiplier or 1e-4,
         )
@@ -130,19 +130,17 @@ class CrossEntropyLoss(nn.Module):
         """
         ce_loss, z_loss = self.loss_fn(get_local_tensor(logits), get_local_tensor(labels))
 
-        if self.reduction != "none" and ce_loss.numel() > 1:
-            # This will be the same case with tensor/sequence parallel loss where we have a DTensor.
-            assert self.tp_enabled
-            if self.reduction == "sum":
-                ce_loss = ce_loss.sum()
+        if self.tp_enabled and self.reduction != "none":
+            # Sum the per-rank losses before normalizing. Averaging per-rank means would
+            # weight shards equally even when their numbers of valid tokens differ.
+            ce_loss = ce_loss.sum()
+            if z_loss is not None:
+                z_loss = z_loss.sum()
+            if self.reduction == "mean":
+                num_valid_tokens = get_full_tensor((labels != self.loss_fn.ignore_index).sum())
+                ce_loss = ce_loss / num_valid_tokens
                 if z_loss is not None:
-                    z_loss = z_loss.sum()
-            elif self.reduction == "mean":
-                ce_loss = ce_loss.mean()
-                if z_loss is not None:
-                    z_loss = z_loss.mean()
-            else:
-                raise NotImplementedError(self.reduction)
+                    z_loss = z_loss / num_valid_tokens
 
         if div_factor is not None:
             ce_loss = ce_loss / div_factor

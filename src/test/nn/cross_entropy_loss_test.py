@@ -82,10 +82,12 @@ def run_cross_entropy_loss_parallel(
 
 
 @pytest.mark.parametrize(
-    "compile, reduction",
+    "compile, reduction, ignore_shard",
     [
-        pytest.param(False, "sum", id="default-sum"),
-        pytest.param(False, "none", id="default-none"),
+        pytest.param(False, "mean", False, id="default-mean"),
+        pytest.param(False, "mean", True, id="mean-ignored-shard"),
+        pytest.param(False, "sum", False, id="default-sum"),
+        pytest.param(False, "none", False, id="default-none"),
     ],
 )
 @pytest.mark.parametrize("normalize_loss", [False, True])
@@ -93,6 +95,7 @@ def run_cross_entropy_loss_parallel(
 @requires_multi_gpu
 def test_cross_entropy_loss_parallel(
     compile: bool,
+    ignore_shard: bool,
     reduction: Literal["sum", "mean", "none"],
     normalize_loss: bool,
     z_loss_multiplier: Optional[float],
@@ -108,6 +111,8 @@ def test_cross_entropy_loss_parallel(
     labels[0][2] = -100
     labels[2][9] = -100
     labels[3][12] = -100
+    if ignore_shard:
+        labels[:, : S // 2] = -100
     batch_num_tokens_for_loss = (labels != -100).sum() if normalize_loss else None
 
     # Get loss.
