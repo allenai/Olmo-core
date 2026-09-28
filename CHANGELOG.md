@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Added `use_array_if_local` to `pack_documents_into_instances`, `segment_documents_into_instances`, `NumpyPackedFSLDataset` and `NumpyPackedFSLDatasetConfig`, forwarded to `iter_document_indices`. Set it to `False` to take document boundaries from the source metadata file instead of inferring them by scanning the token array for the EOS token. Inferring is only correct when every document is EOS-terminated: a producer that truncates documents and drops the terminator with the tail causes the affected document to merge with the one after it, and `LongDocStrategy.truncate` then keeps only the head of the merged span, so the following document never reaches training. Measured on an SFT cache, 97.98% of tokens reached instances via the inferred path versus 100.00% via the metadata file, with an identical maximum document length. Whenever the metadata boundaries are the effective source -- set explicitly, or because the source is a URL, for which `iter_document_indices` always reads the metadata -- `doc_lens` is derived from them rather than by rescanning the packed tokens for EOS, so the block-diagonal attention mask cannot merge an unterminated document into the one after it. The hazard is now documented on `iter_document_indices`. Default behavior is unchanged.
+
+### Fixed
+
+- Metadata-backed packed datasets now include sidecar content hashes in packing-cache keys and dataset fingerprints, invalidating stale boundaries even after same-size corrections. Document lengths preserve EOS/BOS padding segmentation. Local array-backed defaults are unchanged (https://github.com/allenai/OLMo-core/pull/843).
+
 ### Changed
 
 - Raised the minimum supported PyTorch version to 2.10.0. Updated the stable Beaker images to PyTorch 2.10 with CUDA 12.8 and PyTorch 2.11 with CUDA 13.0, and expanded CI coverage to include PyTorch 2.10 and 2.11 with CUDA 12.8 and Docker builds through PyTorch 2.12 with CUDA 13.0.

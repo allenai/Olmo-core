@@ -189,6 +189,21 @@ def iter_document_indices(
         Required to use the local data array instead of the metadata file.
     :param dtype: The data type of the numpy data array.
         Required to use the local data array instead of the metadata file.
+
+    .. warning::
+        Inferring boundaries from the token array (the default whenever ``eos_token_id`` and
+        ``dtype`` are given for a local path) is only correct if **every** document in the array is
+        EOS-terminated. If a producer truncates documents to a maximum length and the terminator is
+        dropped with the tail, the affected document merges with the one that follows it. Callers
+        that then cap document length -- see
+        :func:`iter_document_indices_with_max_sequence_length` with
+        :attr:`LongDocStrategy.truncate` -- keep only the head of the merged span and silently
+        discard the rest, so the following document never reaches training.
+
+        Pass ``use_array_if_local=False`` to read the authoritative boundaries from the metadata
+        file when the producer writes one. Observed on an SFT cache built by open-instruct: the
+        inferred path yielded 97.98% of tokens, the metadata path 100.00%, with an identical maximum
+        document length.
     """
     if use_array_if_local is None:
         if eos_token_id is not None and dtype is not None and not is_url(data_path):
@@ -552,6 +567,9 @@ def segment_documents_into_instances(
 
     Sample a subset of the instances if ``sample`` is provided as a tuple of ``(max_instances, seed)``.
 
+    ``use_array_if_local`` is forwarded to :func:`iter_document_indices`. Set it to ``False`` to take
+    document boundaries from the source metadata file rather than inferring them from ``eos_token_id``.
+
     Returns the number of original documents and the number of resulting instances documents.
     """
     total_og_docs = 0
@@ -897,6 +915,7 @@ def pack_documents_into_instances(
         Type[np.uint8], Type[np.uint16], Type[np.uint32], Type[np.uint64]
     ] = np.uint64,
     long_doc_strategy: LongDocStrategy = LongDocStrategy.truncate,
+    use_array_if_local: Optional[bool] = None,
 ) -> Tuple[List[List[int]], np.ndarray, int]:
     """
     Pack document from source files into instances of at most ``max_sequence_length`` using
@@ -915,6 +934,10 @@ def pack_documents_into_instances(
         the excess tokens are discarded.
         If set to "fragment" then those documents are split into smaller documents so that no tokens
         are discarded, but you end up with fragmented documents.
+    :param use_array_if_local: Forwarded to :func:`iter_document_indices`. Set to ``False`` to take
+        document boundaries from the source metadata file instead of inferring them by scanning the
+        token array for ``eos_token_id``. Inferring is only correct when every document is
+        EOS-terminated; see the note on that function.
 
     :returns: A list of instances, where each instance is a list of document IDs, a 2D array
         of the corresponding document start and end indices, with shape ``(num_documents, 2)``,
@@ -933,6 +956,7 @@ def pack_documents_into_instances(
                 bos_token_id=bos_token_id,
                 dtype=dtype,
                 long_doc_strategy=long_doc_strategy,
+                use_array_if_local=use_array_if_local,
             ):
                 yield start_offset + start_idx
                 yield start_offset + end_idx

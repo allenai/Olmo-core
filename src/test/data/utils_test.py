@@ -1,3 +1,4 @@
+import gzip
 from collections import namedtuple
 
 import numpy as np
@@ -311,3 +312,84 @@ def test_attention_mask_to_cache_leftpad_valid_cases(test_case):
 def test_attention_mask_to_cache_leftpad_invalid_masks(invalid_mask):
     with pytest.raises(ValueError, match="prefix padding"):
         attention_mask_to_cache_leftpad(invalid_mask)
+
+
+def _write_metadata(data_path, boundaries):
+    """Write a boundaries metadata file directly, as a producer that knows its own row
+    boundaries would, rather than deriving them by scanning for EOS."""
+    metadata_path = data_path.with_suffix(".csv.gz")
+    with gzip.open(metadata_path, mode="wt") as f:
+        for start_idx, end_idx in boundaries:
+            f.write(f"{start_idx},{end_idx}\n")
+    return metadata_path
+
+
+def test_iter_document_indices_non_eos_terminated_document(tmp_path):
+    """A document that is not EOS-terminated merges with the next one when boundaries are
+    inferred from the token array. Reading the metadata file instead recovers the truth."""
+    # Two documents: [1, 2, 3] was truncated by its producer and lost its EOS, then [4, 5, 6, 0].
+    data = [1, 2, 3, 4, 5, 6, 0]
+    data_path = tmp_path / "data.npy"
+    mmap = np.memmap(data_path, mode="w+", dtype=np.uint16, shape=(len(data),))
+    mmap[:] = data
+    mmap.flush()
+    _write_metadata(data_path, [(0, 3), (3, 7)])
+
+    # Inferred from the array, the un-terminated document swallows the one after it.
+    assert list(
+        iter_document_indices(data_path, eos_token_id=0, dtype=np.uint16, use_array_if_local=True)
+    ) == [(0, 7)]
+    # The metadata file has the real boundaries.
+    assert list(
+        iter_document_indices(data_path, eos_token_id=0, dtype=np.uint16, use_array_if_local=False)
+    ) == [(0, 3), (3, 7)]
+
+
+def test_pack_documents_into_instances_use_array_if_local(tmp_path):
+    """Capping document length on top of a merged span silently discards the tokens past the
+    cap, so the second document never reaches training. Reading the metadata keeps them."""
+    # [1, 2, 3, 4] was truncated to the cap by its producer and lost its EOS; then [5, 6, 0].
+    data = [1, 2, 3, 4, 5, 6, 0]
+    data_path = tmp_path / "data.npy"
+    mmap = np.memmap(data_path, mode="w+", dtype=np.uint16, shape=(len(data),))
+    mmap[:] = data
+    mmap.flush()
+    _write_metadata(data_path, [(0, 4), (4, 7)])
+
+    def total_tokens_packed(use_array_if_local):
+        _, _, total_tokens = pack_documents_into_instances(
+            data_path,
+            max_sequence_length=4,  # the packer requires a power of two
+            eos_token_id=0,
+            dtype=np.uint16,
+            use_array_if_local=use_array_if_local,
+        )
+        return total_tokens
+
+    # Merged into one 7-token span, truncated to 4: the whole second document is dropped.
+    assert total_tokens_packed(True) == 4
+    # Real boundaries: both documents survive.
+    assert total_tokens_packed(False) == len(data)
+
+
+def test_segment_documents_into_instances_use_array_if_local(tmp_path):
+    data = [1, 2, 3, 4, 5, 6, 0]
+    data_path = tmp_path / "data.npy"
+    mmap = np.memmap(data_path, mode="w+", dtype=np.uint16, shape=(len(data),))
+    mmap[:] = data
+    mmap.flush()
+    _write_metadata(data_path, [(0, 3), (3, 7)])
+
+    def num_docs(use_array_if_local):
+        total_og_docs, _ = segment_documents_into_instances(
+            data_path,
+            tmp_path / f"indices-{use_array_if_local}.npy",
+            max_sequence_length=3,
+            eos_token_id=0,
+            dtype=np.uint16,
+            use_array_if_local=use_array_if_local,
+        )
+        return total_og_docs
+
+    assert num_docs(True) == 1
+    assert num_docs(False) == 2
