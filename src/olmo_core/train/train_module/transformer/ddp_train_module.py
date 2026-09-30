@@ -16,6 +16,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Set,
     Tuple,
     TypeVar,
     Union,
@@ -92,6 +93,11 @@ from .config import (
 log = logging.getLogger(__name__)
 
 
+def _is_olmo_ddp_compatible(model: torch.nn.Module) -> bool:
+    """An :class:`OLMoDDPModel`, or a wrapper that sets ``_olmo_ddp_compatible = True``."""
+    return isinstance(model, OLMoDDPModel) or bool(getattr(model, "_olmo_ddp_compatible", False))
+
+
 M = TypeVar("M", bound=List[OLMoDDPModel])
 
 
@@ -138,7 +144,7 @@ class OLMoDDPTrainModule(TrainModule):
         eval_only: bool = False,
     ):
         super().__init__()
-        assert isinstance(model, OLMoDDPModel), "OLMoDDPTrainModule only supports OLMoDDPModel"
+        assert _is_olmo_ddp_compatible(model), "OLMoDDPTrainModule only supports OLMoDDPModel"
 
         ######################### Validate arguments. [BEGIN] #########################
         if rank_microbatch_size % max_sequence_length != 0:
@@ -1282,6 +1288,7 @@ class OLMoDDPTrainModule(TrainModule):
                         if name.endswith((".q_norm.weight", ".k_norm.weight")) and param.ndim == 2
                     }
                     expansions = prepare_qk_expansion(sd_to_load, metadata, gain_shapes)
+                sd_to_load = self._optimizer_state_dict_for_load(sd_to_load, checkpoint_keys)
                 dist_cp.state_dict_loader.load(
                     sd_to_load,
                     checkpoint_id=dir,
@@ -1292,7 +1299,7 @@ class OLMoDDPTrainModule(TrainModule):
 
                 finish_qk_expansion(sd_to_load, expansions)
 
-                optim.load_state_dict(sd_to_load)
+                optim.load_state_dict(self._optimizer_state_dict_after_load(sd_to_load))
 
                 # load into model params
                 optim._copy_main_params_to_model_params()
@@ -1321,6 +1328,17 @@ class OLMoDDPTrainModule(TrainModule):
         torch.cuda.empty_cache()
 
         return
+
+    def _optimizer_state_dict_for_load(
+        self, state_dict: Dict[str, Any], checkpoint_keys: Set[str]
+    ) -> Dict[str, Any]:
+        """Adapt the optimizer state dict before loading a checkpoint. Identity by default."""
+        del checkpoint_keys
+        return state_dict
+
+    def _optimizer_state_dict_after_load(self, state_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Undo :meth:`_optimizer_state_dict_for_load` after loading. Identity by default."""
+        return state_dict
 
     def _load_model_state_dict_direct(
         self,
@@ -1605,6 +1623,8 @@ class OLMoDDPTrainModule(TrainModule):
             else:
                 batch_num_tokens_for_loss = batch_num_tokens_for_loss.clamp_min(1)
 
+            auxiliary_loss_kwargs = self._batch_auxiliary_loss_kwargs(batch)
+
             # Batch losses to record.
             ce_batch_loss = move_to_device(torch.tensor(0.0), self.device)
             z_batch_loss: Optional[torch.Tensor] = None
@@ -1640,6 +1660,7 @@ class OLMoDDPTrainModule(TrainModule):
                             z_loss_multiplier=self.z_loss_multiplier,
                             loss_div_factor=batch_num_tokens_for_loss,
                             return_logits=debug_dump_logits,
+                            **auxiliary_loss_kwargs,
                             **model_kwargs,
                         )
                         if debug_dump_logits:
@@ -1897,6 +1918,7 @@ class OLMoDDPTrainModule(TrainModule):
                 "please disable in-loop evals"
             )
 
+        auxiliary_loss_kwargs = self._batch_auxiliary_loss_kwargs(batch)
         input_ids, labels, model_kwargs = self._prepare_batch(batch, labels)
 
         for m in self.model_parts:
@@ -1909,6 +1931,7 @@ class OLMoDDPTrainModule(TrainModule):
                     labels=labels,
                     ignore_index=self.label_ignore_index,
                     loss_reduction="none",
+                    **auxiliary_loss_kwargs,
                     **model_kwargs,
                 )
                 assert isinstance(lm_output, LMOutputWithLoss), "Expected LMOutputWithLoss"
@@ -2498,6 +2521,11 @@ class OLMoDDPTrainModule(TrainModule):
     ) -> torch.Tensor:
         raise RuntimeError("Deprecated. Use optimizer's grad clipping instead.")
 
+    def _batch_auxiliary_loss_kwargs(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+        """Extra model-forward kwargs computed from the whole batch. Empty by default."""
+        del batch
+        return {}
+
     def _prepare_batch(
         self, batch: Dict[str, Any], labels: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Dict[str, Any]]:
@@ -2565,7 +2593,7 @@ class OLMoDDPTrainModule(TrainModule):
         pp_config: Optional[TransformerPipelineParallelConfig] = None,
         eval_only: bool = False,
     ) -> List["OLMoDDPModel"]:
-        assert isinstance(model, OLMoDDPModel), "model must be an instance of OLMoDDPModel"
+        assert _is_olmo_ddp_compatible(model), "model must be an instance of OLMoDDPModel"
 
         if tp_config is not None:
             raise NotImplementedError("TP not supported yet")
@@ -2616,7 +2644,7 @@ class OLMoDDPTrainModule(TrainModule):
             model_parts: List[OLMoDDPModel] = cast(List[OLMoDDPModel], stages_and_model_parts[1])
 
             for model_part in model_parts:
-                assert isinstance(model_part, OLMoDDPModel)
+                assert _is_olmo_ddp_compatible(model_part)
                 model_part.install_cuda_events()
 
             self._pp_stages = stages
