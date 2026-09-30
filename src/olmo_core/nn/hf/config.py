@@ -362,6 +362,7 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
         if isinstance(block, OLMoDDPTransformerBlock) and block.routed_experts_router is not None:
             block_router = block.routed_experts_router
             _validate_olmo3moe_router_selection(block_router)
+            block_emo = getattr(block_router, "emo", None)
             signature = (
                 block_router.num_experts,
                 block_router.top_k,
@@ -369,6 +370,7 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
                 block_router.gating_function,
                 block_router.normalize_expert_weights,
                 block_router.restore_weight_scale,
+                block_emo,
             )
             if router_signature is None:
                 router_signature = signature
@@ -454,6 +456,7 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
 
     attention_hidden_size = attention.n_heads * attention.head_dim
     gate_type, gate_full_precision = _olmo3moe_attention_gate(attention)
+    emo = getattr(router, "emo", None)
 
     return Olmo3MoeConfig(
         vocab_size=model.vocab_size,
@@ -491,6 +494,12 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
         embed_scale=model.embed_scale if model.embed_scale is not None else 1.0,
         embed_norm=model.embedding_norm is not None,
         use_peri_ln=use_peri_ln,
+        emo_min_document_expert_pool=emo.min_document_expert_pool if emo is not None else None,
+        emo_max_document_expert_pool=emo.max_document_expert_pool if emo is not None else None,
+        emo_eval_document_expert_pool=emo.eval_pool_size() if emo is not None else None,
+        emo_eos_token_id=emo.eos_token_id if emo is not None else None,
+        emo_routing_mode="full_pool" if emo is not None and emo.full_pool else None,
+        emo_source_config=emo.source_config if emo is not None else None,
         pad_token_id=None,  # type: ignore
         bos_token_id=None,
         eos_token_id=None,  # type: ignore
@@ -559,6 +568,8 @@ def _get_olmo3moe_kda_emo_config(model: "OLMoDDPModel") -> PretrainedConfig:
             emo.max_document_expert_pool if emo is not None else None,
             emo.eval_pool_size() if emo is not None else None,
             emo.eos_token_id if emo is not None else None,
+            emo.full_pool if emo is not None else None,
+            emo.source_config if emo is not None else None,
             latent.out_features if latent is not None else None,
             latent.bias is not None if latent is not None else False,
             latent_norm is not None,
@@ -734,6 +745,8 @@ def _get_olmo3moe_kda_emo_config(model: "OLMoDDPModel") -> PretrainedConfig:
         emo_max_document_expert_pool=emo.max_document_expert_pool if emo is not None else None,
         emo_eval_document_expert_pool=emo.eval_pool_size() if emo is not None else None,
         emo_eos_token_id=emo.eos_token_id if emo is not None else None,
+        emo_routing_mode="full_pool" if emo is not None and emo.full_pool else None,
+        emo_source_config=emo.source_config if emo is not None else None,
         global_load_balancing=router.global_load_balancing,
         use_cache=False,
         pad_token_id=None,

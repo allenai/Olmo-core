@@ -40,7 +40,7 @@ class EmoRouterV2(MoERouterV2):
 
     @property
     def requires_segment_ids(self) -> bool:
-        return True
+        return not self.emo.full_pool and getattr(self, "replay_expert_indices", None) is None
 
     @property
     def eos_token_id(self) -> int:
@@ -73,6 +73,10 @@ class EmoRouterV2(MoERouterV2):
                 "EMO is only supported for the routed-expert router; configure shared-expert "
                 "mixing with a separate standard router"
             )
+        if self.emo.full_pool or getattr(self, "replay_expert_indices", None) is not None:
+            # Ordinary forward owns the gating-specific replay weights, gradients
+            # and auxiliary counts. Never sample a document pool on this path.
+            return super().forward(x, scores_only=False, loss_div_factor=loss_div_factor)
         if segment_ids is None:
             raise OLMoConfigurationError("EMO routing requires per-token segment_ids")
         if segment_ids.shape != x.shape[:2]:

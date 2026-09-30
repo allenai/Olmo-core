@@ -5,6 +5,7 @@ from typing import Iterator, Mapping
 
 import torch
 
+from .emo_router import EmoRouterV2
 from .router import MoERouterV2
 
 
@@ -16,7 +17,8 @@ def replay_routes(model: torch.nn.Module, routes: Mapping[str, torch.Tensor]) ->
     same expert identities. Every routed router must be supplied; shared-only
     routers are excluded by the caller's module-name selection. Nested contexts
     restore their previous routes even when a forward or backward fails. Routers
-    that override the standard forward implementation (including EMO) are rejected.
+    with unsupported forward implementations are rejected. EMO explicitly delegates
+    replay to the standard forward, bypassing document-pool selection.
     """
     routers = {
         name: module
@@ -27,7 +29,7 @@ def replay_routes(model: torch.nn.Module, routes: Mapping[str, torch.Tensor]) ->
         raise ValueError("Replay must supply exactly the model's routed expert routers")
     for name, indices in routes.items():
         router = routers[name]
-        if type(router).forward is not MoERouterV2.forward:
+        if type(router).forward not in (MoERouterV2.forward, EmoRouterV2.forward):
             raise ValueError(f"Replay does not support {type(router).__name__} at {name}")
         if indices.dtype not in (torch.int32, torch.int64):
             raise ValueError(f"Replay indices for {name} must be integers")

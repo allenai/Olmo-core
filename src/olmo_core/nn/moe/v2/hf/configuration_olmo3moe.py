@@ -75,6 +75,8 @@ class Olmo3MoeConfig(PretrainedConfig):
         emo_max_document_expert_pool=None,
         emo_eval_document_expert_pool=None,
         emo_eos_token_id=None,
+        emo_routing_mode=None,
+        emo_source_config=None,
         global_load_balancing=False,
         layer_types: Optional[List[str]] = None,
         dense_layers_indices: Optional[List[int]] = None,
@@ -189,6 +191,8 @@ class Olmo3MoeConfig(PretrainedConfig):
         self.emo_max_document_expert_pool = emo_max_document_expert_pool
         self.emo_eval_document_expert_pool = emo_eval_document_expert_pool
         self.emo_eos_token_id = emo_eos_token_id
+        self.emo_routing_mode = emo_routing_mode
+        self.emo_source_config = emo_source_config
         self.global_load_balancing = global_load_balancing
 
         self.embed_scale = embed_scale

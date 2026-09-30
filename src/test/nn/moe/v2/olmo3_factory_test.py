@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 
-from olmo_core.config import DType
+from olmo_core.config import Config, DType
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.attention import (
     AttentionBackendName,
@@ -52,6 +52,79 @@ def hybrid_config(latent_dim=16):
         embed_norm=True,
         use_peri_ln=True,
     )
+
+
+def emo_config():
+    hf = hybrid_config(None)
+    hf.use_rope = True
+    hf.layer_types = ["full_attention", "full_attention"]
+    hf.emo_min_document_expert_pool = 2
+    hf.emo_max_document_expert_pool = 3
+    hf.emo_eval_document_expert_pool = 4
+    hf.emo_eos_token_id = 0
+    hf.emo_routing_mode = "full_pool"
+    hf.emo_source_config = {"emo_eval_document_expert_pool": 2}
+    return hf
+
+
+def test_emo_factory_preserves_metadata_weights_and_full_pool_export():
+    hf = emo_config()
+    original = deepcopy(hf.to_dict())
+    config = olmo3.build_olmo3_moe_config_from_hf_config(
+        hf, attention_backend=AttentionBackendName.torch
+    )
+    config = Config.from_dict(config.as_config_dict())
+    native = config.build(init_device="cpu")
+    router = native.blocks["1"].routed_experts_router
+    assert router.emo.full_pool
+    assert router.emo.min_document_expert_pool == 2
+    assert router.emo.max_document_expert_pool == 3
+    assert not router.requires_segment_ids
+    reference = Olmo3MoeForCausalLM(hf).to(torch.bfloat16)
+    expected = reference.state_dict()
+    olmo3.load_olmo3_moe_hf_state(native, hf, expected)
+    exported = hf_config_utils.get_hf_config(native)
+    assert exported.emo_routing_mode == "full_pool"
+    assert exported.emo_min_document_expert_pool == 2
+    assert exported.emo_max_document_expert_pool == 3
+    assert exported.emo_eval_document_expert_pool == 4
+    assert exported.emo_eos_token_id == 0
+    assert exported.emo_source_config == hf.emo_source_config
+    rebuilt = olmo3.build_olmo3_moe_config_from_hf_config(
+        exported, attention_backend=AttentionBackendName.torch
+    ).build(init_device="cpu")
+    state = dict(olmo3.iter_olmo3_moe_hf_state(native, exported))
+    olmo3.load_olmo3_moe_hf_state(rebuilt, exported, state)
+    actual = dict(olmo3.iter_olmo3_moe_hf_state(rebuilt, exported))
+    assert actual.keys() == expected.keys()
+    for name in expected:
+        torch.testing.assert_close(actual[name], expected[name], rtol=0, atol=0)
+    assert hf.to_dict() == original
+
+
+@pytest.mark.parametrize("mode", [None, "document_pool", "invalid"])
+def test_emo_factory_requires_explicit_full_pool_execution(mode):
+    hf = emo_config()
+    hf.emo_routing_mode = mode
+    with pytest.raises(NotImplementedError, match="EMO"):
+        olmo3.build_olmo3_moe_config_from_hf_config(hf)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("emo_min_document_expert_pool", None),
+        ("emo_max_document_expert_pool", True),
+        ("emo_eval_document_expert_pool", None),
+        ("emo_eval_document_expert_pool", 2),
+        ("emo_eos_token_id", -1),
+    ],
+)
+def test_emo_factory_rejects_invalid_or_restricted_metadata(field, value):
+    hf = emo_config()
+    setattr(hf, field, value)
+    with pytest.raises((ValueError, OLMoConfigurationError)):
+        olmo3.build_olmo3_moe_config_from_hf_config(hf)
 
 
 @pytest.mark.parametrize("latent_dim", [None, 16])

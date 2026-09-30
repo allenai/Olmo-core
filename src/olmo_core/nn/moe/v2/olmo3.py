@@ -31,6 +31,7 @@ from olmo_core.nn.hf.convert import (
 from olmo_core.nn.layer_norm import LayerNormConfig, LayerNormType
 from olmo_core.nn.lm_head import LMHeadConfig, LMLossImplementation
 from olmo_core.nn.moe import (
+    EmoRouterConfig,
     LatentMoEConfig,
     MoELoadBalancingLossGranularity,
     MoERouterGatingFunction,
@@ -52,6 +53,41 @@ def _as_mapping(config: PretrainedConfig | Mapping[str, Any]) -> Mapping[str, An
     return config.to_dict() if isinstance(config, PretrainedConfig) else config
 
 
+def _emo_config_from_hf(config: Mapping[str, Any]) -> EmoRouterConfig | None:
+    fields = (
+        "emo_min_document_expert_pool",
+        "emo_max_document_expert_pool",
+        "emo_eval_document_expert_pool",
+        "emo_eos_token_id",
+    )
+    mode = config.get("emo_routing_mode")
+    if mode not in (None, "full_pool"):
+        raise NotImplementedError(f"Unsupported EMO routing mode: {mode!r}")
+    if all(config.get(key) is None for key in fields):
+        return None
+    if mode != "full_pool":
+        raise NotImplementedError(
+            "EMO HF training requires explicit emo_routing_mode='full_pool'; "
+            "native document-pool training is not a causal RL policy."
+        )
+    for key in fields:
+        value = config.get(key)
+        if type(value) is not int or value < (0 if key == "emo_eos_token_id" else 1):
+            raise ValueError(f"EMO requires an explicit valid integer {key}")
+    emo = EmoRouterConfig(
+        eos_token_id=config["emo_eos_token_id"],
+        min_document_expert_pool=config["emo_min_document_expert_pool"],
+        max_document_expert_pool=config["emo_max_document_expert_pool"],
+        eval_document_expert_pool=config["emo_eval_document_expert_pool"],
+        full_pool=True,
+        source_config=deepcopy(config.get("emo_source_config")),
+    )
+    emo.validate_for_router(
+        num_experts=config["n_routed_experts"], top_k=config["num_experts_per_tok"]
+    )
+    return emo
+
+
 def build_olmo3_moe_config_from_hf_config(
     hf_config: PretrainedConfig | Mapping[str, Any],
     *,
@@ -68,15 +104,7 @@ def build_olmo3_moe_config_from_hf_config(
     config = _as_mapping(hf_config)
     if config.get("model_type") != "olmo3moe":
         raise ValueError(f"Expected model_type='olmo3moe', got {config.get('model_type')!r}.")
-    if any(
-        config.get(key) is not None
-        for key in (
-            "emo_min_document_expert_pool",
-            "emo_max_document_expert_pool",
-            "emo_eval_document_expert_pool",
-        )
-    ):
-        raise NotImplementedError("The OLMo3 MoE builder does not support EMo.")
+    emo = _emo_config_from_hf(config)
     rope_parameters = config.get("rope_parameters") or config.get("rope_scaling") or {}
     if rope_parameters and rope_parameters.get("rope_type", "default") != "default":
         raise NotImplementedError("The OLMo3 MoE builder does not support scaled RoPE.")
@@ -140,6 +168,7 @@ def build_olmo3_moe_config_from_hf_config(
         dtype=dtype,
     )
     routed_router = MoERouterConfigV2(
+        emo=emo,
         d_model=d_model,
         num_experts=num_experts,
         top_k=int(config["num_experts_per_tok"]),

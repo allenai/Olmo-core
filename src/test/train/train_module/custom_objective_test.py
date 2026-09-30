@@ -80,25 +80,23 @@ def test_router_replay_keeps_experts_and_router_gradients(recompute):
     assert router.replay_expert_indices is None
 
 
-def test_replay_rejects_emo_before_setting_router_state():
-    from olmo_core.nn.moe.emo import EmoRouterConfig
+class UnsupportedRouter(MoERouterV2):
+    def forward(self, *args, **kwargs):
+        return super().forward(*args, **kwargs)
 
+
+def test_replay_rejects_custom_forward_before_setting_router_state():
     model = nn.Module()
     standard = MoERouterConfigV2(d_model=4, num_experts=4, top_k=2).build()
-    emo = MoERouterConfigV2(
-        d_model=4,
-        num_experts=4,
-        top_k=2,
-        emo=EmoRouterConfig(eos_token_id=0, min_document_expert_pool=4, max_document_expert_pool=4),
-    ).build()
+    custom = UnsupportedRouter(d_model=4, num_experts=4, top_k=2)
     model.add_module("first_routed_experts_router", standard)
-    model.add_module("emo_routed_experts_router", emo)
+    model.add_module("custom_routed_experts_router", custom)
     routes = {name: torch.tensor([[[0, 1]]]) for name, _ in model.named_children()}
-    with pytest.raises(ValueError, match="does not support EmoRouterV2"):
+    with pytest.raises(ValueError, match="does not support UnsupportedRouter"):
         with replay_routes(model, routes):
             pytest.fail("Unsupported replay must fail before entering the context")
     assert getattr(standard, "replay_expert_indices", None) is None
-    assert getattr(emo, "replay_expert_indices", None) is None
+    assert getattr(custom, "replay_expert_indices", None) is None
 
 
 def test_nested_replay_restores_routes_after_failure():
