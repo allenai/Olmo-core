@@ -276,9 +276,13 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
     dense_layers_indices: List[int] = []
     moe_block: Optional[OLMoDDPTransformerBlock] = None
     dense_block: Optional[TransformerBlock] = None
+    shared_dense_block: Optional[OLMoDDPTransformerBlock] = None
     for idx, block in enumerate(blocks):
         if isinstance(block, OLMoDDPTransformerBlock):
-            if moe_block is None:
+            if block.routed_experts is None:
+                dense_layers_indices.append(idx)
+                shared_dense_block = block
+            elif moe_block is None:
                 moe_block = block
         else:
             # olmo3moe places the layernorms after attention/MLP (reordered norm); a standard
@@ -298,9 +302,18 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
             f"{model.__class__.__name__}"
         )
 
-    if moe_block.use_peri_norm:
+    use_peri_ln = moe_block.use_peri_norm
+    if any(
+        block.use_peri_norm != use_peri_ln or block.use_pre_norm
+        for block in blocks
+        if isinstance(block, OLMoDDPTransformerBlock)
+    ):
+        raise NotImplementedError("HF export requires homogeneous peri-LN and no pre-norm blocks.")
+    if use_peri_ln and dense_block is not None:
+        raise NotImplementedError("Peri-LN export requires shared-expert dense blocks.")
+    if dense_block is not None and shared_dense_block is not None:
         raise NotImplementedError(
-            "Building an Olmo3MoeConfig is not supported for peri-LN (use_peri_norm=True) models."
+            "HF export cannot mix shared-expert and feed-forward dense layouts."
         )
 
     attention = moe_block.attention
@@ -383,18 +396,31 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
     # Dense MLP intermediate size, if there are any dense layers.
     dense_mlp_intermediate_size: Optional[int] = None
     for idx in dense_layers_indices:
-        feed_forward = blocks[idx].feed_forward
-        if feed_forward.activation_fn is not F.silu:
-            raise NotImplementedError("HF export requires SiLU in every dense feed-forward layer.")
-        if any(
-            proj.bias is not None for proj in (feed_forward.w1, feed_forward.w2, feed_forward.w3)
-        ):
-            raise NotImplementedError(
-                "Exporting olmo3moe with biased dense feed-forward layers is not supported."
-            )
+        block = blocks[idx]
+        if isinstance(block, OLMoDDPTransformerBlock):
+            shared = block.shared_experts
+            if shared is None or shared.activation.value != "swiglu":
+                raise NotImplementedError(
+                    "HF dense export requires a bias-free SwiGLU shared expert."
+                )
+            hidden_size = shared.hidden_size
+        else:
+            feed_forward = block.feed_forward
+            if feed_forward.activation_fn is not F.silu:
+                raise NotImplementedError(
+                    "HF export requires SiLU in every dense feed-forward layer."
+                )
+            if any(
+                proj.bias is not None
+                for proj in (feed_forward.w1, feed_forward.w2, feed_forward.w3)
+            ):
+                raise NotImplementedError(
+                    "HF export does not support biased dense feed-forward layers."
+                )
+            hidden_size = feed_forward.hidden_size
         if dense_mlp_intermediate_size is None:
-            dense_mlp_intermediate_size = feed_forward.hidden_size
-        elif feed_forward.hidden_size != dense_mlp_intermediate_size:
+            dense_mlp_intermediate_size = hidden_size
+        elif hidden_size != dense_mlp_intermediate_size:
             raise NotImplementedError("Heterogeneous dense feed-forward sizes are unsupported.")
 
     # Shared experts (optional). The HF model has a single shared expert.
@@ -461,9 +487,10 @@ def _get_olmo3moe_config(model: "OLMoDDPModel") -> PretrainedConfig:
         sliding_window=sliding_window,
         layer_types=layer_types,
         dense_layers_indices=dense_layers_indices,
+        dense_layers_use_shared_expert=shared_dense_block is not None,
         embed_scale=model.embed_scale if model.embed_scale is not None else 1.0,
         embed_norm=model.embedding_norm is not None,
-        use_peri_ln=False,
+        use_peri_ln=use_peri_ln,
         pad_token_id=None,  # type: ignore
         bos_token_id=None,
         eos_token_id=None,  # type: ignore
@@ -603,8 +630,6 @@ def _get_olmo3moe_kda_emo_config(model: "OLMoDDPModel") -> PretrainedConfig:
 
     attention = attention_blocks[0].attention
     assert isinstance(attention, Attention)
-    if any(block.attention.backend.window_size != (-1, -1) for block in attention_blocks):
-        raise NotImplementedError("Hybrid KDA HF export does not support sliding-window attention.")
     rms_norm_eps = representative.feed_forward_norm.eps
     attention_signature = _olmo3moe_attention_signature(attention, rms_norm_eps)
     assert attention.q_norm is not None and attention.k_norm is not None
@@ -645,10 +670,19 @@ def _get_olmo3moe_kda_emo_config(model: "OLMoDDPModel") -> PretrainedConfig:
         if representative.shared_experts is not None
         else None
     )
-    layer_types = [
-        "linear_attention" if isinstance(block.attention, KimiDeltaAttention) else "full_attention"
-        for block in blocks
-    ]
+    layer_types = []
+    window_sizes = set()
+    for block in blocks:
+        if isinstance(block.attention, KimiDeltaAttention):
+            layer_types.append("linear_attention")
+        elif block.attention.backend.window_size != (-1, -1):
+            layer_types.append("sliding_attention")
+            window_sizes.add(block.attention.backend.window_size[0])
+        else:
+            layer_types.append("full_attention")
+    if len(window_sizes) > 1:
+        raise NotImplementedError("Hybrid KDA HF export requires one common sliding window size.")
+    window_kwargs = {"sliding_window": window_sizes.pop() + 1} if window_sizes else {}
     latent = representative.latent_down_proj
     emo = getattr(router, "emo", None)
 
@@ -688,6 +722,7 @@ def _get_olmo3moe_kda_emo_config(model: "OLMoDDPModel") -> PretrainedConfig:
         latent_moe_dim=latent.out_features if latent is not None else None,
         latent_moe_bias=latent.bias is not None if latent is not None else False,
         latent_moe_up_proj_input_norm=representative.latent_up_proj_input_norm is not None,
+        **window_kwargs,
         layer_types=layer_types,
         dense_layers_indices=dense_layers_indices,
         dense_layers_use_shared_expert=True,
