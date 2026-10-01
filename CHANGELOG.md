@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a Ulysses context-parallel parity test for the recurrent mixers (`GatedDeltaNet`, `KimiDeltaAttention`) that compares per-stage activations, outputs, and gradients against a single-process reference, including packed documents that straddle the CP split, plus a model-level gradient-parity test for `gdn` and `kda` under Ulysses CP.
 - Added opt-in router replay and current-policy balancing counts, custom training objectives,
   bounded checkpoint planning, and streaming Olmo3Moe HF interchange for RL adapters.
-  Custom objectives reject auxiliary-loss-free balancing routers with `bias_gamma` set.
+  Custom objectives reject auxiliary-loss-free balancing routers with `bias_gamma` set,
+  and optionally reset auxiliary metrics before training and on exit.
 - Added an opt-in FP32-output LM head with low-precision GEMMs and mixed-precision backward.
 - Added optional eager-rounding parity and dynamic-row specialization for no-gradient SwiGLU.
 

@@ -1,6 +1,7 @@
 """Numerical checks against real Core modules and HF reference models."""
 
 import contextlib
+from typing import Any, cast
 
 import pytest
 import torch
@@ -226,3 +227,115 @@ def test_custom_objective_supports_auxiliary_losses_including_zero(aux_weight):
         assert metrics[0]["aux"].item() == 0
     else:
         assert metrics[0]["aux"].item() > 0
+
+
+class AuxiliaryMetricModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.routed_experts_router = MoERouterConfigV2(
+            d_model=4, num_experts=4, top_k=2, lb_loss_weight=0.1, z_loss_weight=0.01
+        ).build(init_device="cpu")
+        nn.init.normal_(self.routed_experts_router.weight, std=0.1)
+
+    def forward(self, x):
+        router = self.routed_experts_router
+        weights, _, _, info = router(x, scores_only=False, loss_div_factor=3.0)
+        return weights.square().sum() + router.compute_aux_loss(*info)
+
+    def reset_auxiliary_metrics(self):
+        self.routed_experts_router.reset_metrics()
+
+
+@pytest.mark.parametrize("entrypoint", ["standard", "ddp"])
+@pytest.mark.parametrize("reset", [None, False, True])
+def test_custom_objective_metric_ownership(entrypoint, reset, monkeypatch):
+    import copy
+
+    from olmo_core.train.train_module.transformer.ddp_train_module import (
+        OLMoDDPTrainModule,
+    )
+    from olmo_core.train.train_module.transformer.train_module import (
+        TransformerTrainModule,
+    )
+
+    model = AuxiliaryMetricModel()
+    module = ObjectiveModule(model)
+    models = [model]
+    method = TransformerTrainModule.train_batch_with_loss
+    if entrypoint == "ddp":
+        # Exercise cleanup of every model part, not only module.model.
+        models.append(copy.deepcopy(model))
+        monkeypatch.setattr(module, "model_parts", models, raising=False)
+        method = OLMoDDPTrainModule.train_batch_with_loss
+    references = copy.deepcopy(models)
+    for part in models:
+        part.routed_experts_router.batch_size_per_expert.fill_(9)
+    x = torch.randn(1, 3, 4)
+
+    def objective(module, batch):
+        loss = sum(part(batch["x"]) for part in models)
+        router = model.routed_experts_router
+        return loss, {"counts": router.batch_size_per_expert, "lb": router.load_balancing_loss}
+
+    options = {} if reset is None else {"reset_auxiliary_metrics": reset}
+    previous_metrics = None
+    for iteration in range(2):
+        for part in models + references:
+            part.zero_grad()
+        metrics = method(cast(Any, module), [{"x": x}, {"x": x}], objective, **options)
+        for _ in range(2):
+            sum(part(x) for part in references).backward()
+        for part, reference in zip(models, references):
+            for parameter, expected in zip(part.parameters(), reference.parameters()):
+                torch.testing.assert_close(parameter.grad, expected.grad, rtol=0, atol=0)
+            router = part.routed_experts_router
+            assert router.load_balancing_loss is not None
+            assert router.z_loss is not None
+            if reset:
+                assert router.batch_size_per_expert.sum() == 0
+                assert router.load_balancing_loss == 0
+                assert router.z_loss == 0
+            else:
+                assert router.batch_size_per_expert.sum() == 36 + 12 * (iteration + 1)
+                assert router.load_balancing_loss > 0
+                assert router.z_loss > 0
+        if reset:
+            # Returned counter views must survive cleanup and subsequent batches.
+            for values, assignments in zip(metrics, [6, 12]):
+                assert values["counts"].sum() == assignments
+                assert values["lb"] > 0
+                assert not values["lb"].requires_grad
+            if previous_metrics is not None:
+                for actual, previous in zip(metrics, previous_metrics):
+                    for name in actual:
+                        torch.testing.assert_close(actual[name], previous[name], rtol=0, atol=0)
+            previous_metrics = metrics
+
+
+@pytest.mark.parametrize("failure_phase", ["objective", "backward", "finalize"])
+def test_custom_objective_metric_cleanup_on_failure(failure_phase):
+    model = AuxiliaryMetricModel()
+    module = ObjectiveModule(model)
+
+    def fail(*args):
+        raise RuntimeError("injected custom-objective failure")
+
+    def objective(module, batch):
+        loss = model(batch["x"])
+        assert model.routed_experts_router.batch_size_per_expert.sum() == 6
+        if failure_phase == "objective":
+            fail()
+        if failure_phase == "backward":
+            loss.register_hook(fail)
+        return loss, {}
+
+    if failure_phase == "finalize":
+        model.finalize_grad_reduce = fail
+    with pytest.raises(RuntimeError, match="injected custom-objective failure"):
+        train_batch_with_loss(
+            module, [{"x": torch.randn(1, 3, 4)}], objective, reset_auxiliary_metrics=True
+        )
+    router = model.routed_experts_router
+    assert router.batch_size_per_expert.sum() == 0
+    assert router.load_balancing_loss == 0
+    assert router.z_loss == 0

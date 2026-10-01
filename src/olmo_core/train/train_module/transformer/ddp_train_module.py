@@ -1168,12 +1168,14 @@ class OLMoDDPTrainModule(TrainModule):
         ``constant_memory_planning`` computes metadata for ordinary contiguous shards
         arithmetically, with the default planner as fallback for other layouts.
         ``profile`` logs per-rank phases and summed worker time separately from wall time.
+        CPU profiling uses wall time; CUDA profiling synchronizes this module's device.
         Profiling returns durations in seconds plus writer byte/item counts; otherwise returns None.
         """
 
         def timestamp():
             if profile:
-                torch.cuda.synchronize()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(self.device)
                 return time.perf_counter()
             return 0.0
 
@@ -1249,17 +1251,20 @@ class OLMoDDPTrainModule(TrainModule):
         from olmo_core.io import normalize_path
 
         if profile:
-            torch.cuda.synchronize()
+            if self.device.type == "cuda":
+                torch.cuda.synchronize(self.device)
         load_start = time.perf_counter() if profile else 0.0
         load_pass_seconds = []
 
         def load_pass(*args, **kwargs):
             if not profile:
                 return dist_cp.state_dict_loader.load(*args, **kwargs)
-            torch.cuda.synchronize()
+            if self.device.type == "cuda":
+                torch.cuda.synchronize(self.device)
             phase_start = time.perf_counter()
             dist_cp.state_dict_loader.load(*args, **kwargs)
-            torch.cuda.synchronize()
+            if self.device.type == "cuda":
+                torch.cuda.synchronize(self.device)
             load_pass_seconds.append(time.perf_counter() - phase_start)
 
         dir = normalize_path(dir)
@@ -1424,7 +1429,8 @@ class OLMoDDPTrainModule(TrainModule):
         torch.cuda.empty_cache()
 
         if profile:
-            torch.cuda.synchronize()
+            if self.device.type == "cuda":
+                torch.cuda.synchronize(self.device)
             log.info(
                 "checkpoint_load %s",
                 json.dumps(
@@ -1677,11 +1683,25 @@ class OLMoDDPTrainModule(TrainModule):
             )
 
     def train_batch_with_loss(
-        self, micro_batches, objective: objective_utils.Objective, context_factory=None
+        self,
+        micro_batches,
+        objective: objective_utils.Objective,
+        context_factory=None,
+        *,
+        reset_auxiliary_metrics: bool = False,
     ):
-        """Accumulate a caller-normalized objective with Core gradient synchronization."""
+        """Accumulate a caller-normalized objective with Core gradient synchronization.
+
+        Leave ``reset_auxiliary_metrics=False`` to collect and manage model auxiliary
+        metrics yourself. Set it to True to clear them before training and on exit,
+        including failure, without changing auxiliary losses or gradients.
+        """
         return objective_utils.train_batch_with_loss(
-            self, micro_batches, objective, context_factory
+            self,
+            micro_batches,
+            objective,
+            context_factory,
+            reset_auxiliary_metrics=reset_auxiliary_metrics,
         )
 
     @nvtx.annotate("train_batch")
