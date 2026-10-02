@@ -99,7 +99,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "train_module.freeze_params": "phase policy: what trains",
     "train_module.train_embedding_rows": "image token rows are the only trainable embeddings",
     "train_module.vision_activation_checkpointing": "vision tower memory",
-    "train_module.connector_activation_checkpointing": "connector memory",
+    "train_module.connector_activation_checkpointing": "off: wrapper breaks reset_parameters under the OLMoDDP init order",
     "train_module.response_logits_only": "logits only on supervised positions",
     "train_module.diagnostics_interval": "per-step multimodal diagnostics",
     "train_module.loss_group_weights": "joint text/vision loss split",
@@ -548,7 +548,13 @@ def _build_train_module(
         freeze_params=list(policy.freeze_params),
         train_embedding_rows=_image_token_rows(token_ids),
         vision_activation_checkpointing=phase != AlignmentPhase.bridge,
-        connector_activation_checkpointing=True,
+        # Off on purpose: ``VisionConnector.apply_activation_checkpointing`` wraps the pooling and
+        # projector modules in ``checkpoint_wrapper``, and ``reset_parameters`` then no longer
+        # recognizes the projector (``isinstance`` on the wrapper fails), so a connector initialized
+        # after wrapping -- the OLMoDDP train module's order -- stays uninitialized (connector output
+        # RMS 0, step-1 grad norm 5e3 in the bridge check). The connector's activations are a
+        # negligible share of memory here, so checkpointing them buys nothing.
+        connector_activation_checkpointing=False,
         response_logits_only=True,
         diagnostics_interval=1,
         loss_group_weights={"text": 0.35, "vision": 0.65}

@@ -96,7 +96,7 @@ def test_bridge_optimizer_and_freezing(alignment_recipe):
         "lm.lm_head.*",
     ]
     assert not module.vision_activation_checkpointing
-    assert module.connector_activation_checkpointing and module.response_logits_only
+    assert not module.connector_activation_checkpointing and module.response_logits_only
     assert module.compile_model and module.ep_config.degree == 8
     assert module.z_loss_multiplier == 1e-4
     optim = module.optim
