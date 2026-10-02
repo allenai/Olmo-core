@@ -93,6 +93,13 @@ from .synthetic_ocr import (
 )
 from .text_rich_caption import TextRichCaptionDataset, TextRichCaptionDatasetConfig
 from .tulu import Tulu4Dataset, Tulu4DatasetConfig
+from .vision_alignment_perception import (
+    VISION_ALIGNMENT_OCR_SOURCES,
+    VisionAlignmentAuditedAlignmentDataset,
+    VisionAlignmentAuditedAlignmentDatasetConfig,
+    VisionAlignmentOcrDocumentDataset,
+    VisionAlignmentOcrDocumentDatasetConfig,
+)
 
 __all__ = [
     "MultimodalDatasetMixture",
@@ -100,6 +107,11 @@ __all__ = [
     "MultimodalSourceConfig",
     "PretrainingReplayConfig",
     "PretrainingReplayDataset",
+    "VISION_ALIGNMENT_OCR_SOURCES",
+    "VisionAlignmentAuditedAlignmentDataset",
+    "VisionAlignmentAuditedAlignmentDatasetConfig",
+    "VisionAlignmentOcrDocumentDataset",
+    "VisionAlignmentOcrDocumentDatasetConfig",
     "FineVisionDataset",
     "FineVisionDatasetConfig",
     "VisualWebInstructDataset",

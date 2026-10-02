@@ -701,6 +701,13 @@ def _sequence_length(recipe: VisionAlignmentRecipeConfig) -> int:
     return sequence_length
 
 
+def _visual_sources(phase, sequence_length, artifact_root, **kwargs):
+    """Visual sources for ``phase``; the perception/joint builders register on import."""
+    if phase != AlignmentPhase.bridge:
+        import olmo_core.internal.vision_alignment_phases  # noqa: F401  (registers the builders)
+    return build_visual_sources(phase, sequence_length, artifact_root, **kwargs)
+
+
 def _build_datasets(
     recipe: VisionAlignmentRecipeConfig,
     checkpoint: str,
@@ -719,7 +726,7 @@ def _build_datasets(
         tokenizer_revision=_resolve_tokenizer_revision(recipe, parent, text.tokenizer),
         tokenizer_cache_dir=recipe.hf_cache_dir,
         model_vocab_size=lm_config["vocab_size"],
-        sources=build_visual_sources(phase, sequence_length, recipe.artifact_root),
+        sources=_visual_sources(phase, sequence_length, recipe.artifact_root),
         target_loss_mass=ALIGNMENT_LOSS_TARGETS[phase].copy(),
         mean_loss_weight=ALIGNMENT_MEAN_LOSS_WEIGHTS[phase].copy(),
     )
@@ -751,7 +758,7 @@ def _build_datasets(
         if policy.validation_sequence_length is None
         else min(sequence_length, policy.validation_sequence_length)
     )
-    validation.sources = build_visual_sources(
+    validation.sources = _visual_sources(
         phase, validation_sequence_length, recipe.artifact_root, split="validation"
     )
     validation.target_loss_mass = {name: 1.0 for name in validation.sources}
