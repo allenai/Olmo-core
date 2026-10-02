@@ -25,6 +25,7 @@ API Reference
 
 from __future__ import annotations
 
+import inspect
 import logging
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -43,7 +44,7 @@ from torch.distributed.checkpoint.metadata import Metadata, TensorStorageMetadat
 from olmo_core.aliases import PathOrStr
 from olmo_core.config import StrEnum
 from olmo_core.io import clear_directory, dir_is_empty, is_url, normalize_path
-from olmo_core.utils import gc_cuda, get_element_size, wait_for
+from olmo_core.utils import gc_cuda, get_element_size, log_once, wait_for
 
 from ..utils import barrier, get_fs_local_rank, is_distributed
 from .filesystem import RemoteFileSystemReader, RemoteFileSystemWriter
@@ -101,9 +102,7 @@ def save_state_dict(
     """
     if not _skip_prepare:
         dir = _prepare_env_for_save(dir, process_group=process_group, save_overwrite=save_overwrite)
-    planner = DefaultSavePlanner(
-        dedup_save_to_lowest_rank=True, enable_plan_caching=enable_plan_caching
-    )
+    planner = _new_save_planner(enable_plan_caching=enable_plan_caching)
     dist_cp.state_dict_saver.save(
         state_dict,
         storage_writer=RemoteFileSystemWriter(
@@ -138,9 +137,7 @@ def async_save_state_dict(
     """
     if not _skip_prepare:
         dir = _prepare_env_for_save(dir, process_group=process_group, save_overwrite=save_overwrite)
-    planner = DefaultSavePlanner(
-        dedup_save_to_lowest_rank=True, enable_plan_caching=enable_plan_caching
-    )
+    planner = _new_save_planner(enable_plan_caching=enable_plan_caching)
     return dist_cp.state_dict_saver.async_save(
         state_dict,
         storage_writer=RemoteFileSystemWriter(
@@ -238,9 +235,7 @@ def save_model_and_optim_state(
         process_group=process_group,
         flatten_optimizer_state=flatten_optimizer_state,
     )
-    planner = DefaultSavePlanner(
-        dedup_save_to_lowest_rank=True, enable_plan_caching=enable_plan_caching
-    )
+    planner = _new_save_planner(enable_plan_caching=enable_plan_caching)
     dist_cp.state_dict_saver.save(
         state_dict,
         storage_writer=RemoteFileSystemWriter(
@@ -281,9 +276,7 @@ def async_save_model_and_optim_state(
         process_group=process_group,
         flatten_optimizer_state=flatten_optimizer_state,
     )
-    planner = DefaultSavePlanner(
-        dedup_save_to_lowest_rank=True, enable_plan_caching=enable_plan_caching
-    )
+    planner = _new_save_planner(enable_plan_caching=enable_plan_caching)
     return dist_cp.state_dict_saver.async_save(
         state_dict,
         storage_writer=RemoteFileSystemWriter(
@@ -663,6 +656,21 @@ def get_checkpoint_metadata(dir: PathOrStr) -> Metadata:
     dir = normalize_path(dir)
     storage_reader = RemoteFileSystemReader(dir)
     return storage_reader.read_metadata()
+
+
+def _new_save_planner(enable_plan_caching: bool = False) -> DefaultSavePlanner:
+    kwargs: Dict[str, Any] = dict(dedup_save_to_lowest_rank=True)
+    # The 'enable_plan_caching' option was only added to 'DefaultSavePlanner' in torch 2.7.
+    if "enable_plan_caching" in inspect.signature(DefaultSavePlanner.__init__).parameters:
+        kwargs["enable_plan_caching"] = enable_plan_caching
+    elif enable_plan_caching:
+        log_once(
+            log,
+            "Ignoring 'enable_plan_caching=True' since it's not supported by this version of "
+            "torch (requires torch>=2.7)",
+            level=logging.WARNING,
+        )
+    return DefaultSavePlanner(**kwargs)
 
 
 def _prepare_env_for_save(

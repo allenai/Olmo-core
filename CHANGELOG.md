@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WandBCallback` and `CometCallback` now initialize before the checkpointer (via a higher callback `priority`) so that pre-train checkpoint saves no longer drop already-recorded metrics.
 - `EvaluatorCallback` and `BatchSizeSchedulerCallback` now recognize `OLMoDDPTrainModule` (previously they only accepted `TransformerTrainModule`/`TransformerPipelineTrainModule`, so in-loop eval and batch-size scheduling aborted with an OLMoDDP run). `BatchSizeSchedulerCallback` also accepts the `OLMoDDPOptimizer` for its learning-rate adjustment.
 - The CPU `Test` CI job now caches `HF_HOME` across runs so the HuggingFace roundtrip tests (Qwen3-0.6B, Gemma-3-270m) don't re-download their checkpoints every run.
+- Fixed a `TypeError` when saving checkpoints with torch 2.6 — `enable_plan_caching` is now only passed to `DefaultSavePlanner` when supported (torch 2.7+), and a warning is logged if it's requested but unsupported.
 - Excluded `mark_dynamic` from `torch.compile` tracing (`@torch.compiler.disable`).
 - Clearer error messages (now include the offending values) when a rank batch size isn't divisible by the sequence length, or `max_target_sequence_length` isn't a multiple of `sequence_length`.
 - S3 uploads/downloads now also retry on transient SSL errors (`ssl.SSLError`, botocore/urllib3 `SSLError`).
