@@ -1,7 +1,8 @@
 import pytest
 import torch
 
-from olmo_core.nn.transformer.config import TransformerConfig
+import olmo_core.nn.vision.multimodal as multimodal_module
+from olmo_core.nn.transformer.config import TransformerBlockType, TransformerConfig
 from olmo_core.nn.vision import (
     MultimodalLM,
     MultimodalLMConfig,
@@ -107,6 +108,31 @@ def test_config_has_expected_fields():
     assert cfg.image_patch_token_id == _IMAGE_PATCH_TOKEN
 
 
+def test_masked_residual_dropout_receives_supervised_token_mask():
+    cfg = _tiny_multimodal_cfg()
+    cfg.lm.block.name = TransformerBlockType.default
+    cfg.lm.block.masked_dropout = 0.2
+    model = cfg.build(init_device="cpu").train()
+    input_ids, images, pooled = _make_inputs(batch=1, seq_len=8)
+    loss_masks = torch.tensor([[0.0, 0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 0.0]])
+
+    with pytest.raises(ValueError, match="loss_masks.*masked_dropout"):
+        model(input_ids)
+
+    received = {}
+
+    def capture_mask(_module, _args, kwargs):
+        received["drop_mask"] = kwargs["drop_mask"]
+
+    handle = model.lm.register_forward_pre_hook(capture_mask, with_kwargs=True)
+    try:
+        logits = model(input_ids, images=images, pooled_patches_idx=pooled, loss_masks=loss_masks)
+    finally:
+        handle.remove()
+    torch.testing.assert_close(received["drop_mask"], loss_masks > 0)
+    assert torch.isfinite(logits).all()
+
+
 # ---------------------------------------------------------------------------
 # Text-only forward pass
 # ---------------------------------------------------------------------------
@@ -151,6 +177,7 @@ class TestTextOnlyForward:
 
 class TestImageForward:
     def setup_method(self):
+        torch.manual_seed(0)
         self.cfg = _tiny_multimodal_cfg()
         self.model = self.cfg.build(init_device="cpu")
         self.model.eval()
@@ -168,6 +195,24 @@ class TestImageForward:
         out_img = self.model(input_ids, images=images, pooled_patches_idx=idx)
         assert not torch.allclose(out_text, out_img)
 
+    def test_cached_image_features_match_direct_forward(self):
+        input_ids, images, idx = _make_inputs(batch=2, seq_len=16)
+        encoded = self.model.encode_images(images, idx)
+        direct = self.model(input_ids, images=images, pooled_patches_idx=idx)
+        cached = self.model(input_ids, encoded_image_features=encoded)
+        torch.testing.assert_close(cached, direct)
+
+    def test_images_and_cached_features_are_mutually_exclusive(self):
+        input_ids, images, idx = _make_inputs(batch=1, seq_len=16)
+        encoded = self.model.encode_images(images, idx)
+        with pytest.raises(ValueError, match="either `images` or `encoded_image_features`"):
+            self.model(
+                input_ids,
+                images=images,
+                pooled_patches_idx=idx,
+                encoded_image_features=encoded,
+            )
+
     def test_missing_idx_raises(self):
         input_ids, images, _ = _make_inputs(batch=1, seq_len=16)
         with pytest.raises(ValueError, match="pooled_patches_idx"):
@@ -180,6 +225,53 @@ class TestImageForward:
         input_ids[0, 0] = 7
         with pytest.raises(ValueError, match="match the number of projected image features"):
             self.model(input_ids, images=images, pooled_patches_idx=idx)
+
+    def test_input_scale_diagnostics_cover_connector_and_splice(self):
+        input_ids, images, idx = _make_inputs(batch=1, seq_len=16)
+        self.model.set_input_diagnostics(True)
+        self.model(
+            input_ids,
+            images=images,
+            pooled_patches_idx=idx,
+            token_type_ids=input_ids == _IMAGE_PATCH_TOKEN,
+        )
+        diagnostics = self.model.pop_input_diagnostics()
+
+        assert set(diagnostics) == {
+            "text embedding RMS",
+            "connector output RMS",
+            "spliced image embedding RMS",
+        }
+        assert all(torch.isfinite(value) and value > 0 for value in diagnostics.values())
+        assert self.model.pop_input_diagnostics() == {}
+
+    def test_input_scale_diagnostics_reduce_sums_and_counts(self, monkeypatch):
+        self.model.set_input_diagnostics(True)
+        self.model._record_input_diagnostic("text embedding RMS", torch.tensor([1.0, 3.0]))
+        remote_stats = torch.tensor([16.0, 9.0, 0.0, 4.0, 1.0, 0.0], dtype=torch.float64)
+        process_group = object()
+
+        monkeypatch.setattr(multimodal_module, "is_distributed", lambda: True)
+
+        def fake_all_reduce(stats, group):
+            assert group is process_group
+            stats.add_(remote_stats)
+
+        monkeypatch.setattr(multimodal_module.dist, "all_reduce", fake_all_reduce)
+        diagnostics = self.model.pop_input_diagnostics(
+            reduce_across_process_group=True,
+            process_group=process_group,
+        )
+
+        torch.testing.assert_close(
+            diagnostics["text embedding RMS"],
+            torch.sqrt(torch.tensor(26.0 / 6.0, dtype=torch.float64)),
+        )
+        torch.testing.assert_close(
+            diagnostics["connector output RMS"], torch.tensor(3.0, dtype=torch.float64)
+        )
+        assert "spliced image embedding RMS" not in diagnostics
+        assert self.model.pop_input_diagnostics() == {}
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +291,47 @@ def test_multi_crop():
     assert out.shape == (2, 16, _LM_VOCAB)
 
 
+def test_image_flops_account_for_trainable_vision_backward():
+    model = _tiny_multimodal_cfg().build(init_device="cpu")
+    trainable_flops = model.image_encoder_flops(2, 4, 2)
+    for parameter in model.vision.parameters():
+        parameter.requires_grad_(False)
+    frozen_flops = model.image_encoder_flops(2, 4, 2)
+
+    assert trainable_flops > frozen_flops
+
+
+def test_vision_connector_activation_checkpointing_matches_baseline():
+    torch.manual_seed(0)
+    baseline = _tiny_multimodal_cfg().build(init_device="cpu").train()
+    checkpointed = _tiny_multimodal_cfg().build(init_device="cpu").train()
+    checkpointed.load_state_dict(baseline.state_dict())
+    checkpointed.vision.apply_activation_checkpointing()
+    checkpointed.connector.apply_activation_checkpointing()
+
+    input_ids, images, idx = _make_inputs(batch=1, seq_len=8)
+    baseline_out = baseline(input_ids, images=images, pooled_patches_idx=idx)
+    checkpointed_out = checkpointed(input_ids, images=images, pooled_patches_idx=idx)
+    torch.testing.assert_close(checkpointed_out, baseline_out)
+
+    baseline_out.sum().backward()
+    checkpointed_out.sum().backward()
+    baseline_grads = [
+        param.grad
+        for module in (baseline.vision, baseline.connector)
+        for param in module.parameters()
+    ]
+    checkpointed_grads = [
+        param.grad
+        for module in (checkpointed.vision, checkpointed.connector)
+        for param in module.parameters()
+    ]
+    assert len(checkpointed_grads) == len(baseline_grads)
+    for actual, expected in zip(checkpointed_grads, baseline_grads):
+        assert actual is not None and expected is not None
+        torch.testing.assert_close(actual, expected)
+
+
 # ---------------------------------------------------------------------------
 # Meta device
 # ---------------------------------------------------------------------------
@@ -210,6 +343,24 @@ def test_meta_device():
     for p in model.parameters():
         assert p.device.type == "meta"
         break
+
+
+def test_multimodal_train_mode_keeps_frozen_vision_in_eval():
+    from olmo_core.optim import AdamWConfig
+    from olmo_core.train.train_module import MultimodalTransformerTrainModuleConfig
+
+    model = _tiny_multimodal_cfg().build(init_device="cpu")
+    train_module = MultimodalTransformerTrainModuleConfig(
+        rank_microbatch_size=8,
+        max_sequence_length=8,
+        optim=AdamWConfig(lr=1e-4),
+        freeze_params=["vision.*"],
+    ).build(model, device=torch.device("cpu"))
+
+    train_module._set_model_mode("train")
+    assert model.lm.training
+    assert model.connector.training
+    assert not model.vision.training
 
 
 # ---------------------------------------------------------------------------
