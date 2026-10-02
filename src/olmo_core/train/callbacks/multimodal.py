@@ -302,6 +302,21 @@ class MultimodalBeakerCallback(BeakerCallback):
         super().pre_train()
 
 
+def _load_siglip_vision_state(
+    model_id: str, *, revision: Optional[str], cache_dir: Optional[str], n_blocks: int
+) -> Dict[str, Any]:
+    """Download a SigLIP vision tower from the Hub and map it onto the encoder's parameter names."""
+    import torch
+    from transformers import SiglipVisionModel
+
+    from olmo_core.nn.vision import siglip_state_dict_to_vision_encoder
+
+    hf_vit = SiglipVisionModel.from_pretrained(
+        model_id, revision=revision, cache_dir=cache_dir, dtype=torch.float32
+    )
+    return siglip_state_dict_to_vision_encoder(hf_vit.state_dict(), n_blocks=n_blocks)
+
+
 @dataclass
 class InitializeMultimodalModelCallback(Callback):
     """Initialize a fresh alignment run after the trainer has attempted a resume.
@@ -335,7 +350,6 @@ class InitializeMultimodalModelCallback(Callback):
         if self.trainer.checkpoint_loaded:
             return
 
-        from olmo_core.nn.vision import load_siglip_hf_vision_state_dict
         from olmo_core.train.train_module.transformer.multimodal_train_module import (
             MultimodalOLMoDDPTrainModule,
         )
@@ -359,10 +373,13 @@ class InitializeMultimodalModelCallback(Callback):
         )
 
         log.info("Loading pretrained vision weights from %s", self.vision_model_id)
-        vision_state = load_siglip_hf_vision_state_dict(
-            self.vision_model_id, revision=self.vision_revision, cache_dir=self.cache_dir
+        vision_state = _load_siglip_vision_state(
+            self.vision_model_id,
+            revision=self.vision_revision,
+            cache_dir=self.cache_dir,
+            n_blocks=train_module.multimodal_model.cfg.vision.image_num_layers,
         )
-        train_module.load_siglip_vision_state_dict(vision_state)
+        train_module.load_vision_state_dict(vision_state)
         train_module.assert_vision_optimizer_state_synced()
         if self.image_token_ids:
             train_module.reset_image_token_rows(

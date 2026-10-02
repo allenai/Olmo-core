@@ -1354,14 +1354,6 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
 
     # -- pretrained component loading ---------------------------------------------------------
 
-    def load_siglip_vision_state_dict(self, hf_state_dict: Dict[str, torch.Tensor]) -> None:
-        """Strictly load a SigLIP vision tower and synchronize optimizer masters."""
-        from olmo_core.nn.vision import siglip_hf_state_dict_to_vision
-
-        model = self.multimodal_model
-        vision_state = siglip_hf_state_dict_to_vision(hf_state_dict, model.cfg.vision)
-        self.load_vision_state_dict(vision_state)
-
     @torch.no_grad()
     def load_vision_state_dict(self, vision_state: Dict[str, torch.Tensor]) -> None:
         """Strictly load vision weights and synchronize trainable optimizer masters.

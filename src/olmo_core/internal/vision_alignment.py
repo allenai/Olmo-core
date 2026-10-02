@@ -28,12 +28,7 @@ from olmo_core.nn.attention.kda import KimiDeltaAttentionConfig
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
 from olmo_core.nn.hf.convert_checkpoint import _normalize_legacy_latent_moe_config
 from olmo_core.nn.transformer import OLMoDDPModelConfig
-from olmo_core.nn.vision import (
-    Molmo2TokenIds,
-    MultimodalLMConfig,
-    load_molmo2_hf_vision_config,
-    multimodal_config_from_molmo2_vision,
-)
+from olmo_core.nn.vision import Molmo2TokenIds, MultimodalLMConfig
 from olmo_core.optim import CosWithWarmup, OptimGroupOverride, PerGroupScheduler
 from olmo_core.optim.multimodal_optimizer import MultimodalOLMoDDPOptimizerConfig
 from olmo_core.train import Duration, LoadStrategy, TrainerConfig
@@ -186,8 +181,6 @@ class VisionAlignmentRecipeConfig(Config):
     work_dir: str = "/weka/oe-training-default/rustin/dataset-cache/vision-alignment"
     hf_cache_dir: str | None = "/weka/oe-training-default/rustin/hf-cache/hub"
     tokenizer_revision: str | None = None
-    molmo2_model_id: str = "allenai/Molmo2-4B"
-    molmo2_revision: str = "042abfa7a38879a376cec03d949eff0aefaa0600"
     vision_model_id: str = "google/siglip2-so400m-patch14-384"
     vision_revision: str = "e8e487298228002f3d8a82e0cd5c8ea9c567f57f"
     text_validation_size: int = 1024
@@ -415,13 +408,8 @@ def _build_model(
             raise OLMoConfigurationError("This alignment recipe currently requires an OLMoDDP LM")
         if text is not None:
             _check_text_lm_matches_checkpoint(lm, checkpoint)
-        hf_config = load_molmo2_hf_vision_config(
-            recipe.molmo2_model_id,
-            revision=recipe.molmo2_revision,
-            cache_dir=recipe.hf_cache_dir,
-        )
-        model = multimodal_config_from_molmo2_vision(
-            hf_config, lm, image_patch_token_id=token_ids.im_patch_id
+        model = MultimodalLMConfig.molmo2_vision_stack(
+            lm, image_patch_token_id=token_ids.im_patch_id
         )
     if not isinstance(model.lm, OLMoDDPModelConfig):
         raise OLMoConfigurationError("This alignment recipe currently requires an OLMoDDP LM")

@@ -57,10 +57,9 @@ def alignment_recipe(tmp_path, monkeypatch):
     monkeypatch.setattr(
         MultimodalMixtureConfig, "build_tokenizer", Mock(return_value=(tokenizer, token_ids))
     )
-    load_hf = Mock(return_value=object())
-    monkeypatch.setattr(vision_alignment, "load_molmo2_hf_vision_config", load_hf)
 
-    def make_multimodal(hf_config, language_model, image_patch_token_id):
+    def make_multimodal(cls, language_model, *, image_patch_token_id, **kwargs):
+        # A tiny stand-in for Molmo2's vision stack so recipe tests build quickly.
         vision = VisionEncoderConfig()
         return MultimodalLMConfig(
             lm=language_model,
@@ -71,7 +70,7 @@ def alignment_recipe(tmp_path, monkeypatch):
             image_patch_token_id=image_patch_token_id,
         )
 
-    monkeypatch.setattr(vision_alignment, "multimodal_config_from_molmo2_vision", make_multimodal)
+    monkeypatch.setattr(MultimodalLMConfig, "molmo2_vision_stack", classmethod(make_multimodal))
     constructed_sources = []
 
     def visual_sources(phase, sequence_length, artifact_root, split="train"):
@@ -147,7 +146,6 @@ def alignment_recipe(tmp_path, monkeypatch):
         save=save,
         set_router_coefficients=set_router_coefficients,
         base=base,
-        load_hf=load_hf,
         token_ids=token_ids,
         constructed_sources=constructed_sources,
     )

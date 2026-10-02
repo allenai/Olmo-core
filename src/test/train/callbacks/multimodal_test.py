@@ -36,7 +36,9 @@ def bootstrap(monkeypatch):
     )
     train_module = Mock(spec=MultimodalOLMoDDPTrainModule)
     vision_loader = Mock(return_value={"vision": object()})
-    monkeypatch.setattr("olmo_core.nn.vision.load_siglip_hf_vision_state_dict", vision_loader)
+    monkeypatch.setattr(
+        "olmo_core.train.callbacks.multimodal._load_siglip_vision_state", vision_loader
+    )
     callback.trainer = SimpleNamespace(
         checkpoint_loaded=False, train_module=train_module, global_step=0
     )
@@ -69,15 +71,18 @@ def test_fresh_run_loads_components_and_resets_only_input_rows(bootstrap, suffix
         load_optim_state=False,
     )
     vision_loader.assert_called_once_with(
-        callback.vision_model_id, revision="test-revision", cache_dir="/cache/huggingface"
+        callback.vision_model_id,
+        revision="test-revision",
+        cache_dir="/cache/huggingface",
+        n_blocks=train_module.multimodal_model.cfg.vision.image_num_layers,
     )
-    train_module.load_siglip_vision_state_dict.assert_called_once_with(vision_loader.return_value)
+    train_module.load_vision_state_dict.assert_called_once_with(vision_loader.return_value)
     train_module.reset_image_token_rows.assert_called_once_with(
         [100, 101], seed=42, reset_output_rows=False
     )
     assert [call[0] for call in train_module.mock_calls] == [
         "load_state_dict_direct",
-        "load_siglip_vision_state_dict",
+        "load_vision_state_dict",
         "assert_vision_optimizer_state_synced",
         "reset_image_token_rows",
     ]
