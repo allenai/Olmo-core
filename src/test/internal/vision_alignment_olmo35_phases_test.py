@@ -188,3 +188,75 @@ def test_document_mode_samples_one_annotation_with_its_calibration(
             means.update(ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS[phase])
         assert config.dataset.mean_loss_weight == means
         parent = alignment_recipe.save(config)
+
+
+def _write_caption_manifest(root: Path) -> None:
+    """The prepared caption selections the stage-1 v3 caption sources read."""
+    folder = root / "perception-provenance-v2"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    def entry(split):
+        return {"physical_split": split, "selection": {"path": f"selections/{split}.indices"}}
+
+    sources = {
+        name: {"train": entry("train"), "validation": entry("validation")}
+        for name in ("pixmo_caption", "pixmo_transcript")
+    }
+    (folder / "vision-alignment-perception-provenance.json").write_text(
+        json.dumps({"sources": sources})
+    )
+
+
+@pytest.mark.parametrize("document_mode", [True, False])
+def test_stage1_v3_data_switch(alignment_recipe, request, tmp_path, document_mode):
+    from olmo_core.exceptions import OLMoConfigurationError
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_LOSS_TARGETS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_SOURCES,
+    )
+
+    if document_mode:
+        request.getfixturevalue("hero_checkpoint")
+    _write_caption_manifest(tmp_path / "artifacts")
+    v3 = ["--recipe.data=stage1_v3"]
+    with pytest.raises(OLMoConfigurationError, match="bridge is caption-only"):
+        alignment_recipe.build(overrides=v3)
+    parent = alignment_recipe.save(alignment_recipe.build())
+    if not document_mode:
+        # The shipped means are for one annotation per example.
+        with pytest.raises(OLMoConfigurationError, match="supply dataset.mean_loss_weight"):
+            alignment_recipe.build("perception", parent, include_means=False, overrides=v3)
+        return
+    for phase in ("perception", "joint"):
+        config = alignment_recipe.build(phase, parent, include_means=False, overrides=v3)
+        sources = dict(config.dataset.sources)
+        targets = dict(config.dataset.target_loss_mass)
+        if phase == "joint":
+            assert sources.pop("native_text_replay") is not None
+            assert targets.pop("native_text_replay") == 0.35
+            assert sum(targets.values()) == pytest.approx(0.65)
+            assert config.data_loader.group_sequence_quotas == {"text": 16, "vision": 112}
+        assert set(sources) == set(STAGE1_V3_SOURCES)
+        total = sum(STAGE1_V3_LOSS_TARGETS.values())
+        for name, value in targets.items():
+            assert value / sum(targets.values()) == pytest.approx(
+                STAGE1_V3_LOSS_TARGETS[name] / total
+            )
+        means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k in sources}
+        assert means == STAGE1_V3_MEAN_LOSS_WEIGHTS
+        sampling = _annotation_sampling(sources)
+        assert set(sampling.values()) == {"one"}
+        assert {"pixmo_points_v2", "pixmo_count_v2", "cosyn_point_v2", "plot_qa"} <= set(sampling)
+        for name, source in sources.items():
+            dataset = getattr(source, "dataset", source)
+            assert dataset.message_format == "document", name
+            assert dataset.loss_token_weighting == "none", name
+            assert dataset.max_sequence_length == 8192, name
+        caption = sources["pixmo_caption"].dataset
+        assert caption.style_tag and caption.fixed_prompt is None and caption.mode == "caption"
+        evaluator = config.trainer.callbacks["multimodal_evaluator"]
+        assert {"pixmo_caption", "v3_long_caption", "v3_transcript"} <= set(
+            evaluator.eval_dataset.sources
+        )
+        parent = alignment_recipe.save(config)
