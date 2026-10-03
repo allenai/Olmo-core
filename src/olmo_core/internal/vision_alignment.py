@@ -100,8 +100,8 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "model.image_patch_token_id": "image patch token id from the tokenizer",
     "model.vit_layers": "vision features taken from these ViT layers",
     "model.lm.block*.routed_experts_router.lb_loss_weight": (
-        "router load balancing off while the LM is frozen (bridge, perception); joint "
-        "restores the pretrained coefficients"
+        "router load balancing off while the LM is frozen (bridge, perception, also when "
+        "started from the pretraining checkpoint); joint restores the pretrained coefficients"
     ),
     "model.lm.block*.sequence_mixer.use_experimental_kernels": (
         "document mode passes cu_seqlens to KDA; kernel_fun.kda.chunk_kda's is_supported() "
@@ -129,7 +129,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     ),
     "trainer.save_folder": "alignment output folder",
     "trainer.work_dir": "alignment dataset cache",
-    "trainer.load_path": "phase parent (bridge starts from the pretraining checkpoint)",
+    "trainer.load_path": "phase parent (a phase without one starts from the pretraining checkpoint)",
     "trainer.load_strategy": "phase handoff policy",
     "trainer.load_optim_state": "phase handoff policy",
     "trainer.load_trainer_state": "phase handoff policy",
@@ -144,7 +144,9 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "trainer.callbacks.metrics": "multimodal metric saver",
     "trainer.callbacks.restore_metrics": "resume metrics",
     "trainer.callbacks.multimodal_evaluator": "in-loop multimodal evaluation",
-    "trainer.callbacks.initialize_multimodal": "bridge bootstrap of vision and connector",
+    "trainer.callbacks.initialize_multimodal": (
+        "fresh-start bootstrap of LM, vision and connector (bridge, or any phase without a parent)"
+    ),
     "dataset": "multimodal mixture (visual sources, native text replay in joint)",
     "data_loader": "multimodal mixture loader (packing, crops); workers inherited",
 }
@@ -175,7 +177,11 @@ class VisionAlignmentRecipeConfig(Config):
     """Inputs used to construct an alignment experiment's ordinary component configs.
 
     Set ``pretraining_checkpoint`` for bridge and ``parent_checkpoint`` for subsequent
-    phases. The latter inherit the multimodal model and original text-data ancestry.
+    phases. The latter inherit the multimodal model and original text-data ancestry. Perception
+    and joint may instead start from ``pretraining_checkpoint`` with no parent (stage ablations):
+    they are then initialized exactly like bridge (text LM weights, SigLIP vision encoder, fresh
+    connector and image-token rows) and train with their own phase's policy. A joint parent may
+    be a bridge or perception checkpoint; a perception parent must be a bridge checkpoint.
     Component-level CLI overrides are applied after these defaults are constructed.
     """
 
@@ -202,6 +208,11 @@ class VisionAlignmentRecipeConfig(Config):
     A context override preserves the phase's microbatch instance count and requires fresh
     visual loss-weight calibration; it does not modify RoPE.
     """
+    steps: int | None = None
+    """Training steps of this phase: sets ``trainer.max_duration`` and the horizon of every
+    component's learning-rate schedule (bridge's shorter connector decay scales with it).
+    Warmups and the final learning-rate fraction keep the phase defaults. ``None`` uses the
+    phase default (bridge 500, perception 2,000, joint 1,500)."""
     pretraining_checkpoint: str | None = None
     parent_checkpoint: str | None = None
     artifact_root: str = DEFAULT_ALIGNMENT_ARTIFACT_ROOT
@@ -385,6 +396,9 @@ def _image_token_rows(ids: Molmo2TokenIds) -> list[int]:
 
 
 def _resolve_parent(recipe: VisionAlignmentRecipeConfig) -> tuple[str, dict | None]:
+    """The pretraining checkpoint and the parent phase's saved config, ``None`` for a phase that
+    starts from the pretraining checkpoint (always bridge; perception or joint when no parent is
+    set)."""
     if recipe.phase == AlignmentPhase.bridge:
         if recipe.parent_checkpoint is not None or not recipe.pretraining_checkpoint:
             raise OLMoConfigurationError(
@@ -392,13 +406,19 @@ def _resolve_parent(recipe: VisionAlignmentRecipeConfig) -> tuple[str, dict | No
             )
         return recipe.pretraining_checkpoint, None
     if not recipe.parent_checkpoint:
-        raise OLMoConfigurationError("Set recipe.parent_checkpoint to the previous alignment phase")
+        if recipe.pretraining_checkpoint:
+            return recipe.pretraining_checkpoint, None
+        raise OLMoConfigurationError(
+            "Set recipe.parent_checkpoint to a previous alignment phase, or "
+            "recipe.pretraining_checkpoint to start this phase from the text LM"
+        )
     parent = _read_checkpoint_config(recipe.parent_checkpoint)
     previous = parent.get("recipe", {}).get("phase", parent.get("phase"))
-    expected = "bridge" if recipe.phase == AlignmentPhase.perception else "perception"
-    if previous != expected:
+    order = list(AlignmentPhase)
+    expected = order[: order.index(recipe.phase)]
+    if previous not in expected:
         raise OLMoConfigurationError(
-            f"{recipe.phase} requires a {expected} checkpoint, got {previous}"
+            f"{recipe.phase} requires a {' or '.join(expected)} checkpoint, got {previous}"
         )
     checkpoint = parent.get("pretraining_checkpoint") or parent.get("artifacts", {}).get(
         "base_checkpoint"
@@ -462,7 +482,8 @@ def _build_model(
     if not isinstance(model.lm, OLMoDDPModelConfig):
         raise OLMoConfigurationError("This alignment recipe currently requires an OLMoDDP LM")
     lb_loss_weight = recipe.router_lb_loss_weight
-    if recipe.phase == AlignmentPhase.bridge and lb_loss_weight is None:
+    if parent is None and recipe.phase != AlignmentPhase.joint and lb_loss_weight is None:
+        # The LM is frozen; a later phase inherits this through its parent.
         lb_loss_weight = 0.0
     blocks: list[OLMoDDPTransformerBlockConfig] = []
     for block in [model.lm.block, *(model.lm.block_overrides or {}).values()]:
@@ -485,13 +506,23 @@ def _build_model(
     return model
 
 
+def _phase_steps(recipe: VisionAlignmentRecipeConfig) -> int:
+    return _PHASES[recipe.phase].steps if recipe.steps is None else recipe.steps
+
+
 def _build_train_module(
     phase: AlignmentPhase,
     token_ids: Molmo2TokenIds,
     sequence_length: int,
     text: dict | None = None,
+    steps: int | None = None,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
     policy = _PHASES[phase]
+    horizon = policy.steps if steps is None else steps
+    connector_horizon = horizon
+    if policy.connector_decay_steps is not None:
+        # Bridge decays the connector over a fixed fraction of the phase.
+        connector_horizon = round(policy.connector_decay_steps * horizon / policy.steps)
     # Text-side settings: inherited from the text config, else the recipe's legacy defaults.
     if text is not None:
         text_module = text["train_module"]
@@ -611,15 +642,11 @@ def _build_train_module(
         scheduler=PerGroupScheduler(
             schedulers={
                 "connector": CosWithWarmup(
-                    warmup=policy.connector_warmup,
-                    alpha_f=0.1,
-                    t_max=policy.connector_decay_steps or policy.steps,
+                    warmup=policy.connector_warmup, alpha_f=0.1, t_max=connector_horizon
                 ),
-                "vision": CosWithWarmup(
-                    warmup=policy.vision_warmup, alpha_f=0.1, t_max=policy.steps
-                ),
+                "vision": CosWithWarmup(warmup=policy.vision_warmup, alpha_f=0.1, t_max=horizon),
             },
-            default=CosWithWarmup(warmup=policy.lm_warmup, alpha_f=0.1, t_max=policy.steps),
+            default=CosWithWarmup(warmup=policy.lm_warmup, alpha_f=0.1, t_max=horizon),
         ),
         **module_settings,
     )
@@ -727,6 +754,8 @@ def _build_recipe(cli: CliContext) -> VisionAlignmentRecipeConfig:
         not isfinite(recipe.router_lb_loss_weight) or recipe.router_lb_loss_weight < 0
     ):
         raise OLMoConfigurationError("recipe.router_lb_loss_weight must be finite and nonnegative")
+    if recipe.steps is not None and (type(recipe.steps) is not int or recipe.steps < 1):
+        raise OLMoConfigurationError("recipe.steps must be a positive integer")
     return recipe
 
 
@@ -893,7 +922,8 @@ def _build_trainer(
 ) -> TrainerConfig:
     phase = recipe.phase
     policy = _PHASES[phase]
-    is_bridge = phase == AlignmentPhase.bridge
+    # Bridge, or perception / joint started from the pretraining checkpoint (stage ablations).
+    fresh = recipe.parent_checkpoint is None
     is_joint = phase == AlignmentPhase.joint
     # Bookkeeping settings and callbacks come from the text config; the text run's own
     # checkpointer cadence, W&B, notifier and Beaker callback are replaced below.
@@ -945,10 +975,10 @@ def _build_trainer(
         save_folder=f"{recipe.output_root}/{cli.run_name}",
         work_dir=f"{recipe.work_dir}/{cli.run_name}",
         load_path=recipe.parent_checkpoint,
-        load_strategy=LoadStrategy.if_available if is_bridge else LoadStrategy.always,
-        load_optim_state=None if is_bridge else False,
-        load_trainer_state=None if is_bridge else False,
-        max_duration=Duration.steps(policy.steps),
+        load_strategy=LoadStrategy.if_available if fresh else LoadStrategy.always,
+        load_optim_state=None if fresh else False,
+        load_trainer_state=None if fresh else False,
+        max_duration=Duration.steps(_phase_steps(recipe)),
         **bookkeeping,
     )
     for name, callback in inherited_callbacks.items():
@@ -984,7 +1014,7 @@ def _build_trainer(
             ),
         )
     )
-    if is_bridge:
+    if fresh:
         trainer = trainer.with_callback(
             "initialize_multimodal",
             InitializeMultimodalModelCallback(
@@ -1119,7 +1149,9 @@ def build_config(cli: CliContext) -> VisionAlignmentExperimentConfig:
         model=_build_model(recipe, checkpoint, parent, token_ids, text=text),
         dataset=dataset,
         data_loader=_build_data_loader(cli, recipe, sequence_length, text=text),
-        train_module=_build_train_module(recipe.phase, token_ids, sequence_length, text=text),
+        train_module=_build_train_module(
+            recipe.phase, token_ids, sequence_length, text=text, steps=recipe.steps
+        ),
         trainer=_build_trainer(
             cli, recipe, checkpoint, validation, token_ids, sequence_length, text=text
         ),
