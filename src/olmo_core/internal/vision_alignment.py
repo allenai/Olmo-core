@@ -69,8 +69,10 @@ from .experiment import CliContext, ExperimentConfig, SubCmd
 from .vision_alignment_data import (
     ALIGNMENT_LOSS_TARGETS,
     ALIGNMENT_MEAN_LOSS_WEIGHTS,
+    ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS,
     DEFAULT_ALIGNMENT_ARTIFACT_ROOT,
     build_visual_sources,
+    has_calibrated_artifacts,
 )
 
 log = logging.getLogger(__name__)
@@ -324,6 +326,24 @@ def _checkpoint_lm_config(checkpoint: str) -> dict:
     return model
 
 
+def _uses_document_mode(lm: Any) -> bool:
+    """Whether packed examples reach ``lm`` as documents: KDA layers cannot apply attention
+    masks, so the multimodal model isolates examples through document boundaries instead."""
+    return any(
+        isinstance(getattr(block, "sequence_mixer", None), KimiDeltaAttentionConfig)
+        for block in [lm.block, *(getattr(lm, "block_overrides", None) or {}).values()]
+    )
+
+
+def _sample_one_annotation(sources: dict[str, Any]) -> None:
+    """Keep one sampled annotation per example in sources that would otherwise pack each of an
+    image's annotations as a sibling branch, which document boundaries cannot isolate."""
+    for source in sources.values():
+        config = getattr(source, "dataset", source)  # unwrap MultimodalSourceConfig
+        if hasattr(config, "annotation_sampling"):
+            config.annotation_sampling = "one"
+
+
 def _check_text_lm_matches_checkpoint(lm: OLMoDDPModelConfig, checkpoint: str) -> None:
     pretrained = OLMoDDPModelConfig.from_dict(_checkpoint_lm_config(checkpoint))
     for name in ("d_model", "n_layers", "vocab_size", "tie_word_embeddings"):
@@ -430,7 +450,7 @@ def _build_model(
         if not isinstance(block, OLMoDDPTransformerBlockConfig):
             raise OLMoConfigurationError("Alignment requires OLMoDDP transformer blocks")
         blocks.append(block)
-    document_mode = any(isinstance(b.sequence_mixer, KimiDeltaAttentionConfig) for b in blocks)
+    document_mode = _uses_document_mode(model.lm)
     for block in blocks:
         if block.routed_experts_router is not None and lb_loss_weight is not None:
             block.routed_experts_router.lb_loss_weight = lb_loss_weight
@@ -721,6 +741,13 @@ def _build_datasets(
     )
     text = replay.resolve_dataset()
     lm_config = _read_checkpoint_config(checkpoint)["model"]
+    # The phase's weights come from this checkpoint, so its layer types are the trained LM's.
+    document_mode = _uses_document_mode(
+        OLMoDDPModelConfig.from_dict(_checkpoint_lm_config(checkpoint))
+    )
+    mean_loss_weight = ALIGNMENT_MEAN_LOSS_WEIGHTS[phase].copy()
+    if document_mode:
+        mean_loss_weight.update(ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS.get(phase, {}))
     dataset = MultimodalMixtureConfig(
         tokenizer=text.tokenizer,
         tokenizer_revision=_resolve_tokenizer_revision(recipe, parent, text.tokenizer),
@@ -728,8 +755,10 @@ def _build_datasets(
         model_vocab_size=lm_config["vocab_size"],
         sources=_visual_sources(phase, sequence_length, recipe.artifact_root),
         target_loss_mass=ALIGNMENT_LOSS_TARGETS[phase].copy(),
-        mean_loss_weight=ALIGNMENT_MEAN_LOSS_WEIGHTS[phase].copy(),
+        mean_loss_weight=mean_loss_weight,
     )
+    if document_mode:
+        _sample_one_annotation(dataset.sources)
     if phase == AlignmentPhase.joint:
         if recipe.text_validation_size < 0:
             raise OLMoConfigurationError("recipe.text_validation_size cannot be negative")
@@ -742,7 +771,7 @@ def _build_datasets(
     if (
         text.tokenizer != TokenizerConfig.dolma2()
         or dataset.tokenizer_revision != _DOLMA2_REVISION
-        or recipe.artifact_root != DEFAULT_ALIGNMENT_ARTIFACT_ROOT
+        or not has_calibrated_artifacts(recipe.artifact_root, phase)
         or sequence_length != policy.sequence_length
     ):
         dataset.mean_loss_weight = {}
@@ -761,6 +790,8 @@ def _build_datasets(
     validation.sources = _visual_sources(
         phase, validation_sequence_length, recipe.artifact_root, split="validation"
     )
+    if document_mode:
+        _sample_one_annotation(validation.sources)
     validation.target_loss_mass = {name: 1.0 for name in validation.sources}
     validation.mean_loss_weight = {}
     return dataset, validation, token_ids

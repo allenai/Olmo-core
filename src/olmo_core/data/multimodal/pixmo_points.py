@@ -55,6 +55,7 @@ __all__ = [
     "PixMoCountDatasetConfig",
     "PixMoPointsDataset",
     "PixMoPointsDatasetConfig",
+    "select_annotation",
 ]
 
 from olmo_core.exceptions import OLMoConfigurationError
@@ -69,6 +70,41 @@ _CONTENT_FINGERPRINT_DOMAIN = b"pixmo-perception-adapter-v1\0"
 _SCALAR_COUNT_PROMPT = "How many {label} are there?"
 _TOKEN_FIELDS = ("input_ids", "labels", "loss_masks", "position_ids", "token_type_ids")
 _PERCENT_POINT_CLAMP_TOLERANCE = 2.0
+_ANNOTATION_SAMPLINGS = ("all", "one")
+_ANNOTATION_STREAM = 0x0A11  # spawn-key salt keeping the selection off the augmentation stream
+
+AnnotationSampling = Literal["all", "one"]
+
+
+def _validate_annotation_sampling(value: str) -> None:
+    if value not in _ANNOTATION_SAMPLINGS:
+        raise ValueError(
+            f"annotation_sampling must be one of {_ANNOTATION_SAMPLINGS}, got {value!r}"
+        )
+
+
+def select_annotation(seed: int, index: int, epoch: int, count: int) -> int:
+    """
+    Pick one of an example's ``count`` annotations for ``annotation_sampling="one"``.
+
+    The choice is deterministic per ``(seed, index, epoch)`` and drawn from its own stream, so
+    it does not perturb the example's augmentation stream and successive epochs can pick
+    different annotations of the same image.
+
+    :param seed: The dataset seed.
+    :param index: The example index.
+    :param epoch: The source epoch.
+    :param count: The number of annotations to choose from (positive).
+
+    :returns: The selected annotation's position, in ``[0, count)``.
+    """
+    from .rng import make_random_state
+
+    if count <= 0:
+        raise ValueError("count must be positive")
+    if count == 1:
+        return 0
+    return int(make_random_state(seed, index, epoch, _ANNOTATION_STREAM).randint(count))
 
 
 def _explicit_grounding_prompt(prompt: str, *, counting: bool = False) -> str:
@@ -128,6 +164,7 @@ def _adapter_fingerprint(
     for key, default in (
         ("prompt_templates", "uber_model_v2"),
         ("system_prompt", "demo_or_style_v2"),
+        ("annotation_sampling", "all"),
     ):
         if fingerprint_config.get(key) == default:
             fingerprint_config.pop(key)
@@ -591,6 +628,11 @@ class PixMoPointsDatasetConfig(Config):
     counting: str | bool = "both"  # "both" randomly selects; bool fixes one style
     both_mode: Literal["per_annotation", "duplicate"] = "per_annotation"
     """Sample one style per annotation, or expose both styles as separate examples."""
+    annotation_sampling: AnnotationSampling = "all"
+    """``"all"`` packs every annotation of an image as sibling branches of one example;
+    ``"one"`` keeps a single annotation per example, chosen per ``(seed, index, epoch)``.
+    Language models that can only isolate whole documents (no attention masks, e.g. Kimi Delta
+    Attention) cannot train on sibling branches and need ``"one"``."""
     explicit_grounding_prompts: bool = False
     """Explicitly request point coordinates, including in count-style prompts."""
     max_points: int = 60
@@ -625,6 +667,7 @@ class PixMoPointsDataset:
             raise ValueError(f"Unknown PixMo points counting mode {config.counting!r}")
         if config.both_mode not in ("per_annotation", "duplicate"):
             raise ValueError(f"Unknown PixMo points both_mode {config.both_mode!r}")
+        _validate_annotation_sampling(config.annotation_sampling)
         if not isinstance(config.split, str) or not config.split:
             raise ValueError("PixMo points split must be a non-empty string")
         if config.max_points < 0 or config.max_total_points_per_example <= 0:
@@ -823,6 +866,8 @@ class PixMoPointsDataset:
             else:
                 style = "point_count" if self.config.counting else "pointing"
             specs.append((style, label, pts))
+        if self.config.annotation_sampling == "one" and len(specs) > 1:
+            specs = [specs[select_annotation(self.config.seed, i, epoch, len(specs))]]
 
         def build_branches(branch_rng: np.random.RandomState) -> list[tuple[str, str]]:
             branches: list[tuple[str, str]] = []
@@ -1125,6 +1170,10 @@ class CoSynPointDatasetConfig(Config):
     ``"aux_cosyn_point"``: they are kept, behind a tag of their own, so the model learns them apart
     from the questions that passed. Needs the audited build (:data:`COSYN_POINT_V2_PATH`). ``None``
     treats every question alike, which is all the v1 build allows."""
+    annotation_sampling: AnnotationSampling = "all"
+    """``"all"`` packs every question of an image as sibling branches of one example; ``"one"``
+    keeps a single question per example, chosen per ``(seed, index, epoch)`` (needed by language
+    models that can only isolate whole documents, e.g. Kimi Delta Attention)."""
 
     def build(self, tokenizer) -> CoSynPointDataset:
         return CoSynPointDataset(self, tokenizer)
@@ -1140,6 +1189,7 @@ class CoSynPointDataset:
             raise ValueError("CoSyn Point split must be a non-empty string")
         if config.max_crops <= 0 or config.high_res_max_crops <= 0:
             raise ValueError("CoSyn crop limits must be positive")
+        _validate_annotation_sampling(config.annotation_sampling)
         if not 0.0 <= config.p_high_res <= 1.0:
             raise ValueError("p_high_res must be in [0, 1]")
         if config.max_sequence_length is not None and config.max_sequence_length <= 0:
@@ -1267,6 +1317,8 @@ class CoSynPointDataset:
                 question = _explicit_grounding_prompt(question)
             tag = failed_prefix if audit in FAILED_AUDIT_RESULTS else prefix
             branches.append((f"{tag} {question}" if tag else question, answer))
+        if cfg.annotation_sampling == "one" and len(branches) > 1:
+            branches = [branches[select_annotation(cfg.seed, i, epoch, len(branches))]]
         return _build_example(
             self.tokenizer,
             _open_image(row["image"]),

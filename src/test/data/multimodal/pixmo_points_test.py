@@ -101,6 +101,7 @@ def test_prompt_options_preserve_default_source_identity(config_type):
     saved = asdict(config)
     saved.pop("prompt_templates")
     saved.pop("system_prompt")
+    saved.pop("annotation_sampling", None)
     payload = {
         "adapter": "example",
         "config": saved,

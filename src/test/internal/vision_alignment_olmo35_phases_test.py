@@ -14,9 +14,20 @@ from pathlib import Path
 
 import pytest
 
+from olmo_core.data.multimodal.alignment import MultimodalSourceConfig
+from olmo_core.data.multimodal.pixmo_points import (
+    CoSynPointDatasetConfig,
+    PixMoPointsDatasetConfig,
+)
+from olmo_core.internal import vision_alignment
 from olmo_core.internal.vision_alignment import (
     MULTIMODAL_OVERRIDES,
     VisionAlignmentExperimentConfig,
+)
+from olmo_core.internal.vision_alignment_data import (
+    ALIGNMENT_MEAN_LOSS_WEIGHTS,
+    ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS,
+    DEFAULT_ALIGNMENT_ARTIFACT_ROOT,
 )
 from olmo_core.nn.transformer import OLMoDDPModelConfig
 from olmo_core.train import TrainerConfig
@@ -121,3 +132,59 @@ def test_all_hero_phases_differ_from_the_text_config_only_by_the_override_table(
         if not any(_covered(key, pattern) for key in all_differing)
     )
     assert not stale, f"MULTIMODAL_OVERRIDES entries without a difference: {stale}"
+
+
+@pytest.fixture
+def pointing_sources(monkeypatch):
+    """Give the fixture's perception/joint mixtures their real multi-annotation source types."""
+    stand_in = vision_alignment.build_visual_sources
+
+    def visual_sources(phase, sequence_length, artifact_root, split="train"):
+        sources = stand_in(phase, sequence_length, artifact_root, split=split)
+        if "cosyn_point" in sources:
+            sources["cosyn_point"] = MultimodalSourceConfig(
+                dataset=CoSynPointDatasetConfig(split=split),
+                selection_path=f"{artifact_root}/cosyn_point.npy",
+            )
+            for name, kind in (
+                ("pixmo_points_basic", "basic"),
+                ("pixmo_points_high_frequency", "high_frequency"),
+            ):
+                sources[name] = PixMoPointsDatasetConfig(split=split, kind=kind)
+        return sources
+
+    monkeypatch.setattr(vision_alignment, "build_visual_sources", visual_sources)
+
+
+def _annotation_sampling(sources) -> dict[str, str]:
+    configs = {name: getattr(source, "dataset", source) for name, source in sources.items()}
+    return {
+        name: config.annotation_sampling
+        for name, config in configs.items()
+        if hasattr(config, "annotation_sampling")
+    }
+
+
+@pytest.mark.parametrize("document_mode", [True, False])
+def test_document_mode_samples_one_annotation_with_its_calibration(
+    alignment_recipe, pointing_sources, request, document_mode
+):
+    if document_mode:
+        request.getfixturevalue("hero_checkpoint")
+    overrides = [f"--recipe.artifact_root={DEFAULT_ALIGNMENT_ARTIFACT_ROOT}"]
+    parent = alignment_recipe.save(alignment_recipe.build(overrides=overrides))
+    for phase in ("perception", "joint"):
+        config = alignment_recipe.build(phase, parent, include_means=False, overrides=overrides)
+        sampling = "one" if document_mode else "all"
+        evaluator = config.trainer.callbacks["multimodal_evaluator"]
+        for sources in (config.dataset.sources, evaluator.eval_dataset.sources):
+            assert _annotation_sampling(sources) == {
+                "cosyn_point": sampling,
+                "pixmo_points_basic": sampling,
+                "pixmo_points_high_frequency": sampling,
+            }
+        means = dict(ALIGNMENT_MEAN_LOSS_WEIGHTS[phase])
+        if document_mode:
+            means.update(ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS[phase])
+        assert config.dataset.mean_loss_weight == means
+        parent = alignment_recipe.save(config)
