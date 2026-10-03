@@ -48,6 +48,12 @@ SYNTH_RECEIPTS_OCR = os.environ.get(
     "SYNTH_RECEIPTS_OCR_DIR", "/weka/oe-training-default/jasonr/dataset/ocr/synthetic-receipts-ocr"
 )
 
+# mm_olmo's Hugging Face datasets cache, which holds allenai/MolmoPoint-GUISyn as
+# ``datasets.load_dataset`` wrote it (``allenai___molmo_point-gui_syn/<part>/0.0.0/<revision>``),
+# read by :mod:`.gui_syn`. Override with the GUI_SYN_CACHE_DIR env var, or per run with
+# ``--gui_syn.cache_dir=...`` in Molmo2-Stage1.py.
+GUI_SYN_CACHE = os.environ.get("GUI_SYN_CACHE_DIR", os.path.join(MOLMO_DATA_DIR, "hf_datasets"))
+
 __all__ = [
     "MOLMO_DATA_DIR",
     "TORCH_DATASETS",
@@ -60,4 +66,5 @@ __all__ = [
     "TEXT_RICH_CAPTION",
     "NVIDIA_SYNTH_OCR",
     "SYNTH_RECEIPTS_OCR",
+    "GUI_SYN_CACHE",
 ]

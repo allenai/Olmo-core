@@ -43,6 +43,8 @@ DEMO_STYLES = frozenset(
         "point_count",
         "pointing",
         "cosyn_point",
+        # This repo's tag for GUISyn's interaction intents (mm_olmo asks them as "pointing").
+        "gui_point",
         "user_qa",
         "long_caption",
         "short_caption",
@@ -85,7 +87,8 @@ MULTI_IMAGE_POINTING_STYLES = frozenset(
 # prefix under every system-prompt family.
 AUX_POINTING_STYLES = frozenset({"aux_pointing", "aux_point_count"})
 POINTING_STYLES = frozenset(
-    {"pointing", "point_count", "point_then_count", "cosyn_point"} | AUX_POINTING_STYLES
+    {"pointing", "point_count", "point_then_count", "cosyn_point", "gui_point"}
+    | AUX_POINTING_STYLES
 )
 
 

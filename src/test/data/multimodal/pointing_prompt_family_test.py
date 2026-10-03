@@ -187,11 +187,12 @@ def test_stage1_v2_pointing_uses_the_audited_cosyn_build():
 
     assert mod.POINTING_V2_COSYN_AUDIT_STYLE == "aux_cosyn_point"
     assert COSYN_POINT_V2_PATH.endswith("pixmo_datasets/cosyn-point-v2-masks")
-    src = open("src/scripts/train/Molmo2-Stage1.py").read()
-    v2 = src.split('elif config.pointing_data == "v2":')[1].split("else:")[0]
-    assert "dataset_path=COSYN_POINT_V2_PATH" in v2
-    assert "audit_style=POINTING_V2_COSYN_AUDIT_STYLE" in v2
-    assert '"cosyn_point_v2"' in v2
+    from types import SimpleNamespace
+
+    config = SimpleNamespace(pointing_v2=None, count_v2=None, gui_syn=None, gui_pointing=False)
+    cosyn = dict(mod._v2_pointing_sources(config))["cosyn_point_v2"]
+    assert cosyn.dataset_path == COSYN_POINT_V2_PATH
+    assert cosyn.audit_style == "aux_cosyn_point"
 
 
 def test_target_never_carries_the_prefix():

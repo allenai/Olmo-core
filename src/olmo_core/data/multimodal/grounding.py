@@ -66,8 +66,8 @@ def pointing_answer(
 
     :param points_norm: normalized ``(N, 2)`` points.
     :param label: object label.
-    :param style: ``"pointing"``/``"point"``/``"cosyn_point"`` (just the points tag) or
-        ``"point_count"`` (``Counting the <points…> shows a total of N.``).
+    :param style: ``"pointing"``/``"point"``/``"cosyn_point"``/``"gui_point"`` (just the
+        points tag) or ``"point_count"`` (``Counting the <points…> shows a total of N.``).
     :param count: number of points; defaults to ``len(points_norm)``.
     """
     n = len(points_norm) if count is None else count
@@ -80,7 +80,7 @@ def pointing_answer(
         return f"There are {n} {tag}."
     if style == "count":
         return str(n)
-    # "pointing" / "point" / "cosyn_point" / None
+    # "pointing" / "point" / "cosyn_point" / "gui_point" / None
     return tag
 
 

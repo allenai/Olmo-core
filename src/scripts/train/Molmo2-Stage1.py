@@ -28,8 +28,10 @@ explicit override of any of them still wins.
 
 ``--pointing_data`` selects the pointing/counting group: ``v1`` (the released Molmo2 pretrain's
 sources, the default) or ``v2`` (mm_olmo's molmo3 stage-1 sources: the audited, image-grouped
-PixMo-Points build with sub-sampled absence queries, plus the audited PixMo-Count build). The v2
-knobs are the ``pointing_v2`` / ``count_v2`` config fields, e.g. ``--pointing_v2.filter_audit=true``.
+PixMo-Points build with sub-sampled absence queries, the audited PixMo-Count build and the audited
+CoSyn build, plus MolmoPoint-GUISyn's synthetic GUI screenshots). The v2 knobs are the
+``pointing_v2`` / ``count_v2`` / ``gui_syn`` config fields, e.g. ``--pointing_v2.filter_audit=true``;
+``--gui_pointing=false`` leaves GUISyn out.
 
 ``--ocr_rate`` (default 0) adds the OCR group, paid for by the caption group: olmOCR-mix page
 transcription (rendered from PDFs, needs ``pypdfium2``), TextOCR scene text, two synthetic
@@ -75,6 +77,7 @@ from typing import List, Optional, Sequence, Tuple, cast
 from olmo_core.config import Config, DType
 from olmo_core.data.multimodal import (
     CoSynPointDatasetConfig,
+    GuiSynDatasetConfig,
     MixtureDataLoader,
     MultimodalCollatorConfig,
     MultimodalDataLoader,
@@ -373,7 +376,13 @@ CLOCK_RATE = 0.0
 #         `pixmo_seg` and its messages carry `bboxes` + RLE `segmentations` with no points
 #         (mm_olmo academic_datasets.py:2175-2189, data_formatter.py:965-968). olmo-core has no
 #         segmentation path, so it stays unported -- as do PixMoPointV2's own mask branches.
-# The v2 knobs are the `pointing_v2` / `count_v2` config fields (`--pointing_v2.<field>=...`).
+#         On top of mm_olmo's group, v2 adds MolmoPoint-GUISyn (`gui_syn`, mm_olmo's
+#         `molmo2_syn_point`, which mm_olmo trains only in its GUI-only mixtures): synthetic
+#         desktop / mobile / web screenshots, one point per sampled UI element, asked by an
+#         interaction intent (`gui_point:`) or by the element's name (`pointing:`). It joins
+#         the linear split by image count; `--gui_pointing=false` leaves it out.
+# The v2 knobs are the `pointing_v2` / `count_v2` / `gui_syn` config fields
+# (`--pointing_v2.<field>=...`).
 POINTING_DATA = "v1"
 POINTING_DATA_CHOICES = ("v1", "v2")
 # mm_olmo `_base_mixture` settings for the v2 sources. Audit-failed point sets are kept but
@@ -390,6 +399,12 @@ POINTING_V2_P_PAIRED_NEGATIVES = 0.25
 # mm_olmo tags them `aux_pointing:`; a tag of their own keeps `aux_pointing:` followed by an
 # object name, as `pointing:` is. Its agent masks feed segmentation, which is not trained here.
 POINTING_V2_COSYN_AUDIT_STYLE = "aux_cosyn_point"
+# Whether the v2 pointing group includes MolmoPoint-GUISyn (`gui_syn`). Its intents are English
+# requests, so they get their own `gui_point:` tag, as CoSyn's do. Desktop screenshots carry ~89
+# elements each, so `gui_syn.max_elements` (16) are sampled per image and epoch; they are
+# downscaled to the stage-1 crop budget (`MAX_CROPS`), so ~12-pixel targets on 1920x1080
+# desktop shots lose detail.
+GUI_POINTING = True
 
 # Data recipes: the group rates and the pointing sources, selected with `--recipe`. The caption
 # group gets the remainder, 1 - pointing_rate - nlp_rate - ocr_rate - academic_rate - clock_rate. A
@@ -398,7 +413,8 @@ POINTING_V2_COSYN_AUDIT_STYLE = "aux_cosyn_point"
 #   "v1": the released Molmo2-4B-Pretrain mixture: caption 0.6, pointing and counting 0.3 (v1
 #         sources), Tulu text 0.1, no OCR.
 #   "v2": caption 0.5, pointing and counting 0.25 (v2 sources: audited PixMo-Points / PixMo-Count
-#         + CoSyn), OCR 0.25 (the default OCR sources, see `OCR_RATE`), no text-only data.
+#         + CoSyn, plus GUISyn GUI screenshots), OCR 0.25 (the default OCR sources, see
+#         `OCR_RATE`), no text-only data.
 #   "v3": v2 plus the academic QA group (`ACADEMIC_RATE`) and the clock group (`CLOCK_RATE`), with
 #         more OCR, for 50,000 steps (`RECIPE_MAX_STEPS`): caption 0.33, pointing and counting
 #         0.16, OCR 0.34, academic QA 0.14, clocks 0.03. The OCR rate is what one pass over the
@@ -408,10 +424,11 @@ POINTING_V2_COSYN_AUDIT_STYLE = "aux_cosyn_point"
 #         task, then sqrt(size) with the synthetic sets capped (`_ocr_fractions`), so that pass
 #         is uneven: the figure captions ~1 pass, olmOCR documents 2.1, the small olmOCR subsets,
 #         TextOCR and the receipts 7-10, NVIDIA's 1.46M synthetic images 0.32. Caption and
-#         pointing keep about v2's passes (4.2 over PixMo-Cap, v2 4.0; 4.4 over the pointing
-#         sources, v2 4.4); the academic group gets 1.55 passes and the clock group 271k examples
-#         (0.34 passes). The expected weighted loss splits caption / pointing / OCR / academic as
-#         39.2% / 12.8% / 38.9% / 9.1% (v2: 55.1% / 18.5% / 26.5% / 0), clocks 0.08%.
+#         pointing keep about v2's passes (4.2 over PixMo-Cap, v2 4.0; 4.0 over the pointing
+#         sources with GUISyn, v2 4.0, and 4.4 for both with `--gui_pointing=false`); the
+#         academic group gets 1.55 passes and the clock group 271k examples (0.34 passes). The
+#         expected weighted loss splits caption / pointing / OCR / academic as 39.2% / 12.8% /
+#         38.9% / 9.1% (v2: 55.1% / 18.5% / 26.5% / 0), clocks 0.08%, measured without GUISyn.
 RECIPES = {
     "v1": dict(
         pointing_rate=POINTING_RATE,
@@ -473,6 +490,9 @@ class ExperimentConfig(Config):
     """The audited PixMo-Points source; used when ``pointing_data == "v2"``."""
     count_v2: PixMoCountV2DatasetConfig
     """The audited PixMo-Count source; used when ``pointing_data == "v2"``."""
+    gui_syn: GuiSynDatasetConfig
+    """The MolmoPoint-GUISyn GUI-pointing source; used when ``pointing_data == "v2"`` and
+    ``gui_pointing``."""
     olmocr: OlmOcrMixDatasetConfig
     """Template for the olmOCR-mix OCR sources (``subset`` is set per source); used when
     ``ocr_rate > 0``."""
@@ -508,6 +528,9 @@ class ExperimentConfig(Config):
     pointing_data: str = POINTING_DATA
     """``"v1"`` (released Molmo2 pretrain sources) or ``"v2"`` (mm_olmo molmo3 stage-1 sources:
     audited points + sub-sampled absence queries); see :data:`POINTING_DATA`."""
+    gui_pointing: bool = GUI_POINTING
+    """Include MolmoPoint-GUISyn (``gui_syn``) in the v2 pointing group; see
+    :data:`GUI_POINTING`. No effect with ``pointing_data == "v1"``."""
     ocr_rate: float = OCR_RATE
     """Fraction of mixture samples from the OCR group; see :data:`OCR_RATE`."""
     ocr_sources: Tuple[str, ...] = OCR_SOURCES
@@ -810,6 +833,10 @@ def build_config(script: str, run_name: str, overrides: List[str]) -> Experiment
         max_crops=MAX_CROPS,
         loss_token_weighting=POINTING_DATASET_KWARGS["loss_token_weighting"],
     )
+    gui_syn_config = GuiSynDatasetConfig(
+        max_crops=MAX_CROPS,
+        loss_token_weighting=POINTING_DATASET_KWARGS["loss_token_weighting"],
+    )
     # OCR source templates (`build_ocr_source` fills in the per-source fields); only built when
     # `ocr_rate > 0`. Every response token weighted equally, like the caption source; the user
     # turn is the bare `<style>:` tag (`olmocr:` / `textocr:` / `synth_ocr:` / `receipt_ocr:` /
@@ -1000,6 +1027,7 @@ def build_config(script: str, run_name: str, overrides: List[str]) -> Experiment
         launch=launch_config,
         pointing_v2=pointing_v2_config,
         count_v2=count_v2_config,
+        gui_syn=gui_syn_config,
         recipe=recipe,
         **recipe_fields,
         olmocr=olmocr_config,
@@ -1242,6 +1270,28 @@ def _academic_fractions(names: Sequence[str], sizes: Sequence[int]):
     return _size_fractions(academic_weighting_sizes(names, sizes), "sqrt", names)
 
 
+def _v2_pointing_sources(config: ExperimentConfig) -> List[Tuple[str, Config]]:
+    """The v2 pointing group's ``(name, dataset config)`` pairs: mm_olmo train_molmo3_stage1
+    `_base_mixture`'s pointing group, minus `CocoTrain` and every segmentation branch (the v2
+    sources are ported points-only), plus GUISyn when ``gui_pointing``."""
+    sources: List[Tuple[str, Config]] = [
+        ("pixmo_points_v2", config.pointing_v2),
+        ("pixmo_count_v2", config.count_v2),
+        (
+            "cosyn_point_v2",
+            CoSynPointDatasetConfig(
+                dataset_path=COSYN_POINT_V2_PATH,
+                audit_style=POINTING_V2_COSYN_AUDIT_STYLE,
+                max_crops=MAX_CROPS,
+                **POINTING_DATASET_KWARGS,
+            ),
+        ),
+    ]
+    if config.gui_pointing:
+        sources.append(("gui_syn", config.gui_syn))
+    return sources
+
+
 def _build_mixture_sources(tokenizer, config: ExperimentConfig):
     """Build the caption + pointing + NLP + OCR + academic + clock sources, their sampling weights
     (mm_olmo SubMixture) and their names: caption gets ``1 - pointing_rate - nlp_rate - ocr_rate -
@@ -1278,19 +1328,9 @@ def _build_mixture_sources(tokenizer, config: ExperimentConfig):
                 ),
             ]
         elif config.pointing_data == "v2":
-            # mm_olmo train_molmo3_stage1 `_base_mixture` pointing group, minus `CocoTrain` and
-            # every segmentation branch (the v2 sources are ported points-only).
-            pointing_names = ["pixmo_points_v2", "pixmo_count_v2", "cosyn_point_v2"]
-            pointing = [
-                config.pointing_v2.build(tokenizer),
-                config.count_v2.build(tokenizer),
-                CoSynPointDatasetConfig(
-                    dataset_path=COSYN_POINT_V2_PATH,
-                    audit_style=POINTING_V2_COSYN_AUDIT_STYLE,
-                    max_crops=MAX_CROPS,
-                    **POINTING_DATASET_KWARGS,
-                ).build(tokenizer),
-            ]
+            sources = _v2_pointing_sources(config)
+            pointing_names = [name for name, _ in sources]
+            pointing = [source.build(tokenizer) for _, source in sources]
         else:
             raise OLMoConfigurationError(
                 f"pointing_data={config.pointing_data!r} is not one of {POINTING_DATA_CHOICES}"
