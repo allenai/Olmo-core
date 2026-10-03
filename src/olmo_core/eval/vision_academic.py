@@ -1288,6 +1288,15 @@ def benchmark_definition(manifest: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _runtime(saved: Mapping[str, Any]) -> dict[str, str]:
+    from olmo_core.eval.multimodal_checkpoint import eval_expert_parallel_degree
+
+    if eval_expert_parallel_degree(saved) is None:
+        # Trained without expert parallelism: evaluated the same way, trained attention backends.
+        return {"expert_parallel_path": "none", "attention_backend": "checkpoint"}
+    return {"expert_parallel_path": "sync_1d", "attention_backend": "flex"}
+
+
 def _definition(checkpoint: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
     saved = _read_json(checkpoint / "config.json")
     _checkpoint_tokenizer_config(saved)
@@ -1303,8 +1312,7 @@ def _definition(checkpoint: Path, manifest: Mapping[str, Any]) -> dict[str, Any]
                 "mtime_ns": state_metadata.st_mtime_ns,
             },
             "world_size": 8,
-            "expert_parallel_path": "sync_1d",
-            "attention_backend": "flex",
+            **_runtime(saved),
             "forward_context": "eager_grad_enabled",
             "sequence_bucket_size": 128,
             "torch_version": torch.__version__,
@@ -1523,6 +1531,7 @@ def _evaluate(
     from olmo_core.eval.multimodal_checkpoint import (
         build_model_and_module_config,
         checkpoint_state_dir,
+        eval_expert_parallel_degree,
         native_checkpoint_load_coverage_distributed,
     )
     from olmo_core.nn.moe.v2.ep_config import ExpertParallelPath
@@ -1566,7 +1575,7 @@ def _evaluate(
         loaded = load_selected_examples(manifest, tasks)
         model, config, kind = build_model_and_module_config(
             saved,
-            ep_degree=8,
+            ep_degree=eval_expert_parallel_degree(saved),
             max_sequence_length=8192,
             rank_batch_size=8192,
             ep_path=ExpertParallelPath.sync_1d,

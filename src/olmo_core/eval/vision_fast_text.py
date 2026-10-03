@@ -29,6 +29,7 @@ from olmo_core.distributed.utils import get_rank
 from olmo_core.eval.multimodal_checkpoint import (
     build_model_and_module_config,
     checkpoint_state_dir,
+    eval_expert_parallel_degree,
     native_checkpoint_load_coverage_distributed,
 )
 from olmo_core.eval.task_groups import FAST_TASKS
@@ -78,6 +79,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _runtime(ep_degree: int | None) -> dict[str, Any]:
+    if ep_degree is None:
+        # Trained without expert parallelism: 8 data-parallel ranks, trained attention backends.
+        return {
+            "ep_degree": 1,
+            "ep_dp_degree": 8,
+            "attention_backend": "checkpoint",
+            "expert_parallel_path": "none",
+        }
+    return {
+        "ep_degree": ep_degree,
+        "ep_dp_degree": 8 // ep_degree,
+        "attention_backend": "flex",
+        "expert_parallel_path": "rowwise_nvshmem",
+    }
+
+
 def _identity(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
     checkpoint = args.checkpoint.resolve()
     tokenizer = args.tokenizer.resolve()
@@ -120,10 +138,7 @@ def _identity(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
             "max_sequence_length": args.max_sequence_length,
             "rank_batch_size_tokens": args.rank_batch_size,
             "world_size": 8,
-            "ep_degree": 8,
-            "ep_dp_degree": 1,
-            "attention_backend": "flex",
-            "expert_parallel_path": "rowwise_nvshmem",
+            **_runtime(eval_expert_parallel_degree(config, args.ep_degree)),
             "interface": "native_completion_no_images_no_chat_template",
             "router_lb_policy": "preserve_checkpoint_config",
             "rms_repair": False,
@@ -254,7 +269,7 @@ def main(argv: list[str] | None = None) -> None:
         config = json.loads((checkpoint / "config.json").read_text())
         model, module_config, checkpoint_kind = build_model_and_module_config(
             config,
-            ep_degree=8,
+            ep_degree=eval_expert_parallel_degree(config, args.ep_degree),
             max_sequence_length=args.max_sequence_length,
             rank_batch_size=args.rank_batch_size,
         )

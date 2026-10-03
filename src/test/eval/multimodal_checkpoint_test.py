@@ -92,9 +92,11 @@ def test_load_coverage_includes_frozen_vision_and_router(monkeypatch, tmp_path, 
         assert report["unused_model_bearing_key_count"] == 0
 
 
-def test_eval_configuration_preserves_router_coefficients():
+@pytest.mark.parametrize("expert_parallel", [True, False])
+def test_eval_configuration_preserves_router_coefficients(expert_parallel):
     ep = SimpleNamespace(path=ExpertParallelPath.sync_1d)
-    block = SimpleNamespace(sequence_mixer=AttentionConfig(n_heads=2), ep=ep)
+    attention = AttentionConfig(n_heads=2, backend=AttentionBackendName.flash_4)
+    block = SimpleNamespace(sequence_mixer=attention, ep=ep)
     router = {"load_balancing_loss_weight": 0.01, "z_loss_weight": 0.001}
     config = SimpleNamespace(
         block=block,
@@ -104,13 +106,23 @@ def test_eval_configuration_preserves_router_coefficients():
         recompute_all_blocks_by_chunk=True,
         two_batch_overlap=True,
     )
-    checkpoint.configure_lm_for_eval(config)
-    assert block.sequence_mixer.backend == AttentionBackendName.flex
-    assert ep.path == ExpertParallelPath.rowwise_nvshmem
+    checkpoint.configure_lm_for_eval(config, expert_parallel=expert_parallel)
+    if expert_parallel:
+        assert block.sequence_mixer.backend == AttentionBackendName.flex
+        assert ep.path == ExpertParallelPath.rowwise_nvshmem
+    else:  # Checkpoints trained without EP keep their trained kernels.
+        assert block.sequence_mixer.backend == AttentionBackendName.flash_4
+        assert ep.path == ExpertParallelPath.sync_1d
     assert config.router == {"load_balancing_loss_weight": 0.01, "z_loss_weight": 0.001}
     assert not config.recompute_each_block
     assert not config.recompute_all_blocks_by_chunk
     assert not config.two_batch_overlap
+
+
+@pytest.mark.parametrize("ep_config, expected", [(None, None), ({"degree": 8}, 8)])
+def test_eval_expert_parallel_degree_follows_training(ep_config, expected):
+    raw_config = {"train_module": {"ep_config": ep_config}}
+    assert checkpoint.eval_expert_parallel_degree(raw_config) == expected
 
 
 def test_checkpoint_state_directory(tmp_path):

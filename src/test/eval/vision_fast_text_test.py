@@ -26,6 +26,16 @@ def test_fast_defaults_and_complete_task_panel():
     assert len(fast.FAST_TASKS) == len(set(fast.FAST_TASKS)) == 26
 
 
+def test_runtime_identity_unchanged_for_expert_parallel_checkpoints():
+    assert fast._runtime(8) == {
+        "ep_degree": 8,
+        "ep_dp_degree": 1,
+        "attention_backend": "flex",
+        "expert_parallel_path": "rowwise_nvshmem",
+    }
+    assert fast._runtime(None)["expert_parallel_path"] == "none"
+
+
 def test_task_cache_rejects_other_identity_and_incomplete_tasks(tmp_path):
     path = tmp_path / "task.json"
     identity = {"format": "olmo_core_vision_fast_text_v2", "checkpoint": "checkpoint"}

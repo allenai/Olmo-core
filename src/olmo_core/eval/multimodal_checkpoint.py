@@ -311,18 +311,41 @@ def checkpoint_state_dir(checkpoint: Path) -> Path:
     return nested if nested.is_dir() else checkpoint
 
 
+def eval_expert_parallel_degree(raw_config: Mapping[str, Any], degree: int = 8) -> int | None:
+    """
+    The expert-parallel degree to evaluate a checkpoint with.
+
+    :param raw_config: The checkpoint's saved ``config.json``.
+    :param degree: The evaluation degree for checkpoints trained with expert parallelism.
+
+    :returns: ``degree``, or ``None`` when the checkpoint trained without expert parallelism
+        (``train_module.ep_config`` unset, as in the OLMo 3.5 recipes); such checkpoints are
+        evaluated on the same path.
+    """
+    if raw_config.get("train_module", {}).get("ep_config") is None:
+        return None
+    return degree
+
+
 def configure_lm_for_eval(
     lm_config: OLMoDDPModelConfig,
     *,
     ep_path: ExpertParallelPath = ExpertParallelPath.rowwise_nvshmem,
+    expert_parallel: bool = True,
 ) -> None:
-    """Select evaluation attention and expert-parallel kernels without activation recomputation."""
-    blocks = [lm_config.block, *(lm_config.block_overrides or {}).values()]
-    for block in blocks:
-        if isinstance(block.sequence_mixer, AttentionConfig):
-            block.sequence_mixer.backend = AttentionBackendName.flex
-        if block.ep is not None:
-            block.ep.path = ep_path
+    """
+    Select evaluation attention and expert-parallel kernels without activation recomputation.
+
+    :param expert_parallel: Whether the model is evaluated with expert parallelism. Without it,
+        the trained attention backends are kept: they are what the checkpoint was trained with
+        (OLMo 3.5's attention layers use ``flash_4`` without positional encodings).
+    """
+    if expert_parallel:
+        for block in [lm_config.block, *(lm_config.block_overrides or {}).values()]:
+            if isinstance(block.sequence_mixer, AttentionConfig):
+                block.sequence_mixer.backend = AttentionBackendName.flex
+            if block.ep is not None:
+                block.ep.path = ep_path
     lm_config.recompute_each_block = False
     lm_config.recompute_all_blocks_by_chunk = False
     lm_config.two_batch_overlap = False
@@ -331,12 +354,17 @@ def configure_lm_for_eval(
 def build_model_and_module_config(
     raw_config: dict[str, Any],
     *,
-    ep_degree: int,
+    ep_degree: int | None,
     max_sequence_length: int,
     rank_batch_size: int,
     ep_path: ExpertParallelPath = ExpertParallelPath.rowwise_nvshmem,
 ) -> tuple[torch.nn.Module, OLMoDDPTrainModuleConfig, str]:
-    """Build native LM or multimodal evaluation configs without changing router coefficients."""
+    """
+    Build native LM or multimodal evaluation configs without changing router coefficients.
+
+    :param ep_degree: The expert-parallel degree, or ``None`` to evaluate without expert
+        parallelism (see :func:`eval_expert_parallel_degree`).
+    """
     model_dict = raw_config["model"]
     common = dict(
         rank_microbatch_size=rank_batch_size,
@@ -347,7 +375,9 @@ def build_model_and_module_config(
             name=DataParallelType.ddp,
             only_allreduce_last_microbatch=True,
         ),
-        ep_config=TransformerExpertParallelConfig(degree=ep_degree),
+        ep_config=(
+            TransformerExpertParallelConfig(degree=ep_degree) if ep_degree is not None else None
+        ),
     )
 
     if "lm" in model_dict and "vision" in model_dict:
@@ -356,7 +386,9 @@ def build_model_and_module_config(
             raise TypeError(
                 "The multimodal checkpoint does not contain an OLMoDDP language-model config"
             )
-        configure_lm_for_eval(model_config.lm, ep_path=ep_path)
+        configure_lm_for_eval(
+            model_config.lm, ep_path=ep_path, expert_parallel=ep_degree is not None
+        )
         model = model_config.build(init_device="meta")
         module_config = MultimodalOLMoDDPTrainModuleConfig(
             freeze_params=["vision.*"], response_logits_only=False, **common
@@ -364,6 +396,6 @@ def build_model_and_module_config(
         return model, module_config, "multimodal_stage1"
 
     model_config = OLMoDDPModelConfig.from_dict(model_dict)
-    configure_lm_for_eval(model_config, ep_path=ep_path)
+    configure_lm_for_eval(model_config, ep_path=ep_path, expert_parallel=ep_degree is not None)
     model = model_config.build(init_device="meta")
     return model, OLMoDDPTrainModuleConfig(**common), "pretrained_lm"
