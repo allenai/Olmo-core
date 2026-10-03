@@ -46,17 +46,31 @@ Two consequences of dropping the mask branches, both measured against mm_olmo's 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
 from olmo_core.config import Config
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .paths import PIXMO_DATASETS, PIXMO_POINTS_V2
-from .pixmo_points import FAILED_AUDIT_RESULTS, _build_example, _load_split, _open_image
-from .sft_common import EpochSeededExamples, heldout_ids
+from .pixmo_points import (
+    FAILED_AUDIT_RESULTS,
+    AnnotationSampling,
+    _build_example,
+    _load_split,
+    _open_image,
+    _validate_annotation_sampling,
+    select_annotation,
+)
+from .sft_common import (
+    EpochSeededExamples,
+    SftMessageFormat,
+    heldout_ids,
+    truncate_for_format,
+)
 from .sft_formatter import SftFormatter
 
 __all__ = [
@@ -217,6 +231,19 @@ class PixMoPointsV2DatasetConfig(Config):
     """``"none"`` weights every response token equally, as the released Molmo2 pretrain does for
     its pointing sources (``loss_token_weighting: None``)."""
     message_weight: Optional[float] = None
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents, for a language model trained without a chat template)."""
+    annotation_sampling: AnnotationSampling = "all"
+    """``"all"`` trains every branch of an image (its kept annotations and sampled negatives) as
+    sibling branches of one example; ``"one"`` keeps a single branch per example, chosen per
+    ``(seed, index, epoch)`` (for language models that isolate packed examples only by document
+    boundaries, e.g. Kimi Delta Attention)."""
+    max_sequence_length: Optional[int] = None
+    """Tail-truncate the built sequence to this many tokens. Applies outside the default
+    ``qwen3`` / ``"all"`` path, which keeps the released stage-1 example exactly."""
     seed: int = 0
 
     def validate(self):
@@ -234,10 +261,66 @@ class PixMoPointsV2DatasetConfig(Config):
             raise OLMoConfigurationError("need 0 <= min_points <= max_points")
         if self.n_easy_samples < 0 or self.n_hard_negatives < 0:
             raise OLMoConfigurationError("n_easy_samples / n_hard_negatives must be >= 0")
+        _validate_annotation_sampling(self.annotation_sampling)
 
     def build(self, tokenizer) -> "PixMoPointsV2Dataset":
         self.validate()
         return PixMoPointsV2Dataset(self, tokenizer)
+
+
+def _released_layout(cfg: Any) -> bool:
+    """Whether a v2 source builds the released stage-1 example (every branch, qwen3 layout,
+    Qwen image tokens) through :func:`~.pixmo_points._build_example`'s branch-list convention."""
+    return (
+        cfg.annotation_sampling == "all"
+        and cfg.message_format == "qwen3"
+        and cfg.token_ids == Molmo2TokenIds()
+    )
+
+
+def _build_selected_example(
+    dataset: EpochSeededExamples,
+    pil_image: Any,
+    fmt: SftFormatter,
+    messages: List[Dict[str, Any]],
+    weights: Sequence[Optional[float]],
+    index: int,
+    epoch: Optional[int],
+    rng: np.random.RandomState,
+) -> Dict[str, np.ndarray]:
+    """Build a v2 example in the configured layout and tokenizer, optionally keeping one branch
+    (``annotation_sampling="one"``, chosen on its own stream by
+    :func:`~.pixmo_points.select_annotation`). A kept branch's loss multiplier is folded into the
+    example's ``message_weight``; several branches with differing multipliers are refused, since
+    the serializer here weights the example as a whole."""
+    cfg = dataset.config  # type: ignore[attr-defined]
+    if cfg.annotation_sampling == "one" and len(messages) > 1:
+        k = select_annotation(cfg.seed, index, dataset.resolve_epoch(epoch), len(messages))
+        messages, weights = [messages[k]], [weights[k]]
+    multipliers = {1.0 if w is None else float(w) for w in weights}
+    if len(multipliers) > 1:
+        raise ValueError(
+            "Per-branch loss multipliers need the released qwen3 layout with every branch; "
+            "use annotation_sampling='one' or leave negative_weight unset"
+        )
+    (multiplier,) = multipliers
+    message_weight = cfg.message_weight
+    if multiplier != 1.0:
+        message_weight = multiplier * (1.0 if message_weight is None else message_weight)
+    seq = _build_example(
+        dataset.tokenizer,  # type: ignore[attr-defined]
+        pil_image,
+        lambda branch_rng: [
+            fmt.format_turns(msg, index=index, rng=branch_rng)[0] for msg in messages
+        ],
+        max_crops=cfg.max_crops,
+        loss_token_weighting=cfg.loss_token_weighting,
+        token_ids=cfg.token_ids,
+        message_weight=message_weight,
+        message_format=cfg.message_format,
+        rng=rng,
+    )
+    return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)
 
 
 class PixMoPointsV2Dataset(EpochSeededExamples):
@@ -393,22 +476,29 @@ class PixMoPointsV2Dataset(EpochSeededExamples):
         return messages, weights
 
     def __getitem__(self, i: int) -> Dict[str, np.ndarray]:
+        return self._build(i)
+
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         cfg = self.config
         row = self._data[int(self._index[i])]
         # Per (row, epoch): the negative sub-sampling in `format_row` has to rotate across epochs.
-        rng = self.epoch_rng(i)
+        rng = self.epoch_rng(i, epoch)
         messages, weights = self.format_row(row, rng)
         fmt = SftFormatter(seed=cfg.seed, **STAGE1_PROMPT_FAMILY)
-        branches = [fmt.format_turns(msg, index=i, rng=rng)[0] for msg in messages]
-        return _build_example(
-            self.tokenizer,
-            _open_image(row["image"]),
-            branches,
-            max_crops=cfg.max_crops,
-            loss_token_weighting=cfg.loss_token_weighting,
-            message_weight=cfg.message_weight,
-            shuffle_rng=rng,
-            branch_weights=weights,
+        if _released_layout(cfg):
+            branches = [fmt.format_turns(msg, index=i, rng=rng)[0] for msg in messages]
+            return _build_example(
+                self.tokenizer,
+                _open_image(row["image"]),
+                branches,
+                max_crops=cfg.max_crops,
+                loss_token_weighting=cfg.loss_token_weighting,
+                message_weight=cfg.message_weight,
+                shuffle_rng=rng,
+                branch_weights=weights,
+            )
+        return _build_selected_example(
+            self, _open_image(row["image"]), fmt, messages, weights, i, epoch, rng
         )
 
 
@@ -450,6 +540,19 @@ class PixMoCountV2DatasetConfig(Config):
     """``"none"`` weights every response token equally, as the released Molmo2 pretrain does for
     its pointing sources (``loss_token_weighting: None``)."""
     message_weight: Optional[float] = None
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents, for a language model trained without a chat template)."""
+    annotation_sampling: AnnotationSampling = "all"
+    """``"all"`` trains every branch of an image (its kept annotations and sampled negatives) as
+    sibling branches of one example; ``"one"`` keeps a single branch per example, chosen per
+    ``(seed, index, epoch)`` (for language models that isolate packed examples only by document
+    boundaries, e.g. Kimi Delta Attention)."""
+    max_sequence_length: Optional[int] = None
+    """Tail-truncate the built sequence to this many tokens. Applies outside the default
+    ``qwen3`` / ``"all"`` path, which keeps the released stage-1 example exactly."""
     seed: int = 0
 
     def validate(self):
@@ -457,6 +560,7 @@ class PixMoCountV2DatasetConfig(Config):
             raise OLMoConfigurationError("style must name at least one style")
         if self.audit_style is not None and not self.audit_style:
             raise OLMoConfigurationError("audit_style must be None or name at least one style")
+        _validate_annotation_sampling(self.annotation_sampling)
 
     def build(self, tokenizer) -> "PixMoCountV2Dataset":
         self.validate()
@@ -558,19 +662,26 @@ class PixMoCountV2Dataset(EpochSeededExamples):
         return messages
 
     def __getitem__(self, i: int) -> Dict[str, np.ndarray]:
+        return self._build(i)
+
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         cfg = self.config
         row = self._data[int(self._index[i])]
-        rng = self.epoch_rng(i)
+        rng = self.epoch_rng(i, epoch)
         pil = _open_image(row["image"])
         messages = self.format_row(row, rng, pil.size)
         fmt = SftFormatter(seed=cfg.seed, **STAGE1_PROMPT_FAMILY)
-        branches = [fmt.format_turns(msg, index=i, rng=rng)[0] for msg in messages]
-        return _build_example(
-            self.tokenizer,
-            pil,
-            branches,
-            max_crops=cfg.max_crops,
-            loss_token_weighting=cfg.loss_token_weighting,
-            message_weight=cfg.message_weight,
-            shuffle_rng=rng,
+        if _released_layout(cfg):
+            branches = [fmt.format_turns(msg, index=i, rng=rng)[0] for msg in messages]
+            return _build_example(
+                self.tokenizer,
+                pil,
+                branches,
+                max_crops=cfg.max_crops,
+                loss_token_weighting=cfg.loss_token_weighting,
+                message_weight=cfg.message_weight,
+                shuffle_rng=rng,
+            )
+        return _build_selected_example(
+            self, pil, fmt, messages, [None] * len(messages), i, epoch, rng
         )
