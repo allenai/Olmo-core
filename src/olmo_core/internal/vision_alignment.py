@@ -71,6 +71,10 @@ from .vision_alignment_data import (
     ALIGNMENT_MEAN_LOSS_WEIGHTS,
     ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS,
     DEFAULT_ALIGNMENT_ARTIFACT_ROOT,
+    STAGE1_V3_LOSS_TARGETS,
+    STAGE1_V3_MEAN_LOSS_WEIGHTS,
+    build_stage1_v3_sources,
+    build_stage1_v3_validation_sources,
     build_visual_sources,
     has_calibrated_artifacts,
 )
@@ -155,6 +159,17 @@ class AlignmentPhase(StrEnum):
     joint = "joint"
 
 
+class AlignmentData(StrEnum):
+    """Visual training data of the perception and joint phases."""
+
+    alignment = "alignment"
+    """The alignment recipe's own sources (:data:`ALIGNMENT_LOSS_TARGETS`)."""
+    stage1_v3 = "stage1_v3"
+    """The Molmo2-Stage1 ``v3`` mixture (caption, pointing, OCR, academic QA, clocks) with its
+    prompt tags, weighted to match the per-source loss shares of the v3 Stage-1 run
+    (:data:`STAGE1_V3_LOSS_TARGETS`)."""
+
+
 @dataclass
 class VisionAlignmentRecipeConfig(Config):
     """Inputs used to construct an alignment experiment's ordinary component configs.
@@ -165,6 +180,10 @@ class VisionAlignmentRecipeConfig(Config):
     """
 
     phase: AlignmentPhase = AlignmentPhase.bridge
+    data: AlignmentData = AlignmentData.alignment
+    """Visual training data of perception and joint (see :class:`AlignmentData`). Bridge is
+    always caption-only; validation keeps the alignment sources (``stage1_v3`` adds its
+    ``long_caption:`` / ``transcript:`` prompts)."""
     text_config: str | None = None
     """Path to the text team's resolved mid-training ``config.json`` (a saved
     :class:`~olmo_core.internal.experiment.ExperimentConfig`).
@@ -749,6 +768,11 @@ def _build_datasets(
 ) -> tuple[MultimodalMixtureConfig, MultimodalMixtureConfig, Molmo2TokenIds]:
     phase = recipe.phase
     policy = _PHASES[phase]
+    stage1_v3 = recipe.data == AlignmentData.stage1_v3
+    if stage1_v3 and phase == AlignmentPhase.bridge:
+        raise OLMoConfigurationError(
+            "recipe.data=stage1_v3 selects perception and joint data; bridge is caption-only"
+        )
     replay = PretrainingReplayConfig(
         checkpoint=checkpoint, sequence_length=sequence_length, work_dir=recipe.work_dir
     )
@@ -758,16 +782,24 @@ def _build_datasets(
     document_mode = _uses_document_mode(
         OLMoDDPModelConfig.from_dict(_checkpoint_lm_config(checkpoint))
     )
-    mean_loss_weight = ALIGNMENT_MEAN_LOSS_WEIGHTS[phase].copy()
-    if document_mode:
-        mean_loss_weight.update(ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS.get(phase, {}))
+    if stage1_v3:
+        sources = build_stage1_v3_sources(phase, sequence_length, recipe.artifact_root)
+        target_loss_mass = _stage1_v3_loss_targets(phase)
+        # Measured with one annotation per example; a branch-packing LM needs its own means.
+        mean_loss_weight = STAGE1_V3_MEAN_LOSS_WEIGHTS.copy() if document_mode else {}
+    else:
+        sources = _visual_sources(phase, sequence_length, recipe.artifact_root)
+        target_loss_mass = ALIGNMENT_LOSS_TARGETS[phase].copy()
+        mean_loss_weight = ALIGNMENT_MEAN_LOSS_WEIGHTS[phase].copy()
+        if document_mode:
+            mean_loss_weight.update(ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS.get(phase, {}))
     dataset = MultimodalMixtureConfig(
         tokenizer=text.tokenizer,
         tokenizer_revision=_resolve_tokenizer_revision(recipe, parent, text.tokenizer),
         tokenizer_cache_dir=recipe.hf_cache_dir,
         model_vocab_size=lm_config["vocab_size"],
-        sources=_visual_sources(phase, sequence_length, recipe.artifact_root),
-        target_loss_mass=ALIGNMENT_LOSS_TARGETS[phase].copy(),
+        sources=sources,
+        target_loss_mass=target_loss_mass,
         mean_loss_weight=mean_loss_weight,
     )
     if document_mode:
@@ -784,7 +816,9 @@ def _build_datasets(
     if (
         text.tokenizer != TokenizerConfig.dolma2()
         or dataset.tokenizer_revision != _DOLMA2_REVISION
-        or not has_calibrated_artifacts(recipe.artifact_root, phase)
+        # The stage-1 v3 means do not depend on the prepared artifacts' contents beyond the
+        # caption selection, which only removes ~0.1% of PixMo-Cap's rows.
+        or (not stage1_v3 and not has_calibrated_artifacts(recipe.artifact_root, phase))
         or sequence_length != policy.sequence_length
     ):
         dataset.mean_loss_weight = {}
@@ -803,11 +837,31 @@ def _build_datasets(
     validation.sources = _visual_sources(
         phase, validation_sequence_length, recipe.artifact_root, split="validation"
     )
+    if stage1_v3:
+        validation.sources.update(
+            build_stage1_v3_validation_sources(validation_sequence_length, recipe.artifact_root)
+        )
     if document_mode:
         _sample_one_annotation(validation.sources)
     validation.target_loss_mass = {name: 1.0 for name in validation.sources}
     validation.mean_loss_weight = {}
     return dataset, validation, token_ids
+
+
+def _stage1_v3_loss_targets(phase: AlignmentPhase) -> dict[str, float]:
+    """Stage-1 v3 loss targets; joint keeps its native text replay share and scales the visual
+    targets into the rest."""
+    if phase != AlignmentPhase.joint:
+        return STAGE1_V3_LOSS_TARGETS.copy()
+    text_share = ALIGNMENT_LOSS_TARGETS["joint"]["native_text_replay"]
+    total = sum(STAGE1_V3_LOSS_TARGETS.values())
+    return {
+        "native_text_replay": text_share,
+        **{
+            name: (1.0 - text_share) * value / total
+            for name, value in STAGE1_V3_LOSS_TARGETS.items()
+        },
+    }
 
 
 def _build_data_loader(
@@ -966,11 +1020,18 @@ _ALIGNMENT_SECRETS = [
 ]
 
 
+_STAGE1_V3_POST_SETUP = "pip install -U 'datasets>=4,<6' pypdfium2 h5py"
+"""Packages the stage-1 v3 sources need beyond the training image, as Molmo2-Stage1 installs
+them: ``datasets>=4`` reads the audited PixMo-Points/Count builds (their ``List`` features),
+``pypdfium2`` renders olmOCR-mix pages and ``h5py`` reads the NVIDIA synthetic OCR files."""
+
+
 def _build_launch(
     cli: CliContext,
     *,
     work_dir: str = VisionAlignmentRecipeConfig.work_dir,
     text: dict | None = None,
+    data: AlignmentData = AlignmentData.alignment,
 ) -> BeakerLaunchConfig | None:
     if cli.cluster == "local":
         return None
@@ -1042,6 +1103,10 @@ def _build_launch(
     launch.env_vars = [entry for entry in launch.env_vars if entry.name not in env] + [
         BeakerEnvVar(name=k, value=v) for k, v in env.items()
     ]
+    if data == AlignmentData.stage1_v3:
+        launch.post_setup = " && ".join(
+            step for step in (launch.post_setup, _STAGE1_V3_POST_SETUP) if step
+        )
     launch.min_runtime = "8h"
     launch.follow = False
     launch.env_secrets = [
@@ -1063,7 +1128,7 @@ def build_config(cli: CliContext) -> VisionAlignmentExperimentConfig:
     dataset, validation, token_ids = _build_datasets(recipe, checkpoint, parent, sequence_length)
     config = VisionAlignmentExperimentConfig(
         run_name=cli.run_name,
-        launch=_build_launch(cli, work_dir=recipe.work_dir, text=text),
+        launch=_build_launch(cli, work_dir=recipe.work_dir, text=text, data=recipe.data),
         model=_build_model(recipe, checkpoint, parent, token_ids, text=text),
         dataset=dataset,
         data_loader=_build_data_loader(cli, recipe, sequence_length, text=text),
@@ -1157,6 +1222,15 @@ def _validate_config(
                 "Changing recipe.sequence_length requires calibrated dataset.mean_loss_weight "
                 f"for sources: {missing}. Use MultimodalMixtureConfig.estimate_mean_loss_weights() "
                 "for a bounded calibration sample."
+            )
+    if recipe.data == AlignmentData.stage1_v3:
+        missing = sorted(set(config.dataset.sources) - set(config.dataset.mean_loss_weight))
+        if missing:
+            raise OLMoConfigurationError(
+                "recipe.data=stage1_v3 is calibrated for the dolma2 tokenizer, 8,192-token "
+                "sequences and one annotation per example (document-mode LMs); supply "
+                f"dataset.mean_loss_weight for sources: {missing}. Use "
+                "MultimodalMixtureConfig.estimate_mean_loss_weights() for a bounded sample."
             )
     config.dataset.sampling_weights()
     targets = config.dataset.target_loss_mass
