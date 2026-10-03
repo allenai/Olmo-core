@@ -31,19 +31,31 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from olmo_core.config import Config
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .message_sequence import encode_sft_example
 from .paths import TEXT_RICH_CAPTION
 from .pixmo_cap import style_tag_prompt
-from .pixmo_points import _load_split, _open_image
-from .sft_common import EpochSeededExamples, get_example_with_skip, truncate_example
+from .pixmo_points import (
+    AnnotationSampling,
+    _load_split,
+    _open_image,
+    _validate_annotation_sampling,
+    select_annotation,
+)
+from .sft_common import (
+    EpochSeededExamples,
+    SftMessageFormat,
+    get_example_with_skip,
+    truncate_for_format,
+)
 
 __all__ = [
     "CATEGORIES",
@@ -92,6 +104,15 @@ class TextRichCaptionDatasetConfig(Config):
     """``"none"`` weights every response token equally, like the stage-1 caption source."""
     message_weight: Optional[float] = None
     """Scalar loss multiplier for this source (mm_olmo's ``ocr_weight``, unset in its stage 1)."""
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents, for a language model trained without a chat template)."""
+    annotation_sampling: AnnotationSampling = "all"
+    """``"all"`` trains every level as a sibling branch of one example; ``"one"`` keeps a single
+    level per example, chosen per ``(seed, index, epoch)`` (for language models that isolate
+    packed examples only by document boundaries, e.g. Kimi Delta Attention)."""
 
     seed: int = 0
 
@@ -108,6 +129,7 @@ class TextRichCaptionDatasetConfig(Config):
             )
         if len(set(self.levels)) != len(self.levels):
             raise OLMoConfigurationError(f"levels has duplicates: {self.levels}")
+        _validate_annotation_sampling(self.annotation_sampling)
 
     @property
     def hf_path(self) -> str:
@@ -181,20 +203,24 @@ class TextRichCaptionDataset(EpochSeededExamples):
         sources; see :func:`~olmo_core.data.multimodal.sft_common.get_example_with_skip`."""
         return get_example_with_skip(self, index, len(self))
 
-    def _build(self, i: int) -> Dict[str, np.ndarray]:
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         cfg = self.config
         row = self._data[i]
-        rng = self.epoch_rng(i)
+        rng = self.epoch_rng(i, epoch)
         image = _open_image(self.image_path(row)).convert("RGB")
+        turns = self.turns(row)
+        if cfg.annotation_sampling == "one" and len(turns) > 1:
+            k = select_annotation(cfg.seed, i, self.resolve_epoch(epoch), len(turns))
+            turns = [turns[k]]
         seq = encode_sft_example(
             self.tokenizer,
             image,
-            self.turns(row),
+            turns,
             max_crops=cfg.max_crops,
             loss_token_weighting=cfg.loss_token_weighting,
             message_weight=cfg.message_weight,
+            token_ids=cfg.token_ids,
+            message_format=cfg.message_format,
             shuffle_rng=rng,
         )
-        if cfg.max_sequence_length is not None:
-            seq = truncate_example(seq, cfg.max_sequence_length)
-        return seq
+        return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)

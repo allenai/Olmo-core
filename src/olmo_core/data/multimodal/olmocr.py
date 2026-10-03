@@ -25,22 +25,24 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
 from olmo_core.config import Config
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .message_sequence import encode_sft_example
 from .paths import OLMOCR_MIX
 from .pixmo_cap import style_tag_prompt
 from .sft_common import (
     EpochSeededExamples,
+    SftMessageFormat,
     get_example_with_skip,
     load_hf_dataset,
-    truncate_example,
+    truncate_for_format,
 )
 
 __all__ = [
@@ -195,6 +197,11 @@ class OlmOcrMixDatasetConfig(Config):
     """``"none"`` weights every response token equally, like the stage-1 caption source."""
     message_weight: Optional[float] = None
     """Scalar loss multiplier for this source (mm_olmo's ``ocr_weight``)."""
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents, for a language model trained without a chat template)."""
 
     seed: int = 0
 
@@ -302,11 +309,11 @@ class OlmOcrMixDataset(EpochSeededExamples):
         """
         return get_example_with_skip(self, index, len(self))
 
-    def _build(self, i: int) -> Dict[str, np.ndarray]:
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         cfg = self.config
         row = self._data[int(self._index[i])]
         # Per (row, epoch): `target_dim_for` samples a render size, which should vary by epoch.
-        rng = self.epoch_rng(i)
+        rng = self.epoch_rng(i, epoch)
         # mm_olmo draw order: the render size in `format_example`, then the formatter's prefix.
         target_dim = self.target_dim_for(rng)
         text = self.transcription(row)
@@ -321,8 +328,8 @@ class OlmOcrMixDataset(EpochSeededExamples):
             max_crops=cfg.max_crops,
             loss_token_weighting=cfg.loss_token_weighting,
             message_weight=cfg.message_weight,
+            token_ids=cfg.token_ids,
+            message_format=cfg.message_format,
             shuffle_rng=rng,
         )
-        if cfg.max_sequence_length is not None:
-            seq = truncate_example(seq, cfg.max_sequence_length)
-        return seq
+        return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)
