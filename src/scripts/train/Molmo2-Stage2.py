@@ -6,11 +6,11 @@ Defaults to a 3-dataset debug subset (``tulu4``, ``text_vqa``, ``chart_qa_weight
 smoke tests; set ``--mixture=image-only-v9`` for the full 32-source mixture once parity
 is green.
 
-Quick local smoke test (1 GPU, debug mixture, 5 steps)::
+Quick local smoke test (2 GPUs, debug mixture, 5 steps)::
 
-    torchrun --nproc-per-node=1 src/scripts/train/Molmo2-Stage2.py train smoke \\
+    torchrun --nproc-per-node=2 src/scripts/train/Molmo2-Stage2.py train smoke \\
         --trainer.max_duration.value=5 --trainer.max_duration.unit=steps \\
-        --global_batch_size=16384 --train_module.rank_microbatch_size=16384 \\
+        --global_batch_size=32768 --train_module.rank_microbatch_size=16384 \\
         --train_module.compile_model=false
 
 Resume weights from an OLMo-core stage-1 checkpoint (model only, fresh optimizer)::
@@ -523,16 +523,16 @@ Examples
 Print the config:
 › python {sys.argv[0]} dry_run molmo2-stage2-debug
 
-1-GPU debug smoke (5 steps, batch=1×16k):
-› torchrun --nproc-per-node=1 {sys.argv[0]} train smoke \\
-      --trainer.max_duration.value=5 --global_batch_size=16384 \\
+2-GPU debug smoke (5 steps, global batch=2×16k):
+› torchrun --nproc-per-node=2 {sys.argv[0]} train smoke \\
+      --trainer.max_duration.value=5 --global_batch_size=32768 \\
       --train_module.rank_microbatch_size=16384 --train_module.compile_model=false
 
 Full image-only-v9 mixture:
 › torchrun --nproc-per-node=8 {sys.argv[0]} train my-sft-run --mixture=image-only-v9
 
 Init from HF instead of stage-1 checkpoint:
-› torchrun --nproc-per-node=1 {sys.argv[0]} train smoke --trainer.load_path=null
+› torchrun --nproc-per-node=2 {sys.argv[0]} train smoke --trainer.load_path=null
 
 Launch on Beaker:
 › python {sys.argv[0]} launch molmo2-stage2 --launch.num_nodes=1
