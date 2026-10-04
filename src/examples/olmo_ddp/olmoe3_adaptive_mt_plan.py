@@ -5,18 +5,19 @@ from pathlib import Path
 
 import olmoe3_qkgain_plan as base
 
-CAMPAIGN = "adaptive-small-mt-20261004-32g"
+CAMPAIGN = "adaptive-small-mt-20261004-64g"
 BRANCH = "jacobm/adaptive-compute-2026-10-04-mt"
 SCRIPT = "src/examples/olmo_ddp/olmoe3_adaptive_mt.py"
 WORKSPACE = "ai2/olmo3p5-training"
-GPUS = 32
+GPUS = 64
 GPUS_PER_NODE = 8
 NODES = GPUS // GPUS_PER_NODE
 ROOT = base.MOUNT / "adaptive-compute-redux" / CAMPAIGN
 EVAL = ROOT / "evals"
 AUTO = Path(
-    "/weka/oe-adapt-default/jacobm/adaptive-compute-redux/results/data/olmo_small_mt_2026-10-04"
+    "/weka/oe-adapt-default/jacobm/adaptive-compute-redux/results/data/olmo_small_mt_2026-10-04/training64g"
 )
+DATA_WORK = ROOT / "data-work/prepared"
 START = 0
 SOURCE_STEP = 120000
 REQUESTED_TOKENS = 100_000_000_000
@@ -128,7 +129,7 @@ def self_test():
     assert END == 5961 and END * BATCH == 100_008_984_576
     assert tuple(r.schedule for r in runs()) == SCHEDULES
     for r in runs():
-        assert r.batch // (r.gpus * r.microbatch) == 16
+        assert r.batch // (r.gpus * r.microbatch) == 8
         assert r.lr == 2.2e-4 and r.sequence == 8192 and r.start == 0
         assert r.source.name == "step120000" and r.end in r.saves
         assert r.source != r.root and r.root.is_relative_to(ROOT)

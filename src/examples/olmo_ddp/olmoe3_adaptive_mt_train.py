@@ -60,9 +60,8 @@ def install_adapters(r):
 
     def common(ctx, **kwargs):
         c = original_common(ctx, **kwargs)
-        # Separate generated indices avoid cross-job cache writes. The shared
-        # frozen mixture, sample seed and batch-hash gates determine the data.
-        c.work_dir = str(p.ROOT / "data-work" / r.schedule)
+        # The CPU preparation job creates the shared immutable dataset indices.
+        c.work_dir = str(p.DATA_WORK)
         return c
 
     def model(common):
@@ -80,7 +79,7 @@ def install_adapters(r):
         c.callbacks["qkgain_audit"] = MTAudit(run_id=r.run_id)
         c.callbacks["checkpointer"].pre_train_checkpoint = adapter.source_for(r) == r.source
         c.callbacks["wandb"].project = "adaptive-compute"
-        c.callbacks["wandb"].tags += [r.schedule, "reference-top16", "100B", "32g"]
+        c.callbacks["wandb"].tags += [r.schedule, "reference-top16", "100B", "64g"]
         if int(os.environ["QKGAIN_STOP"]) <= 4:
             c.metrics_collect_interval, c.no_evals = 1, True
         return c

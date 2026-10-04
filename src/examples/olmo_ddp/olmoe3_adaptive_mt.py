@@ -51,7 +51,9 @@ def node(schedule):
         from olmoe3_adaptive_decay_checks import check
 
         atomic_json(p.AUTO / "gpu_checks" / f"{exp}.json", check("cuda"))
-        subprocess.run([sys.executable, p.SCRIPT, "data", schedule], check=True)
+        from olmoe3_adaptive_mt_data import verify_prepared
+
+        atomic_json(p.AUTO / "data" / f"inputs-{schedule}.json", verify_prepared())
     topology = subprocess.check_output(["nvidia-smi", "topo", "-m"], text=True, timeout=30)
     atomic_json(
         p.AUTO / "topology" / exp / f"{job}.json", validate_topology(topology, p.GPUS_PER_NODE)
@@ -151,12 +153,9 @@ def main():
 
         validate(sys.argv[2])
     elif mode == "data":
-        from olmoe3_adaptive_mt_data import components, verify_inputs
-        from olmo_core.data import TokenizerConfig
-        from types import SimpleNamespace
-        data = components(SimpleNamespace(tokenizer=TokenizerConfig.dolma2(), work_dir=str(p.ROOT / "data-work/prepare")))
-        data.dataset.source_mixture_config.build(npdtype=data.dataset.get_dtype(), sequence_length=8192)
-        atomic_json(p.AUTO / "data" / f"inputs-{sys.argv[2]}.json", dict(passed=True, manifest_sha256=verify_inputs()))
+        from olmoe3_adaptive_mt_data import prepare
+
+        prepare()
     elif mode == "node":
         node(sys.argv[2])
     elif mode == "train":
