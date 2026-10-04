@@ -108,8 +108,30 @@ def test_phase_starts_from_the_pretraining_checkpoint_like_bridge(alignment_reci
     assert initializer == bridge.trainer.callbacks["initialize_multimodal"]
     assert initializer.language_checkpoint == str(alignment_recipe.base)
     assert fresh.model == chained.model
-    # The phase's own policy: what trains, the rates, schedules and image-token rows.
-    assert fresh.train_module == chained.train_module
+    # Fresh connector and image rows get bridge's connector schedule; all else matches the chain.
+    bridge_module = bridge.train_module
+    fresh_groups = {
+        o.opts.get("scheduler_name"): o.opts["lr"] for o in fresh.train_module.optim.group_overrides
+    }
+    bridge_groups = {
+        o.opts.get("scheduler_name"): o.opts["lr"] for o in bridge_module.optim.group_overrides
+    }
+    chained_groups = {
+        o.opts.get("scheduler_name"): o.opts["lr"]
+        for o in chained.train_module.optim.group_overrides
+    }
+    assert fresh_groups["connector"] == bridge_groups["connector"]
+    assert fresh_groups["vision"] == chained_groups["vision"]
+    assert (
+        fresh.train_module.scheduler.schedulers["connector"]
+        == bridge_module.scheduler.schedulers["connector"]
+    )
+    assert (
+        fresh.train_module.scheduler.schedulers["vision"]
+        == chained.train_module.scheduler.schedulers["vision"]
+    )
+    assert fresh.train_module.scheduler.default == chained.train_module.scheduler.default
+    assert fresh.train_module.loss_group_weights == chained.train_module.loss_group_weights
     assert fresh.train_module.freeze_params == list(vision_alignment._PHASES[phase].freeze_params)
     assert fresh.train_module.train_embedding_rows == vision_alignment._image_token_rows(
         alignment_recipe.token_ids

@@ -516,13 +516,24 @@ def _build_train_module(
     sequence_length: int,
     text: dict | None = None,
     steps: int | None = None,
+    fresh_connector: bool = False,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
     policy = _PHASES[phase]
     horizon = policy.steps if steps is None else steps
     connector_horizon = horizon
+    connector_lr, connector_warmup = policy.connector_lr, policy.connector_warmup
     if policy.connector_decay_steps is not None:
         # Bridge decays the connector over a fixed fraction of the phase.
         connector_horizon = round(policy.connector_decay_steps * horizon / policy.steps)
+    elif fresh_connector:
+        # A later phase started from the text LM has a freshly initialized connector and image
+        # rows: give them bridge's connector schedule (peak, warmup, absolute decay length). Its
+        # 10% floor is the later phases' own connector LR, so after the decay they match the
+        # chained design.
+        bridge = _PHASES[AlignmentPhase.bridge]
+        assert bridge.connector_decay_steps is not None
+        connector_lr, connector_warmup = bridge.connector_lr, bridge.connector_warmup
+        connector_horizon = bridge.connector_decay_steps
     # Text-side settings: inherited from the text config, else the recipe's legacy defaults.
     if text is not None:
         text_module = text["train_module"]
@@ -597,12 +608,12 @@ def _build_train_module(
         rank_microbatch_size=policy.microbatch_instances * sequence_length,
         max_sequence_length=sequence_length,
         optim=MultimodalOLMoDDPOptimizerConfig(
-            lr=policy.lm_lr or policy.connector_lr,
+            lr=policy.lm_lr or connector_lr,
             group_overrides=[
                 OptimGroupOverride(
                     params=["*lm.embeddings.weight"],
                     opts={
-                        "lr": policy.connector_lr,
+                        "lr": connector_lr,
                         "weight_decay": 0.0,
                         "scheduler_name": "connector",
                     },
@@ -610,7 +621,7 @@ def _build_train_module(
                 OptimGroupOverride(
                     params=["*connector.*"],
                     opts={
-                        "lr": policy.connector_lr,
+                        "lr": connector_lr,
                         "weight_decay": 0.0,
                         "scheduler_name": "connector",
                     },
@@ -642,7 +653,7 @@ def _build_train_module(
         scheduler=PerGroupScheduler(
             schedulers={
                 "connector": CosWithWarmup(
-                    warmup=policy.connector_warmup, alpha_f=0.1, t_max=connector_horizon
+                    warmup=connector_warmup, alpha_f=0.1, t_max=connector_horizon
                 ),
                 "vision": CosWithWarmup(warmup=policy.vision_warmup, alpha_f=0.1, t_max=horizon),
             },
@@ -1150,7 +1161,12 @@ def build_config(cli: CliContext) -> VisionAlignmentExperimentConfig:
         dataset=dataset,
         data_loader=_build_data_loader(cli, recipe, sequence_length, text=text),
         train_module=_build_train_module(
-            recipe.phase, token_ids, sequence_length, text=text, steps=recipe.steps
+            recipe.phase,
+            token_ids,
+            sequence_length,
+            text=text,
+            steps=recipe.steps,
+            fresh_connector=recipe.parent_checkpoint is None,
         ),
         trainer=_build_trainer(
             cli, recipe, checkpoint, validation, token_ids, sequence_length, text=text
