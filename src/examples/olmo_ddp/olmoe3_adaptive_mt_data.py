@@ -3,7 +3,7 @@
 import fcntl
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 
 import olmoe3_adaptive_mt_plan as p
 from olmoe3_lr_sweep_watch import atomic_json
@@ -51,15 +51,18 @@ class FrozenMTMixture(SourceMixtureDatasetConfig):
         ])
 
 
+def freeze_config(config):
+    """Copy constructor fields only; Config also defines inherited ClassVars."""
+    return FrozenMTMixture(**{f.name: getattr(config, f.name) for f in fields(config) if f.init})
+
+
 def components(common):
     import olmoe3_hero_mt as mt
 
     mt.BATCH, mt.REQUESTED_TOKENS, mt.SEED = p.BATCH, p.REQUESTED_TOKENS, p.SEED
     data = mt.data_components(common)
     config = data.dataset.source_mixture_config
-    data.dataset.source_mixture_config = FrozenMTMixture(**{
-        k: getattr(config, k) for k in config.__dataclass_fields__
-    })
+    data.dataset.source_mixture_config = freeze_config(config)
     return data
 
 
