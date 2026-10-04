@@ -114,6 +114,10 @@ def node(schedule):
         )
         source, start = r.root / f"step{stop}", stop
         p.base.validate_checkpoint(source, stop, r.batch, r.gpus)
+        if rank == 0:
+            atomic_json(p.AUTO / "startup" / schedule / f"segment-{stop}.json",
+                        dict(passed=True, step=stop, gpus=r.gpus, checkpoint=str(source),
+                             experiment=exp, all_rank_save_audits_verified=True))
     if rank == 0:
         atomic_json(
             r.root / "audit/success.json",

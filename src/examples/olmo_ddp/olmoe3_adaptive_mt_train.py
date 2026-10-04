@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import olmoe3_adaptive_mt_plan as p
 from olmoe3_lr_sweep_watch import atomic_json
@@ -21,6 +22,13 @@ import olmoe3_qkgain_train as adapter  # noqa: E402
 class MTAudit(adapter.Audit):
     """Use qualified transfer/resume audits and require matching batches across arms."""
 
+    def post_checkpoint_loaded(self, path):
+        super().post_checkpoint_loaded(path)
+        r = p.find_run(self.run_id)
+        atomic_json(p.AUTO / "startup" / r.schedule / f"restore-{self.step}-rank{get_rank()}.json",
+                    dict(passed=True, step=self.step, source=str(path), gpus=r.gpus,
+                         fresh_stage=adapter.source_for(r) == r.source))
+
     def pre_train(self):
         super().pre_train()
         routers = [m for m in self.trainer.train_module.model.modules() if isinstance(m, MoERouterV2)]
@@ -30,8 +38,21 @@ class MTAudit(adapter.Audit):
             assert router.restore_weight_scale and router.normalize_expert_weights == 1.0
             assert router.original_top_k is None and not router.use_recompute_cache
         if get_rank() == 0:
-            atomic_json(p.find_run(self.run_id).root / "audit/routing.json",
-                        dict(passed=True, top_k=8, reference_top_k=16, multiplier=16, routed_layers=15))
+            r = p.find_run(self.run_id)
+            proof = dict(passed=True, top_k=8, reference_top_k=16, multiplier=16, routed_layers=15)
+            atomic_json(r.root / "audit/routing.json", proof)
+            atomic_json(p.AUTO / "startup" / r.schedule / "routing.json", proof)
+
+    def log_metrics(self, step, metrics):
+        # Preserve the finite-loss/gradient and expected-LR checks before publishing.
+        super().log_metrics(step, metrics)
+        if get_rank() == 0:
+            r = p.find_run(self.run_id)
+            row = dict(step=step, updated_at=datetime.now(timezone.utc).isoformat(),
+                       experiment=os.environ["BEAKER_EXPERIMENT_ID"], metrics=metrics)
+            atomic_json(p.AUTO / "progress" / f"{r.schedule}.json", row)
+            with (p.AUTO / "progress" / f"{r.schedule}.jsonl").open("a") as f:
+                f.write(json.dumps(row) + "\n")
 
     def pre_step(self, batch):
         # Match the first actual global batch in each startup segment. The later
