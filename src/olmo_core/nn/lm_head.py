@@ -21,6 +21,7 @@ from olmo_core.doc_utils import beta_feature
 from olmo_core.exceptions import OLMoConfigurationError
 
 from .config import ModuleConfig
+from .fp32_linear import FP32OutputLinear
 from .functional import (
     cross_entropy_loss,
     fused_linear_cross_entropy_loss,
@@ -90,6 +91,11 @@ class LMHeadConfig(ModuleConfig):
     bias: Optional[bool] = None
     dtype: DType = DType.float32
     loss_implementation: LMLossImplementation = LMLossImplementation.default
+    fp32_output: bool = False
+    """Retain FP32 logits with low-precision projection operands. Default head and
+    default loss only; tensor parallelism is not supported. See
+    :class:`~olmo_core.nn.fp32_linear.FP32OutputLinear` for backward semantics.
+    """
 
     def num_params(self, d_model: int, vocab_size: int) -> int:
         """
@@ -120,6 +126,10 @@ class LMHeadConfig(ModuleConfig):
         """
         kwargs = self.as_dict(exclude_none=True, recurse=False)
         kwargs.pop("name")
+        if self.fp32_output and self.name != LMHeadType.default:
+            raise OLMoConfigurationError("fp32_output requires the default LM head")
+        if self.name != LMHeadType.default:
+            kwargs.pop("fp32_output")
         kwargs.update(
             d_model=d_model,
             vocab_size=vocab_size,
@@ -166,12 +176,17 @@ class LMHead(nn.Module):
         bias: bool = True,
         init_device: str = "cpu",
         loss_implementation: LMLossImplementation = LMLossImplementation.default,
+        fp32_output: bool = False,
     ):
         super().__init__()
+        if fp32_output and loss_implementation != LMLossImplementation.default:
+            raise OLMoConfigurationError("fp32_output requires the default LM loss implementation")
+        self.fp32_output = fp32_output
         self.norm = (
             None if layer_norm is None else layer_norm.build(d_model, init_device=init_device)
         )
-        self.w_out = nn.Linear(d_model, vocab_size, bias=bias, dtype=dtype, device=init_device)
+        linear = FP32OutputLinear if fp32_output else nn.Linear
+        self.w_out = linear(d_model, vocab_size, bias=bias, dtype=dtype, device=init_device)
         self._d_model = d_model
         self._vocab_size = vocab_size
         self._loss_implementation = loss_implementation
@@ -368,6 +383,8 @@ class LMHead(nn.Module):
         tp_mesh: DeviceMesh,
         input_layouts: Optional[Tuple[Placement, Placement]] = None,
     ):
+        if self.fp32_output:
+            raise OLMoConfigurationError("fp32_output does not yet support tensor parallelism")
         # NOTE: there's a few cases to consider...
         # 1. If we're not using 'fused_linear' loss and we have a norm, then we do sequence-parallel through
         #    the norm, colwise-parallel through 'w_out', then back to sequence-parallel for the loss.

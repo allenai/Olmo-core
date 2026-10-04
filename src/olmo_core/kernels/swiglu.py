@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 import torch
 import torch.nn.functional as F
@@ -39,6 +39,7 @@ if triton is not None:
         ROW_PROGRAMS: tl.constexpr,
         HAS_START_TENSOR: tl.constexpr,
         START_ROW: tl.constexpr,
+        MATCH_EAGER_ROUNDING: tl.constexpr,
     ):
         pid_m = tl.program_id(0)
         pid_n = tl.program_id(1)
@@ -58,7 +59,61 @@ if triton is not None:
             gate_offsets = row_idx * x_stride_0 + (col_idx + hidden) * x_stride_1
             up = tl.load(x_ptr + up_offsets, mask=mask, other=0.0).to(tl.float32)
             gate = tl.load(x_ptr + gate_offsets, mask=mask, other=0.0).to(tl.float32)
-            y = up * gate * tl.sigmoid(gate)
+            if MATCH_EAGER_ROUNDING:
+                # PyTorch's separate silu and multiply materialize silu in the
+                # input dtype. Scoring must retain that training-time rounding.
+                silu = (gate * tl.sigmoid(gate)).to(x_ptr.dtype.element_ty)
+                y = up * silu.to(tl.float32)
+            else:
+                y = up * gate * tl.sigmoid(gate)
+
+            out_offsets = row_idx * out_stride_0 + col_idx * out_stride_1
+            tl.store(out_ptr + out_offsets, y, mask=mask)
+            row_start += row_stride
+
+    @triton.jit(do_not_specialize=["rows"])
+    def _swiglu_valid_prefix_dynamic_rows_kernel(
+        x_ptr,
+        x_stride_0,
+        x_stride_1,
+        start_elements_ptr,
+        num_elements_ptr,
+        out_ptr,
+        out_stride_0,
+        out_stride_1,
+        rows,
+        hidden: tl.constexpr,
+        BLOCK_M: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+        HAS_START_TENSOR: tl.constexpr,
+        START_ROW: tl.constexpr,
+        MATCH_EAGER_ROUNDING: tl.constexpr,
+    ):
+        pid_m = tl.program_id(0)
+        pid_n = tl.program_id(1)
+        start_row_base = tl.load(start_elements_ptr) if HAS_START_TENSOR else START_ROW
+        end_row = start_row_base + tl.load(num_elements_ptr)
+
+        col_idx = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)[None, :]
+        col_mask = col_idx < hidden
+        row_start = start_row_base + pid_m * BLOCK_M
+        row_stride = tl.num_programs(0) * BLOCK_M
+
+        while row_start < end_row:
+            row_idx = row_start + tl.arange(0, BLOCK_M)[:, None]
+            mask = (row_idx < end_row) & (row_idx < rows) & col_mask
+
+            up_offsets = row_idx * x_stride_0 + col_idx * x_stride_1
+            gate_offsets = row_idx * x_stride_0 + (col_idx + hidden) * x_stride_1
+            up = tl.load(x_ptr + up_offsets, mask=mask, other=0.0).to(tl.float32)
+            gate = tl.load(x_ptr + gate_offsets, mask=mask, other=0.0).to(tl.float32)
+            if MATCH_EAGER_ROUNDING:
+                # PyTorch's separate silu and multiply materialize silu in the
+                # input dtype. Scoring must retain that training-time rounding.
+                silu = (gate * tl.sigmoid(gate)).to(x_ptr.dtype.element_ty)
+                y = up * silu.to(tl.float32)
+            else:
+                y = up * gate * tl.sigmoid(gate)
 
             out_offsets = row_idx * out_stride_0 + col_idx * out_stride_1
             tl.store(out_ptr + out_offsets, y, mask=mask)
@@ -169,6 +224,8 @@ def swiglu_valid_prefix(
     *,
     start: torch.Tensor | int | None = None,
     out: Optional[torch.Tensor] = None,
+    match_eager_rounding: bool = False,
+    row_specialization: Literal["static", "dynamic"] = "static",
     block_m: int = _VALID_PREFIX_SWIGLU_BLOCK_M,
     block_n: int = _VALID_PREFIX_SWIGLU_BLOCK_N,
     row_programs: int = _VALID_PREFIX_SWIGLU_ROW_PROGRAMS,
@@ -182,8 +239,20 @@ def swiglu_valid_prefix(
     valid-row count without synchronizing to the host. ``start`` can also be a
     device scalar. The returned/output tensor has capacity shape
     ``[x.shape[0], x.shape[1] // 2]``; rows outside the requested range are
-    intentionally left untouched.
+    intentionally left untouched. With ``match_eager_rounding=True``, the CUDA
+    kernel rounds ``silu(gate)`` to the input dtype before multiplication, as
+    the eager training expression does. This matches the rounding boundary,
+    not necessarily every output bit: Triton and PyTorch sigmoid approximations
+    can still differ, particularly in FP16/FP32. The default preserves the fused
+    arithmetic used by explicit fused forward/backward callers.
+
+    ``row_specialization="static"`` preserves the capacity-specialized kernel.
+    ``"dynamic"`` reuses a forward kernel across row capacities, while retaining
+    specialization on hidden width, tile sizes, offsets, and arithmetic mode.
+    This option does not change the backward kernel or register an autograd rule.
     """
+    if row_specialization not in ("static", "dynamic"):
+        raise ValueError("row_specialization must be 'static' or 'dynamic'")
     if x.ndim != 2:
         raise ValueError(f"Expected x rank-2 [M, 2H], got {tuple(x.shape)}")
     if x.shape[1] % 2 != 0:
@@ -245,7 +314,13 @@ def swiglu_valid_prefix(
     has_start_tensor = isinstance(start, torch.Tensor)
     start_ptr = start if has_start_tensor else num_elements
     start_row = 0 if start is None or has_start_tensor else int(start)
-    _swiglu_valid_prefix_kernel[(row_grid, col_grid)](
+    kernel = (
+        _swiglu_valid_prefix_kernel
+        if row_specialization == "static"
+        else _swiglu_valid_prefix_dynamic_rows_kernel
+    )
+    capacity_options = {"ROW_PROGRAMS": int(row_grid)} if row_specialization == "static" else {}
+    kernel[(row_grid, col_grid)](
         x,
         x.stride(0),
         x.stride(1),
@@ -258,9 +333,10 @@ def swiglu_valid_prefix(
         hidden,
         BLOCK_M=int(block_m),
         BLOCK_N=int(block_n),
-        ROW_PROGRAMS=int(row_grid),
+        **capacity_options,
         HAS_START_TENSOR=has_start_tensor,
         START_ROW=start_row,
+        MATCH_EAGER_ROUNDING=match_eager_rounding,
         num_warps=int(num_warps),
         num_stages=int(num_stages),
     )

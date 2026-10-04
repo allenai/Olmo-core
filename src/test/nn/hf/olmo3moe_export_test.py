@@ -320,7 +320,8 @@ def test_export_rejects_clipped_attention(builder, layers, clip_qkv):
     for layer in layers:
         model = builder()
         if builder is build_hybrid:
-            model.blocks["3"] = deepcopy(model.blocks["2"])
+            # Built blocks contain CUDA events, which cannot be deep-copied.
+            model.blocks["3"] = build_hybrid().blocks["2"]
         model.blocks[layer].attention.clip_qkv = clip_qkv
         with pytest.raises(NotImplementedError, match="clip_qkv"):
             get_hf_config(model)
@@ -338,7 +339,8 @@ def test_export_rejects_unrepresented_attention_operations(builder, layers, chan
     for layer in layers:
         model = builder()
         if builder is build_hybrid:
-            model.blocks["3"] = deepcopy(model.blocks["2"])
+            # Built blocks contain CUDA events, which cannot be deep-copied.
+            model.blocks["3"] = build_hybrid().blocks["2"]
         attention = model.blocks[layer].attention
         if change.startswith("scale"):
             attention.backend.scale = 0.0 if change == "scale_zero" else 1.0
@@ -497,8 +499,11 @@ def test_core_hybrid_exports_and_reloads(tmp_path, latent, emo, per_head, scalab
 @requires_gpu
 @pytest.mark.parametrize("emo", [False, True])
 @pytest.mark.parametrize("kda_norm_eps", [1e-5, 1e-3])
-def test_core_hybrid_hf_forward_parity(emo, kda_norm_eps):
-    model = build_hybrid(emo=emo, device="cuda", kda_norm_eps=kda_norm_eps)
+@pytest.mark.parametrize("window", [None, 4])
+def test_core_hybrid_hf_forward_parity(emo, kda_norm_eps, window):
+    model = build_hybrid(
+        emo=emo, device="cuda", kda_norm_eps=kda_norm_eps, window=window, scalable=window is None
+    )
     config = get_hf_config(model)
     config._attn_implementation = "eager"
     hf = Olmo3MoeForCausalLM(config).to(device="cuda", dtype=torch.bfloat16).eval()
@@ -545,10 +550,22 @@ def test_hybrid_export_rejects_restricted_emo_inference_pool():
 
 
 @requires_fla
-def test_hybrid_export_rejects_sliding_window_attention():
+def test_hybrid_export_preserves_sliding_window_attention():
     model = build_hybrid(scalable=False, window=4)
     assert model.blocks["2"].attention.backend.window_size == (3, 0)
-    with pytest.raises(NotImplementedError, match="sliding.window"):
+    config = get_hf_config(model)
+    assert config.layer_types == ["linear_attention", "linear_attention", "sliding_attention"]
+    assert config.sliding_window == 4
+    restored = type(config).from_dict(config.to_dict())
+    assert restored.layer_types == config.layer_types
+    assert restored.sliding_window == config.sliding_window
+
+
+@requires_fla
+def test_hybrid_export_rejects_heterogeneous_sliding_windows():
+    model = build_hybrid(scalable=False, window=4)
+    model.blocks["3"] = build_hybrid(scalable=False, window=8).blocks["2"]
+    with pytest.raises(NotImplementedError, match="one common sliding window size"):
         get_hf_config(model)
 
 
