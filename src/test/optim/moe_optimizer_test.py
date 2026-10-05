@@ -33,6 +33,47 @@ def test_refresh_main_params_after_model_load():
     )
 
 
+def _run_aligned_flat_model_buffers():
+    mesh = init_device_mesh("cpu", (2,))
+    params = {
+        "gate": nn.Parameter(torch.arange(4, dtype=torch.bfloat16)),
+        "norm": nn.Parameter(torch.arange(544, dtype=torch.bfloat16)),
+        "scale": nn.Parameter(torch.arange(3, dtype=torch.bfloat16)),
+        "projection": nn.Parameter(torch.arange(24, dtype=torch.bfloat16).reshape(4, 6)),
+    }
+    original = {name: param.detach().clone() for name, param in params.items()}
+    optim = object.__new__(OLMoDDPOptimizer)
+    optim._device = torch.device("cpu")
+    optim._dp_group = mesh.get_group()
+    optim.param_groups = [{"pg": "dp", "named_params": params}]
+    optim.states = {
+        f"{name}.main": distribute_tensor(
+            param.detach().float().reshape(-1),
+            mesh,
+            [Shard(0) if name in ("norm", "projection") else Replicate()],
+        )
+        for name, param in params.items()
+    }
+    optim._init_flat_model_param_buffers()
+    for name, param in params.items():
+        assert param.data_ptr() % 16 == 0, name
+        torch.testing.assert_close(param, original[name], rtol=0, atol=0)
+
+    # Padding in model storage must not change packed all-gather offsets or
+    # the logical shapes/values used by optimizer state and checkpoints.
+    for main in optim.states.values():
+        main.to_local().add_(8)
+    optim._copy_main_params_to_flat_model_buffers()
+    for name, param in params.items():
+        torch.testing.assert_close(param, original[name] + 8, rtol=0, atol=0)
+
+
+def test_flat_model_buffers_preserve_alignment_and_sharded_sync():
+    run_distributed_test(
+        _run_aligned_flat_model_buffers, world_size=2, backend="gloo", start_method="spawn"
+    )
+
+
 def test_build_groups_applies_overrides():
     model = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 4))
     config = OLMoDDPOptimizerConfig(
