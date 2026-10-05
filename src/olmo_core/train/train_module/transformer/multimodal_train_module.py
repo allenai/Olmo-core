@@ -1327,7 +1327,7 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             model_part.eval()
 
         try:
-            with torch.enable_grad():
+            with self._eval_batch_context():
                 output = self.model_forward_no_pipeline(
                     input_ids,
                     labels=labels,
