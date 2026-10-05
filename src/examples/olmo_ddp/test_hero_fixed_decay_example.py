@@ -58,6 +58,7 @@ class FixedDecayExampleTest(unittest.TestCase):
                 alias.symlink_to(source, target_is_directory=True)
                 p = example.make_plan(alias, 200_000_000_000, "emo", f"child-{step}")
                 self.assertEqual(p["source"], str(source))
+                self.assertEqual((p["schema"], p["source_gpus"], p["gpus"]), (2, gpus, gpus))
                 self.assertEqual(p["decay_steps"], 11921)
                 self.assertEqual(p["end_step"], step + 11921)
                 self.assertEqual(p["end_tokens"], (step + 11921) * example.BATCH)
@@ -92,6 +93,27 @@ class FixedDecayExampleTest(unittest.TestCase):
         self.checkpoint(root / "step358001", 358001, name="different-child", decay=11921)
         with self.assertRaisesRegex(ValueError, "different child"):
             example.select_checkpoint(p)
+
+    def test_halved_gpu_plan_and_child_resume(self):
+        source = self.checkpoint(self.root / "source", 357500, 128)
+        p = example.make_plan(source, 400_000_000_000, "emo", "child", gpus=64)
+        self.assertEqual((p["source_gpus"], p["gpus"]), (128, 64))
+        self.assertEqual((p["decay_steps"], p["end_step"]), (23842, 381342))
+        self.assertEqual(example.checkpoint_info(Path(p["source"]))["gpus"], p["source_gpus"])
+        self.assertEqual(example.select_checkpoint(p), (357500, str(source)))
+        root = Path(p["save_folder"])
+        child = self.checkpoint(root / "step357502", 357502, 64, name="child", decay=23842)
+        self.assertEqual(example.select_checkpoint(p), (357502, str(child)))
+        self.checkpoint(root / "step358000", 358000, 128, name="child", decay=23842)
+        with self.assertRaisesRegex(ValueError, "Unexpected child checkpoint"):
+            example.select_checkpoint(p)
+
+    def test_unsupported_gpu_counts(self):
+        for source_gpus, gpus in [(64, 32), (64, 128), (128, 96), (128, 32)]:
+            with self.subTest(source_gpus=source_gpus, gpus=gpus):
+                source = self.checkpoint(self.root / f"s{source_gpus}-{gpus}", 357500, source_gpus)
+                with self.assertRaisesRegex(ValueError, "Cannot train"):
+                    example.make_plan(source, 10, "emo", f"c{source_gpus}-{gpus}", gpus=gpus)
 
     def test_decayed_source_is_rejected(self):
         source = self.checkpoint(self.root / "decayed", 240000, decay=24000)

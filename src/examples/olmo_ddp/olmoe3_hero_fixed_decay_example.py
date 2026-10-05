@@ -25,9 +25,12 @@ existing src/examples/olmo_ddp/olmoe3_profile_setup.sh inside the disposable wor
 The setup and olmoe3_small_hero_runtime.py verify the exact package/kernel pins.
 
 This example supports the ORIGINAL 7:1 split-QK small PT hero, EMO or non-EMO.
-It deliberately requires the saved GPU count (64 or 128), with 8 GPUs/node.
-It preserves model/EMO configuration, optimizer, trainer step, data position and
-per-rank RNG. It does not implement 3:1, MT, LC, SFT or GPU-count resharding.
+It trains on the saved GPU count (64 or 128) by default, with 8 GPUs/node, or on
+half of a 128-GPU source with --gpus 64. It preserves model/EMO configuration,
+optimizer, trainer step, data position and, on the saved GPU count, per-rank RNG.
+A 128->64 restore reshards optimizer state (verified from saved rank audits) and
+reseeds RNG natively, as the hero's 64->128 continuation did. It does not
+implement 3:1, MT, LC, SFT, or any other GPU-count change.
 
 CHOOSE A CHECKPOINT AND AN ADDITIONAL BUDGET
 ==========================================
@@ -58,7 +61,8 @@ On a machine with the checkpoint Weka mount, make a plan (stdlib Python only):
 
 Use a new name AND plan for every source/budget experiment. Replace 6T with any
 other protected boundary and 200B with e.g. 100B, 400B or 0.2T. Bare integers mean
-tokens; B/T mean decimal billion/trillion. Omitting --output prints JSON only.
+tokens; B/T mean decimal billion/trillion. Add --gpus 64 to train a 128-GPU
+source on 64 GPUs. Omitting --output prints JSON only.
 The planner never submits jobs or writes to checkpoint directories.
 
 REGISTER THE NEW CHILD BEFORE TRAINING
@@ -94,7 +98,7 @@ On EVERY worker in ONE allocation, run the following after qualified setup:
 
     export DECAY_PLAN=/path/on/shared/weka/my-7to1-emo-6t-plus200b.json
     export DECAY_MASTER_ADDR=<reachable-hostname-of-this-allocation-rank-0>
-    export DECAY_NODES=16  # 6T is 128 GPUs; use 8 for a 64-GPU source
+    export DECAY_NODES=16  # plan['gpus'] // 8, e.g. 8 for a 64-GPU plan
     torchrun --nnodes="$DECAY_NODES" --nproc-per-node=8 \
       --node-rank="$BEAKER_REPLICA_RANK" \
       --master-addr="$DECAY_MASTER_ADDR" --master-port=29500 --max-restarts=0 \
@@ -127,7 +131,9 @@ DETAILS FOR AN AGENT ADAPTING THIS EXAMPLE
 * The inherited 14T horizon is replaced for this child, allowing e.g. 14T + 200B.
 * Preserve the original data/optimizer/model policy. The source model config is
   checked against the built model before training; don't silently change EMO,
-  QK gains or the 7:1 layer pattern. Keep the saved GPU count for exact RNG restore.
+  QK gains or the 7:1 layer pattern. The global batch is unchanged at 64 GPUs
+  (gradient accumulation 8 instead of 4). Only the saved GPU count restores RNG
+  exactly; a 128->64 first restore reseeds natively, later child restores are exact.
 * Source completion/audit checks are structural checks, not full payload checksums;
   use the existing protection receipts for upload/download integrity verification.
 * This ends after PT decay. Conversion/evaluation and MT/LC/SFT are separate jobs.
@@ -192,12 +198,22 @@ def checkpoint_info(path: Path) -> dict:
     return {"source": str(path), "start_step": step, "start_tokens": tokens, "gpus": gpus}
 
 
-def make_plan(source: Path, decay_tokens: int, arm: str, name: str) -> dict:
+def supported_gpus(source_gpus: int, gpus: int) -> bool:
+    """Allow the saved GPU count, or halving a 128-GPU source onto 64 GPUs."""
+    return (source_gpus, gpus) in ((64, 64), (128, 128), (128, 64))
+
+
+def make_plan(
+    source: Path, decay_tokens: int, arm: str, name: str, gpus: int | None = None
+) -> dict:
     """Read the native source and describe an isolated fixed-budget decay."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,99}", name):
         raise ValueError("Use a unique lowercase alphanumeric/hyphen run name, <=100 characters")
     info = checkpoint_info(source)
     source = Path(info["source"])
+    gpus = info["gpus"] if gpus is None else gpus
+    if not supported_gpus(info["gpus"], gpus):
+        raise ValueError(f"Cannot train a {info['gpus']}-GPU source on {gpus} GPUs")
     config = read_json(source / "config.json")
     tm = config["train_module"]
     if not tm["scheduler"]["_CLASS_"].endswith(".ConstantWithWarmup"):
@@ -215,9 +231,13 @@ def make_plan(source: Path, decay_tokens: int, arm: str, name: str) -> dict:
     if root.exists():
         raise ValueError(f"Choose an unused child run name; output already exists: {root}")
     return {
-        "schema": 1,
+        "schema": 2,
         "base_commit": BASE_COMMIT,
-        **info,
+        "source": info["source"],
+        "start_step": info["start_step"],
+        "start_tokens": info["start_tokens"],
+        "source_gpus": info["gpus"],
+        "gpus": gpus,
         "source_config_sha256": hashlib.sha256((source / "config.json").read_bytes()).hexdigest(),
         "run_name": name,
         "arm": arm,
@@ -305,15 +325,23 @@ def select_checkpoint(plan: dict) -> tuple[int, str]:
 def train_example(args):
     """Run the inherited full-state hero with an isolated identity and WSD schedule."""
     plan = read_json(args.plan)
-    if plan["schema"] != 1 or plan["base_commit"] != BASE_COMMIT:
+    if plan["schema"] != 2 or plan["base_commit"] != BASE_COMMIT:
         raise ValueError("Unexpected plan schema/source revision")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,99}", plan["run_name"]):
         raise ValueError("Invalid child run name")
     if plan["arm"] not in ("emo", "non-emo"):
         raise ValueError("Invalid PT lineage arm")
+    if not supported_gpus(plan["source_gpus"], plan["gpus"]):
+        raise ValueError("Unsupported source/training GPU counts")
     source = Path(plan["source"])
     info = checkpoint_info(source)
-    if any(info[k] != plan[k] for k in info):
+    planned = {
+        "source": plan["source"],
+        "start_step": plan["start_step"],
+        "start_tokens": plan["start_tokens"],
+        "gpus": plan["source_gpus"],
+    }
+    if info != planned:
         raise ValueError("Source checkpoint metadata changed since planning")
     if (
         hashlib.sha256((source / "config.json").read_bytes()).hexdigest()
@@ -355,7 +383,7 @@ def train_example(args):
     verify_runtime()
     prepare_training_environment(backend="cpu:gloo,cuda:nccl", shared_filesystem=True)
     if dist.get_world_size() != plan["gpus"]:
-        raise ValueError("Use the source GPU count; this example does not reshard")
+        raise ValueError(f"Launch exactly plan['gpus']={plan['gpus']} ranks")
     child = ChildRun(plan)
     registration = read_json(hero.CONTROL / "registrations" / f"{child.run_id}.json")
     if any(registration.get(k) != v for k, v in plan["registration"].items()):
@@ -421,7 +449,22 @@ def train_example(args):
         """Retain sampled weight/optimizer audits and additionally verify RNG/data restoration."""
 
         def post_checkpoint_loaded(self, path):
-            super().post_checkpoint_loaded(path)
+            saved_gpus = read_json(Path(path) / "resume_audit" / "rank0.json")["gpus"]
+            halved = saved_gpus != dist.get_world_size()
+            if halved:
+                if Path(path).resolve() != source or (saved_gpus, plan["gpus"]) != (128, 64):
+                    raise RuntimeError(
+                        f"Only the planned 128->64 source restore may reshard: {path}"
+                    )
+                from olmoe3_hero_reshard_audit import verify_halved_dp
+
+                proof = verify_halved_dp(self.trainer, path, hero.state_sample(self.trainer))
+                hero.atomic_json(
+                    Path(self.output_dir) / f"restore-step{self.step}-rank{dist.get_rank()}.json",
+                    {"source": str(path), "step": self.step, "sampled_state_exact": True, **proof},
+                )
+            else:
+                super().post_checkpoint_loaded(path)
             if self.step != start:
                 raise RuntimeError(f"Restored step {self.step} differs from selected step {start}")
             saved = torch.load(
@@ -429,7 +472,9 @@ def train_example(args):
                 map_location="cpu",
                 weights_only=False,
             )
-            if not equal(saved["rng"], EnvRngStates.current_state().as_dict()):
+            if saved["world_size"] != saved_gpus:
+                raise RuntimeError("Trainer state and resume audit disagree on saved GPU count")
+            if not halved and not equal(saved["rng"], EnvRngStates.current_state().as_dict()):
                 raise RuntimeError("Per-rank RNG restore mismatch")
             if not equal(saved["data_loader"], self.trainer.data_loader.state_dict()):
                 raise RuntimeError("Data position restore mismatch")
@@ -494,6 +539,9 @@ def main():
     planner.add_argument("--decay-tokens", type=token_count, required=True)
     planner.add_argument("--arm", choices=("emo", "non-emo"), required=True)
     planner.add_argument("--run-name", required=True)
+    planner.add_argument(
+        "--gpus", type=int, help="Training GPUs: the saved count (default) or 64 for 128"
+    )
     planner.add_argument("--output", type=Path)
     trainer = commands.add_parser(
         "train", help="Worker entrypoint: run under torchrun after setup/registration"
@@ -503,7 +551,7 @@ def main():
     trainer.add_argument("--stop-after-steps", type=int)
     args = parser.parse_args()
     if args.command == "plan":
-        plan = make_plan(args.source, args.decay_tokens, args.arm, args.run_name)
+        plan = make_plan(args.source, args.decay_tokens, args.arm, args.run_name, args.gpus)
         serialized = json.dumps(plan, indent=2, sort_keys=True) + "\n"
         if args.output is not None:
             with args.output.open("x") as handle:

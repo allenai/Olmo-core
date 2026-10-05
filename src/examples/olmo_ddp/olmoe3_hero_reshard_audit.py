@@ -1,4 +1,4 @@
-"""Verify the original 64-rank sampled state after a 128-rank DCP restore."""
+"""Verify the original sampled state after a DCP restore onto a doubled or halved DP size."""
 
 import hashlib
 import json
@@ -66,5 +66,51 @@ def verify_doubled_dp(trainer, path, actual):
         "gpus": 128,
         "source_rank": rank // 2,
         "resharded_optimizer_tensors_verified": len(records),
+        "rng_policy": "native reseed when world size changes",
+    }
+
+
+def sample_digest(flat, start, width):
+    """Hash the evenly spaced samples that state_sample takes from one saved shard."""
+    count = min(128, width)
+    offsets = [start + i * (width - 1) // max(1, count - 1) for i in range(count)]
+    sampled = flat[torch.tensor(offsets, device=flat.device)].contiguous().view(torch.uint8)
+    return hashlib.sha256(sampled.cpu().numpy().tobytes()).hexdigest()
+
+
+def verify_halved_dp(trainer, path, actual):
+    """Find both original 128-rank shards, back to back, inside each 64-rank shard."""
+    rank = dist.get_rank()
+    assert dist.get_world_size() == 64
+    sources = (2 * rank, 2 * rank + 1)
+    saved = [
+        json.loads((Path(path) / "resume_audit" / f"rank{source}.json").read_text())
+        for source in sources
+    ]
+    for source, row in zip(sources, saved):
+        assert row["gpus"] == 128 and row["rank"] == source, source
+        for key in ("step", "tokens", "loss_history", "norm_history"):
+            assert row[key] == actual[key], key
+        assert row["tensors"].keys() == actual["tensors"].keys(), source
+    verified = 0
+    for name, observed in sorted(actual["tensors"].items()):
+        first, second = (row["tensors"][name] for row in saved)
+        if first[0] == observed[0]:
+            assert first == observed and second == observed, name
+            continue
+        tensor = trainer.train_module.optim.states[name]
+        assert len(tensor.placements) == 1 and tensor.placements[0].is_shard(0), name
+        local = tensor.to_local().detach().reshape(-1)
+        width = first[0]
+        assert second[0] == width and local.numel() == 2 * width, name
+        assert first[1] == second[1] == str(local.dtype), name
+        assert sample_digest(local, 0, width) == first[2], name
+        assert sample_digest(local, width, width) == second[2], name
+        verified += 1
+    return {
+        "source_gpus": 128,
+        "gpus": 64,
+        "source_ranks": list(sources),
+        "resharded_optimizer_tensors_verified": verified,
         "rng_policy": "native reseed when world size changes",
     }
