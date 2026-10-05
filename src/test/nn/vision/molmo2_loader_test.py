@@ -13,7 +13,7 @@ HF Molmo2 checkpoint can be added later (task follow-up).
 """
 
 import dataclasses
-from typing import Dict
+from typing import Any, Dict, cast
 
 import pytest
 import torch
@@ -96,20 +96,20 @@ def _tiny_cfg(tie_word_embeddings: bool = False) -> MultimodalLMConfig:
 
 def _attention_dims(lm_cfg: TransformerConfig):
     """Mirror of molmo2_loader._attention_dims so tests can construct fake weights."""
-    block = lm_cfg.block
+    block: Any = lm_cfg.block
     seq_mixer = block.attention if block.attention is not None else block.sequence_mixer
-    n_heads = getattr(seq_mixer, "n_heads", None) or getattr(seq_mixer, "num_heads", None)
+    n_heads: Any = getattr(seq_mixer, "n_heads", None) or getattr(seq_mixer, "num_heads", None)
     n_kv = (
         getattr(seq_mixer, "n_kv_heads", None)
         or getattr(seq_mixer, "num_kv_heads", None)
         or n_heads
     )
-    head_dim = getattr(seq_mixer, "head_dim", None) or (lm_cfg.d_model // n_heads)
+    head_dim: Any = getattr(seq_mixer, "head_dim", None) or (lm_cfg.d_model // n_heads)
     return int(n_heads), int(n_kv), int(head_dim)
 
 
 def _has_qk_norm(lm_cfg: TransformerConfig) -> bool:
-    block = lm_cfg.block
+    block: Any = lm_cfg.block
     seq_mixer = block.attention if block.attention is not None else block.sequence_mixer
     return getattr(seq_mixer, "qk_norm", None) is not None
 
@@ -133,7 +133,7 @@ def _synthetic_hf_state_dict(cfg: MultimodalLMConfig) -> Dict[str, torch.Tensor]
     d_model = lm_cfg.d_model
     # Match our model's resolved hidden_size for SwiGLU. For olmo3_1M this
     # ends up matching what TransformerConfig.llama_like computes.
-    block = lm_cfg.block
+    block: Any = lm_cfg.block
     intermediate = block.feed_forward.hidden_size
 
     has_qk_norm = _has_qk_norm(lm_cfg)
@@ -282,7 +282,7 @@ def test_ff_proj_chunk_assigns_gate_and_multiplier_correctly():
     cfg = _tiny_cfg()
     lm_cfg = cfg.lm
     d_model = lm_cfg.d_model
-    intermediate = lm_cfg.block.feed_forward.hidden_size
+    intermediate = cast(Any, lm_cfg.block).feed_forward.hidden_size
     # Distinct halves so we can verify the assignment.
     mul_half = torch.ones(intermediate, d_model)
     gate_half = -torch.ones(intermediate, d_model)
