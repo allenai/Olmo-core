@@ -1135,3 +1135,59 @@ class ExponentialScheduler(Scheduler):
             growth_factor = (initial_lr / self.lr_min) ** ratio
 
         return self.lr_min * growth_factor
+
+
+@Scheduler.register("per_group")
+@dataclass
+class PerGroupScheduler(Scheduler):
+    """
+    Dispatch to a different sub-scheduler per optimizer param group.
+
+    OLMo-core calls :meth:`Scheduler.set_lr` once per param group with the *same*
+    scheduler object, so a single scheduler cannot apply different warmups to
+    different groups. This wrapper reads a ``scheduler_name`` key from each param
+    group (set via :class:`~olmo_core.optim.OptimGroupOverride`'s ``opts``) and
+    delegates to the matching sub-scheduler, falling back to :attr:`default`.
+
+    This reproduces mm_olmo's ``multimodal`` scheduler, where the connector and LM
+    use different warmups (e.g. 200 vs 2000 steps) but the same cosine decay.
+
+    Example::
+
+        PerGroupScheduler(
+            schedulers={"connector": CosWithWarmup(warmup=200, alpha_f=0.1)},
+            default=CosWithWarmup(warmup=2000, alpha_f=0.1),
+        )
+
+    with an ``OptimGroupOverride(params=["connector.*"], opts={"scheduler_name": "connector"})``.
+    """
+
+    schedulers: Dict[str, Scheduler] = field(default_factory=dict)
+    """Sub-schedulers keyed by the param group's ``scheduler_name``."""
+
+    default: Optional[Scheduler] = None
+    """Scheduler used for groups without a matching ``scheduler_name``."""
+
+    group_name_field: str = "scheduler_name"
+    """The param-group key used to select a sub-scheduler."""
+
+    def __post_init__(self, *args):
+        if self.default is None:
+            raise OLMoConfigurationError("PerGroupScheduler requires a 'default' scheduler")
+
+    def get_lr(
+        self, initial_lr: Union[float, torch.Tensor], current: int, t_max: int
+    ) -> Union[float, torch.Tensor]:
+        raise NotImplementedError(
+            "PerGroupScheduler dispatches at the param-group level; use set_lr()."
+        )
+
+    def _scheduler_for(self, group: Dict[str, Any]) -> Scheduler:
+        name = group.get(self.group_name_field)
+        if name is not None and name in self.schedulers:
+            return self.schedulers[name]
+        assert self.default is not None
+        return self.default
+
+    def set_lr(self, group: Dict[str, Any], trainer: "Trainer") -> Union[float, torch.Tensor]:
+        return self._scheduler_for(group).set_lr(group, trainer)
