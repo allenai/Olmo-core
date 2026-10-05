@@ -1,6 +1,8 @@
+"""Vision-language models with pooled image features in the language-model embedding stream."""
+
 import os
 from dataclasses import dataclass, replace
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, List, Literal, Optional, Tuple, Union, cast
 
 import torch
 import torch.distributed as dist
@@ -12,6 +14,7 @@ from olmo_core.config import Config, DType
 from olmo_core.distributed.utils import barrier, is_distributed
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.embedding import SplitVocabEmbedding
+from olmo_core.nn.functional import weighted_cross_entropy_loss
 from olmo_core.nn.lm_head import LMOutputWithLoss
 from olmo_core.nn.transformer.config import TransformerBlockConfig, TransformerConfig
 from olmo_core.nn.vision.config import VisionEncoderConfig
@@ -21,6 +24,7 @@ from olmo_core.nn.vision.connector import (
     VisionConnectorConfig,
 )
 from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID
+from olmo_core.utils import move_to_device
 
 __all__ = [
     "MOLMO2_BASE_VOCAB_SIZE",
@@ -28,6 +32,7 @@ __all__ = [
     "MOLMO2_VOCAB_SIZE",
     "MultimodalLMConfig",
     "MultimodalLM",
+    "MultimodalOLMoDDPModel",
 ]
 
 MOLMO2_BASE_VOCAB_SIZE = 151_936
@@ -38,6 +43,13 @@ MOLMO2_N_EXTRA_TOKENS = 128
 
 MOLMO2_VOCAB_SIZE = MOLMO2_BASE_VOCAB_SIZE + MOLMO2_N_EXTRA_TOKENS
 """Molmo2's total *input* vocab (base + extra); the LM head spans only the base."""
+
+
+_INPUT_DIAGNOSTIC_NAMES = (
+    "text embedding RMS",
+    "connector output RMS",
+    "spliced image embedding RMS",
+)
 
 
 def _molmo2_attn_backend():
@@ -277,8 +289,13 @@ class MultimodalLMConfig(Config):
         Instantiate the multimodal model on ``init_device``.
 
         :param init_device: Device string (e.g. ``"cpu"``, ``"meta"``).
-        :returns: A :class:`MultimodalLM`.
+        :returns: A :class:`MultimodalLM`, or a :class:`MultimodalOLMoDDPModel` when the language
+            model is an :class:`~olmo_core.nn.transformer.OLMoDDPModelConfig`.
         """
+        from olmo_core.nn.transformer import OLMoDDPModelConfig
+
+        if isinstance(self.lm, OLMoDDPModelConfig):
+            return MultimodalOLMoDDPModel(self, init_device=init_device)
         return MultimodalLM(self, init_device=init_device)
 
 
@@ -316,6 +333,89 @@ class MultimodalLM(nn.Module):
         self._masked_residual_dropout = float(getattr(cfg.lm.block, "masked_dropout", 0.0) or 0.0)
         self.vision = cfg.vision.build(init_device=init_device)
         self.connector = cfg.connector.build(init_device=init_device)
+        self._collect_input_diagnostics = False
+        self._input_diagnostic_sums: Dict[str, torch.Tensor] = {}
+        self._input_diagnostic_counts: Dict[str, int] = {}
+        # Resolved lazily from the LM's sequence mixers; tests may set it directly.
+        self._document_mode: Optional[bool] = None
+
+    def uses_document_boundaries(self) -> bool:
+        """
+        Whether packed examples are isolated through document boundaries (``doc_lens``) instead
+        of attention masks.
+
+        Recurrent sequence mixers such as :class:`~olmo_core.nn.attention.kda.KimiDeltaAttention`
+        cannot apply an attention mask; they reset their state at document boundaries instead
+        (``cu_doc_lens``), and the attention layers of such language models take the same
+        boundaries through their variable-length kernels. When any LM block uses such a mixer,
+        :meth:`forward` derives one document per packed example from ``example_ids`` and sends no
+        masks or positions. Image tokens are then causal like text.
+        """
+        if self._document_mode is None:
+            from olmo_core.nn.attention.kda import KimiDeltaAttention
+
+            self._document_mode = any(
+                isinstance(module, KimiDeltaAttention) for module in self.lm.modules()
+            )
+        return self._document_mode
+
+    # -- input-scale diagnostics ------------------------------------------------------------
+
+    def set_input_diagnostics(self, enabled: bool) -> None:
+        """Enable or disable detached embedding-scale diagnostics for the next forwards."""
+        self._collect_input_diagnostics = enabled
+        self._input_diagnostic_sums.clear()
+        self._input_diagnostic_counts.clear()
+
+    @torch.no_grad()
+    def _record_input_diagnostic(self, name: str, values: torch.Tensor) -> None:
+        if not self._collect_input_diagnostics or values.numel() == 0:
+            return
+        sum_squares = values.detach().float().square().sum()
+        if name in self._input_diagnostic_sums:
+            self._input_diagnostic_sums[name] += sum_squares
+            self._input_diagnostic_counts[name] += values.numel()
+        else:
+            self._input_diagnostic_sums[name] = sum_squares
+            self._input_diagnostic_counts[name] = values.numel()
+
+    @torch.no_grad()
+    def pop_input_diagnostics(
+        self,
+        *,
+        reduce_across_process_group: bool = False,
+        process_group: Optional[dist.ProcessGroup] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Return the accumulated RMS values and disable collection.
+
+        :param reduce_across_process_group: Reduce sums and counts before computing each RMS.
+        :param process_group: The process group to reduce across. ``None`` uses the default group.
+        """
+        if reduce_across_process_group:
+            if not is_distributed():
+                raise RuntimeError("cannot reduce input diagnostics outside distributed training")
+            device = next(self.parameters()).device
+            n_metrics = len(_INPUT_DIAGNOSTIC_NAMES)
+            stats = torch.zeros(2 * n_metrics, dtype=torch.float64, device=device)
+            for idx, name in enumerate(_INPUT_DIAGNOSTIC_NAMES):
+                if name in self._input_diagnostic_sums:
+                    stats[idx] = self._input_diagnostic_sums[name].double()
+                    stats[n_metrics + idx] = self._input_diagnostic_counts[name]
+            self.set_input_diagnostics(False)
+            dist.all_reduce(stats, group=process_group)
+            return {
+                name: torch.sqrt(stats[idx] / stats[n_metrics + idx])
+                for idx, name in enumerate(_INPUT_DIAGNOSTIC_NAMES)
+                if stats[n_metrics + idx] > 0
+            }
+
+        diagnostics = {
+            name: torch.sqrt(sum_squares / self._input_diagnostic_counts[name])
+            for name, sum_squares in self._input_diagnostic_sums.items()
+        }
+        self.set_input_diagnostics(False)
+        return diagnostics
 
     # -- model introspection (mirrors the Transformer API used by the trainer / callbacks) --
 
@@ -326,6 +426,7 @@ class MultimodalLM(nn.Module):
 
     @property
     def num_trainable_params(self) -> int:
+        """Number of parameters with gradient computation enabled."""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     @property
@@ -339,6 +440,7 @@ class MultimodalLM(nn.Module):
 
     @property
     def is_moe(self) -> bool:
+        """Whether the language model uses mixture-of-experts layers."""
         return self.lm.is_moe
 
     def num_flops_per_token(self, seq_len: int) -> int:
@@ -365,10 +467,11 @@ class MultimodalLM(nn.Module):
         """Idealized FLOPs for the vision half of one batch, for MFU accounting.
 
         The ViT processes every (padded) crop in the batch, so ``n_crops`` should be the
-        full ``B * n_crops`` of the images tensor. The encoder is **frozen** → forward-only
-        (2 FLOPs/param/patch for the linear layers, plus the attention score+context
-        quadratic ``4·L·P·d`` per patch). The connector is **trained** → 6 FLOPs/param
-        (fwd+bwd) per pooled output token.
+        full ``B * n_crops`` of the images tensor. A frozen encoder is forward-only (2
+        FLOPs/param/patch for the linear layers, plus the attention score+context quadratic
+        ``4·L·P·d`` per patch); a trainable encoder uses the forward-plus-backward multipliers
+        (6 and 12). The connector is **trained** → 6 FLOPs/param (fwd+bwd) per pooled output
+        token.
 
         :param n_crops: total number of image crops processed by the ViT this batch.
         :param n_patches_per_crop: patches per crop fed to the ViT (``P``).
@@ -377,7 +480,14 @@ class MultimodalLM(nn.Module):
         d = self.cfg.vision.image_emb_dim
         n_layers = self.cfg.vision.image_num_layers
         n_raw = n_crops * n_patches_per_crop
-        vit = n_raw * (2 * self._n_vision_params + 4 * n_layers * n_patches_per_crop * d)
+        vision_multiplier = (
+            6 if any(param.requires_grad for param in self.vision.parameters()) else 2
+        )
+        attention_multiplier = 12 if vision_multiplier == 6 else 4
+        vit = n_raw * (
+            vision_multiplier * self._n_vision_params
+            + attention_multiplier * n_layers * n_patches_per_crop * d
+        )
         connector = n_pooled_tokens * 6 * self._n_connector_params
         return int(vit + connector)
 
@@ -443,11 +553,45 @@ class MultimodalLM(nn.Module):
 
         return self.connector(features, pooled_patches_idx)
 
+    def encode_images(
+        self,
+        images: torch.Tensor,
+        pooled_patches_idx: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Encode images into the compact ``(total_valid_pooled_rows, d_model)`` features that
+        :meth:`forward` splices at the ``<im_patch>`` positions, so they can be computed once and
+        reused across autoregressive forwards (``encoded_image_features``).
+
+        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``.
+        :param pooled_patches_idx: Shape ``(B, n_pooled, pool_size)``; a row whose indices are
+            all ``-1`` is collator padding and is dropped.
+        """
+        device = self.lm.device
+        images = images.to(device)
+        pooled_patches_idx = pooled_patches_idx.to(device)
+        image_features = self._encode_images(images, pooled_patches_idx)  # (B, n_pooled, d)
+        self._record_input_diagnostic("connector output RMS", image_features)
+
+        # ViT may run extra crop microbatches when ``n_crops`` differs across DP ranks;
+        # sync before the LM forward so all-gather collectives stay aligned.
+        if is_distributed():
+            barrier()
+
+        # Keep only valid pooled rows (a row is padding iff *all* its patch indices are -1,
+        # e.g. added by a batch collator to equalize ``n_pooled`` across examples). Selecting in
+        # row-major order keeps each example's features aligned with its ``<im_patch>``
+        # positions, so batches with a variable number of image tokens per example work. For
+        # unpadded / B=1 inputs every row is valid and this is a no-op.
+        valid_rows = (pooled_patches_idx >= 0).any(dim=-1)  # (B, n_pooled)
+        return image_features[valid_rows]  # (total_valid, d)
+
     def forward(
         self,
         input_ids: torch.Tensor,
         images: Optional[torch.Tensor] = None,
         pooled_patches_idx: Optional[torch.Tensor] = None,
+        encoded_image_features: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         subsegment_ids: Optional[torch.Tensor] = None,
@@ -466,8 +610,10 @@ class MultimodalLM(nn.Module):
             text-only batches.
         :param pooled_patches_idx: Per-group patch indices,
             shape ``(B, n_pooled, pool_size)``. Required when *images* is not
-            ``None``. ``n_pooled`` must equal the number of
+            ``None``. The number of non-padding pooled rows must equal the number of
             ``<im_patch>`` tokens per sequence.
+        :param encoded_image_features: Optional output of :meth:`encode_images`, reused across
+            autoregressive forwards; mutually exclusive with ``images``.
         :param labels: Target token IDs, shape ``(B, seq_len)``.
         :param token_type_ids: Optional ``(B, seq_len)`` tensor marking image tokens
             (non-zero) vs. text tokens (zero). When provided, image tokens attend to
@@ -529,7 +675,28 @@ class MultimodalLM(nn.Module):
         if labels is not None:
             labels = labels.to(device)
 
-        use_flex_attn = os.environ.get("OLMO2_FLEX_ATTN") == "1"
+        document_mode = self.uses_document_boundaries()
+        if document_mode:
+            # The packer always emits ``subsegment_ids`` (a constant id for examples without
+            # branches), so only real sibling branches, which need an attention mask, are
+            # rejected; otherwise the ids carry nothing beyond the example boundaries.
+            if subsegment_ids is not None and has_sibling_branches(subsegment_ids, example_ids):
+                raise ValueError(
+                    "Sibling-branch packing (`subsegment_ids` with several branches in one "
+                    "example) needs an attention mask, which the LM's recurrent sequence mixers "
+                    "cannot apply; pack one document per example instead."
+                )
+            subsegment_ids = None
+            # Recurrent mixers carry no positions and the attention layers of such LMs use no
+            # RoPE, so explicit positions have nothing to act on.
+            position_ids = None
+            doc_lens, max_doc_lens = document_lengths_from_example_ids(
+                example_ids if example_ids is not None else torch.zeros_like(input_ids)
+            )
+            kwargs["doc_lens"] = doc_lens
+            kwargs["max_doc_lens"] = max_doc_lens
+
+        use_flex_attn = os.environ.get("OLMO2_FLEX_ATTN") == "1" and not document_mode
         or_mask: Optional[torch.Tensor] = None
         and_mask: Optional[torch.Tensor] = None
         flex_attn_block_mask = None
@@ -571,14 +738,14 @@ class MultimodalLM(nn.Module):
         if self.lm.embedding_norm is not None:
             h = self.lm.embedding_norm(h)
 
+        if images is not None and encoded_image_features is not None:
+            raise ValueError("Pass either `images` or `encoded_image_features`, not both")
+
+        image_features = encoded_image_features
         if images is not None:
             if pooled_patches_idx is None:
                 raise ValueError("`pooled_patches_idx` is required when `images` is provided")
-
-            images = images.to(device)
-            pooled_patches_idx = pooled_patches_idx.to(device)
-
-            image_features = self._encode_images(images, pooled_patches_idx)  # (B, n_pooled, d)
+            image_features = self.encode_images(images, pooled_patches_idx)
 
             # Tie the connector output into the autograd graph on *every* forward that ran
             # the vision path, even when no rows are spliced below (e.g. an all-text
@@ -588,21 +755,10 @@ class MultimodalLM(nn.Module):
             # across ranks regardless of how text-only vs image examples are distributed.
             h = h + 0.0 * image_features.sum().to(h.dtype)
 
-            # ViT may run extra crop microbatches when ``n_crops`` differs across DP ranks;
-            # sync before the LM FSDP forward so all-gather collectives stay aligned.
-            if is_distributed():
-                barrier()
-
-            # Keep only valid pooled rows (a row is padding iff *all* its patch
-            # indices are -1, e.g. added by a batch collator to equalize ``n_pooled``
-            # across examples). Selecting in row-major order keeps each example's
-            # features aligned with its ``<im_patch>`` positions, so batches with a
-            # variable number of image tokens per example work. For unpadded / B=1
-            # inputs every row is valid and this is a no-op.
-            valid_rows = (pooled_patches_idx >= 0).any(dim=-1)  # (B, n_pooled)
-            image_features = image_features[valid_rows]  # (total_valid, d)
-
+        is_image_patch: Optional[torch.Tensor] = None
+        if image_features is not None:
             # Splice into LM embeddings at every <im_patch> position.
+            image_features = image_features.to(device)
             is_image_patch = input_ids.view(-1) == self.cfg.image_patch_token_id
             n_patches_in_seq = int(is_image_patch.sum())
             n_features = image_features.shape[0]
@@ -618,7 +774,20 @@ class MultimodalLM(nn.Module):
             # the contiguous ``h``, so the in-place add below propagates back into ``h``.
             h = h.contiguous()
             flat = h.view(-1, d)
+            image_features = image_features.to(flat.dtype)
             flat[is_image_patch] = flat[is_image_patch] + image_features.reshape(-1, d)
+
+        if self._collect_input_diagnostics:
+            valid_tokens = torch.ones_like(input_ids, dtype=torch.bool)
+            if token_type_ids is not None:
+                valid_tokens = valid_tokens & (token_type_ids.to(device) == 0)
+            elif is_image_patch is not None:
+                valid_tokens = (valid_tokens.view(-1) & ~is_image_patch).view_as(input_ids)
+            self._record_input_diagnostic("text embedding RMS", h[valid_tokens])
+            if is_image_patch is not None:
+                self._record_input_diagnostic(
+                    "spliced image embedding RMS", h.reshape(-1, h.shape[-1])[is_image_patch]
+                )
 
         # Build flex BlockMask after vision so the mask is not resident during ViT.
         if flex_mask_kwargs is not None:
@@ -628,7 +797,7 @@ class MultimodalLM(nn.Module):
                 **flex_mask_kwargs
             )
 
-        if not use_flex_attn:
+        if not use_flex_attn and not document_mode:
             # Dense (B, S, S) masks for the torch SDPA backend only.
             if token_type_ids is not None:
                 is_image = token_type_ids.to(device) != 0  # (B, S)
@@ -677,3 +846,377 @@ class MultimodalLM(nn.Module):
         ):
             out[..., output_vocab_size:] = torch.finfo(out.dtype).min
         return out
+
+
+def has_sibling_branches(
+    subsegment_ids: torch.Tensor, example_ids: Optional[torch.Tensor] = None
+) -> bool:
+    """
+    Whether any packed example carries more than one branch.
+
+    :param subsegment_ids: ``(B, S)`` per-token subsegment ids; the shared prefix of a branched
+        example uses ``ATTEND_ALL_SUBSEGMENT_ID`` and does not count as a branch.
+    :param example_ids: ``(B, S)`` per-token example ids (``-1`` = padding); ``None`` treats
+        each row as one example.
+    """
+    from olmo_core.data.multimodal.sequence_builder import ATTEND_ALL_SUBSEGMENT_ID
+
+    subsegment_ids = subsegment_ids.cpu()
+    rows = example_ids.cpu() if example_ids is not None else torch.zeros_like(subsegment_ids)
+    for row_subseg, row_examples in zip(subsegment_ids, rows):
+        for example in torch.unique(row_examples):
+            if int(example) < 0:
+                continue
+            ids = torch.unique(row_subseg[row_examples == example])
+            if int((ids != ATTEND_ALL_SUBSEGMENT_ID).sum()) > 1:
+                return True
+    return False
+
+
+def document_lengths_from_example_ids(example_ids: torch.Tensor) -> Tuple[torch.Tensor, List[int]]:
+    """
+    Turn per-token packed-example ids into per-row document lengths.
+
+    Every run of equal ids in a row is one document, including a trailing padding run
+    (``-1``), so the lengths of a row sum to the sequence length and each padded position is
+    isolated from every example. Ids are read on the CPU: the result feeds kernel launch
+    arguments (``max_doc_lens``) that must be Python integers.
+
+    :param example_ids: Integer tensor of shape ``(B, seq_len)``.
+
+    :returns: ``doc_lens`` of shape ``(B, max_docs)`` (``int32``, zero-padded) as consumed by
+        :func:`~olmo_core.data.utils.get_cumulative_document_lengths`, and the longest document
+        of each row.
+
+    :raises ValueError: If an id occurs in two separate runs of a row, which is how
+        sibling-branch packing interleaves examples; such batches need attention masks.
+    """
+    if example_ids.dim() != 2:
+        raise ValueError(f"example_ids must be (B, seq_len), got shape {tuple(example_ids.shape)}")
+    rows = example_ids.detach().cpu().to(torch.long)
+    lengths: List[List[int]] = []
+    for row in rows:
+        if row.numel() == 0:
+            lengths.append([])
+            continue
+        change = torch.ones(row.numel(), dtype=torch.bool)
+        change[1:] = row[1:] != row[:-1]
+        starts = torch.nonzero(change, as_tuple=False).flatten()
+        ends = torch.cat([starts[1:], torch.tensor([row.numel()])])
+        if len(starts) != len(torch.unique(row)):
+            raise ValueError(
+                "example_ids must be contiguous per example (one document each); interleaved "
+                "ids indicate sibling-branch packing, which needs attention masks"
+            )
+        lengths.append((ends - starts).tolist())
+    max_docs = max((len(row) for row in lengths), default=0)
+    doc_lens = torch.zeros(len(lengths), max_docs, dtype=torch.int32)
+    for index, row in enumerate(lengths):
+        if row:
+            doc_lens[index, : len(row)] = torch.tensor(row, dtype=torch.int32)
+    return doc_lens, [max(row) if row else 0 for row in lengths]
+
+
+class MultimodalOLMoDDPModel(MultimodalLM):
+    """
+    A :class:`MultimodalLM` whose language model is an
+    :class:`~olmo_core.nn.ddp.model.OLMoDDPModel`, trainable by
+    :class:`~olmo_core.train.train_module.transformer.multimodal_train_module.MultimodalOLMoDDPTrainModule`.
+
+    The OLMoDDP train module owns data/expert parallelism and its fused optimizer, and only
+    talks to the language model through a small runtime surface. This adapter keeps the
+    multimodal model compositional and forwards that surface to the LM, wrapping the *whole*
+    model (vision encoder, connector and LM) in the LM's multi-group DDP. Pipeline, tensor and
+    context parallelism are deliberately not exposed: multimodal masks and image embeddings need
+    the full sequence on each rank.
+
+    Given ``labels`` and ``loss_masks``, the forward computes the multimodal objective itself: a
+    float-weighted, response-only cross entropy normalized by the global loss weight, plus the
+    LM's z-loss over the same positions. Given ``labels`` alone (a text-only batch) it defers to
+    the language model's plain per-token loss, and without labels it returns logits like the
+    parent.
+
+    The router token mask of #868 is **not** carried: ``router_token_mask`` only feeds the train
+    module's router-loss divisor and data metrics, while the routers themselves see every
+    position, so their load-balancing and z-loss statistics include packed padding tokens. The
+    bridge phase trains with a zero load-balancing weight; this matters once the language model
+    itself trains (perception/joint and mid-training).
+    """
+
+    _olmo_ddp_compatible = True
+
+    def __init__(self, cfg: MultimodalLMConfig, init_device: str = "cpu"):
+        super().__init__(cfg, init_device=init_device)
+        from olmo_core.nn.ddp import OLMoDDPModel
+
+        if not isinstance(self.lm, OLMoDDPModel):
+            raise TypeError(
+                f"{type(self).__name__} requires an OLMoDDPModel language model, "
+                f"got {type(self.lm).__name__}"
+            )
+
+    def encode_images(
+        self,
+        images: torch.Tensor,
+        pooled_patches_idx: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Encode images with the pixels cast to the vision tower's parameter dtype.
+
+        The OLMoDDP train module casts the whole wrapped model (vision encoder, connector and
+        LM) to its training dtype, while the collator delivers float32 pixels, so the cast is
+        required here; it is a no-op when the tower already runs in the pixels' dtype.
+        """
+        vision_dtype = next(self.vision.parameters()).dtype
+        return super().encode_images(images.to(dtype=vision_dtype), pooled_patches_idx)
+
+    @property
+    def _olmo_lm(self):
+        from olmo_core.nn.ddp import OLMoDDPModel
+
+        return cast(OLMoDDPModel, self.lm)
+
+    # -- runtime surface the OLMoDDP train module reads ---------------------------------------
+
+    @property
+    def tbo(self) -> bool:
+        """Whether the language model uses two-batch overlap."""
+        return self._olmo_lm.tbo
+
+    @property
+    def recompute_all_blocks_by_chunk(self) -> bool:
+        """Whether activation recomputation groups LM blocks into chunks."""
+        return self._olmo_lm.recompute_all_blocks_by_chunk
+
+    @property
+    def recompute_each_block(self) -> bool:
+        """Whether each LM block is independently recomputed during backward."""
+        return self._olmo_lm.recompute_each_block
+
+    @property
+    def has_grad_accum_fp32_buffer(self) -> bool:
+        """Whether the language model accumulates gradients in FP32 buffers."""
+        return self._olmo_lm.has_grad_accum_fp32_buffer
+
+    @property
+    def device(self) -> torch.device:
+        """The language model's device."""
+        return self._olmo_lm.device
+
+    def train(self, mode: bool = True):
+        """Set training mode while keeping a fully frozen vision encoder in evaluation mode."""
+        super().train(mode)
+        if mode and not any(p.requires_grad for p in self.vision.parameters()):
+            self.vision.eval()
+        return self
+
+    def purge_cuda_events(self) -> None:
+        """Release language-model CUDA event handles before copying or partitioning it."""
+        self._olmo_lm.purge_cuda_events()
+
+    def install_cuda_events(self) -> None:
+        """Install language-model CUDA event handles for distributed execution."""
+        self._olmo_lm.install_cuda_events()
+
+    def count_non_rowwise_ep_no_sync_blocks(self) -> int:
+        """Count no-sync expert-parallel blocks that do not use rowwise dispatch."""
+        return self._olmo_lm.count_non_rowwise_ep_no_sync_blocks()
+
+    def count_ep_no_sync_blocks(self) -> int:
+        """Count language-model blocks using no-sync expert parallelism."""
+        return self._olmo_lm.count_ep_no_sync_blocks()
+
+    def iter_ep_no_sync_symm_tensor_infos(self) -> Iterator[Any]:
+        """Yield symmetric-buffer metadata from no-sync expert-parallel blocks."""
+        yield from self._olmo_lm.iter_ep_no_sync_symm_tensor_infos()
+
+    def apply_fp8(self, *args, **kwargs) -> None:
+        """Configure FP8 computation in the language model."""
+        self._olmo_lm.apply_fp8(*args, **kwargs)
+
+    def apply_cp(self, *args, **kwargs) -> None:
+        """Reject context parallelism, which is unsupported for multimodal batches."""
+        raise NotImplementedError("Context parallelism is not supported for multimodal OLMoDDP")
+
+    def apply_pp(self, *args, **kwargs) -> None:
+        """Reject pipeline parallelism, which is unsupported for multimodal batches."""
+        raise NotImplementedError("Pipeline parallelism is not supported for multimodal OLMoDDP")
+
+    def apply_ep(self, *args, **kwargs):
+        """Apply expert parallelism to the language model."""
+        return self._olmo_lm.apply_ep(*args, **kwargs)
+
+    def apply_activation_checkpointing(self, *args, **kwargs) -> None:
+        """Configure activation checkpointing in the language model."""
+        self._olmo_lm.apply_activation_checkpointing(*args, **kwargs)
+
+    def apply_compile(self) -> None:
+        """Compile the language-model blocks."""
+        self._olmo_lm.apply_compile()
+
+    def apply_dp(self, *args, **kwargs):
+        """Wrap the complete multimodal model (not just the LM) in data parallelism."""
+        return self._olmo_lm.apply_dp(*args, root_module=self, **kwargs)
+
+    @torch.no_grad()
+    def init_weights(self, *args, device: Optional[torch.device] = None, **kwargs):
+        """Initialize LM parameters and materialize the vision encoder and connector."""
+        device = device or self._olmo_lm.device
+        generator = self._olmo_lm.init_weights(*args, device=device, **kwargs)
+        for module in (self.vision, self.connector):
+            module.to_empty(device=device)
+            module.reset_parameters()
+        return generator
+
+    def prewarm_deepep_v2_runtimes(self, *args, **kwargs) -> None:
+        """Initialize DeepEP runtimes used by the language model."""
+        self._olmo_lm.prewarm_deepep_v2_runtimes(*args, **kwargs)
+
+    def prewarm_ep_no_sync_symm_buffers(self, *args, **kwargs) -> None:
+        """Prewarm the language model's expert-parallel symmetric buffers."""
+        self._olmo_lm.prewarm_ep_no_sync_symm_buffers(*args, **kwargs)
+
+    def refresh_rowwise_fp8_cache(self) -> None:
+        """Rebuild language-model FP8 caches from current parameter values."""
+        self._olmo_lm.refresh_rowwise_fp8_cache()
+
+    def named_fp8_weight_stores(self) -> Iterator[Tuple[str, object]]:
+        """Yield FP8 weight stores with multimodal-model parameter names."""
+        for name, weight in self._olmo_lm.named_fp8_weight_stores():
+            yield f"lm.{name}", weight
+
+    def named_mxfp8_expert_weights(self) -> Iterator[Tuple[str, object]]:
+        """Yield FP8 weight stores using the expert-weight compatibility interface."""
+        yield from self.named_fp8_weight_stores()
+
+    def zero_grad(self, *args, **kwargs) -> None:
+        """Clear gradients of every component through the language model's buffers."""
+        self._olmo_lm.zero_grad(*args, **kwargs)
+        for module in (self.vision, self.connector):
+            for param in module.parameters():
+                param.grad = None
+
+    def post_batch(self, dry_run: bool = False) -> None:
+        """Run language-model cleanup after an optimizer batch."""
+        self._olmo_lm.post_batch(dry_run=dry_run)
+
+    def post_optim_step(self) -> None:
+        """Update language-model state after the optimizer step."""
+        self._olmo_lm.post_optim_step()
+
+    def compute_auxiliary_metrics(self, reset: bool = True) -> Dict[str, Tuple[torch.Tensor, Any]]:
+        """Return accumulated language-model auxiliary metrics and their reduction types."""
+        return self._olmo_lm.compute_auxiliary_metrics(reset=reset)
+
+    def reset_auxiliary_metrics(self) -> None:
+        """Clear accumulated language-model auxiliary metrics."""
+        self._olmo_lm.reset_auxiliary_metrics()
+
+    # -- forward ------------------------------------------------------------------------------
+
+    def forward(  # type: ignore[override]
+        self,
+        input_ids: torch.Tensor,
+        *,
+        labels: Optional[torch.Tensor] = None,
+        loss_masks: Optional[torch.Tensor] = None,
+        ignore_index: int = -100,
+        loss_reduction: Literal["mean", "sum", "none"] = "mean",
+        z_loss_multiplier: Optional[float] = None,
+        loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
+        loss_weight_div_factor: Optional[Union[torch.Tensor, float]] = None,
+        return_logits: Optional[bool] = None,
+        response_logits_only: bool = False,
+        router_token_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> Union[torch.Tensor, LMOutputWithLoss]:
+        """
+        Run the vision-language forward pass.
+
+        Without ``labels`` this returns logits exactly like :meth:`MultimodalLM.forward`. With
+        ``labels`` it computes the multimodal training objective from response-position logits:
+
+        .. code-block:: python
+
+            ce = sum_i loss_masks_i * CE(logits_i, labels_i) / loss_weight_div_factor
+
+        so that, after DDP gradient averaging, the objective is normalized by the global loss
+        weight (the train module supplies ``loss_weight_div_factor`` as the global weight sum
+        divided by the DP world size, matching the LM-only convention for ``loss_div_factor``).
+        The z-loss uses the same weights. Router auxiliary losses keep their own divisor
+        (``router_loss_div_factor``, forwarded to the LM).
+
+        :param loss_masks: Float per-token loss weights, shape ``(B, seq_len)``, aligned with
+            ``labels``. Required with ``labels``; ``0`` marks unsupervised positions.
+        :param loss_div_factor: The LM-only divisor (label count). Accepted for interface
+            compatibility and used only when ``loss_weight_div_factor`` is not given.
+        :param loss_weight_div_factor: Divisor for the weighted CE and z-loss.
+        :param response_logits_only: Compute logits only where ``loss_masks > 0``. Always on
+            when ``labels`` are given; opt-in otherwise.
+        :param router_token_mask: Accepted from the collator for the train module (router loss
+            divisor, data metrics) and dropped here: the router token mask of #868 is not
+            carried, so the language model's routers see every position and their
+            load-balancing and z-loss statistics include padding tokens (see the class docstring).
+        """
+        del router_token_mask
+        if loss_masks is not None:
+            loss_masks = loss_masks.to(device=self.lm.device, dtype=torch.float32)
+        if labels is None:
+            return super().forward(
+                input_ids,
+                loss_masks=loss_masks,
+                response_logits_only=response_logits_only,
+                **kwargs,
+            )
+        if loss_masks is None:
+            # A text-only batch (e.g. a downstream evaluator's): the language model computes
+            # the plain per-token cross entropy with the LM-only divisor and reduction.
+            return super().forward(
+                input_ids,
+                labels=labels,
+                ignore_index=ignore_index,
+                loss_reduction=loss_reduction,
+                z_loss_multiplier=z_loss_multiplier,
+                loss_div_factor=loss_div_factor,
+                return_logits=return_logits,
+                response_logits_only=response_logits_only,
+                **kwargs,
+            )
+        if loss_reduction != "sum":
+            raise ValueError(
+                f"{type(self).__name__} computes a weighted sum loss; got "
+                f"loss_reduction={loss_reduction!r}"
+            )
+        if self.cfg.output_vocab_size is not None:
+            raise OLMoConfigurationError(
+                "output_vocab_size is not supported by the multimodal OLMoDDP loss"
+            )
+        labels = labels.to(self.lm.device)
+        response_mask = loss_masks > 0
+        # Response logits are ``(N_response, vocab)`` in row-major mask order.
+        logits = super().forward(
+            input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
+        )
+        assert isinstance(logits, torch.Tensor)
+        flat_labels = labels.reshape(-1)[response_mask.reshape(-1)]
+        flat_weights = loss_masks.reshape(-1)[response_mask.reshape(-1)]
+        ce_loss, z_loss = weighted_cross_entropy_loss(
+            logits,
+            flat_labels,
+            flat_weights,
+            ignore_index=ignore_index,
+            compute_z_loss=z_loss_multiplier is not None,
+            z_loss_multiplier=z_loss_multiplier or 0.0,
+        )
+        div_factor = (
+            loss_weight_div_factor if loss_weight_div_factor is not None else loss_div_factor
+        )
+        if div_factor is not None:
+            div_factor = move_to_device(div_factor, ce_loss.device)
+            ce_loss = ce_loss / div_factor
+            if z_loss is not None:
+                z_loss = z_loss / div_factor
+        loss = ce_loss if z_loss is None else ce_loss + z_loss
+        return LMOutputWithLoss(
+            logits=logits if return_logits else None, loss=loss, ce_loss=ce_loss, z_loss=z_loss
+        )

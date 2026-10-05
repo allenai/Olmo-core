@@ -27,7 +27,7 @@ from .molmo2_loader import (
     multimodal_lm_state_dict_to_hf,
 )
 from .molmo2_tokens import Molmo2TokenIds, prepare_molmo2_tokenizer
-from .multimodal import MultimodalLM, MultimodalLMConfig
+from .multimodal import MultimodalLM, MultimodalLMConfig, MultimodalOLMoDDPModel
 
 __all__ = [
     "VisionEncoderType",
@@ -45,6 +45,7 @@ __all__ = [
     "VisionConnector",
     "MultimodalLMConfig",
     "MultimodalLM",
+    "MultimodalOLMoDDPModel",
     "molmo2_hf_state_dict_to_multimodal_lm",
     "preprocess_image_molmo2",
     "Molmo2TokenIds",
