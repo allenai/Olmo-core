@@ -22,6 +22,7 @@ import logging
 import os
 from dataclasses import dataclass
 from fnmatch import fnmatch
+from functools import lru_cache
 from typing import Any, Dict, List, Literal, Optional, Tuple, cast
 
 import torch
@@ -196,7 +197,7 @@ class MultimodalTransformerTrainModule(TransformerTrainModule):
         # Apply data parallelism IN-PLACE *before* building the optimizer: composable
         # DDP/FSDP keep the model's type, attributes, and (prefix-free) parameter names,
         # and FSDP additionally needs the optimizer built on the sharded DTensor params.
-        if self.world_mesh is not None:
+        if self.world_mesh is not None and dp_config is not None:
             self._parallelize(dp_config)
 
         log.info("Building optimizer...")
@@ -475,6 +476,7 @@ class MultimodalTransformerTrainModule(TransformerTrainModule):
                 "total grad norm", grad_norm, reduce_type=None, namespace="optim"
             )
 
+        assert self.optim is not None
         if self.scheduler is not None:
             for group_idx, group in enumerate(self.optim.param_groups):
                 new_lr = self.scheduler.set_lr(group, self.trainer)
@@ -491,6 +493,7 @@ class MultimodalTransformerTrainModule(TransformerTrainModule):
             "(stage-1 training runs without in-loop eval)."
         )
 
+    @lru_cache
     def num_flops_per_token(self, seq_len: int) -> Optional[int]:
         try:
             if hasattr(self._lm, "num_flops_per_token"):
