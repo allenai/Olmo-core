@@ -14,7 +14,7 @@ from olmo_core.data.multimodal.alignment import (
 )
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
 from olmo_core.data.multimodal.pixmo_cap import PixMoCapDatasetConfig
-from olmo_core.internal.experiment import ExperimentConfig, SubCmd, _build_data_loader
+from olmo_core.internal.experiment import ExperimentConfig
 from olmo_core.nn.transformer import TransformerConfig
 from olmo_core.nn.vision import (
     Molmo2TokenIds,
@@ -52,7 +52,7 @@ def mixture():
     )
 
 
-def test_mixture_loader_builds_through_shared_runner(tmp_path, monkeypatch, mixture):
+def test_mixture_loader_builds_from_the_built_mixture(tmp_path, monkeypatch, mixture):
     dataset = MultimodalMixtureConfig(tokenizer=TokenizerConfig.dolma2())
     build = Mock(return_value=mixture)
     monkeypatch.setattr(dataset, "build", build)
@@ -67,9 +67,7 @@ def test_mixture_loader_builds_through_shared_runner(tmp_path, monkeypatch, mixt
     )
     monkeypatch.setattr("olmo_core.data.multimodal.mixture_data_loader.get_rank", get_rank)
 
-    loader = _build_data_loader(
-        SimpleNamespace(dataset=dataset, data_loader=loader_config), dp_process_group=group
-    )
+    loader = loader_config.build(dataset.build(), dp_process_group=group)
     loader.reshuffle(epoch=1)
     batch = next(iter(loader))
 
@@ -94,7 +92,7 @@ class _MultimodalExperimentConfig(ExperimentConfig):
     train_module: MultimodalTransformerTrainModuleConfig
 
 
-def test_multimodal_experiment_round_trip_and_dry_run(tmp_path):
+def test_multimodal_experiment_round_trip(tmp_path):
     lm = TransformerConfig.olmo2_1M(vocab_size=512)
     vision = VisionEncoderConfig()
     config = _MultimodalExperimentConfig(
@@ -131,7 +129,6 @@ def test_multimodal_experiment_round_trip_and_dry_run(tmp_path):
     assert isinstance(
         DataLoaderConfig.from_dict(config.data_loader.as_config_dict()), MixtureDataLoaderConfig
     )
-    SubCmd.dry_run.run(restored)
 
 
 def test_text_runner_import_does_not_require_vision_dependencies():

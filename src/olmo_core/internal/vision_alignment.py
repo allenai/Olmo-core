@@ -3,10 +3,11 @@
 import copy
 import json
 import logging
+import sys
 from dataclasses import dataclass, field, fields, replace
 from math import isfinite
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from olmo_core.config import Config, DType, StrEnum
 from olmo_core.data import TokenizerConfig
@@ -14,6 +15,7 @@ from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
 from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.distributed.parallel import DataParallelType
+from olmo_core.distributed.utils import barrier, get_local_rank
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.io import is_url, normalize_path, resource_path
 from olmo_core.launch.beaker import (
@@ -31,7 +33,13 @@ from olmo_core.nn.transformer import OLMoDDPModelConfig
 from olmo_core.nn.vision import Molmo2TokenIds, MultimodalLMConfig
 from olmo_core.optim import CosWithWarmup, OptimGroupOverride, PerGroupScheduler
 from olmo_core.optim.multimodal_optimizer import MultimodalOLMoDDPOptimizerConfig
-from olmo_core.train import Duration, LoadStrategy, TrainerConfig
+from olmo_core.train import (
+    Duration,
+    LoadStrategy,
+    Trainer,
+    TrainerConfig,
+    teardown_training_environment,
+)
 from olmo_core.train.callbacks import (
     CheckpointerCallback,
     ConfigSaverCallback,
@@ -54,9 +62,10 @@ from olmo_core.train.train_module import (
 from olmo_core.train.train_module.transformer.multimodal_train_module import (
     MultimodalOLMoDDPTrainModuleConfig,
 )
+from olmo_core.utils import seed_all
 
 from .common import build_launch_config
-from .experiment import CliContext, ExperimentConfig
+from .experiment import CliContext, ExperimentConfig, SubCmd
 from .vision_alignment_data import (
     ALIGNMENT_LOSS_TARGETS,
     ALIGNMENT_MEAN_LOSS_WEIGHTS,
@@ -1165,3 +1174,51 @@ def _validate_config(
         holdout.split = "validation"
         evaluator.eval_dataset.sources["native_text_holdout"] = holdout
         evaluator.eval_dataset.target_loss_mass["native_text_holdout"] = 1.0
+
+
+def parse_cli_args() -> CliContext:
+    """Parse ``SUBCOMMAND RUN_NAME CLUSTER [OVERRIDES...]`` from the command line."""
+    commands = (SubCmd.launch, SubCmd.train, SubCmd.dry_run)
+    if len(sys.argv) < 4 or sys.argv[1] not in commands:
+        print(f"Usage: python {sys.argv[0]} {'|'.join(commands)} RUN_NAME CLUSTER [OVERRIDES...]")
+        sys.exit(1)
+    script, cmd, run_name, cluster, *overrides = sys.argv
+    return CliContext(script, SubCmd(cmd), run_name, cluster, overrides)
+
+
+def train(config: VisionAlignmentExperimentConfig) -> Trainer:
+    """Build the model, train module, data loader and trainer, train, and return the trainer."""
+    seed_all(config.init_seed)
+    model = config.model.build(init_device="meta")
+    train_module = config.train_module.build(model)
+    data_loader = config.data_loader.build(
+        config.dataset.build(), dp_process_group=train_module.dp_process_group
+    )
+    # Finish source preparation on all ranks before the trainer creates bookkeeping groups.
+    barrier()
+    trainer = config.trainer.build(train_module, data_loader)
+    cast(ConfigSaverCallback, trainer.callbacks["config_saver"]).config = config.as_config_dict()
+    trainer.fit()
+    return trainer
+
+
+def run(cmd: SubCmd, config: VisionAlignmentExperimentConfig) -> None:
+    """Run ``launch``, ``train`` (under torchrun) or ``dry_run`` for a built config."""
+    if get_local_rank() == 0:
+        print(config)
+    if cmd == SubCmd.launch:
+        assert config.launch is not None
+        config.launch.launch()
+    elif cmd == SubCmd.train:
+        train(config)
+        teardown_training_environment()
+    elif cmd != SubCmd.dry_run:
+        raise OLMoConfigurationError(f"Vision alignment does not support '{cmd}'")
+
+
+def main() -> None:
+    """Build one alignment phase from the command line and run it."""
+    cli = parse_cli_args()
+    config = build_config(cli)
+    cli.cmd.prepare_environment(config)
+    run(cli.cmd, config)

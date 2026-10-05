@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.internal import vision_alignment
 from olmo_core.internal.experiment import CliContext, SubCmd
 from olmo_core.internal.vision_alignment import VisionAlignmentExperimentConfig
@@ -135,3 +136,25 @@ def test_local_config_does_not_construct_beaker_launch(monkeypatch):
     )
     assert vision_alignment._build_launch(cli) is None
     build_launch.assert_not_called()
+
+
+def test_parse_cli_args_reads_argv(monkeypatch):
+    argv = ["Vision-Align.py", "dry_run", "run01", "local", "--recipe.phase=bridge"]
+    monkeypatch.setattr("sys.argv", argv)
+    assert vision_alignment.parse_cli_args() == CliContext(
+        "Vision-Align.py", SubCmd.dry_run, "run01", "local", ["--recipe.phase=bridge"]
+    )
+
+
+@pytest.mark.parametrize("cmd", ["prep", "eval_checkpoints", "bogus"])
+def test_parse_cli_args_rejects_unsupported_subcommands(monkeypatch, cmd):
+    monkeypatch.setattr("sys.argv", ["Vision-Align.py", cmd, "run01", "local"])
+    with pytest.raises(SystemExit):
+        vision_alignment.parse_cli_args()
+
+
+@pytest.mark.parametrize("cmd", [SubCmd.prep, SubCmd.eval_checkpoints])
+def test_run_rejects_unsupported_subcommands(cmd):
+    config = Mock(launch=None)
+    with pytest.raises(OLMoConfigurationError, match="does not support"):
+        vision_alignment.run(cmd, config)
