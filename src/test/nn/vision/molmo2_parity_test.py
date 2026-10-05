@@ -145,6 +145,7 @@ def test_molmo2_converter_loads_and_vision_matches(model_id: str):
     # while still tight enough to catch real architecture mismatches.
     for layer in cfg.vit_layers:
         diff = (hf_hidden[layer] - our_hidden[layer]).abs().max().item()
+        print(f"[parity] {model_id} vision layer {layer} max|diff|={diff:.3e}")
         assert diff < 5e-3, (
             f"{model_id}: vision layer {layer} max abs diff = {diff:.2e} " f"(threshold 5e-3)"
         )

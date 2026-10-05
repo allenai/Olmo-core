@@ -103,6 +103,7 @@ def test_molmo2_embedding_parity(model_id: str):
         our_e = ours.lm.embeddings(ids)
 
     diff = (hf_e.float() - our_e.float()).abs().max().item()
+    print(f"[parity] {model_id} embedding max|diff|={diff:.3e}")
     assert diff < 1e-3, f"{model_id}: embedding diff = {diff:.3e}"
 
 
@@ -158,6 +159,9 @@ def test_molmo2_lm_forward_parity(model_id: str):
     diff = (hf_last - our_last).abs().max().item()
     hf_argmax = int(hf_last.argmax().item())
     our_argmax = int(our_last.argmax().item())
+    print(
+        f"[parity] {model_id} LM-only logits max|diff|={diff:.3e} argmax_match={hf_argmax == our_argmax}"
+    )
     assert hf_argmax == our_argmax, (
         f"{model_id}: LM argmax mismatch — HF={hf_argmax} ours={our_argmax}, "
         f"max abs diff = {diff:.3e}"
@@ -271,6 +275,10 @@ def test_molmo2_full_pipeline_logit_parity(model_id: str):
     diff = (hf_last - our_last).abs().max().item()
     hf_argmax = int(hf_last.argmax().item())
     our_argmax = int(our_last.argmax().item())
+    print(
+        f"[parity] {model_id} full-pipeline logits max|diff|={diff:.3e} "
+        f"argmax_match={hf_argmax == our_argmax}"
+    )
     assert hf_argmax == our_argmax, (
         f"{model_id}: full-pipeline argmax mismatch — HF={hf_argmax} "
         f"ours={our_argmax}, max abs diff = {diff:.3e}"

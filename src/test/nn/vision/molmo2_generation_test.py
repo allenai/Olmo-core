@@ -425,6 +425,7 @@ def test_molmo2_image_bidirectional_attention_parity():
 
     bidir_diff = (hf_logits - our_bidir).abs().max().item()
     causal_diff = (hf_logits - our_causal).abs().max().item()
+    print(f"[parity] bidirectional max|diff|={bidir_diff:.3e} causal max|diff|={causal_diff:.3e}")
 
     # (1) Bidirectional reproduces HF.
     assert bidir_diff < 5.0, (
