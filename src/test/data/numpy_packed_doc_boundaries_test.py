@@ -181,3 +181,98 @@ def test_default_boundaries_unchanged(tmp_path: Path):
         assert get_path(ds.paths[0]) == ds._get_indices_path(
             name, ds.paths[0], extra_ids=(LongDocStrategy.truncate, ds.indices_dtype.__name__)
         )
+
+
+def _trained_tokens(ds: NumpyPackedFSLDataset) -> int:
+    return sum(int(ds[i]["label_mask"].sum()) for i in range(len(ds)))
+
+
+def _real_tokens(ds: NumpyPackedFSLDataset) -> int:
+    return sum(int((ds[i]["input_ids"] != PAD).sum()) for i in range(len(ds)))
+
+
+def test_full_length_row_without_eos_is_its_own_document(tmp_path: Path):
+    """A row truncated to exactly the sequence length has lost its EOS. With metadata boundaries it
+    fills one instance on its own and the next row is intact; the EOS scan merges the two, truncates
+    the merged span to the sequence length and so never trains on the next row."""
+    truncated = (
+        [IM_START, 40, IM_END, NL, IM_START] + [41] * 11,
+        [0, 0, 0, 0, 0] + [1] * 11,
+    )
+    assert len(truncated[0]) == 16 and EOS not in truncated[0]
+    rows = [truncated, SINGLE_TURN]
+    for name in ("meta", "eos"):
+        (tmp_path / name).mkdir()
+        _write_part(tmp_path / name, 0, rows)
+
+    meta = _build(tmp_path / "meta", 16, use_array_if_local=False)
+    assert sorted(_real_segments(meta)) == sorted(rows)
+    full = [meta[i] for i in range(len(meta)) if meta[i]["input_ids"].tolist() == truncated[0]]
+    assert len(full) == 1 and full[0]["doc_lens"].tolist() == [16]
+    assert _trained_tokens(meta) == sum(sum(mask) for _, mask in rows)
+
+    eos = _build(tmp_path / "eos", 16)
+    assert _trained_tokens(eos) == sum(truncated[1])
+
+
+@pytest.mark.parametrize("sequence_length", [8, 16, 32, 64])
+def test_padding_matches_eos_scan(tmp_path: Path, sequence_length: int):
+    """Where the metadata and the EOS scan agree on the documents (every row ends in its only EOS),
+    the two modes give identical instances, padding segment included: padded with PAD, masked out,
+    and one trailing `doc_lens` segment."""
+    rows = [
+        ([IM_START, 50 + i, IM_END, NL, IM_START] + [60 + i] * i + [EOS], [0] * 5 + [1] * (i + 1))
+        for i in range(1, 7)
+    ]
+    for name in ("meta", "eos"):
+        (tmp_path / name).mkdir()
+        _write_part(tmp_path / name, 0, rows)
+    meta = _build(tmp_path / "meta", sequence_length, use_array_if_local=False)
+    eos = _build(tmp_path / "eos", sequence_length)
+    assert len(meta) == len(eos)
+    padded = 0
+    for i in range(len(meta)):
+        a, b = meta[i], eos[i]
+        for key in ("input_ids", "label_mask", "doc_lens"):
+            assert a[key].tolist() == b[key].tolist(), key
+        real = int(a["label_mask"].numel() - (a["input_ids"] == PAD).sum())
+        if real < sequence_length:
+            padded += 1
+            assert a["doc_lens"][-1] == sequence_length - real
+            assert not a["label_mask"][real:].any()
+    assert padded > 0
+
+
+def test_row_cut_across_parts_is_two_documents(tmp_path: Path):
+    """The legacy open-instruct layout cuts parts every 1 GiB, mid-row, and writes the cut row as two
+    metadata lines, one per part. Metadata boundaries yield both pieces, so no token is lost, but as
+    two documents: the tail trains without its prompt. (The EOS scan drops the head instead.) This is
+    why open-instruct requires row-aligned parts for metadata boundaries."""
+    stream = SINGLE_TURN[0] + MULTI_TURN[0] + SINGLE_TURN[0]
+    labels = SINGLE_TURN[1] + MULTI_TURN[1] + SINGLE_TURN[1]
+    cut = len(SINGLE_TURN[0]) + 5  # inside MULTI_TURN, before its first EOS
+    for name in ("meta", "eos"):
+        directory = tmp_path / name
+        directory.mkdir()
+        for part, (lo, hi) in enumerate([(0, cut), (cut, len(stream))]):
+            np.array(stream[lo:hi], dtype=np.uint32).tofile(
+                directory / f"token_ids_part_{part:04d}.npy"
+            )
+            np.array(labels[lo:hi], dtype=np.bool_).tofile(
+                directory / f"labels_mask_part_{part:04d}.npy"
+            )
+        with gzip.open(directory / "token_ids_part_0000.csv.gz", "wt") as f:
+            f.write(f"0,{len(SINGLE_TURN[0])}\n{len(SINGLE_TURN[0])},{cut}\n")
+        tail = len(SINGLE_TURN[0]) + len(MULTI_TURN[0]) - cut
+        with gzip.open(directory / "token_ids_part_0001.csv.gz", "wt") as f:
+            f.write(f"0,{tail}\n{tail},{tail + len(SINGLE_TURN[0])}\n")
+
+    meta = _build(tmp_path / "meta", 32, use_array_if_local=False)
+    documents = _real_segments(meta)
+    assert len(documents) == 4
+    assert (MULTI_TURN[0][:5], MULTI_TURN[1][:5]) in documents
+    assert (MULTI_TURN[0][5:], MULTI_TURN[1][5:]) in documents
+    assert _real_tokens(meta) == len(stream)
+
+    eos = _build(tmp_path / "eos", 32)
+    assert _real_tokens(eos) == len(stream) - 5
