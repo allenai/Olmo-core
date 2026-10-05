@@ -6,7 +6,6 @@ from unittest.mock import Mock
 import pytest
 
 from olmo_core.exceptions import OLMoConfigurationError
-from olmo_core.internal import experiment
 from olmo_core.internal import vision_alignment_pipeline as pipeline
 from olmo_core.internal.experiment import CliContext, SubCmd
 from olmo_core.train import LoadStrategy
@@ -67,16 +66,16 @@ def test_default_launch_submits_one_controller_job(cli, entrypoint, explicit_all
 
 
 @pytest.mark.parametrize("phase", ["bridge", "perception", "joint"])
-def test_explicit_phase_uses_standard_single_stage_runner(monkeypatch, cli, entrypoint, phase):
+def test_explicit_phase_uses_the_single_stage_runner(monkeypatch, cli, entrypoint, phase):
     config, builder = entrypoint
     cli.overrides.append(f"--recipe.phase={phase}")
     prepare, run = Mock(), Mock()
     monkeypatch.setattr(SubCmd, "prepare_environment", prepare)
-    monkeypatch.setattr(SubCmd, "run", run)
+    monkeypatch.setattr(pipeline, "run", run)
     pipeline.main()
     builder.assert_called_once_with(cli)
     prepare.assert_called_once_with(config)
-    run.assert_called_once_with(config)
+    run.assert_called_once_with(cli.cmd, config)
     config.launch.launch.assert_not_called()
 
 
@@ -194,12 +193,3 @@ def test_signal_forwards_to_workers_and_stops_chain_even_after_zero_exit(monkeyp
     assert caught.value.code == 128 + signum
     kill.assert_called_once_with(1234, signum)
     assert signal.getsignal(signum) is original_handler
-
-
-def test_standard_experiment_parser_keeps_cli_contract(monkeypatch):
-    monkeypatch.setattr(
-        experiment.sys, "argv", ["train.py", "dry_run", "run", "local", "--init_seed=1"]
-    )
-    assert experiment.parse_cli_args() == CliContext(
-        "train.py", SubCmd.dry_run, "run", "local", ["--init_seed=1"]
-    )

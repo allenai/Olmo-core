@@ -19,11 +19,14 @@ from olmo_core.train.checkpoint import Checkpointer
 from olmo_core.train.common import DurationUnit
 from olmo_core.utils import prepare_cli_environment
 
-from .experiment import CliContext, SubCmd, parse_cli_args, train
+from .experiment import CliContext, SubCmd
 from .vision_alignment import (
     AlignmentPhase,
     VisionAlignmentExperimentConfig,
     build_config,
+    parse_cli_args,
+    run,
+    train,
 )
 
 log = logging.getLogger(__name__)
@@ -251,7 +254,7 @@ def main() -> None:
             finally:
                 teardown_training_environment()
         else:
-            cli.cmd.run(config)
+            run(cli.cmd, config)
         return
 
     if cli.cmd not in (SubCmd.launch, SubCmd.train, SubCmd.dry_run):
@@ -278,7 +281,7 @@ def main() -> None:
         )
         bridge.launch.launch()
     elif cli.cmd == SubCmd.dry_run:
-        SubCmd.dry_run.run(bridge)
+        run(SubCmd.dry_run, bridge)
         print("Perception and joint configs are resolved from their completed parent checkpoints.")
     else:
         _run_pipeline(cli, bridge)
