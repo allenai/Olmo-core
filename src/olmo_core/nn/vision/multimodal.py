@@ -124,6 +124,7 @@ class MultimodalLMConfig(Config):
         *,
         connector_mlp_hidden_size: int,
         response_residual_dropout: float = 0.0,
+        image_patch_token_id: int = IM_PATCH_ID,
         **kwargs,
     ) -> "MultimodalLMConfig":
         """
@@ -135,6 +136,9 @@ class MultimodalLMConfig(Config):
         :param connector_mlp_hidden_size: HF ``adapter_config.intermediate_size``. Equal to
             the LM's feed-forward hidden size in every released variant, but a distinct
             field, so it is passed explicitly rather than derived from ``lm``.
+        :param image_patch_token_id: Token id whose positions receive the image features;
+            Molmo2's own ``<im_patch>`` id by default, a spare row of the LM's vocabulary
+            when the LM is not a Molmo2 one.
         """
         from olmo_core.nn.vision.config import VisionEncoderType
 
@@ -173,10 +177,34 @@ class MultimodalLMConfig(Config):
                 projector_type=ImageProjectorType.mlp,
                 mlp_hidden_size=connector_mlp_hidden_size,
             ),
-            image_patch_token_id=IM_PATCH_ID,
+            image_patch_token_id=image_patch_token_id,
             vit_layers=(24, 18),
             # The head spans the base vocab structurally, so no logit masking is required.
             output_vocab_size=None,
+            **kwargs,
+        )
+
+    @classmethod
+    def molmo2_vision_stack(
+        cls, lm: TransformerConfig, *, image_patch_token_id: int, **kwargs
+    ) -> "MultimodalLMConfig":
+        """
+        Molmo2's vision tower and connector around an already-built language model.
+
+        The vision encoder and the connector are those of :meth:`molmo2_4B` (SigLIP2-SO400M/14
+        truncated to 25 blocks, two-layer attention-pooling connector with a 9,728-wide MLP),
+        with the connector projecting into ``lm.d_model``. This is the configuration for
+        aligning a vision tower to a language model from another checkpoint; the connector
+        is freshly initialised rather than loaded from a Molmo2 checkpoint.
+
+        :param lm: The already-built language-model config.
+        :param image_patch_token_id: The token id in ``lm``'s vocabulary that marks image
+            patch positions.
+        """
+        return cls._molmo2_like(
+            lm,
+            connector_mlp_hidden_size=9728,
+            image_patch_token_id=image_patch_token_id,
             **kwargs,
         )
 

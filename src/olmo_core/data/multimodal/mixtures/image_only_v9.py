@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from olmo_core.data.multimodal.academic_dataset import AcademicDatasetConfig
 from olmo_core.data.multimodal.mixture_weights import (
@@ -198,7 +198,7 @@ def build_image_only_v9_dataset(
     if name == "pixmo_ask_model_anything":
         return PixMoAmaDatasetConfig(seed=seed).build(tokenizer)
     if name == "pixmo_cap":
-        cap_kw = dict(
+        cap_kw: Dict[str, Any] = dict(
             dataset_path=f"{PIXMO_DATASETS}/cap",
             mode="sft_demo",
             seed=seed,
@@ -209,7 +209,7 @@ def build_image_only_v9_dataset(
     if name == "pixmo_cap_qa_as_user_qa":
         return PixMoCapQaDatasetConfig(seed=seed).build(tokenizer)
     if name == "tulu4":
-        tulu_kw = dict(seed=seed)
+        tulu_kw: Dict[str, Any] = dict(seed=seed)
         if max_sequence_length is not None:
             tulu_kw["max_sequence_length"] = max_sequence_length
         return Tulu4DatasetConfig(**tulu_kw).build(tokenizer)

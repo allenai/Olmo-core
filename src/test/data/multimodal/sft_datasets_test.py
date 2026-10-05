@@ -29,6 +29,7 @@ from olmo_core.nn.vision.molmo2_tokens import (
     LOW_RES_IM_START_ID,
     N_PATCHES_SQ,
     PATCH_DIM,
+    Molmo2TokenIds,
 )
 
 # ---------------------------------------------------------------------------
@@ -139,6 +140,11 @@ def test_truncate_example_refuses_to_cut_image_tokens():
     with pytest.raises(ValueError, match="im_patch"):
         truncate_example(seq, 2)
 
+    token_ids = Molmo2TokenIds()
+    seq["input_ids"] = np.array([1, 2, token_ids.im_end_id, 3], dtype=np.int64)
+    with pytest.raises(ValueError, match="image-structural"):
+        truncate_example(seq, 2, image_token_ids=token_ids.image_token_ids)
+
 
 def test_truncate_example_refuses_to_drop_all_loss():
     seq = {
@@ -184,8 +190,10 @@ class _FlakyDataset:
 
     def __init__(self, size: int, bad):
         self.size, self.bad, self._warned = size, set(bad), 0
+        self.epochs = []
 
-    def _build(self, i: int):
+    def _build(self, i: int, epoch: int = 0):
+        self.epochs.append(epoch)
         if i in self.bad:
             raise ValueError(f"row {i} is broken")
         return {"input_ids": np.array([i], dtype=np.int64)}
@@ -193,7 +201,8 @@ class _FlakyDataset:
 
 def test_get_example_with_skip_advances_over_bad_rows():
     ds = _FlakyDataset(10, bad={3, 4})
-    assert get_example_with_skip(ds, 3, 10)["input_ids"].tolist() == [5]
+    assert get_example_with_skip(ds, 3, 10, epoch=7)["input_ids"].tolist() == [5]
+    assert ds.epochs == [7, 7, 7]
     assert get_example_with_skip(ds, 0, 10)["input_ids"].tolist() == [0]
 
 

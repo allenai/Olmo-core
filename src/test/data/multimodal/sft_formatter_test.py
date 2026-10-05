@@ -11,6 +11,14 @@ from olmo_core.data.multimodal.message_weight import (
 )
 from olmo_core.data.multimodal.mixture_weights import compute_flat_mixture_weights
 from olmo_core.data.multimodal.mixtures.image_only_v9 import IMAGE_ONLY_V9_SUBMIXTURES
+from olmo_core.data.multimodal.sequence_builder import example_rng
+from olmo_core.data.multimodal.sft_common import (
+    SFT_MESSAGE_FORMATS,
+    get_example_with_skip,
+    sft_example_rng,
+    truncate_example,
+    validate_sft_message_format,
+)
 from olmo_core.data.multimodal.sft_formatter import SftFormatter
 
 
@@ -68,6 +76,116 @@ def test_image_only_v9_has_43_datasets():
     names = [src.name for g in IMAGE_ONLY_V9_SUBMIXTURES for src in g.datasets]
     assert len(names) == 43
     assert len(set(names)) == 43
+
+
+def test_message_formats_include_qwen_and_native_document_layouts():
+    assert SFT_MESSAGE_FORMATS == ("qwen3", "document")
+    assert validate_sft_message_format("qwen3") == "qwen3"
+    assert validate_sft_message_format("document") == "document"
+    with pytest.raises(ValueError, match="Unknown message_format"):
+        validate_sft_message_format("qwen2")
+
+
+def test_qwen_rng_preserves_seed_and_document_rng_tracks_epoch():
+    qwen = sft_example_rng(17, 23, 7, "qwen3")
+    expected = example_rng(17, 23)
+    np.testing.assert_array_equal(
+        qwen.randint(2**31, size=16), expected.randint(2**31, size=16)
+    )
+
+    assert not np.array_equal(
+        sft_example_rng(17, 23, 7, "qwen3").randint(2**31, size=16),
+        sft_example_rng(999, 23, 7, "qwen3").randint(2**31, size=16),
+    )
+
+    document_epoch0 = sft_example_rng(17, 23, 0, "document")
+    document_epoch1 = sft_example_rng(17, 23, 1, "document")
+    assert not np.array_equal(
+        document_epoch0.randint(2**31, size=16),
+        document_epoch1.randint(2**31, size=16),
+    )
+
+
+def test_example_rng_preserves_seeded_molmo2_stream():
+    expected = np.random.RandomState(17 * 195172 + 23).randint(2**31, size=16)
+    np.testing.assert_array_equal(example_rng(17, 23).randint(2**31, size=16), expected)
+
+
+@pytest.mark.parametrize("epoch", [None, 0, 3])
+def test_bad_row_skip_supports_single_argument_and_epoch_aware_datasets(epoch):
+    calls = []
+
+    def build(index, *args):
+        calls.append((index, args))
+        if index == 1:
+            raise ValueError("Invalid example")
+        return {"row": index}
+
+    class Dataset:
+        _build = staticmethod(build)
+
+    assert get_example_with_skip(Dataset(), 1, 3, epoch) == {"row": 2}
+    expected_args = () if epoch is None else (epoch,)
+    assert calls == [(1, expected_args), (2, expected_args)]
+
+
+def test_truncate_example_uses_model_specific_image_patch_id():
+    seq = {
+        "input_ids": np.array([10, 11, 1234], dtype=np.int64),
+        "labels": np.array([11, 12, 13], dtype=np.int64),
+        "loss_masks": np.array([0.0, 1.0, 0.0], dtype=np.float32),
+        "position_ids": np.arange(3, dtype=np.int64),
+    }
+    with pytest.raises(ValueError, match="drop <im_patch>"):
+        truncate_example(seq, 2, image_patch_token_id=1234)
+
+
+@pytest.mark.parametrize("max_len", [8])
+def test_truncation_preserves_metadata_and_non_token_fields(max_len):
+    token_fields = {
+        "input_ids": np.arange(10, 18),
+        "labels": np.arange(11, 19),
+        "loss_masks": np.ones(8),
+        "position_ids": np.arange(8),
+    }
+    other_fields = {
+        "metadata": {"example_id": "row-1", "answers": ["answer"]},
+        "source": "academic",
+        "weight": 1.0,
+        "optional": None,
+        "references": list(range(8)),
+        "scalar": np.array(1),
+        "images": np.zeros((8, 2, 2)),
+        "pooled_patches_idx": np.zeros((8, 4), dtype=np.int64),
+    }
+    example = {**token_fields, **other_fields}
+    out = truncate_example(example, max_len)
+
+    for key, value in token_fields.items():
+        np.testing.assert_array_equal(out[key], value[:max_len])
+        assert len(example[key]) == 8
+    for key, value in other_fields.items():
+        assert out[key] is value
+    assert set(out) == set(example)
+
+
+def test_truncate_recomputes_surviving_root_subsegment_weight():
+    root_weight = 1.0 / np.sqrt(2.0)
+    seq = {
+        "input_ids": np.array([10, 20, 21, 30, 31, 32]),
+        "labels": np.array([20, 21, 2, 31, 32, 2]),
+        "loss_masks": np.array([0.0, root_weight, root_weight, 0.0, root_weight, root_weight]),
+        "position_ids": np.arange(6),
+        "token_type_ids": np.zeros(6, dtype=np.int64),
+        "subsegment_ids": np.array([10000, 0, 0, 1, 1, 1]),
+    }
+
+    out = truncate_example(seq, 4, recompute_root_subsegments=True)
+
+    # Branch 1 contributes only context before the limit, so vendor preprocessing omits it
+    # and removes the original two-branch 1/sqrt(2) scaling from branch 0.
+    assert len(out["input_ids"]) == 3
+    np.testing.assert_allclose(out["loss_masks"], [0.0, 1.0, 1.0])
 
 
 def test_sft_formatter_vqa_short_answer():

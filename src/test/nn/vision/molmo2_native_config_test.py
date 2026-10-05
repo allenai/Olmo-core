@@ -89,3 +89,29 @@ def test_native_config_shape(factory_name: str, d_model: int, ffn_hidden_size: i
     assert cfg.connector.num_input_layers == len(cfg.vit_layers)
     assert cfg.connector.output_dim == cfg.lm.d_model
     assert cfg.connector.mlp_hidden_size == ffn_hidden_size
+
+
+def test_molmo2_vision_stack_wraps_an_external_lm_with_the_4b_vision_and_connector():
+    # An LM with a different d_model than Molmo2-4B's (Qwen3-8B: 4096 vs 2560) and a spare
+    # vocabulary row as the image-patch token.
+    lm = MultimodalLMConfig.molmo2_8B().lm
+    cfg = MultimodalLMConfig.molmo2_vision_stack(lm, image_patch_token_id=100278)
+    reference = MultimodalLMConfig.molmo2_4B()
+    assert cfg.lm is lm
+    assert cfg.vision == reference.vision
+    assert cfg.vit_layers == reference.vit_layers == (24, 18)
+    assert cfg.image_patch_token_id == 100278
+    assert cfg.output_vocab_size is None
+    assert cfg.connector.output_dim == 4096
+    assert cfg.connector.mlp_hidden_size == reference.connector.mlp_hidden_size == 9728
+    for field in (
+        "image_emb_dim",
+        "image_num_heads",
+        "image_num_key_value_heads",
+        "image_head_dim",
+        "num_input_layers",
+        "pooling_type",
+        "pooling_attention_mask",
+        "projector_type",
+    ):
+        assert getattr(cfg.connector, field) == getattr(reference.connector, field), field

@@ -19,7 +19,6 @@ difference in generated token IDs is a real bug in the converter.
 Auto-skips if ``allenai/Molmo2-4B`` is not in the local HF cache.
 """
 
-import os
 
 import numpy as np
 import pytest

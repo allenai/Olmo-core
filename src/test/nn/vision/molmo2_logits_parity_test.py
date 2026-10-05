@@ -21,7 +21,6 @@ installed. We feed already-shaped tensors to HF's lower-level forward
 paths instead.
 """
 
-import os
 
 import pytest
 import torch

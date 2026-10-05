@@ -21,7 +21,6 @@ These tests auto-skip when the corresponding HF checkpoint is not cached
 locally — they're not meant for default CI.
 """
 
-import os
 
 import pytest
 import torch

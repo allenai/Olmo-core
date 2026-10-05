@@ -5,11 +5,13 @@ from __future__ import annotations
 import itertools
 
 import numpy as np
+import pytest
 
 from olmo_core.data.multimodal.packing import (
     DynamicPacker,
     PackingConstraint,
     iter_dynamic_packs,
+    iter_packs,
     select_subset_2d_knapsack,
 )
 
@@ -134,3 +136,79 @@ def test_iter_dynamic_packs_flush_and_determinism():
     for p in packs1:
         assert len(p["input_ids"]) <= 24
         assert p["images"].shape[0] <= 4 or len(np.unique(p["example_ids"])) == 1
+
+
+def _stream_example(index: int, length: int, crops: int):
+    return {
+        "input_ids": np.full(length, index, dtype=np.int64),
+        "labels": np.full(length, index, dtype=np.int64),
+        "loss_masks": np.ones(length, dtype=np.float32),
+        "position_ids": np.arange(length, dtype=np.int64),
+        "token_type_ids": np.zeros(length, dtype=np.int64),
+        "images": np.zeros((crops, 1, 1), dtype=np.float32),
+        "pooled_patches_idx": np.zeros((crops, 1), dtype=np.int64),
+    }
+
+
+def _example_runs(pack):
+    runs = []
+    for value in pack["input_ids"].tolist():
+        if not runs or runs[-1] != value:
+            runs.append(value)
+    return runs
+
+
+@pytest.mark.parametrize("image_weight", [1.0, 30.0])
+def test_buffered_packer_matches_dynamic_packer_examples_and_order(image_weight):
+    # The resumable buffered packer used by MixtureDataLoader(continuous_stream=True) must
+    # select the same examples as vision's DynamicPacker (mm_olmo DynamicSolver) and emit
+    # them in buffer order.
+    rng = np.random.default_rng(0)
+    specs = [
+        (int(rng.choice([0, 0, 1, 2, 3, 5, 9])), int(rng.integers(100, 2400))) for _ in range(400)
+    ]
+    stream = [_stream_example(i, length, crops) for i, (crops, length) in enumerate(specs)]
+    expected = list(
+        itertools.islice(
+            iter_dynamic_packs(
+                iter(stream),
+                2560,
+                max_crops_per_pack=27,
+                buffer_size=48,
+                image_weight=image_weight,
+                flush=False,
+            ),
+            100,
+        )
+    )
+    actual = list(
+        itertools.islice(
+            iter_packs(
+                iter(stream),
+                2560,
+                max_crops_per_pack=27,
+                buffer_size=48,
+                image_weight=image_weight,
+            ),
+            100,
+        )
+    )
+    assert [_example_runs(p) for p in actual] == [_example_runs(p) for p in expected]
+
+
+def test_mixture_loader_defaults_match_the_molmo2_scripts(tmp_path):
+    from olmo_core.data.multimodal import MixtureDataLoader, MultimodalCollator
+    from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
+
+    loader = MixtureDataLoader(
+        [[_stream_example(0, 4, 0)]],
+        [1.0],
+        MultimodalCollator(pad_token_id=0, pad_sequence_length=8),
+        work_dir=tmp_path,
+        global_batch_size=8,
+    )
+    assert (loader.pack_buffer_size, loader.pack_image_weight) == (48, 30.0)
+    assert loader.continuous_stream is False
+    config = MixtureDataLoaderConfig(global_batch_size=8, sequence_length=8, work_dir="x")
+    assert (config.pack_buffer_size, config.pack_image_weight) == (48, 30.0)
+    assert config.continuous_stream is False and config.batch_metadata is False
