@@ -7,7 +7,7 @@ not forwarding it — so training raised on the first batch even though calling 
 with ``loss_masks`` worked fine.
 """
 
-from typing import Dict
+from typing import Any, Dict, cast
 
 import pytest
 import torch
@@ -38,7 +38,7 @@ def _model_config(masked_dropout: float) -> MultimodalLMConfig:
         attn_backend=AttentionBackendName.torch,
     )
     if masked_dropout:
-        lm.block.masked_dropout = masked_dropout
+        cast(Any, lm.block).masked_dropout = masked_dropout
     vision = VisionEncoderConfig(
         name=VisionEncoderType.siglip,
         use_cls_token=False,

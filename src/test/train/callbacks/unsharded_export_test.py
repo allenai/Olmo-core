@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock
 
 import torch
@@ -35,6 +36,10 @@ def _callback(**kwargs) -> UnshardedModelExportCallback:
     callback = UnshardedModelExportCallback(**kwargs)
     callback.trainer = trainer
     return callback
+
+
+def _bookkeeping(callback: UnshardedModelExportCallback) -> Mock:
+    return cast(Mock, callback.trainer.run_bookkeeping_op)
 
 
 def test_export_writes_unsharded_weights_and_config(tmp_path: Path):
@@ -79,18 +84,18 @@ def test_saved_checkpoints_are_exported_as_background_ops(tmp_path: Path):
 
     # Only queued on the saving thread; submitted from the main thread's next hook.
     callback.post_checkpoint_saved(path)
-    callback.trainer.run_bookkeeping_op.assert_not_called()
+    _bookkeeping(callback).assert_not_called()
     callback.post_step()
-    callback.trainer.run_bookkeeping_op.assert_called_once_with(
+    _bookkeeping(callback).assert_called_once_with(
         callback.export, path, op_name="unsharded_model_export", distributed=False
     )
 
     # The final checkpoint is saved in the checkpointer's 'post_train' and picked up here.
     callback.post_checkpoint_saved(str(tmp_path / "step20"))
     callback.post_train()
-    assert callback.trainer.run_bookkeeping_op.call_count == 2
+    assert _bookkeeping(callback).call_count == 2
     callback.post_step()
-    assert callback.trainer.run_bookkeeping_op.call_count == 2
+    assert _bookkeeping(callback).call_count == 2
 
 
 def test_disabled_callback_exports_nothing(tmp_path: Path):
@@ -98,4 +103,4 @@ def test_disabled_callback_exports_nothing(tmp_path: Path):
     callback.post_checkpoint_saved(str(tmp_path / "step10"))
     callback.post_step()
     callback.post_train()
-    callback.trainer.run_bookkeeping_op.assert_not_called()
+    _bookkeeping(callback).assert_not_called()
