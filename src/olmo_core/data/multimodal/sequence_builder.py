@@ -144,12 +144,12 @@ def build_packed_sequence(
                 seg_end=np.zeros(len(prefix_body), dtype=bool),
             )
         )
-        for branch_idx, response in enumerate(response_id_lists):
-            response_ids = list(response)
+        for branch_idx, branch_response in enumerate(response_id_lists):
+            response_ids = list(branch_response)
             branch_tokens = [carry_over] + response_ids
             branch_weight = 1.0
             if root_length:
-                n_resp = len(response) + 1 if n_branches == 1 else len(response)
+                n_resp = len(response_ids) + 1 if n_branches == 1 else len(response_ids)
                 branch_weight = 2.0 / np.sqrt(n_resp) if n_resp else 0.0
             loss = np.zeros(len(branch_tokens), dtype=np.float32)
             loss[1:] = branch_weight  # carry-over (idx 0) is non-loss; response gets loss
