@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any, Callable
 
@@ -65,6 +66,63 @@ ALIGNMENT_MEAN_LOSS_WEIGHTS: dict[str, dict[str, float]] = {
     },
 }
 """Loss-weight calibration at 8,192 tokens for each phase."""
+
+ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS: dict[str, dict[str, float]] = {
+    "perception": {
+        "cosyn_point": 9.25648039940279,
+        "pixmo_points_basic": 9.418736778199673,
+        "pixmo_points_high_frequency": 18.28113580151694,
+    },
+    "joint": {
+        "cosyn_point": 9.25648039940279,
+        "pixmo_points_basic": 9.418736778199673,
+        "pixmo_points_high_frequency": 18.28113580151694,
+    },
+}
+"""Calibration at 8,192 tokens of the multi-annotation sources when each example keeps one
+sampled annotation (``annotation_sampling="one"``, used for language models with document
+boundaries). The other sources keep :data:`ALIGNMENT_MEAN_LOSS_WEIGHTS`."""
+
+ALIGNMENT_ARTIFACT_MANIFESTS: dict[str, str] = {
+    "pixmo-cap-content-disjoint-v1/build-state.json": (
+        "31a03bc22d2a2bfb04ac1d4a1d0b0626879cf05e269f2e1bd63679102f7acb72"
+    ),
+    "pixmo-cap-content-disjoint-v1/vision-alignment-validation-manifest.json": (
+        "83cb9594648952c53d3ad042605a2e099e6a1e04bb24fed18625c1db53452d42"
+    ),
+    "perception-provenance-v2/build-state.json": (
+        "23e2970fed5805f20a9acf13cb088a22723d1469dc52810fc4be1c9b500442fa"
+    ),
+    "perception-provenance-v2/vision-alignment-perception-provenance.json": (
+        "73cb3920676db5e16d789f7257800dcb44b2553b6463cff81beb740213d921e2"
+    ),
+    "finevision-materialization-v1/build-plan.json": (
+        "c074b71c1c234cb92d0f3d8b2c83b6dadb2eef13a672b92dc8cca33158d74ea0"
+    ),
+    "finevision-materialization-v1/vision-alignment-finevision-materialization.json": (
+        "1436ad9d3f67d4e66a4f6e8e5f02c16a074af4707062ea28af6bacf89aada063"
+    ),
+}
+"""SHA-256 of the build manifests of the prepared artifacts the calibration was measured on,
+relative to the artifact root."""
+
+
+def has_calibrated_artifacts(artifact_root: str, phase: str) -> bool:
+    """Whether ``artifact_root`` holds the prepared artifacts the calibration of ``phase`` was
+    measured on: the default root, or a copy whose build manifests are byte-identical.
+
+    :param artifact_root: Directory containing the prepared alignment datasets and selections.
+    :param phase: ``bridge``, ``perception``, or ``joint``.
+    """
+    if artifact_root == DEFAULT_ALIGNMENT_ARTIFACT_ROOT:
+        return True
+    for name, digest in ALIGNMENT_ARTIFACT_MANIFESTS.items():
+        if phase == "bridge" and not name.startswith("pixmo-cap-content-disjoint-v1/"):
+            continue  # bridge reads only the caption artifacts
+        path = Path(artifact_root) / name
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            return False
+    return True
 
 
 def build_visual_sources(
