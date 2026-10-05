@@ -57,6 +57,7 @@ __all__ = [
     "load_model_and_optim_state",
     "unshard_checkpoint",
     "load_keys",
+    "load_unsharded_model_state",
     "get_checkpoint_metadata",
     "UnshardStrategy",
     "UnshardStrategyType",
@@ -652,6 +653,35 @@ def load_keys(
     state_dict = _load_unsharded_keys(dir, keys, pre_download=pre_download, work_dir=work_dir)
     for key in keys:
         yield _get_key(state_dict, key, pop=True)
+
+
+def load_unsharded_model_state(
+    dir: PathOrStr,
+    *,
+    pre_download: bool = False,
+    work_dir: Optional[PathOrStr] = None,
+) -> Dict[str, torch.Tensor]:
+    """
+    Load the full, unsharded model state dict (no optimizer state) from a checkpoint created
+    via :func:`save_model_and_optim_state()`, into CPU memory.
+
+    Unlike :func:`unshard_checkpoint()` and :func:`load_keys()`, this may be called from a single
+    rank of a distributed job: it reads the files directly and issues no collectives.
+
+    :param dir: The path/URL to the checkpoint created via :func:`save_model_and_optim_state()`.
+    :param pre_download: Download and cache relevant remote checkpoint files before trying to read from them.
+    :param work_dir: A working directory for caching files/directories.
+
+    :returns: The model state dict, keyed by parameter name as in ``model.state_dict()``.
+    """
+    dir = normalize_path(dir)
+    # validate checkpoint.
+    get_checkpoint_metadata(dir)
+
+    state_dict = _load_unsharded_keys(dir, ["model"], pre_download=pre_download, work_dir=work_dir)
+    if "model" not in state_dict:
+        raise RuntimeError(f"no model state found in checkpoint '{dir}'")
+    return state_dict["model"]
 
 
 def get_checkpoint_metadata(dir: PathOrStr) -> Metadata:

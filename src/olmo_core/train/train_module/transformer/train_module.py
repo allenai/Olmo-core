@@ -660,8 +660,17 @@ class TransformerTrainModule(TrainModule):
     def _clip_grad_norm(
         self, max_grad_norm: float, norm_type: float = 2.0, foreach: Optional[bool] = None
     ) -> torch.Tensor:
-        if isinstance(self.model, FSDP):
-            return self.model.clip_grad_norm_(max_grad_norm)
+        # FSDP1 and composable FSDP2 (``FSDPModule``) may expose ``clip_grad_norm_``.
+        # The multimodal root (`FSDPMultimodalLM`) is an ``FSDPModule`` but does not always
+        # inherit that helper — fall back to ``nn.utils.clip_grad_norm_`` on DTensor params.
+        if isinstance(self.model, (FSDP, FSDPModule)):
+            if hasattr(self.model, "clip_grad_norm_"):
+                grad_norm = self.model.clip_grad_norm_(max_grad_norm)
+            else:
+                grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
+            if isinstance(grad_norm, DTensor):
+                grad_norm = grad_norm.full_tensor()
+            return grad_norm
 
         # Adapted from https://github.com/pytorch/torchtitan/blob/2a4437014e66bcf88a3f0419b816266e6326d539/torchtitan/utils.py#L348
 
