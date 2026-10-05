@@ -709,11 +709,11 @@ class FlexAttentionBackend(AttentionBackend):
         kv_cache_manager: Optional[KVCacheManager] = None,
         or_mask: Optional[torch.Tensor] = None,
         and_mask: Optional[torch.Tensor] = None,
+        sinks: Optional[torch.Tensor] = None,
         flex_attn_is_image: Optional[torch.Tensor] = None,
         flex_attn_subsegment_ids: Optional[torch.Tensor] = None,
         flex_attn_example_ids: Optional[torch.Tensor] = None,
         flex_attn_block_mask: Optional[torch.Tensor] = None,
-        sinks: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         from torch.nn.attention.flex_attention import create_block_mask
 

@@ -1411,10 +1411,26 @@ class NormalizedAttention(Attention):
         or_mask: Optional[torch.Tensor] = None,
         and_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        flex_attn_is_image: Optional[torch.Tensor] = None,
+        flex_attn_subsegment_ids: Optional[torch.Tensor] = None,
+        flex_attn_example_ids: Optional[torch.Tensor] = None,
+        flex_attn_block_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if cache_leftpad:
             raise NotImplementedError(
                 "cache_leftpad is not supported for the normalized attention variant"
+            )
+        if any(
+            m is not None
+            for m in (
+                flex_attn_is_image,
+                flex_attn_subsegment_ids,
+                flex_attn_example_ids,
+                flex_attn_block_mask,
+            )
+        ):
+            raise NotImplementedError(
+                "flex attention masks are not supported for the normalized attention variant"
             )
 
         B, T, _ = x.shape
