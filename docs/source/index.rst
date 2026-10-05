@@ -32,6 +32,7 @@ specific to your environment. Then you can install Olmo-core from PyPI with:
    guides/data_loading.rst
    guides/data_mixing.rst
    guides/generation.rst
+   guides/vision_alignment.md
 
 .. toctree::
    :hidden:

@@ -180,7 +180,7 @@ def decode_batch(
     invalid_special_ids = set(tokenizer.all_special_ids) - {tokenizer.eos_token_id}
     for part in module.model_parts:
         part.eval()
-    with torch.compiler.set_stance("force_eager"), module._multimodal_eval_batch_context():
+    with torch.compiler.set_stance("force_eager"), module._eval_batch_context():
         # Keep the proven grad-enabled attention regime. Detaching projected features
         # avoids retaining the vision graph across autoregressive forwards.
         features = module.multimodal_model.encode_images(
