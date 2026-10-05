@@ -19,25 +19,8 @@ def _has_qwen3_5_transformers() -> bool:
 
 
 def _get_qwen3_5_config(hf_config) -> TransformerConfig:
-    text_config = getattr(hf_config, "text_config", hf_config)
-    rope_params = getattr(text_config, "rope_parameters", {}) or {}
-    return TransformerConfig.qwen3_5_like(
-        d_model=text_config.hidden_size,
-        vocab_size=text_config.vocab_size,
-        n_layers=text_config.num_hidden_layers,
-        n_heads=text_config.num_attention_heads,
-        n_kv_heads=text_config.num_key_value_heads,
-        head_dim=text_config.head_dim,
-        intermediate_size=text_config.intermediate_size,
-        linear_num_key_heads=text_config.linear_num_key_heads,
-        linear_num_value_heads=text_config.linear_num_value_heads,
-        linear_key_head_dim=text_config.linear_key_head_dim,
-        linear_value_head_dim=text_config.linear_value_head_dim,
-        linear_conv_kernel_dim=text_config.linear_conv_kernel_dim,
-        rope_theta=rope_params.get("rope_theta", 10_000_000),
-        partial_rotary_factor=text_config.partial_rotary_factor,
-        attn_backend=AttentionBackendName.torch,
-        tie_word_embeddings=text_config.tie_word_embeddings,
+    return TransformerConfig.qwen3_5_from_hf_config(
+        hf_config, attn_backend=AttentionBackendName.torch
     )
 
 

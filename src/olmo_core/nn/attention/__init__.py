@@ -4,7 +4,17 @@ import os
 import warnings
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    cast,
+)
 
 import torch
 import torch.nn as nn
@@ -832,10 +842,39 @@ class Attention(SequenceMixer):
         max_doc_len_k: Optional[int] = None,
         local_k_slice: Optional[slice] = None,
         cache_leftpad: Optional[torch.Tensor] = None,
+        or_mask: Optional[torch.Tensor] = None,
+        and_mask: Optional[torch.Tensor] = None,
+        flex_attn_is_image: Optional[torch.Tensor] = None,
+        flex_attn_subsegment_ids: Optional[torch.Tensor] = None,
+        flex_attn_example_ids: Optional[torch.Tensor] = None,
+        flex_attn_block_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if self.kv_cache_manager is not None:
             self.kv_cache_manager.record_leftpad(cache_leftpad)
+        if or_mask is not None and not self.backend.SUPPORTS_OR_MASK:
+            raise NotImplementedError(
+                f"'{type(self.backend).__name__}' does not support `or_mask` "
+                "(e.g. bidirectional image-token attention); use the 'torch' attention backend."
+            )
+        if and_mask is not None and not self.backend.SUPPORTS_AND_MASK:
+            raise NotImplementedError(
+                f"'{type(self.backend).__name__}' does not support `and_mask` "
+                "(e.g. subsegment / branch isolation); use the 'torch' attention backend."
+            )
         # shape: (batch_size, seq_len, n_heads, head_dim)
+        backend_kwargs: Dict[str, Optional[torch.Tensor]] = dict(
+            or_mask=or_mask,
+            and_mask=and_mask,
+        )
+        from olmo_core.nn.attention.backend import FlexAttentionBackend
+
+        if isinstance(self.backend, FlexAttentionBackend):
+            backend_kwargs.update(
+                flex_attn_is_image=flex_attn_is_image,
+                flex_attn_subsegment_ids=flex_attn_subsegment_ids,
+                flex_attn_example_ids=flex_attn_example_ids,
+                flex_attn_block_mask=flex_attn_block_mask,
+            )
         att = self.backend(
             (q, k, v),
             cu_doc_lens=cu_doc_lens,
@@ -847,6 +886,7 @@ class Attention(SequenceMixer):
             local_k_slice=local_k_slice,
             kv_cache_manager=self.kv_cache_manager,
             sinks=self.sinks,
+            **backend_kwargs,
         )
         if self.kv_cache_manager is not None:
             self.kv_cache_manager.update_seqlen(q.shape[1])
@@ -893,6 +933,7 @@ class Attention(SequenceMixer):
         pos_cos: Optional[torch.Tensor],
         freqs_cis: Optional[torch.Tensor],
         cu_doc_lens: Optional[torch.Tensor],
+        position_ids: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         assert self.rope is not None
         rope_kwargs = {}
@@ -903,6 +944,13 @@ class Attention(SequenceMixer):
                     f"got {type(self.rope).__name__}"
                 )
             rope_kwargs["cu_doc_lens"] = cu_doc_lens
+        if position_ids is not None:
+            if not isinstance(self.rope, RotaryEmbedding):
+                raise NotImplementedError(
+                    "Explicit `position_ids` RoPE is only supported by RotaryEmbedding; "
+                    f"got {type(self.rope).__name__}"
+                )
+            rope_kwargs["position_ids"] = position_ids
         return self.rope(
             q,
             k,
@@ -923,6 +971,7 @@ class Attention(SequenceMixer):
         freqs_cis: Optional[torch.Tensor] = None,
         start_pos: Optional[int] = None,
         cu_doc_lens: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Project the input into per-head Q/K/V (with clip, QK norm, and RoPE applied), returning
@@ -976,7 +1025,9 @@ class Attention(SequenceMixer):
                     "sharded by the context parallel load balancer"
                 )
 
-            q, k = self._apply_rope(q, k, start_pos, pos_sin, pos_cos, freqs_cis, cu_doc_lens)
+            q, k = self._apply_rope(
+                q, k, start_pos, pos_sin, pos_cos, freqs_cis, cu_doc_lens, position_ids
+            )
 
         q = self._apply_scalable_softmax(q, cu_doc_lens)
         return q, k, v
@@ -995,6 +1046,13 @@ class Attention(SequenceMixer):
         pos_cos: Optional[torch.Tensor] = None,
         freqs_cis: Optional[torch.Tensor] = None,
         cache_leftpad: Optional[torch.Tensor] = None,
+        or_mask: Optional[torch.Tensor] = None,
+        and_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        flex_attn_is_image: Optional[torch.Tensor] = None,
+        flex_attn_subsegment_ids: Optional[torch.Tensor] = None,
+        flex_attn_example_ids: Optional[torch.Tensor] = None,
+        flex_attn_block_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Apply attention to the input.
@@ -1028,6 +1086,7 @@ class Attention(SequenceMixer):
                     freqs_cis=freqs_cis,
                     start_pos=start_pos,
                     cu_doc_lens=cu_doc_lens,
+                    position_ids=position_ids,
                 ),
             )
         else:
@@ -1038,6 +1097,7 @@ class Attention(SequenceMixer):
                 freqs_cis=freqs_cis,
                 start_pos=start_pos,
                 cu_doc_lens=cu_doc_lens,
+                position_ids=position_ids,
             )
 
         # Optionally save Q/K/V for backward as MXFP8 to reduce the saved-activation footprint.
@@ -1066,6 +1126,12 @@ class Attention(SequenceMixer):
                 max_doc_len_k=max_doc_len_k,
                 local_k_slice=local_k_slice,
                 cache_leftpad=cache_leftpad,
+                or_mask=or_mask,
+                and_mask=and_mask,
+                flex_attn_is_image=flex_attn_is_image,
+                flex_attn_subsegment_ids=flex_attn_subsegment_ids,
+                flex_attn_example_ids=flex_attn_example_ids,
+                flex_attn_block_mask=flex_attn_block_mask,
             )
         self._mxfp8_saved_qkv_for_backward_last_pack_count = qkv_save_counter[0]
         if qkv_checkpoint is not None:
@@ -1342,6 +1408,9 @@ class NormalizedAttention(Attention):
         pos_cos: Optional[torch.Tensor] = None,
         freqs_cis: Optional[torch.Tensor] = None,
         cache_leftpad: Optional[torch.Tensor] = None,
+        or_mask: Optional[torch.Tensor] = None,
+        and_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if cache_leftpad:
             raise NotImplementedError(
@@ -1380,7 +1449,9 @@ class NormalizedAttention(Attention):
                 )
 
             start_pos = self.kv_cache_manager.current_position() if self.kv_cache_manager else None
-            q, k = self._apply_rope(q, k, start_pos, pos_sin, pos_cos, freqs_cis, cu_doc_lens)
+            q, k = self._apply_rope(
+                q, k, start_pos, pos_sin, pos_cos, freqs_cis, cu_doc_lens, position_ids
+            )
 
         # shape: (batch_size, seq_len, n_heads, head_dim)
         att = self.sdpa(
@@ -1395,6 +1466,8 @@ class NormalizedAttention(Attention):
             max_doc_len_k=max_doc_len_k,
             local_k_slice=local_k_slice,
             cache_leftpad=cache_leftpad,
+            or_mask=or_mask,
+            and_mask=and_mask,
         )
 
         # shape: (batch_size, seq_len, d_model)
@@ -1671,6 +1744,7 @@ class FusedAttentionV2(Attention):
         freqs_cis: Optional[torch.Tensor] = None,
         start_pos: Optional[int] = None,
         cu_doc_lens: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B, T, _ = x.shape
 
@@ -1709,7 +1783,9 @@ class FusedAttentionV2(Attention):
                     "sharded by the context parallel load balancer"
                 )
 
-            q, k = self._apply_rope(q, k, start_pos, pos_sin, pos_cos, freqs_cis, cu_doc_lens)
+            q, k = self._apply_rope(
+                q, k, start_pos, pos_sin, pos_cos, freqs_cis, cu_doc_lens, position_ids
+            )
 
         return q, k, v
 

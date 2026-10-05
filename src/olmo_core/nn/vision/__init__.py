@@ -14,7 +14,18 @@ from .connector import (
     VisionConnector,
     VisionConnectorConfig,
 )
-from .image_vit import VisionTransformer, ViTAttention, ViTBlock, ViTMLP
+from .image_vit import (
+    VisionTransformer,
+    ViTAttention,
+    ViTBlock,
+    ViTMLP,
+    siglip_state_dict_to_vision_encoder,
+)
+from .molmo2_image_processor import preprocess_image_molmo2
+from .molmo2_loader import (
+    molmo2_hf_state_dict_to_multimodal_lm,
+    multimodal_lm_state_dict_to_hf,
+)
 from .multimodal import MultimodalLM, MultimodalLMConfig
 
 __all__ = [
@@ -26,10 +37,13 @@ __all__ = [
     "ViTMLP",
     "ViTBlock",
     "VisionTransformer",
+    "siglip_state_dict_to_vision_encoder",
     "ImagePoolingType",
     "ImageProjectorType",
     "VisionConnectorConfig",
     "VisionConnector",
     "MultimodalLMConfig",
     "MultimodalLM",
+    "molmo2_hf_state_dict_to_multimodal_lm",
+    "preprocess_image_molmo2",
 ]

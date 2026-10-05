@@ -36,6 +36,7 @@ from olmo_core.nn.attention.ring import (
     RingContextParallelStyle,
     UlyssesContextParallelStyle,
 )
+from olmo_core.nn.embedding import SplitVocabEmbedding
 from olmo_core.utils import get_default_device, mark_dynamic, move_to_device
 
 from ..attention import Attention, RingAttentionLoadBalancer, SequenceMixer
@@ -58,7 +59,7 @@ from .config import (
     TransformerDataParallelWrappingStrategy,
     resolve_block_configs,
 )
-from .init import InitMethod
+from .init import InitMethod, _apply_init
 
 if TYPE_CHECKING:
     from olmo_core.train.common import ReduceType
@@ -114,6 +115,7 @@ class Transformer(nn.Module):
         block_pattern: Optional[List[str]] = None,
         embed_scale: Optional[float] = None,
         tie_word_embeddings: bool = False,
+        n_extra_vocab: int = 0,
     ):
         super().__init__()
 
@@ -125,7 +127,17 @@ class Transformer(nn.Module):
         self.dtype = dtype
         self.embed_scale = embed_scale
 
-        self.embeddings = nn.Embedding(vocab_size, d_model, dtype=dtype, device=init_device)
+        # With extra tokens the table is split into two parameters (see
+        # :class:`SplitVocabEmbedding`): ``vocab_size`` is then the *base* vocab, and the
+        # tied LM head spans only that base — the extra tokens are inputs, never targets.
+        self.n_extra_vocab = n_extra_vocab
+        self.embeddings: nn.Module
+        if n_extra_vocab > 0:
+            self.embeddings = SplitVocabEmbedding(
+                vocab_size, n_extra_vocab, d_model, dtype=dtype, device=init_device
+            )
+        else:
+            self.embeddings = nn.Embedding(vocab_size, d_model, dtype=dtype, device=init_device)
         self.embedding_norm = (
             None
             if embedding_norm is None
@@ -347,11 +359,26 @@ class Transformer(nn.Module):
                 self.embeddings,
                 d_model=self.d_model,
                 embed_scale=self.embed_scale,
-                std=self.embedding_init_std
-                if self.embedding_init_std is not None
-                else self.init_std,
+                std=(
+                    self.embedding_init_std
+                    if self.embedding_init_std is not None
+                    else self.init_std
+                ),
                 generator=generator,
             )
+            if isinstance(self.embeddings, SplitVocabEmbedding):
+                # mm_olmo initialises the added rows from `new_embedding_init_range`, which
+                # matches our `init_std` default of 0.02.
+                _apply_init(
+                    nn.init.normal_,
+                    self.embeddings.extra_weight,
+                    generator=generator,
+                    std=(
+                        self.embedding_init_std
+                        if self.embedding_init_std is not None
+                        else self.init_std
+                    ),
+                )
 
         # Re-establish weight tying since `to_empty` above allocates fresh storage.
         if self.tie_word_embeddings:
@@ -441,6 +468,8 @@ class Transformer(nn.Module):
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
         return_logits: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        response_logits_only: bool = False,
+        response_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Tuple[
         torch.Tensor,
@@ -453,6 +482,8 @@ class Transformer(nn.Module):
         # so we have to be careful here.
         B, S = input_ids.shape[:2]
 
+        if response_mask is not None:
+            response_mask = move_to_device(response_mask, self.device)
         # Context-parallel inputs may already be sequence-sharded by the caller (e.g. the pipeline
         # train module shards the batch before the pipeline schedule). In that case we must not
         # shard input_ids/labels again, but we still shard the RoPE buffers, which are built from the
@@ -481,6 +512,8 @@ class Transformer(nn.Module):
             z_loss_multiplier=z_loss_multiplier,
             return_logits=return_logits,
             logits_to_keep=logits_to_keep,
+            response_logits_only=response_logits_only,
+            response_mask=response_mask,
         )
 
         if loss_div_factor is not None:
@@ -661,6 +694,18 @@ class Transformer(nn.Module):
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
         return_logits: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        response_logits_only: bool = False,
+        response_mask: Optional[torch.Tensor] = None,
+        or_mask: Optional[torch.Tensor] = None,
+        and_mask: Optional[torch.Tensor] = None,
+        drop_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        flex_attn_is_image: Optional[torch.Tensor] = None,
+        flex_attn_subsegment_ids: Optional[torch.Tensor] = None,
+        flex_attn_example_ids: Optional[torch.Tensor] = None,
+        flex_attn_block_mask: Optional[torch.Tensor] = None,
+        pos_sin: Optional[torch.Tensor] = None,
+        pos_cos: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
         """
@@ -681,6 +726,8 @@ class Transformer(nn.Module):
         :param return_logits: Whether to return logits along with the loss when labels are provided.
         :param logits_to_keep: Number of positions to keep from the end of the sequence (if int),
             or tensor specifying which positions to keep. Default is 0 (keep all).
+        :param response_logits_only: If True, only compute logits at ``response_mask`` positions.
+        :param response_mask: Boolean mask ``(batch_size, seq_len)`` for ``response_logits_only``.
 
         :returns: The logits if ``labels`` is ``None`` or the losses if ``labels`` is not ``None``.
         """
@@ -689,6 +736,21 @@ class Transformer(nn.Module):
                 "`input_embeddings` is not supported with context parallelism: `_prepare_inputs` "
                 "shards `input_ids`/`labels`/RoPE while `input_embeddings` stays full-size, which "
                 "would misalign the hidden states."
+            )
+        if or_mask is not None and self._cp_load_balancer is not None:
+            raise RuntimeError(
+                "`or_mask` is not supported with context parallelism: the full-size "
+                "(seq, seq) mask would misalign with the sequence-sharded hidden states."
+            )
+        if and_mask is not None and self._cp_load_balancer is not None:
+            raise RuntimeError(
+                "`and_mask` is not supported with context parallelism: the full-size "
+                "(seq, seq) mask would misalign with the sequence-sharded hidden states."
+            )
+        if position_ids is not None and self._cp_load_balancer is not None:
+            raise RuntimeError(
+                "Explicit `position_ids` are not supported with context parallelism, "
+                "which shards/derives its own RoPE positions."
             )
 
         (
@@ -706,8 +768,56 @@ class Transformer(nn.Module):
             loss_div_factor=loss_div_factor,
             return_logits=return_logits,
             logits_to_keep=logits_to_keep,
+            response_logits_only=response_logits_only,
+            response_mask=response_mask,
             **kwargs,
         )
+
+        # Bidirectional / custom attention allow-mask (e.g. for image tokens),
+        # OR'd onto the causal base inside each block's attention. Passed through
+        # to every block; only the dense SDPA backend honors it.
+        if or_mask is not None:
+            all_block_kwargs["or_mask"] = move_to_device(or_mask, self.device)
+
+        # Restrictive (AND) attention mask, e.g. subsegment / branch isolation in packed
+        # multi-annotation multimodal data. AND'd onto the (causal | or_mask) base inside
+        # each block's attention; only the dense SDPA backend honors it.
+        if and_mask is not None:
+            all_block_kwargs["and_mask"] = move_to_device(and_mask, self.device)
+
+        if flex_attn_is_image is not None:
+            all_block_kwargs["flex_attn_is_image"] = move_to_device(flex_attn_is_image, self.device)
+        if flex_attn_subsegment_ids is not None:
+            all_block_kwargs["flex_attn_subsegment_ids"] = move_to_device(
+                flex_attn_subsegment_ids, self.device
+            )
+        if flex_attn_example_ids is not None:
+            all_block_kwargs["flex_attn_example_ids"] = move_to_device(
+                flex_attn_example_ids, self.device
+            )
+        if flex_attn_block_mask is not None:
+            all_block_kwargs["flex_attn_block_mask"] = flex_attn_block_mask
+
+        # Explicit per-token RoPE positions (e.g. parallel branches that share an
+        # overlapping position range). Passed through to every attention block.
+        if position_ids is not None:
+            all_block_kwargs["position_ids"] = move_to_device(position_ids, self.device)
+
+        # Externally-provided RoPE buffers (e.g. M-RoPE / multimodal 3D rotary). When
+        # supplied, every attention block uses these instead of computing 1D RoPE from
+        # sequential positions. Sequence-mixers that ignore RoPE (e.g. GatedDeltaNet)
+        # simply drop these via ``**kwargs``. Not supported with context parallelism,
+        # which shards/derives its own RoPE buffers.
+        if pos_sin is not None or pos_cos is not None:
+            if self._cp_load_balancer is not None:
+                raise RuntimeError(
+                    "External `pos_sin`/`pos_cos` (e.g. M-RoPE) are not supported with "
+                    "context parallelism."
+                )
+            if pos_sin is not None:
+                all_block_kwargs["pos_sin"] = move_to_device(pos_sin, self.device)
+            if pos_cos is not None:
+                all_block_kwargs["pos_cos"] = move_to_device(pos_cos, self.device)
 
         # Get embeddings but pass-through for non-existent layers to allow easy
         # pipeline parallel configuration.
@@ -719,6 +829,11 @@ class Transformer(nn.Module):
                 h = h * self.embed_scale
             if self.embedding_norm is not None:
                 h = self.embedding_norm(h)
+
+        # Per-token residual dropout mask (Molmo2's `response_residual_dropout`). Only
+        # forwarded when supplied, so blocks that do not accept it are unaffected.
+        if drop_mask is not None:
+            all_block_kwargs["drop_mask"] = drop_mask
 
         # Run each block.
         for block_key, block in self.blocks.items():

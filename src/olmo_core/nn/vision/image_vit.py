@@ -1,17 +1,21 @@
 import math
+from functools import partial
 from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 from olmo_core.nn.vision.config import VisionEncoderConfig
+from olmo_core.nn.vision.sdpa import vision_scaled_dot_product_attention
 
 __all__ = [
     "ViTAttention",
     "ViTMLP",
     "ViTBlock",
     "VisionTransformer",
+    "siglip_state_dict_to_vision_encoder",
 ]
 
 
@@ -35,6 +39,11 @@ def _get_activation(name: str) -> Callable[[torch.Tensor], torch.Tensor]:
     if name not in _ACTIVATIONS:
         raise ValueError(f"Unknown activation {name!r}; expected one of {sorted(_ACTIVATIONS)}.")
     return _ACTIVATIONS[name]
+
+
+def _vit_activation_checkpoint_function(cfg: VisionEncoderConfig) -> Callable:
+    preserve_rng_state = (cfg.attention_dropout != 0.0) or (cfg.residual_dropout != 0.0)
+    return partial(checkpoint, preserve_rng_state=preserve_rng_state, use_reentrant=False)
 
 
 class ViTAttention(nn.Module):
@@ -99,7 +108,7 @@ class ViTAttention(nn.Module):
             k = k.repeat_interleave(self.num_kv_groups, dim=2)
             v = v.repeat_interleave(self.num_kv_groups, dim=2)
 
-        out = F.scaled_dot_product_attention(
+        out = vision_scaled_dot_product_attention(
             q.transpose(1, 2).contiguous(),
             k.transpose(1, 2).contiguous(),
             v.transpose(1, 2).contiguous(),
@@ -253,8 +262,25 @@ class VisionTransformer(nn.Module):
         self.blocks = nn.ModuleList(
             [cfg.block.build(cfg, init_device=init_device) for _ in range(cfg.image_num_layers)]
         )
+        self._activation_checkpoint_fn: Optional[Callable] = None
 
         self.reset_parameters()
+
+    def apply_activation_checkpointing(self) -> None:
+        """Per-block activation checkpointing (mm_olmo ``VitConfig.activation_checkpointing``)."""
+        self._activation_checkpoint_fn = _vit_activation_checkpoint_function(self.cfg)
+
+    def apply_compile(self) -> None:
+        """``torch.compile`` each ViT block (mm_olmo ``compile_vit: blocks``).
+
+        Per-block compilation keeps compile times low thanks to the repeated structure, the
+        same strategy :meth:`olmo_core.nn.transformer.Transformer.apply_compile` uses.
+
+        .. warning::
+            Call after :meth:`apply_activation_checkpointing` and before FSDP wrapping.
+        """
+        for idx, block in enumerate(self.blocks):
+            self.blocks[idx] = torch.compile(block)  # type: ignore[assignment]
 
     def reset_parameters(self):
         """Re-initialise all parameters."""
@@ -306,6 +332,72 @@ class VisionTransformer(nn.Module):
 
         hidden_states: List[torch.Tensor] = []
         for block in self.blocks:
-            x = block(x)
+            if self._activation_checkpoint_fn is not None:
+                x = self._activation_checkpoint_fn(block, x)
+            else:
+                x = block(x)
             hidden_states.append(x)
         return hidden_states
+
+
+def siglip_state_dict_to_vision_encoder(
+    hf_state: Dict[str, torch.Tensor],
+    *,
+    n_blocks: Optional[int] = None,
+    prefix: str = "",
+) -> Dict[str, torch.Tensor]:
+    """
+    Map a HuggingFace SigLIP / SigLIP2 vision-tower state dict onto
+    :class:`VisionTransformer` parameter names.
+
+    Accepts either a ``SiglipVisionTransformer`` state dict or a ``SiglipVisionModel``
+    one (whose keys carry a ``vision_model.`` prefix, stripped automatically).
+    ``post_layernorm`` and ``head.*`` are skipped: our encoder returns per-block hidden
+    states and does not model SigLIP's attention-pooling head.
+
+    :param hf_state: The HF vision-tower state dict.
+    :param n_blocks: Number of transformer blocks to emit. Defaults to every block found
+        in ``hf_state``. Pass a smaller value to load into a truncated encoder — e.g.
+        Molmo2 keeps blocks ``0..24`` of SigLIP2-SO400M's 27.
+    :param prefix: Prepended to every output key, e.g. ``"vision."`` when loading into a
+        :class:`~olmo_core.nn.vision.MultimodalLM` rather than a bare encoder.
+
+    :returns: A state dict suitable for ``load_state_dict``.
+
+    :raises KeyError: If an expected SigLIP key is absent.
+    """
+    hf_state = {k.removeprefix("vision_model."): v for k, v in hf_state.items()}
+
+    available = (
+        max((int(k.split(".")[2]) for k in hf_state if k.startswith("encoder.layers.")), default=-1)
+        + 1
+    )
+    if n_blocks is None:
+        n_blocks = available
+    elif n_blocks > available:
+        raise KeyError(f"requested {n_blocks} blocks but the state dict only has {available}")
+
+    patch_w = hf_state["embeddings.patch_embedding.weight"]
+    out: Dict[str, torch.Tensor] = {
+        # Conv2d (D, 3, p, p) -> our linear projection (D, 3 * p * p), C-first flatten.
+        f"{prefix}patch_embedding.weight": patch_w.reshape(patch_w.shape[0], -1),
+        f"{prefix}patch_embedding.bias": hf_state["embeddings.patch_embedding.bias"],
+        f"{prefix}positional_embedding": hf_state["embeddings.position_embedding.weight"],
+    }
+    for i in range(n_blocks):
+        src, dst = f"encoder.layers.{i}", f"{prefix}blocks.{i}"
+        for hf_name, ours in (("layer_norm1", "attn_norm"), ("layer_norm2", "ffn_norm")):
+            for suffix in ("weight", "bias"):
+                out[f"{dst}.{ours}.{suffix}"] = hf_state[f"{src}.{hf_name}.{suffix}"]
+        for hf_name, ours in (
+            ("q_proj", "wq"),
+            ("k_proj", "wk"),
+            ("v_proj", "wv"),
+            ("out_proj", "wo"),
+        ):
+            for suffix in ("weight", "bias"):
+                out[f"{dst}.attn.{ours}.{suffix}"] = hf_state[f"{src}.self_attn.{hf_name}.{suffix}"]
+        for hf_name, ours in (("fc1", "w1"), ("fc2", "w2")):
+            for suffix in ("weight", "bias"):
+                out[f"{dst}.ffn.{ours}.{suffix}"] = hf_state[f"{src}.mlp.{hf_name}.{suffix}"]
+    return out

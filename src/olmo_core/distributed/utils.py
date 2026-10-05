@@ -435,6 +435,24 @@ def all_gather(
     return output_list
 
 
+def reduce_distributed_failure_flag(
+    local_failed: bool,
+    device: torch.device,
+    group: Optional[dist.ProcessGroup] = None,
+) -> bool:
+    """
+    Return ``True`` if any rank in ``group`` reported ``local_failed``.
+
+    Use at synchronized points (e.g. after forward CE) so one rank's failure aborts
+    all ranks quickly instead of leaving them in an NCCL collective watchdog timeout.
+    """
+    if not is_distributed():
+        return local_failed
+    flag = torch.tensor(1.0 if local_failed else 0.0, device=device)
+    dist.all_reduce(flag, op=dist.ReduceOp.MAX, group=group)
+    return bool(flag.item() > 0)
+
+
 def all_gather_object(obj: T, group: Optional[dist.ProcessGroup] = None) -> List[T]:
     """
     All-gather an object using pickle to all ranks in a process group.
