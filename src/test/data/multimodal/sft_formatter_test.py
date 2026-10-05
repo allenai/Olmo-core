@@ -14,14 +14,12 @@ from olmo_core.data.multimodal.mixtures.image_only_v9 import IMAGE_ONLY_V9_SUBMI
 from olmo_core.data.multimodal.sequence_builder import example_rng
 from olmo_core.data.multimodal.sft_common import (
     SFT_MESSAGE_FORMATS,
-    MaxSequenceLengthDataset,
     get_example_with_skip,
     sft_example_rng,
     truncate_example,
     validate_sft_message_format,
 )
 from olmo_core.data.multimodal.sft_formatter import SftFormatter
-from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 
 def test_message_weight_scalar():
@@ -143,8 +141,7 @@ def test_truncate_example_uses_model_specific_image_patch_id():
 
 
 @pytest.mark.parametrize("max_len", [8])
-@pytest.mark.parametrize("wrapped", [False, True])
-def test_truncation_preserves_metadata_and_non_token_fields(max_len, wrapped):
+def test_truncation_preserves_metadata_and_non_token_fields(max_len):
     token_fields = {
         "input_ids": np.arange(10, 18),
         "labels": np.arange(11, 19),
@@ -162,11 +159,7 @@ def test_truncation_preserves_metadata_and_non_token_fields(max_len, wrapped):
         "pooled_patches_idx": np.zeros((8, 4), dtype=np.int64),
     }
     example = {**token_fields, **other_fields}
-    if wrapped:
-        bounded = MaxSequenceLengthDataset([example], max_len, token_ids=Molmo2TokenIds())
-        out = bounded[0]
-    else:
-        out = truncate_example(example, max_len)
+    out = truncate_example(example, max_len)
 
     for key, value in token_fields.items():
         np.testing.assert_array_equal(out[key], value[:max_len])
@@ -174,39 +167,6 @@ def test_truncation_preserves_metadata_and_non_token_fields(max_len, wrapped):
     for key, value in other_fields.items():
         assert out[key] is value
     assert set(out) == set(example)
-
-
-def test_max_sequence_dataset_forwards_epoch_and_rejects_structural_image_truncation():
-    token_ids = Molmo2TokenIds(
-        im_start_id=101,
-        im_end_id=102,
-        im_patch_id=103,
-        im_col_id=104,
-        low_res_im_start_id=105,
-    )
-
-    class Dataset:
-        def __init__(self):
-            self.calls = []
-
-        def __len__(self):
-            return 1
-
-        def get(self, index, epoch):
-            self.calls.append((index, epoch))
-            return {
-                "input_ids": np.array([1, 2, 3, token_ids.im_end_id]),
-                "labels": np.array([2, 3, 4, 5]),
-                "loss_masks": np.array([0.0, 1.0, 1.0, 0.0]),
-                "position_ids": np.arange(4),
-                "token_type_ids": np.zeros(4, dtype=np.int64),
-            }
-
-    source = Dataset()
-    bounded = MaxSequenceLengthDataset(source, 3, token_ids=token_ids)
-    with pytest.raises(ValueError, match="image-structural"):
-        bounded.get(0, 7)
-    assert source.calls == [(0, 7)]
 
 
 def test_truncate_recomputes_surviving_root_subsegment_weight():

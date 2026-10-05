@@ -44,7 +44,7 @@ from typing import (
 
 import numpy as np
 
-from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID, Molmo2TokenIds
+from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID
 
 from .message_weight import ATTEND_ALL_SUBSEGMENT_ID
 from .sequence_builder import example_rng
@@ -57,7 +57,6 @@ __all__ = [
     "IMAGE_PLACEHOLDER",
     "MAX_ROW_SKIP",
     "EpochSeededExamples",
-    "MaxSequenceLengthDataset",
     "SFT_MESSAGE_FORMATS",
     "SftMessageFormat",
     "load_hf_dataset",
@@ -359,53 +358,6 @@ def truncate_example(
                 original_branch_count / len(surviving_branch_ids)
             )
     return out
-
-
-class MaxSequenceLengthDataset:
-    """Apply vendor-compatible tail truncation before an example reaches the packer.
-
-    This wrapper gives every Stage 2 source the same sequence bound, including academic
-    and multi-image datasets that do not expose a native ``max_sequence_length`` field.
-    Invalid rows raise while the source reference is being loaded, allowing
-    :class:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoader` to use its
-    deterministic skip-broken policy instead of failing later inside collation.
-    """
-
-    def __init__(
-        self,
-        dataset,
-        max_sequence_length: int,
-        *,
-        token_ids: Molmo2TokenIds,
-    ):
-        if max_sequence_length <= 0:
-            raise ValueError("max_sequence_length must be positive")
-        self.dataset = dataset
-        self.max_sequence_length = max_sequence_length
-        self.token_ids = token_ids
-        weighting = getattr(getattr(dataset, "config", None), "loss_token_weighting", None)
-        self.recompute_root_subsegments = weighting in (
-            "root_subsegments",
-            "root_subsegments_root_tokens",
-        )
-
-    def __len__(self) -> int:
-        return len(self.dataset)
-
-    def __getitem__(self, index: int) -> Dict[str, Any]:
-        return self.get(index, 0)
-
-    def get(self, index: int, epoch: int = 0) -> Dict[str, Any]:
-        """Load and safely bound one example, forwarding source epochs when supported."""
-        getter = getattr(self.dataset, "get", None)
-        example = getter(index, epoch) if getter is not None else self.dataset[index]
-        return truncate_example(
-            example,
-            self.max_sequence_length,
-            image_patch_token_id=self.token_ids.im_patch_id,
-            image_token_ids=self.token_ids.image_token_ids,
-            recompute_root_subsegments=self.recompute_root_subsegments,
-        )
 
 
 def get_example_with_skip(
