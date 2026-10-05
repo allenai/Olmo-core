@@ -26,7 +26,7 @@ from olmo_core.distributed.utils import hide_from_torch, unhide_from_torch
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.kernels import olmo_symm_mem
 from olmo_core.kernels import symm_mem_vdev2d as symm_mem_vdev2d_kernels
-from olmo_core.utils import mark_dynamic
+from olmo_core.utils import mark_dynamic, move_to_device
 
 from ..lm_head import LMOutputWithLoss
 from ..moe.v2.checkpointing import checkpoint_recompute_context_fn
@@ -736,11 +736,18 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         reduce_grads_in_fp32: bool = True,
         bucket_cap_mb: Optional[int] = None,
         use_reduce_scatter: bool = False,
+        root_module: Optional[torch.nn.Module] = None,
     ):
+        """
+        Wrap the model in multi-group DDP.
+
+        :param root_module: Wrap this module instead, when the model is nested inside it.
+        """
         from olmo_core.nn.parallel.distributed import MultiGroupDistributedDataParallel
 
+        module = self if root_module is None else root_module
         self._ep_modules = [
-            m for m in self.modules() if getattr(m, "_ep_sharded", False)
+            m for m in module.modules() if getattr(m, "_ep_sharded", False)
         ]  # collect the ep sharded part based on `_ep_sharded` field (will be set to True in `apply_ep`)
         ep_sharded_params = set()
         for m in self._ep_modules:
@@ -750,7 +757,7 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         # TODO(dtype): broad bf16 casting is a current MoE V2 shortcut. Replace
         # this with explicit dtype ownership so FP8 state, optimizer main params,
         # and normal model params are not coupled to a blanket module cast.
-        self.to(self._training_dtype)
+        module.to(self._training_dtype)
         self.disable_mxfp8_expert_anchor_grads()
 
         dp_group = dense_process_group if dense_process_group is not None else dp_mesh.get_group()
@@ -788,7 +795,7 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         total_numel = 0
         ep_params = 0
         ep_numel = 0
-        for param in self.parameters():
+        for param in module.parameters():
             total_params += 1
             total_numel += param.numel()
             if param in ep_sharded_params:
@@ -811,7 +818,7 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         )
 
         ddp_model = MultiGroupDistributedDataParallel(
-            module=self,
+            module=module,
             dim=0,  # for scatter/gather
             init_sync=init_sync,
             process_group=dp_group,
@@ -1301,16 +1308,25 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         z_loss_multiplier: Optional[float] = None,
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
         return_logits: Optional[bool] = None,
+        input_embeddings: Optional[torch.Tensor] = None,
+        router_loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
         **kwargs,
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
         """
         Run the transformer on the token input IDs.
 
         :param input_ids: The token input IDs, shape ``(batch_size, seq_len)``.
+        :param input_embeddings: Used in place of ``forward_embed(input_ids)`` when given.
+        :param router_loss_div_factor: Divisor for the router losses, if not ``loss_div_factor``.
 
         :returns: The logits if ``labels`` is ``None`` or the losses if ``labels`` is not ``None``.
         """
         if self.tbo:
+            if input_embeddings is not None or router_loss_div_factor is not None:
+                raise NotImplementedError(
+                    "input_embeddings and router_loss_div_factor are not supported with "
+                    "two-batch overlap"
+                )
             return self.forward_tbo(
                 input_ids,
                 labels=labels,
@@ -1338,8 +1354,19 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
             return_logits=return_logits,
             **kwargs,
         )
+        if router_loss_div_factor is not None:
+            all_block_kwargs["loss_div_factor"] = move_to_device(
+                router_loss_div_factor, self.device
+            )
 
-        h = self.forward_embed(input_ids)
+        if input_embeddings is not None:
+            if self._cp_load_balancer is not None:
+                raise NotImplementedError(
+                    "input_embeddings are not supported with context parallelism"
+                )
+            h = move_to_device(input_embeddings, self.device)
+        else:
+            h = self.forward_embed(input_ids)
 
         if self.recompute_all_blocks_by_chunk:
             h = checkpoint(
