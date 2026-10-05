@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Corrected the Molmo2 stage-2 smoke recipe to require 2 GPUs; a single FSDP rank does not shard the model and optimizer state enough to fit the documented 80 GB H100 setup.
+
 ## [v3.0.0](https://github.com/allenai/Olmo-core/releases/tag/v3.0.0) - 2026-09-30
 
 ### Added
