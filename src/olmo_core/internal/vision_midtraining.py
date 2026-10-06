@@ -51,6 +51,7 @@ from olmo_core.train.train_module.transformer.multimodal_train_module import (
 )
 
 from .experiment import CliContext, ExperimentConfig
+from .vision_alignment import _STAGE1_V3_POST_SETUP
 from .vision_alignment import _build_launch as _build_alignment_launch
 from .vision_alignment import (
     _check_text_lm_matches_checkpoint,
@@ -930,6 +931,12 @@ def build_config(
         alignment_phase=phase,
         init_seed=6198,
     ).merge(cli.overrides)
+    if stage1_v3 and config.launch is not None:
+        # The v3 Stage-1 sources need packages beyond the text image (PDF rendering, HDF5), as
+        # alignment installs them for its stage1_v3 data.
+        config.launch.post_setup = " && ".join(
+            step for step in (config.launch.post_setup, _STAGE1_V3_POST_SETUP) if step
+        )
     reusable_visual_calibration = (
         stage1_v3
         and recipe.sequence_length == 8192

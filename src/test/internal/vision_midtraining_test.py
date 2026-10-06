@@ -952,3 +952,53 @@ def test_a_launcher_can_supply_its_own_launch_config(mixed_recipe, text_config):
     )
     assert config.launch.cmd == theirs.cmd and config.launch.git == theirs.git
     assert config.launch.num_nodes == 2 and theirs.num_nodes == 1
+
+
+@pytest.mark.parametrize("visual_data", ["stage1_v3", "midtraining"])
+def test_stage1_v3_vision_installs_its_packages(
+    mixed_recipe, text_config, monkeypatch, visual_data
+):
+    """The v3 Stage-1 sources render PDFs and read HDF5, which the text image lacks; with them the
+    launch installs the packages alignment installs for its stage1_v3 data."""
+    from gantry.api import GitRepoState
+
+    from olmo_core.internal.vision_alignment import _STAGE1_V3_POST_SETUP
+    from olmo_core.internal.vision_alignment_data import STAGE1_V3_MEAN_LOSS_WEIGHTS
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: PixMoCapDatasetConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    theirs = BeakerLaunchConfig(
+        name="ladders-mixed",
+        cmd=["train"],
+        post_setup="python -m build_ext",
+        git=GitRepoState(
+            repo="allenai/scaling-ladders",
+            repo_url="https://github.com/allenai/scaling-ladders",
+            ref="a" * 40,
+            branch="main",
+        ),
+    )
+    cli = CliContext(
+        script="ladders/olmoe3/workloads/mixed_midtraining.py",
+        cmd=SubCmd.dry_run,
+        run_name="mixed-test",
+        cluster="ai2/holmes",
+        overrides=[
+            f"--recipe.parent_checkpoint={mixed_recipe.parent}",
+            f"--recipe.visual_data={visual_data}",
+        ],
+    )
+    config = build_config(cli, text_config=text_config.config, launch=theirs)
+    if visual_data == "stage1_v3":
+        assert config.launch.post_setup == f"python -m build_ext && {_STAGE1_V3_POST_SETUP}"
+    else:
+        assert config.launch.post_setup == "python -m build_ext"
+    assert theirs.post_setup == "python -m build_ext"
