@@ -100,6 +100,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "model.image_patch_token_id": "image patch token id from the tokenizer",
     "model.vit_layers": "vision features taken from these ViT layers",
     "model.loss_chunk_size": "the weighted loss scores this many tokens at a time (no full logits)",
+    "model.sync_vit_crops": "the vision encoder pads its crops to the data-parallel maximum only under FSDP",
     "model.lm.block*.routed_experts_router.lb_loss_weight": (
         "router load balancing off while the LM is frozen (bridge, perception, also when "
         "started from the pretraining checkpoint); joint restores the pretrained coefficients"
