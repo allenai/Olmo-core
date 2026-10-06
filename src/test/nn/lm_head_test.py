@@ -244,6 +244,57 @@ def test_lm_head_logits_to_keep(head_type):
     assert logits.shape == (B, logits_to_keep, vocab_size)
 
 
+@requires_gpu
+@pytest.mark.parametrize("head_type", [LMHeadType.default, LMHeadType.normalized])
+@pytest.mark.parametrize(
+    "loss_implementation", [LMLossImplementation.default, LMLossImplementation.fused_linear]
+)
+def test_lm_head_response_logits_only(head_type, loss_implementation):
+    seed_all(42)
+    device = torch.device("cuda")
+    d_model, vocab_size = 256, 1024
+    B, S = 2, 32
+
+    if (
+        head_type == LMHeadType.normalized
+        and loss_implementation == LMLossImplementation.fused_linear
+    ):
+        pytest.skip("NormalizedLMHead does not support fused_linear")
+
+    config = LMHeadConfig(name=head_type, loss_implementation=loss_implementation)
+    lm_head = config.build(d_model=d_model, vocab_size=vocab_size, init_device="cuda")
+
+    inputs = torch.randn(B, S, d_model, device=device)
+    labels = torch.randint(0, vocab_size, (B, S), device=device)
+
+    response_mask = torch.zeros(B, S, dtype=torch.bool, device=device)
+    response_mask[0, [3, 7, 15, 22]] = True
+    response_mask[1, [1, 9, 18]] = True
+
+    output_full = lm_head(inputs, labels=labels, return_logits=True)
+    full_logits = output_full.logits
+    ref_logits = full_logits.view(-1, vocab_size)[response_mask.view(-1)]
+
+    narrow_logits = lm_head(
+        inputs,
+        labels=None,
+        response_logits_only=True,
+        response_mask=response_mask,
+    )
+    torch.testing.assert_close(narrow_logits, ref_logits)
+
+    output_narrow = lm_head(
+        inputs,
+        labels=labels,
+        response_logits_only=True,
+        response_mask=response_mask,
+        return_logits=True,
+    )
+    if output_narrow.logits is not None:
+        torch.testing.assert_close(output_narrow.logits, ref_logits)
+    torch.testing.assert_close(output_narrow.loss, output_full.loss)
+
+
 @pytest.mark.parametrize("head_type", [LMHeadType.default, LMHeadType.normalized])
 @pytest.mark.parametrize(
     "loss_implementation", [LMLossImplementation.default, LMLossImplementation.fused_linear]
