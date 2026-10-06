@@ -1,5 +1,6 @@
 """Vision-language models with pooled image features in the language-model embedding stream."""
 
+import contextlib
 import os
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Iterator, List, Literal, Optional, Tuple, Union, cast
@@ -15,8 +16,9 @@ from olmo_core.distributed.utils import barrier, is_distributed
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.embedding import SplitVocabEmbedding
 from olmo_core.nn.functional import weighted_cross_entropy_loss
-from olmo_core.nn.lm_head import LMOutputWithLoss
+from olmo_core.nn.lm_head import LMOutputWithLoss, _select_hidden_for_logits
 from olmo_core.nn.transformer.config import TransformerBlockConfig, TransformerConfig
+from olmo_core.nn.vision.chunked_loss import chunked_weighted_cross_entropy_loss
 from olmo_core.nn.vision.config import VisionEncoderConfig
 from olmo_core.nn.vision.connector import (
     ImagePoolingType,
@@ -132,6 +134,13 @@ class MultimodalLMConfig(Config):
     each packed sequence as one causal stream, its state carrying across the examples as text
     pretraining carries it across packed documents, with no masks, boundaries or positions;
     an attention LM keeps the mask path.
+    """
+
+    loss_chunk_size: int = 4096
+    """
+    Tokens scored per chunk by the OLMoDDP model's weighted loss, so that a micro-batch's
+    logits never exist all at once (each chunk's are recomputed in the backward pass).
+    ``0`` scores every response token at once.
     """
 
     output_vocab_size: Optional[int] = None
@@ -1035,6 +1044,44 @@ class MultimodalOLMoDDPModel(MultimodalLM):
                 f"{type(self).__name__} requires an OLMoDDPModel language model, "
                 f"got {type(self.lm).__name__}"
             )
+        if self.lm.lm_head is None:
+            raise OLMoConfigurationError(f"{type(self).__name__} requires an LM head")
+        # The weighted loss scores the LM head's hidden states a chunk at a time (see
+        # ``loss_chunk_size``), so the head must be able to hand them over unprojected.
+        self._lm_head_forward = self.lm.lm_head.forward
+        self._lm_head_hidden_states_only = False
+        self.lm.lm_head.forward = self._lm_head_forward_or_hidden_states  # type: ignore[method-assign]
+
+    def _lm_head_forward_or_hidden_states(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        The LM head's own forward or, inside :meth:`_lm_head_hidden_states`, its normed and
+        response-selected hidden states ``(N_response, d_model)`` instead of their logits.
+        """
+        if not self._lm_head_hidden_states_only:
+            return self._lm_head_forward(x, **kwargs)
+        if kwargs.get("labels") is not None:
+            raise ValueError("The LM head computes no loss while handing over hidden states")
+        head = self.lm.lm_head
+        assert head is not None
+        h = head.norm(x) if head.norm is not None else x
+        h, _ = _select_hidden_for_logits(
+            h,
+            None,
+            logits_to_keep=kwargs.get("logits_to_keep", 0),
+            response_logits_only=kwargs.get("response_logits_only", False),
+            response_mask=kwargs.get("response_mask"),
+            ignore_index=kwargs.get("ignore_index", -100),
+        )
+        return h
+
+    @contextlib.contextmanager
+    def _lm_head_hidden_states(self) -> Iterator[None]:
+        """Have the LM head return hidden states instead of logits within the block."""
+        self._lm_head_hidden_states_only = True
+        try:
+            yield
+        finally:
+            self._lm_head_hidden_states_only = False
 
     def encode_images(
         self,
@@ -1274,21 +1321,41 @@ class MultimodalOLMoDDPModel(MultimodalLM):
             )
         labels = labels.to(self.lm.device)
         response_mask = loss_masks > 0
-        # Response logits are ``(N_response, vocab)`` in row-major mask order.
-        logits = super().forward(
-            input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
-        )
-        assert isinstance(logits, torch.Tensor)
         flat_labels = labels.reshape(-1)[response_mask.reshape(-1)]
         flat_weights = loss_masks.reshape(-1)[response_mask.reshape(-1)]
-        ce_loss, z_loss = weighted_cross_entropy_loss(
-            logits,
-            flat_labels,
-            flat_weights,
-            ignore_index=ignore_index,
-            compute_z_loss=z_loss_multiplier is not None,
-            z_loss_multiplier=z_loss_multiplier or 0.0,
-        )
+        logits: Optional[torch.Tensor] = None
+        if return_logits or self.cfg.loss_chunk_size <= 0:
+            # Response logits are ``(N_response, vocab)`` in row-major mask order.
+            logits = super().forward(
+                input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
+            )
+            assert isinstance(logits, torch.Tensor)
+            ce_loss, z_loss = weighted_cross_entropy_loss(
+                logits,
+                flat_labels,
+                flat_weights,
+                ignore_index=ignore_index,
+                compute_z_loss=z_loss_multiplier is not None,
+                z_loss_multiplier=z_loss_multiplier or 0.0,
+            )
+        else:
+            # The response hidden states ``(N_response, d_model)`` in the same order, scored a
+            # chunk at a time so the micro-batch's logits never exist at once.
+            with self._lm_head_hidden_states():
+                hidden = super().forward(
+                    input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
+                )
+            assert isinstance(hidden, torch.Tensor) and self.lm.lm_head is not None
+            ce_loss, z_loss = chunked_weighted_cross_entropy_loss(
+                self.lm.lm_head.w_out,
+                hidden,
+                flat_labels,
+                flat_weights,
+                ignore_index=ignore_index,
+                compute_z_loss=z_loss_multiplier is not None,
+                z_loss_multiplier=z_loss_multiplier or 0.0,
+                chunk_size=self.cfg.loss_chunk_size,
+            )
         div_factor = (
             loss_weight_div_factor if loss_weight_div_factor is not None else loss_div_factor
         )
