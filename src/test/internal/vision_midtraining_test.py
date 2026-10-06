@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -12,9 +13,14 @@ from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.data.source_mixture import (
     SourceMixtureConfig,
     SourceMixtureDatasetConfig,
+    SourceMixtureList,
 )
 from olmo_core.exceptions import OLMoConfigurationError
-from olmo_core.internal import vision_midtraining, vision_midtraining_data
+from olmo_core.internal import (
+    vision_alignment,
+    vision_midtraining,
+    vision_midtraining_data,
+)
 from olmo_core.internal.experiment import CliContext, SubCmd
 from olmo_core.internal.vision_midtraining import (
     MixedMidtrainingExperimentConfig,
@@ -32,7 +38,8 @@ from olmo_core.nn.vision import (
     VisionConnectorConfig,
     VisionEncoderConfig,
 )
-from olmo_core.train import LoadStrategy
+from olmo_core.optim import Scheduler
+from olmo_core.train import Duration, LoadStrategy
 
 
 @pytest.fixture
@@ -109,7 +116,10 @@ def mixed_recipe(tmp_path, monkeypatch):
 
 def test_mixed_recipe_defaults_and_roundtrip(mixed_recipe):
     config = mixed_recipe.build()
-    restored = MixedMidtrainingExperimentConfig.from_dict(config.as_config_dict())
+    # ``as_config_dict`` omits the ``None`` launch of a local run; it is restored explicitly.
+    restored = MixedMidtrainingExperimentConfig.from_dict(
+        {"launch": None, **config.as_config_dict()}
+    )
     assert restored == config
     assert config.recipe.text_loss_share == 0.9
     assert config.launch is None
@@ -125,7 +135,6 @@ def test_mixed_recipe_defaults_and_roundtrip(mixed_recipe):
     assert config.data_loader.source_groups is None
     assert config.data_loader.group_sequence_quotas is None
     assert config.train_module.loss_group_weights is None
-    assert not config.data_loader.text_only
     assert config.data_loader.prefetch_workers == 8
     assert config.data_loader.max_consecutive_data_errors == 0
     assert config.data_loader.max_total_data_errors == 0
@@ -251,10 +260,7 @@ def test_t100_keeps_text_and_nonvision_optimization_without_visual_access(
     assert text.dataset.target_loss_mass == {"text_midtraining": 1.0}
     assert text.dataset.mean_loss_weight == {"text_midtraining": 8191}
     assert text.dataset.sources["text_midtraining"] == mixed.dataset.sources["text_midtraining"]
-    assert text.data_loader.text_only
-    expected_loader = mixed.data_loader.copy()
-    expected_loader.text_only = True
-    assert text.data_loader == expected_loader
+    assert text.data_loader == mixed.data_loader
     assert text.train_module.rank_microbatch_size == mixed.train_module.rank_microbatch_size
     assert text.model == mixed.model
     expected_optim = mixed.train_module.optim.copy()
@@ -263,7 +269,10 @@ def test_t100_keeps_text_and_nonvision_optimization_without_visual_access(
     assert text.train_module.scheduler == mixed.train_module.scheduler
     assert text.train_module.freeze_params == ["vision.*"]
     assert not text.train_module.vision_activation_checkpointing
-    assert MixedMidtrainingExperimentConfig.from_dict(text.as_config_dict()) == text
+    assert (
+        MixedMidtrainingExperimentConfig.from_dict({"launch": None, **text.as_config_dict()})
+        == text
+    )
 
 
 def test_mixed_recipe_preserves_parent_architecture_and_router(mixed_recipe):
@@ -293,7 +302,7 @@ def test_mixed_recipe_optimizer_contract(mixed_recipe, text_loss_share):
     assert module.freeze_params == (["vision.*"] if text_only else [])
     assert module.train_embedding_rows is None
     assert module.vision_activation_checkpointing is not text_only
-    assert module.connector_activation_checkpointing and module.response_logits_only
+    assert not module.connector_activation_checkpointing and module.response_logits_only
     assert module.ep_config.degree == 8 and module.compile_model
     assert module.optim.lr == 1e-5 and module.optim.weight_decay == 0.1
     assert module.optim.betas == (0.9, 0.95) and module.optim.eps == 1e-8
@@ -427,14 +436,6 @@ def test_legacy_alignment_parent_resolves_tokenizer_from_ancestry(mixed_recipe, 
     assert config.pretraining_checkpoint == "/original/pretraining/stepN"
 
 
-@pytest.mark.parametrize("share,text_only", [(0.9, "true"), (1, "false")])
-def test_text_only_execution_must_match_global_recipe(mixed_recipe, share, text_only):
-    with pytest.raises(OLMoConfigurationError, match="text_only"):
-        mixed_recipe.build(
-            f"--recipe.text_loss_share={share}", f"--data_loader.text_only={text_only}"
-        )
-
-
 @pytest.mark.parametrize("override", ["--recipe.text_loss_share", "--recipe.text-loss-share=true"])
 def test_boolean_share_cannot_bypass_numeric_validation(mixed_recipe, override):
     with pytest.raises(OLMoConfigurationError, match="boolean"):
@@ -559,7 +560,7 @@ def test_launch_uses_standard_two_node_alignment_settings(
             ),
         )
     )
-    monkeypatch.setattr(vision_midtraining, "build_launch_config", factory)
+    monkeypatch.setattr(vision_alignment, "build_launch_config", factory)
     config = build_config(
         CliContext(
             script="src/scripts/train/Mixed-Midtraining.py",
@@ -573,7 +574,9 @@ def test_launch_uses_standard_two_node_alignment_settings(
             ],
         )
     )
-    assert factory.call_args.kwargs["workspace"] == "ai2/molmofication"
+    assert factory.call_args.kwargs["workspace"] == "ai2/oe-olmo3p5-mt"
+    assert factory.call_args.kwargs["budget"] == "ai2/oe-other"
+    assert config.launch.num_nodes == 2
     assert factory.call_args.kwargs["num_nodes"] == 2
     assert config.data_loader.sequence_length == 8192
     assert config.data_loader.global_batch_size == 128 * 8192
@@ -592,11 +595,10 @@ def test_launch_uses_standard_two_node_alignment_settings(
     assert config.launch.aws_credentials_secret is None
     env = {item.name: item.value for item in config.launch.env_vars}
     assert env["OLMO_CORE_DATA_VERIFICATION_CACHE_DIR"] == "/tmp/mixed-data-cache/data-verification"
-    assert env["NVSHMEM_REMOTE_TRANSPORT"] == "none"
     assert "OLMO_CORE_FS_CACHE_DIR" not in env
     secrets = {item.name: item.secret for item in config.launch.env_secrets}
-    assert secrets["BEAKER_TOKEN"] == "JASONR_BEAKER_TOKEN"
-    assert secrets["WANDB_API_KEY"] == "RUSTINS_WANDB_API_KEY"
+    assert secrets["BEAKER_TOKEN"] == "jasonr_BEAKER_TOKEN"
+    assert secrets["WANDB_API_KEY"] == "jasonr_WANDB_API_KEY"
     assert len(secrets) == len(config.launch.env_secrets)
 
 
@@ -668,3 +670,120 @@ def test_custom_artifact_roots_do_not_reopen_default_provenance(mixed_recipe, mo
         f"--dataset.mean_loss_weight={json.dumps(means)}",
     )
     assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+
+TEXT_FIXTURE = Path(__file__).parent.parent / "fixtures" / "olmo35_text_midtraining_config.json"
+
+
+@pytest.fixture
+def text_config(tmp_path):
+    """The text team's OLMo 3.5 mid-training config, with a small source mixture as its data."""
+    text = json.loads(TEXT_FIXTURE.read_text())
+    text["dataset"] = NumpyFSLDatasetConfig.from_src_mix(
+        SourceMixtureDatasetConfig(
+            source_list=SourceMixtureList(
+                sources=[
+                    SourceMixtureConfig(
+                        source_name="web", target_ratio=0.7, paths=["gs://bucket/web/*.npy"]
+                    ),
+                    SourceMixtureConfig(
+                        source_name="code", target_ratio=0.3, paths=["gs://bucket/code/*.npy"]
+                    ),
+                ]
+            ),
+            requested_tokens=text["trainer"]["max_duration"]["value"],
+            global_batch_size=text["data_loader"]["global_batch_size"],
+            processes=16,
+            seed=1387822106,
+        ),
+        tokenizer=TokenizerConfig.dolma2(),
+        sequence_length=8192,
+        work_dir="/text-team/dataset-cache",
+    ).as_config_dict()
+    path = tmp_path / "text_config.json"
+    path.write_text(json.dumps(text))
+    return SimpleNamespace(path=path, config=text)
+
+
+def test_text_config_inherits_the_text_midtraining_recipe(mixed_recipe, text_config):
+    text = text_config.config
+    config = mixed_recipe.build(f"--recipe.text_config={text_config.path}")
+    text_loader, text_module = text["data_loader"], text["train_module"]
+    batch = text_loader["global_batch_size"]
+    budget = -(-text["trainer"]["max_duration"]["value"] // batch) * batch
+
+    # Batch, budget and loader workers.
+    assert config.data_loader.global_batch_size == batch == 1024 * 8192
+    assert config.data_loader.prefetch_workers == text_loader["num_workers"]
+    assert config.trainer.max_duration == Duration.tokens(budget)
+
+    # The text mixture, with its cache in this recipe's work directory.
+    replay = config.dataset.sources["text_midtraining"]
+    expected = NumpyFSLDatasetConfig.from_dict(text["dataset"])
+    assert (
+        replay.dataset.source_mixture_config.source_list
+        == expected.source_mixture_config.source_list
+    )
+    assert replay.dataset.source_mixture_config.requested_tokens == budget
+    assert replay.dataset.work_dir == config.recipe.work_dir != expected.work_dir
+    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+    # LM optimization from the text config; connector and vision scale with the LM rate.
+    optim, lr = config.train_module.optim, text_module["optim"]["lr"]
+    assert optim.lr == lr
+    groups = {tuple(group.params): group.opts for group in optim.group_overrides}
+    assert groups[("*connector.*",)]["lr"] == 2 * lr
+    assert groups[("*vision.*",)]["lr"] == pytest.approx(0.1 * lr)
+    for group in text_module["optim"]["group_overrides"]:
+        assert groups[tuple(group["params"])] == group["opts"]
+    for name in ("betas", "eps", "weight_decay", "sigma_factor", "compile"):
+        assert getattr(optim, name) == (
+            tuple(text_module["optim"][name]) if name == "betas" else text_module["optim"][name]
+        )
+    scheduler = Scheduler.from_dict(text_module["scheduler"])
+    assert config.train_module.scheduler.default == scheduler
+    assert all(s == scheduler for s in config.train_module.scheduler.schedulers.values())
+    assert config.train_module.ep_config is None
+    assert config.train_module.z_loss_multiplier == text_module["z_loss_multiplier"]
+    assert config.train_module.compile_model == text_module["compile_model"]
+
+    # Checkpoint cadence from the text run.
+    checkpointer = config.trainer.callbacks["checkpointer"]
+    text_checkpointer = text["trainer"]["callbacks"]["checkpointer"]
+    assert checkpointer.save_interval == text_checkpointer["save_interval"]
+    assert checkpointer.ephemeral_save_interval == text_checkpointer["ephemeral_save_interval"]
+
+
+def test_text_config_launch_keeps_two_nodes(mixed_recipe, text_config, monkeypatch):
+    from gantry.api import GitRepoState
+
+    factory = Mock(
+        return_value=BeakerLaunchConfig(
+            name="mixed-test",
+            cmd=["train"],
+            git=GitRepoState(
+                repo="allenai/OLMo-core",
+                repo_url="https://github.com/allenai/OLMo-core",
+                ref="a" * 40,
+                branch="vision",
+            ),
+        )
+    )
+    monkeypatch.setattr(vision_alignment, "build_launch_config", factory)
+    config = build_config(
+        CliContext(
+            script="src/scripts/train/Mixed-Midtraining.py",
+            cmd=SubCmd.launch,
+            run_name="mixed-test",
+            cluster="ai2/holmes",
+            overrides=[
+                f"--recipe.parent_checkpoint={mixed_recipe.parent}",
+                f"--recipe.text_config={text_config.path}",
+                "--recipe.work_dir=/tmp/mixed-data-cache",
+            ],
+        )
+    )
+    text_launch = text_config.config["launch"]
+    assert config.launch.num_nodes == 2
+    assert config.launch.beaker_image == text_launch["beaker_image"]
+    assert factory.call_args.kwargs["workspace"] == "ai2/oe-olmo3p5-mt"

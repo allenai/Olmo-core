@@ -510,31 +510,16 @@ def _phase_steps(recipe: VisionAlignmentRecipeConfig) -> int:
     return _PHASES[recipe.phase].steps if recipe.steps is None else recipe.steps
 
 
-def _build_train_module(
-    phase: AlignmentPhase,
-    token_ids: Molmo2TokenIds,
-    sequence_length: int,
-    text: dict | None = None,
-    steps: int | None = None,
-    fresh_connector: bool = False,
-) -> MultimodalOLMoDDPTrainModuleConfig:
-    policy = _PHASES[phase]
-    horizon = policy.steps if steps is None else steps
-    connector_horizon = horizon
-    connector_lr, connector_warmup = policy.connector_lr, policy.connector_warmup
-    if policy.connector_decay_steps is not None:
-        # Bridge decays the connector over a fixed fraction of the phase.
-        connector_horizon = round(policy.connector_decay_steps * horizon / policy.steps)
-    elif fresh_connector:
-        # A later phase started from the text LM has a freshly initialized connector and image
-        # rows: give them bridge's connector schedule (peak, warmup, absolute decay length). Its
-        # 10% floor is the later phases' own connector LR, so after the decay they match the
-        # chained design.
-        bridge = _PHASES[AlignmentPhase.bridge]
-        assert bridge.connector_decay_steps is not None
-        connector_lr, connector_warmup = bridge.connector_lr, bridge.connector_warmup
-        connector_horizon = bridge.connector_decay_steps
-    # Text-side settings: inherited from the text config, else the recipe's legacy defaults.
+def text_train_settings(text: dict | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Optimizer and train-module settings inherited from a text config.
+
+    :param text: The text team's resolved config (``recipe.text_config``), or ``None`` for the
+        legacy s002 defaults.
+
+    :returns: Keyword arguments for the multimodal optimizer config and for the train module
+        config. Learning rates, schedules and parameter groups are not included.
+    """
     if text is not None:
         text_module = text["train_module"]
         text_optim = text_module["optim"]
@@ -604,6 +589,34 @@ def _build_train_module(
             ),
             ep_config=TransformerExpertParallelConfig(degree=8),
         )
+    return optim_settings, module_settings
+
+
+def _build_train_module(
+    phase: AlignmentPhase,
+    token_ids: Molmo2TokenIds,
+    sequence_length: int,
+    text: dict | None = None,
+    steps: int | None = None,
+    fresh_connector: bool = False,
+) -> MultimodalOLMoDDPTrainModuleConfig:
+    policy = _PHASES[phase]
+    horizon = policy.steps if steps is None else steps
+    connector_horizon = horizon
+    connector_lr, connector_warmup = policy.connector_lr, policy.connector_warmup
+    if policy.connector_decay_steps is not None:
+        # Bridge decays the connector over a fixed fraction of the phase.
+        connector_horizon = round(policy.connector_decay_steps * horizon / policy.steps)
+    elif fresh_connector:
+        # A later phase started from the text LM has a freshly initialized connector and image
+        # rows: give them bridge's connector schedule (peak, warmup, absolute decay length). Its
+        # 10% floor is the later phases' own connector LR, so after the decay they match the
+        # chained design.
+        bridge = _PHASES[AlignmentPhase.bridge]
+        assert bridge.connector_decay_steps is not None
+        connector_lr, connector_warmup = bridge.connector_lr, bridge.connector_warmup
+        connector_horizon = bridge.connector_decay_steps
+    optim_settings, module_settings = text_train_settings(text)
     return MultimodalOLMoDDPTrainModuleConfig(
         rank_microbatch_size=policy.microbatch_instances * sequence_length,
         max_sequence_length=sequence_length,

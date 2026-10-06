@@ -1,22 +1,20 @@
 """Mixed text-and-vision midtraining through the shared internal experiment runner."""
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from math import isfinite
 from pathlib import Path
 from typing import Any
 
-from olmo_core.config import Config, DType, _clean_opts
+from olmo_core.config import Config, _clean_opts
 from olmo_core.data import InstanceFilterConfig, NumpyFSLDatasetConfig, TokenizerConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
 from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.data.source_mixture import SourceMixtureDatasetConfig, SourceMixtureList
-from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.io import is_url, normalize_path, resource_path
-from olmo_core.launch.beaker import BeakerEnvSecret, BeakerEnvVar, BeakerLaunchConfig
-from olmo_core.launch.beaker_presets import get_preset
+from olmo_core.launch.beaker import BeakerLaunchConfig
 from olmo_core.nn.attention import AttentionConfig
 from olmo_core.nn.attention.backend import AttentionBackendName
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
@@ -25,30 +23,39 @@ from olmo_core.nn.transformer import OLMoDDPModelConfig
 from olmo_core.nn.vision import MultimodalLMConfig
 from olmo_core.optim import (
     CosWithWarmup,
-    OLMoDDPOptimizerConfig,
     OptimGroupOverride,
     PerGroupScheduler,
+    Scheduler,
     SchedulerUnits,
 )
+from olmo_core.optim.multimodal_optimizer import MultimodalOLMoDDPOptimizerConfig
 from olmo_core.train import CheckpointerConfig, Duration, LoadStrategy, TrainerConfig
 from olmo_core.train.callbacks import (
-    BeakerCallback,
     CheckpointerCallback,
     ConfigSaverCallback,
     GarbageCollectorCallback,
     GPUMemoryMonitorCallback,
-    MetricSaverCallback,
-    WandBCallback,
 )
-from olmo_core.train.callbacks.restore_metrics import RestoreMetricsCallback
-from olmo_core.train.train_module import (
+from olmo_core.train.callbacks.multimodal import (
+    MultimodalBeakerCallback,
+    MultimodalCheckpointerCallback,
+    MultimodalMetricSaverCallback,
+    MultimodalWandBCallback,
+    RestoreMetricsCallback,
+)
+from olmo_core.train.common import DurationUnit
+from olmo_core.train.train_module.transformer.multimodal_train_module import (
     MultimodalOLMoDDPTrainModuleConfig,
-    TransformerDataParallelConfig,
-    TransformerExpertParallelConfig,
 )
 
-from .common import build_launch_config
 from .experiment import CliContext, ExperimentConfig
+from .vision_alignment import _build_launch as _build_alignment_launch
+from .vision_alignment import (
+    _load_text_config,
+    parse_cli_args,
+    run,
+    text_train_settings,
+)
 from .vision_alignment_data import DEFAULT_ALIGNMENT_ARTIFACT_ROOT
 from .vision_midtraining_data import (
     DEFAULT_MIDTRAINING_ARTIFACT_ROOT,
@@ -62,6 +69,12 @@ from .vision_midtraining_data import (
 
 _DOLMA2_REVISION = "5292e5d6c0f40b67cc765fe41bec991cf4345b5c"
 _SOURCE_MIX_PATH = "src/olmo_core/data/source_mixtures/OLMo3-32B-midtraining-modelnamefilter.yaml"
+_LEGACY_MAX_TOKENS = 50_000_000_000
+_CONNECTOR_LR_SCALE = 2.0
+_VISION_LR_DIVISOR = 10
+"""Connector and vision learning rates relative to the LM's (Rustin's 2e-5 and 1e-6 at 1e-5)."""
+_NUM_NODES = 2
+"""Mixed midtraining runs on two eight-GPU nodes, as Rustin ran it."""
 
 
 @dataclass
@@ -75,6 +88,14 @@ class MixedMidtrainingRecipeConfig(Config):
 
     parent_checkpoint: str | None = None
     """Joint-alignment checkpoint used for a fresh, model-only handoff."""
+    text_config: str | None = None
+    """Path to the text team's resolved mid-training ``config.json``.
+
+    When set, the text mixture, token budget, global batch, LM learning rate and schedule,
+    optimizer and train-module settings, trainer bookkeeping and launch resources are inherited
+    from it; the connector and vision learning rates scale with the LM's. Without it, the
+    legacy s002 recipe applies (OLMo 3 32B midtraining mix, LM learning rate 1e-5, EP8).
+    """
     text_loss_share: float = 0.9
     """Target text fraction of expected supervised-token loss mass; one is text-only."""
     visual_example_weights: dict[str, float] = field(
@@ -86,8 +107,9 @@ class MixedMidtrainingRecipeConfig(Config):
     )
     """Reserved shares of aggregate visual loss mass, disjoint from example-weighted sources."""
     sequence_length: int = 8192
-    max_tokens: int = 50_000_000_000
-    """Token-position budget, rounded up to a whole number of global batches."""
+    max_tokens: int | None = None
+    """Token-position budget, rounded up to a whole number of global batches. ``None`` uses the
+    text config's budget, else 50B tokens."""
     max_crops: int = 8
     source_mix_path: str = _SOURCE_MIX_PATH
     text_dataset: NumpyFSLDatasetConfig | None = None
@@ -106,8 +128,8 @@ class MixedMidtrainingRecipeConfig(Config):
 class MixedMidtrainingExperimentConfig(ExperimentConfig):
     """A mixed-midtraining experiment using the standard model, data, and trainer configs."""
 
-    model: MultimodalLMConfig
-    dataset: MultimodalMixtureConfig
+    model: MultimodalLMConfig  # type: ignore[assignment]
+    dataset: MultimodalMixtureConfig  # type: ignore[assignment]
     data_loader: MixtureDataLoaderConfig
     train_module: MultimodalOLMoDDPTrainModuleConfig
     recipe: MixedMidtrainingRecipeConfig = field(default_factory=MixedMidtrainingRecipeConfig)
@@ -164,6 +186,8 @@ def _build_recipe(
         raise OLMoConfigurationError("Set recipe.parent_checkpoint to a joint-alignment checkpoint")
     for name, minimum in (("sequence_length", 2), ("max_tokens", 1), ("max_crops", 1)):
         value = getattr(recipe, name)
+        if name == "max_tokens" and value is None:
+            continue
         if type(value) is not int or value < minimum:
             raise OLMoConfigurationError(f"recipe.{name} must be an integer of at least {minimum}")
     if (
@@ -215,29 +239,43 @@ def _tokenizer_revision(recipe: MixedMidtrainingRecipeConfig, parent: dict[str, 
     return revision if revision is not None else recipe.tokenizer_revision
 
 
-def _build_model(parent: dict[str, Any]) -> MultimodalLMConfig:
+def _build_model(parent: dict[str, Any], text: dict | None = None) -> MultimodalLMConfig:
     model = MultimodalLMConfig.from_dict(parent["model"])
     if not isinstance(model.lm, OLMoDDPModelConfig):
         raise OLMoConfigurationError("Mixed midtraining requires an OLMoDDP language model")
     for block in [model.lm.block, *(model.lm.block_overrides or {}).values()]:
         if not isinstance(block, OLMoDDPTransformerBlockConfig):
             raise OLMoConfigurationError("Mixed midtraining requires OLMoDDP transformer blocks")
-        if isinstance(block.sequence_mixer, AttentionConfig):
-            block.sequence_mixer.backend = AttentionBackendName.flex
-        if block.ep is not None:
-            block.ep.path = ExpertParallelPath.rowwise_nvshmem
-            block.ep.schedule = ExpertParallelSchedule.normal
-    model.lm.recompute_each_block = True
-    model.lm.recompute_all_blocks_by_chunk = False
+        if text is None:
+            if isinstance(block.sequence_mixer, AttentionConfig):
+                block.sequence_mixer.backend = AttentionBackendName.flex
+            if block.ep is not None:
+                block.ep.path = ExpertParallelPath.rowwise_nvshmem
+                block.ep.schedule = ExpertParallelSchedule.normal
+    if text is None:
+        model.lm.recompute_each_block = True
+        model.lm.recompute_all_blocks_by_chunk = False
+    # With a text config, the parent's LM already carries the text run's runtime (alignment
+    # built it from the same config). The wrapper feeds embeddings, which two-batch overlap
+    # cannot take.
     model.lm.two_batch_overlap = False
     return model
 
 
 def _build_text_dataset(
-    recipe: MixedMidtrainingRecipeConfig, tokenizer: TokenizerConfig, budget: int, batch_size: int
+    recipe: MixedMidtrainingRecipeConfig,
+    tokenizer: TokenizerConfig,
+    budget: int,
+    batch_size: int,
+    text: dict | None = None,
 ) -> NumpyFSLDatasetConfig:
     if recipe.text_dataset is not None:
         dataset = recipe.text_dataset.copy()
+    elif text is not None:
+        # The text team's mid-training mixture; the mixture cache lives in this recipe's own
+        # work directory.
+        dataset = NumpyFSLDatasetConfig.from_dict(text["dataset"])
+        dataset.work_dir = recipe.work_dir
     else:
         if tokenizer != TokenizerConfig.dolma2():
             raise OLMoConfigurationError(
@@ -273,10 +311,14 @@ def _build_text_dataset(
 
 
 def _build_data_loader(
-    cli: CliContext, recipe: MixedMidtrainingRecipeConfig
+    cli: CliContext, recipe: MixedMidtrainingRecipeConfig, text: dict | None = None
 ) -> MixtureDataLoaderConfig:
+    batch_size, workers = 128 * recipe.sequence_length, 8
+    if text is not None:
+        batch_size = int(text["data_loader"]["global_batch_size"])
+        workers = int(text["data_loader"].get("num_workers", workers))
     return MixtureDataLoaderConfig(
-        global_batch_size=128 * recipe.sequence_length,
+        global_batch_size=batch_size,
         sequence_length=recipe.sequence_length,
         work_dir=f"{recipe.work_dir}/{cli.run_name}",
         seed=95818,
@@ -284,169 +326,179 @@ def _build_data_loader(
         pack_buffer_size=48,
         pack_max_crops=64,
         pack_image_weight=1.0,
-        prefetch_workers=8,
+        # Exact resume from the checkpointed cursor and the collator metadata the train module
+        # reads, as in alignment.
+        continuous_stream=True,
+        batch_metadata=True,
+        prefetch_workers=workers,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
-        text_only=recipe.text_loss_share == 1.0,
     ).merge(cli.overrides, prefix="data_loader")
 
 
 def _build_train_module(
-    sequence_length: int, budget: int, batch_size: int, *, text_only: bool
+    sequence_length: int,
+    budget: int,
+    batch_size: int,
+    *,
+    text_only: bool,
+    text: dict | None = None,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
-    scheduler = CosWithWarmup(
-        warmup=200 * batch_size, alpha_f=0.1, t_max=budget, units=SchedulerUnits.tokens
-    )
+    optim_settings, module_settings = text_train_settings(text)
+    scheduler: Scheduler
+    if text is not None:
+        text_optim = text["train_module"]["optim"]
+        lm_lr = float(text_optim["lr"])
+        connector_lr, vision_lr = _CONNECTOR_LR_SCALE * lm_lr, lm_lr / _VISION_LR_DIVISOR
+        scheduler = Scheduler.from_dict(text["train_module"]["scheduler"])
+        lm_groups = [
+            OptimGroupOverride.from_dict(group) for group in text_optim.get("group_overrides") or []
+        ]
+    else:
+        lm_lr, connector_lr, vision_lr = 1e-5, 2e-5, 1e-6
+        scheduler = CosWithWarmup(
+            warmup=200 * batch_size, alpha_f=0.1, t_max=budget, units=SchedulerUnits.tokens
+        )
+        optim_settings.update(eps=1e-8, weight_decay=0.1)
+        lm_groups = [
+            OptimGroupOverride(
+                params=[
+                    "*lm.embeddings.weight",
+                    "*lm.embedding_norm.*",
+                    "*lm.blocks.*norm*.weight",
+                    "*lm.lm_head.norm.*",
+                ],
+                opts={"weight_decay": 0.0},
+            )
+        ]
     return MultimodalOLMoDDPTrainModuleConfig(
         rank_microbatch_size=2 * sequence_length,
         max_sequence_length=sequence_length,
-        optim=OLMoDDPOptimizerConfig(
-            lr=1e-5,
-            betas=(0.9, 0.95),
-            eps=1e-8,
-            weight_decay=0.1,
+        optim=MultimodalOLMoDDPOptimizerConfig(
+            lr=lm_lr,
             group_overrides=[
                 OptimGroupOverride(
                     params=["*connector.*"],
-                    opts={"lr": 2e-5, "weight_decay": 0.0, "scheduler_name": "connector"},
+                    opts={
+                        "lr": connector_lr,
+                        "weight_decay": 0.0,
+                        "scheduler_name": "connector",
+                    },
                 ),
                 OptimGroupOverride(
                     params=["*vision.*"],
                     opts={
-                        "lr": 0.0 if text_only else 1e-6,
+                        "lr": 0.0 if text_only else vision_lr,
                         "weight_decay": 0.0,
                         "scheduler_name": "vision",
                     },
                 ),
-                OptimGroupOverride(
-                    params=[
-                        "*lm.embeddings.weight",
-                        "*lm.embedding_norm.*",
-                        "*lm.blocks.*norm*.weight",
-                        "*lm.lm_head.norm.*",
-                    ],
-                    opts={"weight_decay": 0.0},
-                ),
+                *lm_groups,
             ],
-            compile=False,
             foreach_chunk_size=50_000_000,
-            sigma_factor=12,
-            max_grad_norm=1.0,
             clip_grad_norm_by_scheduler_group=True,
-            check_nan_inf_grad=True,
-            use_distributed=True,
+            **optim_settings,
         ),
         freeze_params=["vision.*"] if text_only else [],
         train_embedding_rows=None,
         vision_activation_checkpointing=not text_only,
-        connector_activation_checkpointing=True,
+        # Off as in alignment: the checkpoint wrapper breaks the connector's reset_parameters
+        # under the OLMoDDP init order, and its activations are a negligible share of memory.
+        connector_activation_checkpointing=False,
         response_logits_only=True,
         diagnostics_interval=100,
-        z_loss_multiplier=1e-4,
-        max_grad_norm=1.0,
-        compile_model=True,
         scheduler=PerGroupScheduler(
             schedulers={"connector": scheduler.copy(), "vision": scheduler.copy()},
             default=scheduler,
         ),
-        dp_config=TransformerDataParallelConfig(
-            name=DataParallelType.ddp,
-            reduce_dtype=DType.float32,
-            only_allreduce_last_microbatch=True,
-            reduce_grads_in_fp32=True,
-            accumulate_grads_in_fp32=True,
-        ),
-        ep_config=TransformerExpertParallelConfig(degree=8),
+        **module_settings,
     )
 
 
 def _build_trainer(
-    cli: CliContext, recipe: MixedMidtrainingRecipeConfig, budget: int
+    cli: CliContext, recipe: MixedMidtrainingRecipeConfig, budget: int, text: dict | None = None
 ) -> TrainerConfig:
+    bookkeeping: dict[str, Any] = dict(
+        checkpointer=CheckpointerConfig(load_thread_count=8),
+        metrics_collect_interval=5,
+        cancel_check_interval=5,
+    )
+    inherited_callbacks: dict[str, Any] = {
+        "gpu_monitor": GPUMemoryMonitorCallback(),
+        "config_saver": ConfigSaverCallback(),
+        "garbage_collector": GarbageCollectorCallback(),
+    }
+    checkpointer = MultimodalCheckpointerCallback(
+        save_interval=10_000, ephemeral_save_interval=500, save_async=False, max_checkpoints=2
+    )
+    if text is not None:
+        # Bookkeeping, checkpoint cadence and callbacks come from the text run; its W&B, Beaker
+        # and notifier callbacks are replaced by the multimodal ones below.
+        text_trainer = TrainerConfig.from_dict(text["trainer"])
+        bookkeeping = dict(
+            checkpointer=text_trainer.checkpointer,
+            metrics_collect_interval=text_trainer.metrics_collect_interval,
+            cancel_check_interval=text_trainer.cancel_check_interval,
+            async_bookkeeping=text_trainer.async_bookkeeping,
+            bookkeeping_soft_timeout=text_trainer.bookkeeping_soft_timeout,
+        )
+        inherited_callbacks = {
+            name: callback
+            for name, callback in text_trainer.callbacks.items()
+            if name not in ("checkpointer", "wandb", "slack_notifier", "beaker")
+        }
+        text_checkpointer = text_trainer.callbacks.get("checkpointer")
+        if isinstance(text_checkpointer, CheckpointerCallback):
+            checkpointer = MultimodalCheckpointerCallback(
+                **{
+                    f.name: getattr(text_checkpointer, f.name)
+                    for f in fields(CheckpointerCallback)
+                    if f.init and not f.name.startswith("_")
+                }
+            )
+    trainer = TrainerConfig(
+        save_folder=f"{recipe.output_root}/{cli.run_name}",
+        work_dir=f"{recipe.work_dir}/{cli.run_name}",
+        save_overwrite=False,
+        load_path=recipe.parent_checkpoint,
+        load_strategy=LoadStrategy.always,
+        load_optim_state=False,
+        load_trainer_state=False,
+        max_duration=Duration.tokens(budget),
+        **bookkeeping,
+    )
+    for name, callback in inherited_callbacks.items():
+        trainer = trainer.with_callback(name, callback)
     return (
-        TrainerConfig(
-            save_folder=f"{recipe.output_root}/{cli.run_name}",
-            work_dir=f"{recipe.work_dir}/{cli.run_name}",
-            save_overwrite=False,
-            load_path=recipe.parent_checkpoint,
-            load_strategy=LoadStrategy.always,
-            load_optim_state=False,
-            load_trainer_state=False,
-            checkpointer=CheckpointerConfig(load_thread_count=8),
-            metrics_collect_interval=5,
-            cancel_check_interval=5,
-            max_duration=Duration.tokens(budget),
-        )
-        .with_callback("gpu_monitor", GPUMemoryMonitorCallback())
+        trainer.with_callback("checkpointer", checkpointer)
+        .with_callback("beaker", MultimodalBeakerCallback())
         .with_callback(
-            "checkpointer",
-            CheckpointerCallback(
-                save_interval=10_000,
-                ephemeral_save_interval=500,
-                save_async=False,
-                max_checkpoints=2,
+            "wandb",
+            MultimodalWandBCallback(
+                name=cli.run_name, project="mixed-midtraining", auto_resume=True
             ),
-        )
-        .with_callback("config_saver", ConfigSaverCallback())
-        .with_callback("garbage_collector", GarbageCollectorCallback())
-        .with_callback("beaker", BeakerCallback())
-        .with_callback(
-            "wandb", WandBCallback(name=cli.run_name, project="mixed-midtraining", auto_resume=True)
         )
         .with_callback(
             "metrics",
-            MetricSaverCallback(save_interval=5, final_metrics_fname="metrics-final.json"),
+            MultimodalMetricSaverCallback(
+                save_interval=5, final_metrics_fname="metrics-final.json"
+            ),
         )
         .with_callback("restore_metrics", RestoreMetricsCallback(metrics_callback="metrics"))
     )
 
 
 def _build_launch(
-    cli: CliContext, *, work_dir: str = MixedMidtrainingRecipeConfig.work_dir
+    cli: CliContext,
+    *,
+    work_dir: str = MixedMidtrainingRecipeConfig.work_dir,
+    text: dict | None = None,
 ) -> BeakerLaunchConfig | None:
-    if cli.cluster == "local":
-        return None
-    preset = get_preset("olmo-ddp")
-    launch = build_launch_config(
-        name=cli.run_name,
-        cmd=cli.remote_cmd,
-        cluster=cli.cluster,
-        root_dir="/weka/oe-training-default",
-        workspace="ai2/molmofication",
-        num_nodes=2,
-        step_timeout=None,
-        step_soft_timeout=None,
-    )
-    if preset.beaker_image is not None:
-        launch.beaker_image = preset.beaker_image
-    launch.post_setup = preset.post_setup
-    env = {item.name: item.value for item in launch.env_vars}
-    env.update(dict(preset.env_vars))
-    env.update(
-        {
-            "OLMO_CORE_DATA_VERIFICATION_CACHE_DIR": str(Path(work_dir) / "data-verification"),
-            "OLMO_USE_OWN_SYMM_MEM": "1",
-            "NVSHMEM_REMOTE_TRANSPORT": "none",
-            "OLMO_EP_MP_HIGH_PRIORITY_GROUP": "1",
-            "OLMO_OWN_SYMM_PREWARM": "1",
-            "TORCHINDUCTOR_COMPILE_THREADS": "8",
-            "TORCH_LOGS": "-dynamo",
-        }
-    )
-    launch.env_vars = [BeakerEnvVar(name=name, value=value) for name, value in env.items()]
-    launch.priority = "urgent"
-    launch.min_runtime = "8h"
-    launch.shared_memory = "32GiB"
-    launch.env_secrets = [
-        secret
-        for secret in launch.env_secrets
-        if secret.name not in {"BEAKER_TOKEN", "WANDB_API_KEY"}
-    ] + [
-        BeakerEnvSecret(name="BEAKER_TOKEN", secret="JASONR_BEAKER_TOKEN", required=True),
-        BeakerEnvSecret(name="WANDB_API_KEY", secret="RUSTINS_WANDB_API_KEY", required=True),
-    ]
-    launch.aws_config_secret = None
-    launch.aws_credentials_secret = None
+    # The alignment launcher: workspace, budget, secrets, and (with a text config) the text
+    # run's image, install step, resources and environment.
+    launch = _build_alignment_launch(cli, work_dir=work_dir, text=text)
+    if launch is not None:
+        launch.num_nodes = _NUM_NODES
     return launch
 
 
@@ -561,8 +613,6 @@ def _validate_config(
         or loader.global_batch_size % config.train_module.rank_microbatch_size
     ):
         raise OLMoConfigurationError("Global and microbatches must contain whole sequences")
-    if loader.text_only != (recipe.text_loss_share == 1.0):
-        raise OLMoConfigurationError("data_loader.text_only must match recipe.text_loss_share")
     if loader.source_groups is not None or loader.group_sequence_quotas is not None:
         raise OLMoConfigurationError(
             "Fixed sequence quotas cannot implement calibrated loss shares"
@@ -625,10 +675,11 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
     """
     overrides = _clean_opts(cli.overrides)
     recipe = _build_recipe(cli, overrides)
+    text = _load_text_config(recipe.text_config) if recipe.text_config else None
     parent, ancestry = _resolve_parent(recipe)
     tokenizer = _parent_tokenizer(parent, ancestry)
     revision = _tokenizer_revision(recipe, parent)
-    loader = _build_data_loader(cli, recipe)
+    loader = _build_data_loader(cli, recipe, text)
     if (
         type(loader.global_batch_size) is not int
         or loader.global_batch_size <= 0
@@ -637,13 +688,21 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
         raise OLMoConfigurationError(
             "Global batch size must contain a positive whole number of sequences"
         )
+    max_tokens = recipe.max_tokens
+    if max_tokens is None:
+        max_tokens = _LEGACY_MAX_TOKENS
+        if text is not None:
+            duration = text["trainer"]["max_duration"]
+            if DurationUnit(duration["unit"]) != DurationUnit.tokens:
+                raise OLMoConfigurationError("The text config's duration must be in tokens")
+            max_tokens = int(duration["value"])
     budget = (
-        (recipe.max_tokens + loader.global_batch_size - 1) // loader.global_batch_size
+        (max_tokens + loader.global_batch_size - 1) // loader.global_batch_size
     ) * loader.global_batch_size
-    text = _build_text_dataset(recipe, tokenizer, budget, loader.global_batch_size)
-    model = _build_model(parent)
+    text_data = _build_text_dataset(recipe, tokenizer, budget, loader.global_batch_size, text)
+    model = _build_model(parent, text)
     means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if recipe.text_loss_share < 1.0 else {}
-    if text.label_mask_paths is None:
+    if text_data.label_mask_paths is None:
         means[TEXT_SOURCE_NAME] = float(recipe.sequence_length - 1)
     elif recipe.text_loss_share == 1.0:
         means[TEXT_SOURCE_NAME] = 1.0
@@ -659,12 +718,14 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
         else {}
     )
     dataset = MultimodalMixtureConfig(
-        tokenizer=text.tokenizer.copy(),
+        tokenizer=text_data.tokenizer.copy(),
         sources=dict(
             sorted(
                 {
                     **visual_sources,
-                    TEXT_SOURCE_NAME: PretrainingReplayConfig(dataset=text.copy(), split="all"),
+                    TEXT_SOURCE_NAME: PretrainingReplayConfig(
+                        dataset=text_data.copy(), split="all"
+                    ),
                 }.items()
             )
         ),
@@ -675,7 +736,7 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
     )
     config = MixedMidtrainingExperimentConfig(
         run_name=cli.run_name,
-        launch=_build_launch(cli, work_dir=recipe.work_dir),
+        launch=_build_launch(cli, work_dir=recipe.work_dir, text=text),
         model=model,
         dataset=dataset,
         data_loader=loader,
@@ -684,8 +745,9 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
             budget,
             loader.global_batch_size,
             text_only=recipe.text_loss_share == 1.0,
+            text=text,
         ),
-        trainer=_build_trainer(cli, recipe, budget),
+        trainer=_build_trainer(cli, recipe, budget, text),
         recipe=recipe,
         pretraining_checkpoint=ancestry,
         init_seed=6198,
@@ -709,3 +771,11 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
         reusable_visual_calibration,
     )
     return config
+
+
+def main() -> None:
+    """Build mixed midtraining from the command line and run ``launch``, ``train`` or ``dry_run``."""
+    cli = parse_cli_args()
+    config = build_config(cli)
+    cli.cmd.prepare_environment(config)
+    run(cli.cmd, config)  # type: ignore[arg-type]
