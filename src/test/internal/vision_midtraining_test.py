@@ -787,3 +787,100 @@ def test_text_config_launch_keeps_two_nodes(mixed_recipe, text_config, monkeypat
     assert config.launch.num_nodes == 2
     assert config.launch.beaker_image == text_launch["beaker_image"]
     assert factory.call_args.kwargs["workspace"] == "ai2/oe-olmo3p5-mt"
+
+
+def _write_text_lm_checkpoint(path, lm):
+    path.mkdir(parents=True)
+    config = {
+        "model": lm.as_config_dict(),
+        "dataset": {"tokenizer": TokenizerConfig.dolma2().as_config_dict()},
+    }
+    (path / "config.json").write_text(json.dumps(config))
+    return path
+
+
+@pytest.mark.parametrize("phase", ["bridge", "perception", "joint"])
+def test_parent_can_be_any_alignment_stage(mixed_recipe, tmp_path, phase):
+    """Any stage's endpoint can start midtraining (stage ablations). Bridge and perception switch
+    router load balancing off while the LM is frozen; midtraining trains the LM, so it restores
+    the text LM's coefficients. Joint already restored them."""
+    pretrained = mixed_recipe.model.lm.copy()
+    pretrained.block.routed_experts_router = MoERouterConfigV2(
+        d_model=64, num_experts=8, top_k=2, lb_loss_weight=0.005
+    )
+    ancestry = _write_text_lm_checkpoint(tmp_path / "text-lm" / "step100", pretrained)
+    mixed_recipe.model.lm.block.routed_experts_router = MoERouterConfigV2(
+        d_model=64, num_experts=8, top_k=2, lb_loss_weight=0.0
+    )
+    mixed_recipe.metadata["model"] = mixed_recipe.model.as_config_dict()
+    mixed_recipe.metadata["recipe"] = {"phase": phase}
+    mixed_recipe.metadata["pretraining_checkpoint"] = str(ancestry)
+    (mixed_recipe.parent / "config.json").write_text(json.dumps(mixed_recipe.metadata))
+
+    config = mixed_recipe.build()
+
+    assert config.alignment_phase == phase
+    assert config.pretraining_checkpoint == str(ancestry)
+    router = config.model.lm.block.routed_experts_router
+    assert router.lb_loss_weight == (0.0 if phase == "joint" else 0.005)
+    assert config.trainer.load_path == str(mixed_recipe.parent)
+    assert "initialize_multimodal" not in config.trainer.callbacks
+
+
+def test_parent_must_be_an_alignment_checkpoint(mixed_recipe):
+    mixed_recipe.metadata["recipe"] = {"phase": "stage1"}
+    (mixed_recipe.parent / "config.json").write_text(json.dumps(mixed_recipe.metadata))
+    with pytest.raises(OLMoConfigurationError, match="vision-alignment checkpoint"):
+        mixed_recipe.build()
+
+
+def _build_from_text_lm(tmp_path, *overrides):
+    return build_config(
+        CliContext(
+            script="src/scripts/train/Mixed-Midtraining.py",
+            cmd=SubCmd.dry_run,
+            run_name="mixed-test",
+            cluster="local",
+            overrides=[
+                f"--recipe.output_root={tmp_path}/outputs",
+                f"--recipe.work_dir={tmp_path}/cache",
+                *overrides,
+            ],
+        )
+    )
+
+
+def test_midtraining_without_alignment_starts_from_the_text_lm(mixed_recipe, tmp_path):
+    lm = mixed_recipe.model.lm
+    checkpoint = _write_text_lm_checkpoint(tmp_path / "text-lm" / "step100", lm)
+
+    config = _build_from_text_lm(tmp_path, f"--recipe.pretraining_checkpoint={checkpoint}")
+
+    assert config.alignment_phase is None
+    assert config.pretraining_checkpoint == str(checkpoint)
+    assert config.model.lm.d_model == lm.d_model and config.model.lm.n_layers == lm.n_layers
+    assert config.model.image_patch_token_id == 100280
+    assert config.model == MultimodalLMConfig.molmo2_vision_stack(
+        config.model.lm, image_patch_token_id=100280
+    )
+    # The initialization callback loads the LM and the vision encoder; resume uses the run's own
+    # checkpoints.
+    assert config.trainer.load_path is None
+    assert config.trainer.load_strategy == LoadStrategy.if_available
+    init = config.trainer.callbacks["initialize_multimodal"]
+    assert init.language_checkpoint == str(checkpoint)
+    assert init.vision_model_id == config.recipe.vision_model_id
+    assert init.image_token_ids == [100278, 100279, 100280, 100281, 100282, 100283]
+    # Everything trains, as when starting from an alignment checkpoint.
+    assert config.train_module.freeze_params == []
+    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+
+@pytest.mark.parametrize("both", [True, False])
+def test_exactly_one_starting_checkpoint(mixed_recipe, tmp_path, both):
+    checkpoint = _write_text_lm_checkpoint(tmp_path / "text-lm" / "step100", mixed_recipe.model.lm)
+    overrides = [f"--recipe.parent_checkpoint={mixed_recipe.parent}"] if both else []
+    if both:
+        overrides.append(f"--recipe.pretraining_checkpoint={checkpoint}")
+    with pytest.raises(OLMoConfigurationError, match="exactly one"):
+        _build_from_text_lm(tmp_path, *overrides)

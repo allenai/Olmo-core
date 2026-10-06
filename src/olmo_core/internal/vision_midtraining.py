@@ -17,10 +17,11 @@ from olmo_core.io import is_url, normalize_path, resource_path
 from olmo_core.launch.beaker import BeakerLaunchConfig
 from olmo_core.nn.attention import AttentionConfig
 from olmo_core.nn.attention.backend import AttentionBackendName
+from olmo_core.nn.attention.kda import KimiDeltaAttentionConfig
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
 from olmo_core.nn.moe.v2.ep_config import ExpertParallelPath, ExpertParallelSchedule
 from olmo_core.nn.transformer import OLMoDDPModelConfig
-from olmo_core.nn.vision import MultimodalLMConfig
+from olmo_core.nn.vision import Molmo2TokenIds, MultimodalLMConfig
 from olmo_core.optim import (
     CosWithWarmup,
     OptimGroupOverride,
@@ -37,6 +38,7 @@ from olmo_core.train.callbacks import (
     GPUMemoryMonitorCallback,
 )
 from olmo_core.train.callbacks.multimodal import (
+    InitializeMultimodalModelCallback,
     MultimodalBeakerCallback,
     MultimodalCheckpointerCallback,
     MultimodalMetricSaverCallback,
@@ -51,8 +53,13 @@ from olmo_core.train.train_module.transformer.multimodal_train_module import (
 from .experiment import CliContext, ExperimentConfig
 from .vision_alignment import _build_launch as _build_alignment_launch
 from .vision_alignment import (
+    _check_text_lm_matches_checkpoint,
+    _checkpoint_lm_config,
+    _image_token_rows,
     _load_text_config,
+    _restore_pretraining_router_lb,
     _sample_one_annotation,
+    _uses_document_mode,
     parse_cli_args,
     run,
     text_train_settings,
@@ -93,7 +100,16 @@ class MixedMidtrainingRecipeConfig(Config):
     """
 
     parent_checkpoint: str | None = None
-    """Joint-alignment checkpoint used for a fresh, model-only handoff."""
+    """Vision-alignment checkpoint to continue from (model-only handoff): the endpoint of any
+    alignment stage (bridge, perception or joint), so stage ablations can feed midtraining.
+    Set this or ``pretraining_checkpoint``."""
+    pretraining_checkpoint: str | None = None
+    """Text LM checkpoint to start from without vision alignment: the vision encoder and the
+    connector are initialized as alignment's bridge initializes them (pretrained SigLIP, a fresh
+    connector, image-token embedding rows). Set this or ``parent_checkpoint``."""
+    vision_model_id: str = "google/siglip2-so400m-patch14-384"
+    """Vision encoder loaded when starting from ``pretraining_checkpoint``."""
+    vision_revision: str = "e8e487298228002f3d8a82e0cd5c8ea9c567f57f"
     text_config: str | None = None
     """Path to the text team's resolved mid-training ``config.json``.
 
@@ -145,6 +161,9 @@ class MixedMidtrainingExperimentConfig(ExperimentConfig):
     recipe: MixedMidtrainingRecipeConfig = field(default_factory=MixedMidtrainingRecipeConfig)
     pretraining_checkpoint: str | None = None
     """Original language-model ancestry, when recorded by the alignment parent."""
+    alignment_phase: str | None = None
+    """The alignment stage of the parent checkpoint, or ``None`` when midtraining starts from
+    the text LM."""
 
 
 def _read_checkpoint_config(checkpoint: str) -> dict[str, Any]:
@@ -192,8 +211,11 @@ def _build_recipe(
             if any(isinstance(item, bool) for item in values):
                 raise OLMoConfigurationError(f"{mapping} values must be numeric, not booleans")
     recipe = MixedMidtrainingRecipeConfig().merge(cli.overrides, prefix="recipe")
-    if not recipe.parent_checkpoint:
-        raise OLMoConfigurationError("Set recipe.parent_checkpoint to a joint-alignment checkpoint")
+    if bool(recipe.parent_checkpoint) == bool(recipe.pretraining_checkpoint):
+        raise OLMoConfigurationError(
+            "Set exactly one of recipe.parent_checkpoint (an alignment checkpoint) and "
+            "recipe.pretraining_checkpoint (a text LM checkpoint, without alignment)"
+        )
     for name, minimum in (("sequence_length", 2), ("max_tokens", 1), ("max_crops", 1)):
         value = getattr(recipe, name)
         if name == "max_tokens" and value is None:
@@ -211,20 +233,75 @@ def _build_recipe(
     return recipe
 
 
-def _resolve_parent(recipe: MixedMidtrainingRecipeConfig) -> tuple[dict[str, Any], str | None]:
+_ALIGNMENT_PHASES = ("bridge", "perception", "joint")
+
+
+def _resolve_parent(
+    recipe: MixedMidtrainingRecipeConfig,
+) -> tuple[dict[str, Any], str | None, str]:
     assert recipe.parent_checkpoint is not None
     parent = _read_checkpoint_config(recipe.parent_checkpoint)
     phase = (parent.get("recipe") or {}).get(
         "phase", (parent.get("vision_alignment") or {}).get("phase", parent.get("phase"))
     )
-    if phase != "joint":
-        raise OLMoConfigurationError(f"Mixed midtraining requires joint alignment, got {phase!r}")
+    if phase not in _ALIGNMENT_PHASES:
+        raise OLMoConfigurationError(
+            f"recipe.parent_checkpoint must be a vision-alignment checkpoint, got phase {phase!r}"
+        )
     if not isinstance(parent.get("model"), dict) or "lm" not in parent["model"]:
-        raise OLMoConfigurationError("Joint-alignment parent must record a multimodal model")
+        raise OLMoConfigurationError("Alignment parent must record a multimodal model")
     ancestry = parent.get("pretraining_checkpoint") or (parent.get("artifacts") or {}).get(
         "base_checkpoint"
     )
-    return parent, ancestry
+    return parent, ancestry, phase
+
+
+def _pretrained_lm(text: dict | None, ancestry: str | None) -> OLMoDDPModelConfig:
+    """The text LM's own config: the text config's, else the pretraining checkpoint's."""
+    if text is not None:
+        lm = OLMoDDPModelConfig.from_dict(text["model"])
+    elif ancestry:
+        lm = OLMoDDPModelConfig.from_dict(_checkpoint_lm_config(ancestry))
+    else:
+        raise OLMoConfigurationError(
+            "Restoring the LM's router settings needs recipe.text_config or a recorded "
+            "pretraining checkpoint"
+        )
+    if not isinstance(lm, OLMoDDPModelConfig):
+        raise OLMoConfigurationError("Mixed midtraining requires an OLMoDDP language model")
+    return lm
+
+
+def _lm_tokenizer(text: dict | None, checkpoint: str) -> TokenizerConfig:
+    raw = ((text or {}).get("dataset") or {}).get("tokenizer")
+    if raw is None:
+        raw = (_read_checkpoint_config(checkpoint).get("dataset") or {}).get("tokenizer")
+    if raw is None:
+        raise OLMoConfigurationError("The text LM checkpoint does not identify its tokenizer")
+    return TokenizerConfig.from_dict(raw)
+
+
+def _build_lm_model(
+    recipe: MixedMidtrainingRecipeConfig, text: dict | None, token_ids: Molmo2TokenIds
+) -> MultimodalLMConfig:
+    """The multimodal model around the text LM, as alignment's bridge builds it."""
+    assert recipe.pretraining_checkpoint is not None
+    lm_dict = (
+        text["model"] if text is not None else _checkpoint_lm_config(recipe.pretraining_checkpoint)
+    )
+    lm = OLMoDDPModelConfig.from_dict(lm_dict)
+    if not isinstance(lm, OLMoDDPModelConfig):
+        raise OLMoConfigurationError("Mixed midtraining requires an OLMoDDP language model")
+    if text is not None:
+        _check_text_lm_matches_checkpoint(lm, recipe.pretraining_checkpoint)
+    if _uses_document_mode(lm):
+        # As in alignment: kernel_fun's KDA does not support packed documents (cu_seqlens).
+        for block in [lm.block, *(lm.block_overrides or {}).values()]:
+            mixer = getattr(block, "sequence_mixer", None)
+            if isinstance(mixer, KimiDeltaAttentionConfig):
+                mixer.use_experimental_kernels = False
+    lm.two_batch_overlap = False
+    return MultimodalLMConfig.molmo2_vision_stack(lm, image_patch_token_id=token_ids.im_patch_id)
 
 
 def _parent_tokenizer(parent: dict[str, Any], ancestry: str | None) -> TokenizerConfig:
@@ -428,7 +505,11 @@ def _build_train_module(
 
 
 def _build_trainer(
-    cli: CliContext, recipe: MixedMidtrainingRecipeConfig, budget: int, text: dict | None = None
+    cli: CliContext,
+    recipe: MixedMidtrainingRecipeConfig,
+    budget: int,
+    text: dict | None = None,
+    token_ids: Molmo2TokenIds | None = None,
 ) -> TrainerConfig:
     bookkeeping: dict[str, Any] = dict(
         checkpointer=CheckpointerConfig(load_thread_count=8),
@@ -472,15 +553,32 @@ def _build_trainer(
         save_folder=f"{recipe.output_root}/{cli.run_name}",
         work_dir=f"{recipe.work_dir}/{cli.run_name}",
         save_overwrite=False,
+        # From an alignment checkpoint: model-only handoff. From the text LM: the initialization
+        # callback loads it (and the vision encoder); resume uses the run's own checkpoints.
         load_path=recipe.parent_checkpoint,
-        load_strategy=LoadStrategy.always,
-        load_optim_state=False,
-        load_trainer_state=False,
+        load_strategy=LoadStrategy.always
+        if recipe.parent_checkpoint
+        else LoadStrategy.if_available,
+        load_optim_state=False if recipe.parent_checkpoint else None,
+        load_trainer_state=False if recipe.parent_checkpoint else None,
         max_duration=Duration.tokens(budget),
         **bookkeeping,
     )
     for name, callback in inherited_callbacks.items():
         trainer = trainer.with_callback(name, callback)
+    if recipe.pretraining_checkpoint:
+        assert token_ids is not None
+        trainer = trainer.with_callback(
+            "initialize_multimodal",
+            InitializeMultimodalModelCallback(
+                language_checkpoint=recipe.pretraining_checkpoint,
+                vision_model_id=recipe.vision_model_id,
+                vision_revision=recipe.vision_revision,
+                cache_dir=recipe.hf_cache_dir,
+                image_token_ids=_image_token_rows(token_ids),
+                seed=6198,
+            ),
+        )
     return (
         trainer.with_callback("checkpointer", checkpointer)
         .with_callback("beaker", MultimodalBeakerCallback())
@@ -656,18 +754,25 @@ def _validate_config(
             "Use trainer.callbacks.checkpointer.enabled=false to disable checkpoint writes."
         )
     if config.trainer.load_path != recipe.parent_checkpoint:
-        raise OLMoConfigurationError("Use recipe.parent_checkpoint to select the initial model")
-    if (
+        raise OLMoConfigurationError(
+            "Use recipe.parent_checkpoint or recipe.pretraining_checkpoint to select the initial model"
+        )
+    if recipe.parent_checkpoint and (
         config.trainer.load_strategy != LoadStrategy.always
         or config.trainer.load_optim_state is not False
         or config.trainer.load_trainer_state is not False
     ):
         raise OLMoConfigurationError("The alignment handoff requires model-only checkpoint loading")
+    if recipe.pretraining_checkpoint and "initialize_multimodal" not in config.trainer.callbacks:
+        raise OLMoConfigurationError(
+            "Starting from the text LM requires the initialization callback"
+        )
     if config.pretraining_checkpoint != ancestry:
-        raise OLMoConfigurationError("Pretraining ancestry must match the alignment parent")
-    assert recipe.parent_checkpoint is not None
+        raise OLMoConfigurationError("Pretraining ancestry must match the starting checkpoint")
+    source = recipe.parent_checkpoint or recipe.pretraining_checkpoint
+    assert source is not None
     paths = []
-    for value in (recipe.parent_checkpoint, config.trainer.save_folder):
+    for value in (source, config.trainer.save_folder):
         path = normalize_path(value).rstrip("/")
         paths.append(path if is_url(path) else str(Path(path).resolve()))
     source_path, output_path = paths
@@ -688,9 +793,18 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
     overrides = _clean_opts(cli.overrides)
     recipe = _build_recipe(cli, overrides)
     text = _load_text_config(recipe.text_config) if recipe.text_config else None
-    parent, ancestry = _resolve_parent(recipe)
-    tokenizer = _parent_tokenizer(parent, ancestry)
-    revision = _tokenizer_revision(recipe, parent)
+    phase: str | None = None
+    if recipe.parent_checkpoint:
+        parent, ancestry, phase = _resolve_parent(recipe)
+        tokenizer = _parent_tokenizer(parent, ancestry)
+        revision = _tokenizer_revision(recipe, parent)
+    else:
+        ancestry = recipe.pretraining_checkpoint
+        assert ancestry is not None
+        tokenizer = _lm_tokenizer(text, ancestry)
+        revision = recipe.tokenizer_revision
+        if revision is None and tokenizer == TokenizerConfig.dolma2():
+            revision = _DOLMA2_REVISION
     loader = _build_data_loader(cli, recipe, text)
     if (
         type(loader.global_batch_size) is not int
@@ -712,7 +826,21 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
         (max_tokens + loader.global_batch_size - 1) // loader.global_batch_size
     ) * loader.global_batch_size
     text_data = _build_text_dataset(recipe, tokenizer, budget, loader.global_batch_size, text)
-    model = _build_model(parent, text)
+    token_ids: Molmo2TokenIds | None = None
+    if recipe.parent_checkpoint:
+        model = _build_model(parent, text)
+        if phase != "joint":
+            # Bridge and perception freeze the LM and switch router load balancing off; the LM
+            # trains here, so the text LM's own coefficients come back.
+            assert isinstance(model.lm, OLMoDDPModelConfig)
+            _restore_pretraining_router_lb(model.lm, _pretrained_lm(text, ancestry))
+    else:
+        _, token_ids = MultimodalMixtureConfig(
+            tokenizer=tokenizer.copy(),
+            tokenizer_revision=revision,
+            tokenizer_cache_dir=recipe.hf_cache_dir,
+        ).build_tokenizer()
+        model = _build_lm_model(recipe, text, token_ids)
     stage1_v3 = recipe.visual_data == "stage1_v3" and recipe.text_loss_share < 1.0
     if stage1_v3:
         means = dict(STAGE1_V3_MEAN_LOSS_WEIGHTS)
@@ -769,9 +897,10 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
             text_only=recipe.text_loss_share == 1.0,
             text=text,
         ),
-        trainer=_build_trainer(cli, recipe, budget, text),
+        trainer=_build_trainer(cli, recipe, budget, text, token_ids),
         recipe=recipe,
         pretraining_checkpoint=ancestry,
+        alignment_phase=phase,
         init_seed=6198,
     ).merge(cli.overrides)
     reusable_visual_calibration = (
