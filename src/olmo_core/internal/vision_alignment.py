@@ -466,14 +466,16 @@ def _build_model(
     return model
 
 
-def _build_train_module(
-    phase: AlignmentPhase,
-    token_ids: Molmo2TokenIds,
-    sequence_length: int,
-    text: dict | None = None,
-) -> MultimodalOLMoDDPTrainModuleConfig:
-    policy = _PHASES[phase]
-    # Text-side settings: inherited from the text config, else the recipe's legacy defaults.
+def text_train_settings(text: dict | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Optimizer and train-module settings inherited from a text config.
+
+    :param text: The text team's resolved config (``recipe.text_config``), or ``None`` for the
+        legacy s002 defaults.
+
+    :returns: Keyword arguments for the multimodal optimizer config and for the train module
+        config. Learning rates, schedules and parameter groups are not included.
+    """
     if text is not None:
         text_module = text["train_module"]
         text_optim = text_module["optim"]
@@ -543,6 +545,17 @@ def _build_train_module(
             ),
             ep_config=TransformerExpertParallelConfig(degree=8),
         )
+    return optim_settings, module_settings
+
+
+def _build_train_module(
+    phase: AlignmentPhase,
+    token_ids: Molmo2TokenIds,
+    sequence_length: int,
+    text: dict | None = None,
+) -> MultimodalOLMoDDPTrainModuleConfig:
+    policy = _PHASES[phase]
+    optim_settings, module_settings = text_train_settings(text)
     return MultimodalOLMoDDPTrainModuleConfig(
         rank_microbatch_size=policy.microbatch_instances * sequence_length,
         max_sequence_length=sequence_length,
