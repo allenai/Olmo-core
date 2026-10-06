@@ -1043,3 +1043,22 @@ def test_text_config_from_the_text_lm_scales_the_fresh_components(
         config.train_module.optim.weight_decay
         == text_config.config["train_module"]["optim"]["weight_decay"]
     )
+
+
+def test_text_config_duration_in_steps_sizes_the_budget(mixed_recipe, text_config, tmp_path):
+    """A step-based text duration (short runs, as microanneal.py accepts) becomes steps x batch."""
+    text = json.loads(text_config.path.read_text())
+    text["trainer"]["max_duration"] = {
+        "value": 150,
+        "unit": "steps",
+        "_CLASS_": "olmo_core.train.common.Duration",
+    }
+    path = tmp_path / "text_steps.json"
+    path.write_text(json.dumps(text))
+    config = mixed_recipe.build(f"--recipe.text_config={path}")
+    batch = text["data_loader"]["global_batch_size"]
+    assert config.trainer.max_duration == Duration.tokens(150 * batch)
+    assert (
+        config.dataset.sources["text_midtraining"].dataset.source_mixture_config.requested_tokens
+        == 150 * batch
+    )

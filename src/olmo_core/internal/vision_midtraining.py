@@ -858,9 +858,16 @@ def build_config(
         max_tokens = _LEGACY_MAX_TOKENS
         if text is not None:
             duration = text["trainer"]["max_duration"]
-            if DurationUnit(duration["unit"]) != DurationUnit.tokens:
-                raise OLMoConfigurationError("The text config's duration must be in tokens")
-            max_tokens = int(duration["value"])
+            unit = DurationUnit(duration["unit"])
+            if unit == DurationUnit.tokens:
+                max_tokens = int(duration["value"])
+            elif unit == DurationUnit.steps:
+                # As the microanneal workload sizes its mixture: steps x the global batch.
+                max_tokens = int(duration["value"]) * loader.global_batch_size
+            else:
+                raise OLMoConfigurationError(
+                    "The text config's duration must be in tokens or steps"
+                )
     budget = (
         (max_tokens + loader.global_batch_size - 1) // loader.global_batch_size
     ) * loader.global_batch_size
