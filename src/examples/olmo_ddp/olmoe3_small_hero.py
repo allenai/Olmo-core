@@ -127,7 +127,11 @@ class HeroAudit(qualified.IntegrationAudit):
         assert get_world_size() == GPUS
         assert MOUNT.is_mount() and DOLMA_MOUNT.is_mount()
         assert self.trainer.global_train_tokens_seen == self.step * BATCH
-        assert self.trainer.data_loader.tokens_processed == self.step * BATCH
+        # The loader counts only the current epoch; 14T children resume in epoch 2.
+        loader = self.trainer.data_loader
+        prior_batches = (self.trainer.epoch - 1) * loader.total_batches
+        assert loader.tokens_processed == loader.batches_processed * BATCH
+        assert prior_batches + loader.batches_processed == self.step
         if r.smoke:
             assert self.step == int(os.environ["OLMO35_HERO_EXPECTED_START"])
         else:

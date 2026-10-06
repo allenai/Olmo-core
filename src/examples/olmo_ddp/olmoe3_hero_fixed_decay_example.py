@@ -129,6 +129,8 @@ DETAILS FOR AN AGENT ADAPTING THIS EXAMPLE
   uploader lineage and prefix must all identify the NEW child. This adapter binds
   those through hero.find_run; changing only trainer.save_folder is insufficient.
 * The inherited 14T horizon is replaced for this child, allowing e.g. 14T + 200B.
+  The 14T source is 2 batches into data epoch 2, so its decay reads reshuffled
+  second-epoch data.
 * Preserve the original data/optimizer/model policy. The source model config is
   checked against the built model before training; don't silently change EMO,
   QK gains or the 7:1 layer pattern. The global batch is unchanged at 64 GPUs
