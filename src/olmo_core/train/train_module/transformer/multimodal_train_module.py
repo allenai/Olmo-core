@@ -309,6 +309,9 @@ class MultimodalTransformerTrainModule(TransformerTrainModule):
             log.info(f"Froze {n_frozen} parameter tensors matching {self.freeze_params}")
 
         model.to(self.device)
+        # DDP issues no collective in the forward pass, so each rank encodes its own crops
+        # without padding to the data-parallel maximum (see MultimodalLMConfig.sync_vit_crops).
+        model.sync_vit_crops = False
         if vision_activation_checkpointing and hasattr(
             model.vision, "apply_activation_checkpointing"
         ):
