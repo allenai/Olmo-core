@@ -1434,14 +1434,15 @@ class NumpyPackedFSLDataset(NumpyFSLDatasetBase):
         return out
 
     def _packed_from_metadata_boundaries(self, source_paths: Sequence[PathOrStr]) -> bool:
-        """Whether packing took its document boundaries from the metadata file.
+        """Whether `doc_lens`, the fingerprint and the packing cache keys follow the metadata file.
 
-        `iter_document_indices` reads the metadata for any URL source whatever
-        `use_array_if_local` says, so the effective boundary source -- not the raw option --
-        decides whether re-deriving boundaries by scanning for EOS would disagree with how the
-        instance was packed.
+        Only when ``use_array_if_local=False`` is set. Upstream (#843) also applies this to URL
+        sources, for which `iter_document_indices` always packs from the metadata; this backport
+        leaves URL sources as they were at 89e7dcb7 (EOS-scanned `doc_lens`, unchanged
+        fingerprints and cache keys) so that nothing changes unless the option is set.
         """
-        return self._use_array_if_local is False or any(is_url(path) for path in source_paths)
+        del source_paths
+        return self._use_array_if_local is False
 
     def _get_metadata_hash(self, source_path: PathOrStr, _: int) -> Optional[str]:
         if not self._packed_from_metadata_boundaries([source_path]):

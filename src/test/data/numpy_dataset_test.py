@@ -1025,8 +1025,8 @@ def test_numpy_packed_fsl_dataset_doc_lens_follow_metadata_boundaries(tmp_path: 
     # Trailing padding stays a final segment, matching `get_document_lengths`.
     assert doc_lens(False, 16) == [[4, 4, 8]]
 
-    # A remote source reads the metadata boundaries whatever `use_array_if_local` says, so the
-    # strategy has to follow the effective boundary source rather than the raw option.
+    # Only the explicit option switches doc_lens to the metadata. This backport leaves URL sources
+    # (which iter_document_indices always packs from metadata) as they were at 89e7dcb7.
     def packed_from_metadata(use_array_if_local, paths):
         ds = NumpyPackedFSLDataset(
             data_path,
@@ -1038,9 +1038,10 @@ def test_numpy_packed_fsl_dataset_doc_lens_follow_metadata_boundaries(tmp_path: 
         )
         return ds._packed_from_metadata_boundaries(paths)
 
-    assert packed_from_metadata(True, ["s3://bucket/mmap1.npy"]) is True
-    assert packed_from_metadata(None, ["s3://bucket/mmap1.npy"]) is True
-    assert packed_from_metadata(True, [data_path, "s3://bucket/other.npy"]) is True
+    assert packed_from_metadata(True, ["s3://bucket/mmap1.npy"]) is False
+    assert packed_from_metadata(None, ["s3://bucket/mmap1.npy"]) is False
+    assert packed_from_metadata(True, [data_path, "s3://bucket/other.npy"]) is False
+    assert packed_from_metadata(False, ["s3://bucket/mmap1.npy"]) is True
     assert packed_from_metadata(True, [data_path]) is False
     assert packed_from_metadata(None, [data_path]) is False
     assert packed_from_metadata(False, [data_path]) is True
@@ -1173,8 +1174,25 @@ def test_numpy_packed_fsl_dataset_metadata_cache_remote_and_mixed(
     before = dataset()
     fingerprint = before.fingerprint
     cache = before._get_document_indices_path(local, remote)
+    if use_array_if_local is not False:
+        # Unless the option is False, a URL source reads no sidecar for its fingerprint or cache
+        # keys. Left unset, both are what they were at 89e7dcb7 (fingerprint recorded there).
+        if use_array_if_local is None:
+            assert fingerprint == "2f3d5a1adb14852c3d800c311574107fe44a40040b3c964c19d3dbb8ed1317ab"
+        assert cache == before._get_indices_path(
+            "document-indices",
+            local,
+            remote,
+            extra_ids=(
+                LongDocStrategy.truncate,
+                before.indices_dtype.__name__,
+                *(() if use_array_if_local is None else ("use_array_if_local=True",)),
+            ),
+        )
+        assert not reads
+        return
     assert ("https://example.com", "remote.csv.gz") in reads
-    assert ((str(tmp_path), "local.csv.gz") in reads) is (use_array_if_local is False)
+    assert (str(tmp_path), "local.csv.gz") in reads
     reads.clear()
     before._get_instance_offsets_path(local, remote)
     before._get_docs_by_instance_path(local, remote)
