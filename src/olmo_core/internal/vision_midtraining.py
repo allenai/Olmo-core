@@ -784,15 +784,38 @@ def _validate_config(
         raise OLMoConfigurationError("Use a separate output folder for mixed midtraining")
 
 
-def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
+def build_config(
+    cli: CliContext,
+    text_config: ExperimentConfig | dict[str, Any] | None = None,
+    launch: BeakerLaunchConfig | None = None,
+) -> MixedMidtrainingExperimentConfig:
     """Build mixed midtraining from checkpoint metadata and ordinary component overrides.
 
     No token arrays or visual datasets are opened. Dataset preparation and checkpoint
     loading remain the responsibility of the standard experiment runner.
+
+    :param cli: The command line.
+    :param text_config: The text team's mid-training config, built by their own launcher (for
+        example a scaling-ladders midtraining or microanneal workload), in place of
+        ``recipe.text_config``. Either an experiment config or its ``as_config_dict()``.
+    :param launch: That launcher's own Beaker launch config (image, secrets, environment), used
+        on two nodes in place of the one this recipe builds.
     """
     overrides = _clean_opts(cli.overrides)
     recipe = _build_recipe(cli, overrides)
-    text = _load_text_config(recipe.text_config) if recipe.text_config else None
+    if text_config is not None and recipe.text_config:
+        raise OLMoConfigurationError("Pass the text config in memory or as recipe.text_config")
+    text: dict[str, Any] | None = None
+    if isinstance(text_config, ExperimentConfig):
+        text = text_config.as_config_dict()
+    elif text_config is not None:
+        text = dict(text_config)
+    elif recipe.text_config:
+        text = _load_text_config(recipe.text_config)
+    if text is not None:
+        for section in ("model", "train_module", "trainer", "data_loader"):
+            if section not in text:
+                raise OLMoConfigurationError(f"The text config lacks the {section!r} section")
     phase: str | None = None
     if recipe.parent_checkpoint:
         parent, ancestry, phase = _resolve_parent(recipe)
@@ -886,7 +909,11 @@ def build_config(cli: CliContext) -> MixedMidtrainingExperimentConfig:
     )
     config = MixedMidtrainingExperimentConfig(
         run_name=cli.run_name,
-        launch=_build_launch(cli, work_dir=recipe.work_dir, text=text),
+        launch=(
+            _build_launch(cli, work_dir=recipe.work_dir, text=text)
+            if launch is None
+            else launch.replace(num_nodes=_NUM_NODES)
+        ),
         model=model,
         dataset=dataset,
         data_loader=loader,
