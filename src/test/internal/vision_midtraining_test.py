@@ -884,3 +884,71 @@ def test_exactly_one_starting_checkpoint(mixed_recipe, tmp_path, both):
         overrides.append(f"--recipe.pretraining_checkpoint={checkpoint}")
     with pytest.raises(OLMoConfigurationError, match="exactly one"):
         _build_from_text_lm(tmp_path, *overrides)
+
+
+def test_text_config_in_memory_matches_the_file(mixed_recipe, text_config):
+    """A launcher that builds the text config itself (scaling-ladders) gets the same result as
+    the saved config.json."""
+    from_file = mixed_recipe.build(f"--recipe.text_config={text_config.path}")
+    in_memory = build_config(
+        CliContext(
+            script="src/scripts/train/Mixed-Midtraining.py",
+            cmd=SubCmd.dry_run,
+            run_name="mixed-test",
+            cluster="local",
+            overrides=[
+                f"--recipe.parent_checkpoint={mixed_recipe.parent}",
+                f"--recipe.output_root={from_file.recipe.output_root}",
+                f"--recipe.work_dir={from_file.recipe.work_dir}",
+            ],
+        ),
+        text_config=text_config.config,
+    )
+    in_memory.recipe.text_config = from_file.recipe.text_config
+    assert in_memory == from_file
+
+
+def test_text_config_cannot_come_from_both(mixed_recipe, text_config):
+    with pytest.raises(OLMoConfigurationError, match="in memory or as recipe.text_config"):
+        build_config(
+            CliContext(
+                script="src/scripts/train/Mixed-Midtraining.py",
+                cmd=SubCmd.dry_run,
+                run_name="mixed-test",
+                cluster="local",
+                overrides=[
+                    f"--recipe.parent_checkpoint={mixed_recipe.parent}",
+                    f"--recipe.text_config={text_config.path}",
+                ],
+            ),
+            text_config=text_config.config,
+        )
+
+
+def test_a_launcher_can_supply_its_own_launch_config(mixed_recipe, text_config):
+    from gantry.api import GitRepoState
+
+    theirs = BeakerLaunchConfig(
+        name="ladders-mixed",
+        cmd=["ladders/olmoe3/workloads/mixed_midtraining.py", "train"],
+        num_nodes=1,
+        git=GitRepoState(
+            repo="allenai/scaling-ladders",
+            repo_url="https://github.com/allenai/scaling-ladders",
+            ref="a" * 40,
+            branch="main",
+        ),
+    )
+    config = build_config(
+        CliContext(
+            script="ladders/olmoe3/workloads/mixed_midtraining.py",
+            cmd=SubCmd.dry_run,
+            run_name="mixed-test",
+            cluster="ai2/holmes",
+            overrides=[f"--recipe.parent_checkpoint={mixed_recipe.parent}"],
+        ),
+        text_config=text_config.config,
+        launch=theirs,
+    )
+    assert config.launch.cmd == theirs.cmd and config.launch.git == theirs.git
+    assert config.launch.num_nodes == 2 and theirs.num_nodes == 1
