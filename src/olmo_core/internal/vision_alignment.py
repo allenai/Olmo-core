@@ -99,6 +99,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "model.connector": "vision-to-language connector",
     "model.image_patch_token_id": "image patch token id from the tokenizer",
     "model.vit_layers": "vision features taken from these ViT layers",
+    "model.loss_chunk_size": "the weighted loss scores this many tokens at a time (no full logits)",
     "model.lm.block*.routed_experts_router.lb_loss_weight": (
         "router load balancing off while the LM is frozen (bridge, perception, also when "
         "started from the pretraining checkpoint); joint restores the pretrained coefficients"
