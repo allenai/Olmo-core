@@ -6,7 +6,7 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
-from olmo_core.config import Config, _clean_opts
+from olmo_core.config import Config, DType, _clean_opts
 from olmo_core.data import InstanceFilterConfig, NumpyFSLDatasetConfig, TokenizerConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
@@ -454,6 +454,8 @@ def _build_data_loader(
         # reads, as in alignment.
         continuous_stream=True,
         batch_metadata=True,
+        # Half the pixel bytes copied to the device; the bf16 tower sees the same values.
+        image_dtype=DType.bfloat16,
         prefetch_workers=workers,
         prefetch_max_in_flight=recipe.prefetch_max_in_flight,
         max_consecutive_data_errors=0,

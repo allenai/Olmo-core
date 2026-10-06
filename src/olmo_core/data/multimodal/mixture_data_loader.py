@@ -36,6 +36,7 @@ from typing import (
 import numpy as np
 import torch.distributed as dist
 
+from olmo_core.config import DType
 from olmo_core.distributed.utils import get_rank, get_world_size
 from olmo_core.exceptions import OLMoConfigurationError
 
@@ -91,6 +92,8 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
     batch_metadata: bool = False
     """Have the collator emit ``router_token_mask``, ``image_crop_counts`` and
     ``pooled_token_counts`` for the OLMoDDP multimodal train module."""
+    image_dtype: Optional[DType] = None
+    """Dtype of the collated ``images`` tensor (see :class:`MultimodalCollatorConfig`)."""
     est_tokens_per_example: int = 1400
     prefetch_workers: int = 0
     prefetch_max_in_flight: int | None = None
@@ -148,6 +151,7 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
                 pad_token_id=pad_token_id,
                 pad_sequence_length=self.sequence_length,
                 batch_metadata=self.batch_metadata,
+                image_dtype=self.image_dtype.as_pt() if self.image_dtype is not None else None,
             ),
             work_dir=self.work_dir,
             global_batch_size=self.global_batch_size,

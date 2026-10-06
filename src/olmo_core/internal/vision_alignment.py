@@ -928,6 +928,8 @@ def _build_data_loader(
         pack_image_weight=1.0,
         continuous_stream=True,
         batch_metadata=True,
+        # Half the pixel bytes copied to the device; the bf16 tower sees the same values.
+        image_dtype=DType.bfloat16,
         prefetch_workers=workers,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,

@@ -634,7 +634,9 @@ class MultimodalLM(nn.Module):
         # (the trainer does): the crop counts and the valid-row selection then cost no
         # device-to-host sync.
         idx_host = pooled_patches_idx if pooled_patches_idx.device.type == "cpu" else None
-        images = images.to(device)
+        # Pixels arrive in the collator's dtype (float32, or bfloat16 to halve the copy) and are
+        # computed in the tower's; the cast is a no-op when they already match.
+        images = images.to(device=device, dtype=next(self.vision.parameters()).dtype)
         pooled_patches_idx = pooled_patches_idx.to(device)
         counts = _crop_counts(idx_host, images.shape[2]) if idx_host is not None else None
         image_features = self._encode_images(images, pooled_patches_idx, counts)  # (B, n_pooled, d)

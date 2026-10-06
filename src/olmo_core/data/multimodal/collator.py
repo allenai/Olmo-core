@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
 
-from olmo_core.config import Config
+from olmo_core.config import Config, DType
 
 from .packing import _PackedImageParts
 
@@ -39,12 +39,18 @@ class MultimodalCollatorConfig(Config):
     """Also emit ``router_token_mask``, ``image_crop_counts`` and ``pooled_token_counts``
     (consumed by the OLMoDDP multimodal train module); off by default."""
 
+    image_dtype: Optional[DType] = None
+    """Dtype of the emitted ``images`` tensor; ``None`` keeps the datasets' float32. The
+    model casts pixels to its vision tower's dtype anyway, so ``bfloat16`` halves what is
+    copied to the device for a bf16 tower without changing what it computes."""
+
     def build(self) -> "MultimodalCollator":
         return MultimodalCollator(
             pad_token_id=self.pad_token_id,
             label_ignore_index=self.label_ignore_index,
             pad_sequence_length=self.pad_sequence_length,
             batch_metadata=self.batch_metadata,
+            image_dtype=self.image_dtype.as_pt() if self.image_dtype is not None else None,
         )
 
 
@@ -71,11 +77,13 @@ class MultimodalCollator:
         label_ignore_index: int = -100,
         pad_sequence_length: Optional[int] = None,
         batch_metadata: bool = False,
+        image_dtype: Optional[torch.dtype] = None,
     ):
         self.pad_token_id = pad_token_id
         self.label_ignore_index = label_ignore_index
         self.pad_sequence_length = pad_sequence_length
         self.batch_metadata = batch_metadata
+        self.image_dtype = image_dtype
 
     def _pad_1d(self, arrays: List[np.ndarray], value, max_len: int, dtype) -> torch.Tensor:
         out = np.full((len(arrays), max_len), value, dtype=dtype)
@@ -161,6 +169,8 @@ class MultimodalCollator:
             if pp.shape[0]:
                 pooled[i, : pp.shape[0]] = pp
         batch["images"] = torch.from_numpy(images)
+        if self.image_dtype is not None:
+            batch["images"] = batch["images"].to(self.image_dtype)
         batch["pooled_patches_idx"] = torch.from_numpy(pooled)
 
         # Subsegment ids only when at least one example is multi-branch (packed). For
