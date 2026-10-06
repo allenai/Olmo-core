@@ -64,6 +64,7 @@ __all__ = [
     "count_image_placeholders",
     "decode_pil_image",
     "truncate_example",
+    "truncate_for_format",
     "get_example_with_skip",
     "sft_example_rng",
     "validate_sft_message_format",
@@ -126,6 +127,11 @@ class EpochSeededExamples:
 
     Requires the host class to expose ``config.seed`` and ``__len__``. The epoch is restored
     with the loader's state, so a resumed run replays the epoch it was in.
+
+    :meth:`get` instead takes the epoch per call, as the continuous-stream mixture loader
+    passes each source's own epoch. It never touches the shared epoch, so concurrent loader
+    threads cannot race on it. It requires the host class to define ``_build(index, epoch)``
+    and skips unusable rows deterministically (:func:`get_example_with_skip`).
     """
 
     _epoch: int = 0
@@ -134,14 +140,26 @@ class EpochSeededExamples:
         """Set the epoch used to derive per-example RNG streams (called by the data loader)."""
         self._epoch = int(epoch)
 
-    def epoch_rng(self, index: int) -> np.random.RandomState:
-        """This row's RNG stream for the current epoch."""
+    def resolve_epoch(self, epoch: Optional[int] = None) -> int:
+        """``epoch`` when given, else the epoch last set by :meth:`set_epoch`."""
+        return self._epoch if epoch is None else int(epoch)
+
+    def epoch_rng(self, index: int, epoch: Optional[int] = None) -> np.random.RandomState:
+        """This row's RNG stream for ``epoch`` (default: the current epoch)."""
         return example_rng(
             self.config.seed,  # type: ignore[attr-defined]
             index,
-            epoch=self._epoch,
+            epoch=self.resolve_epoch(epoch),
             dataset_len=len(self),  # type: ignore[arg-type]
         )
+
+    def get(self, index: int, epoch: int = 0) -> Dict[str, Any]:
+        """Build row ``index`` for source epoch ``epoch``, skipping unusable rows.
+
+        :param index: Row index.
+        :param epoch: Source epoch; it seeds the row's RNG stream in place of the shared epoch.
+        """
+        return get_example_with_skip(self, index, len(self), epoch)  # type: ignore[arg-type]
 
 
 IMAGE_PLACEHOLDER = "<image>"
@@ -290,6 +308,32 @@ def decode_pil_image(obj: Any):
     if isinstance(obj, str):
         return Image.open(obj)
     raise TypeError(f"Unsupported image cell type: {type(obj)}")
+
+
+def truncate_for_format(
+    seq: Dict[str, Any],
+    max_len: Optional[int],
+    token_ids: Molmo2TokenIds,
+    message_format: str,
+) -> Dict[str, Any]:
+    """:func:`truncate_example` for a source's selected tokenizer and serializer.
+
+    The released Qwen layout protects only ``<im_patch>`` (the stage-1 sources' existing
+    behaviour); the document layout protects every structural image token.
+
+    :param seq: A built example.
+    :param max_len: Maximum token count; ``None`` leaves the example unchanged.
+    :param token_ids: The source's image token IDs.
+    :param message_format: ``"qwen3"`` or ``"document"``.
+    """
+    if max_len is None:
+        return seq
+    return truncate_example(
+        seq,
+        max_len,
+        image_patch_token_id=token_ids.im_patch_id,
+        image_token_ids=token_ids.image_token_ids if message_format == "document" else None,
+    )
 
 
 def truncate_example(

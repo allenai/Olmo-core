@@ -198,6 +198,23 @@ full corpus replay, but still incurs ordinary dataset preparation. Train/validat
 disjointness belongs in data preparation; retain the prepared selections when using the
 default sources.
 
+### Stage-1 v3 data
+
+`--recipe.data=stage1_v3` replaces the perception and joint visual sources with the Molmo2-Stage1
+`v3` mixture (`build_stage1_v3_sources`): PixMo-Cap captions and transcripts (`long_caption:` /
+`transcript:`, over the prepared caption selection), the audited PixMo-Points/Count and CoSyn
+pointing builds, olmOCR-mix, the text-rich figure captions, TextOCR, the synthetic OCR sets,
+CoSyn/DVQA/FigureQA/PlotQA academic QA and PixMo-Clocks, each with v3's prompt tags, serialized
+as documents with every response token weighted equally. Bridge stays caption-only and refuses
+the switch; phases, learning rates, packing and the joint text replay split are unchanged. The
+targets (`STAGE1_V3_LOSS_TARGETS`) are each source's share of the v3 Stage-1 run's expected loss
+(its example rate times its mean loss weight on the v3 path): caption 39.2%, pointing 12.6%, OCR
+39.3%, academic 8.8%, clocks 0.08%; joint scales them into the 0.65 visual share. The supplied
+means (`STAGE1_V3_MEAN_LOSS_WEIGHTS`) assume a document-mode LM (one annotation per example,
+dolma2, 8,192 tokens); other models must supply their own. The launch installs `datasets>=4`,
+`pypdfium2` and `h5py`. Validation keeps the alignment sources and adds v3's caption and
+transcript prompts (`v3_long_caption`, `v3_transcript`).
+
 `recipe.sequence_length` updates training lengths without changing RoPE. Source serialization,
 crop, packing or split changes require compatible calibration and a fresh data stream.
 Loader fingerprints validate resume compatibility.

@@ -31,18 +31,24 @@ import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from olmo_core.config import Config
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .message_sequence import encode_sft_example
 from .paths import NVIDIA_SYNTH_OCR, SYNTH_RECEIPTS_OCR
 from .pixmo_cap import style_tag_prompt
-from .sft_common import EpochSeededExamples, get_example_with_skip, truncate_example
+from .sft_common import (
+    EpochSeededExamples,
+    SftMessageFormat,
+    get_example_with_skip,
+    truncate_for_format,
+)
 
 __all__ = [
     "NvidiaSynthOcrDatasetConfig",
@@ -73,7 +79,9 @@ RECEIPT_LOCALES: Tuple[str, ...] = ("US", "UK")
 _RECEIPT_COLUMNS = ("id", "image_photo", "full_text", "locale")
 
 
-def _run_example(ds, tokenizer, image, prompt: str, text: str, cfg, index: int):
+def _run_example(
+    ds, tokenizer, image, prompt: str, text: str, cfg, index: int, epoch: Optional[int] = None
+):
     seq = encode_sft_example(
         tokenizer,
         image,
@@ -81,11 +89,11 @@ def _run_example(ds, tokenizer, image, prompt: str, text: str, cfg, index: int):
         max_crops=cfg.max_crops,
         loss_token_weighting=cfg.loss_token_weighting,
         message_weight=cfg.message_weight,
-        shuffle_rng=ds.epoch_rng(index),
+        token_ids=cfg.token_ids,
+        message_format=cfg.message_format,
+        shuffle_rng=ds.epoch_rng(index, epoch),
     )
-    if cfg.max_sequence_length is not None:
-        seq = truncate_example(seq, cfg.max_sequence_length)
-    return seq
+    return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +149,11 @@ class NvidiaSynthOcrDatasetConfig(Config):
     loss_token_weighting: str = "none"
     """``"none"`` weights every response token equally, like the other OCR sources."""
     message_weight: Optional[float] = None
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents, for a language model trained without a chat template)."""
     seed: int = 0
 
     def validate(self):
@@ -231,7 +244,7 @@ class NvidiaSynthOcrDataset(EpochSeededExamples):
         :func:`~olmo_core.data.multimodal.sft_common.get_example_with_skip`."""
         return get_example_with_skip(self, index, len(self))
 
-    def _build(self, i: int) -> Dict[str, np.ndarray]:
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         from PIL import Image
 
         image_bytes, annotation = self.read(i)
@@ -240,7 +253,7 @@ class NvidiaSynthOcrDataset(EpochSeededExamples):
             raise ValueError("image has no text")
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         prompt = style_tag_prompt(SYNTH_OCR_STYLE)
-        return _run_example(self, self.tokenizer, image, prompt, text, self.config, i)
+        return _run_example(self, self.tokenizer, image, prompt, text, self.config, i, epoch)
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +340,11 @@ class SyntheticReceiptsDatasetConfig(Config):
     loss_token_weighting: str = "none"
     """``"none"`` weights every response token equally, like the other OCR sources."""
     message_weight: Optional[float] = None
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents, for a language model trained without a chat template)."""
     seed: int = 0
 
     def validate(self):
@@ -372,7 +390,7 @@ class SyntheticReceiptsDataset(EpochSeededExamples):
         :func:`~olmo_core.data.multimodal.sft_common.get_example_with_skip`."""
         return get_example_with_skip(self, index, len(self))
 
-    def _build(self, i: int) -> Dict[str, np.ndarray]:
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         from PIL import Image
 
         row = self._data[i]
@@ -381,4 +399,4 @@ class SyntheticReceiptsDataset(EpochSeededExamples):
             raise ValueError("receipt has no text")
         image = Image.open(io.BytesIO(row["image_photo"])).convert("RGB")
         prompt = style_tag_prompt(RECEIPT_OCR_STYLE)
-        return _run_example(self, self.tokenizer, image, prompt, text, self.config, i)
+        return _run_example(self, self.tokenizer, image, prompt, text, self.config, i, epoch)

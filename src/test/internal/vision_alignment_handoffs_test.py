@@ -161,8 +161,9 @@ def test_rejects_bare_language_checkpoint_as_phase_parent(alignment_recipe, phas
 
 def test_rejects_wrong_previous_phase(alignment_recipe):
     bridge = alignment_recipe.save(alignment_recipe.build())
-    with pytest.raises(OLMoConfigurationError, match="requires a perception checkpoint"):
-        alignment_recipe.build("joint", bridge)
+    perception = alignment_recipe.save(alignment_recipe.build("perception", bridge))
+    with pytest.raises(OLMoConfigurationError, match="requires a bridge checkpoint"):
+        alignment_recipe.build("perception", perception)
 
 
 def test_bridge_requires_one_bare_pretraining_checkpoint(alignment_recipe):
