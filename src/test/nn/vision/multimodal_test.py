@@ -239,3 +239,68 @@ def test_multi_layer_vit():
     input_ids, images, idx = _make_inputs(batch=2, seq_len=16)
     out = model(input_ids, images=images, pooled_patches_idx=idx)
     assert out.shape == (2, 16, _LM_VOCAB)
+
+
+# ---------------------------------------------------------------------------
+# Sequence packing: a packed example must be isolated (its logits unchanged vs
+# running it standalone), for both the dense and FlexAttention backends.
+# ---------------------------------------------------------------------------
+
+
+def _packing_example(seed: int, n_text: int, n_crops: int):
+    import numpy as np
+
+    rng = np.random.RandomState(seed)
+    L = n_crops + n_text
+    return dict(
+        input_ids=np.array(
+            [_IMAGE_PATCH_TOKEN] * n_crops + list(rng.randint(2, _LM_VOCAB, n_text))
+        ),
+        labels=np.full(L, 2, dtype=np.int64),
+        loss_masks=np.ones(L, dtype=np.float32),
+        position_ids=np.arange(L, dtype=np.int64),
+        token_type_ids=np.array([1] * n_crops + [0] * n_text, dtype=np.int64),
+        images=rng.randn(n_crops, 4, 14 * 14 * 3).astype("float32"),
+        pooled_patches_idx=np.arange(n_crops * 4).reshape(n_crops, 4).astype("int64"),
+    )
+
+
+@pytest.mark.parametrize("backend", ["torch", "flex"])
+def test_packed_examples_are_isolated(backend):
+    from olmo_core.data.multimodal.collator import MultimodalCollatorConfig
+    from olmo_core.data.multimodal.packing import pack_examples
+    from olmo_core.nn.attention import AttentionBackendName
+
+    torch.manual_seed(0)
+    lm_cfg = _tiny_lm_cfg()
+    # set the attention backend
+    lm_cfg = TransformerConfig.olmo2_1M(
+        vocab_size=_LM_VOCAB, attn_backend=AttentionBackendName(backend)
+    )
+    vis_cfg = _tiny_vision_cfg()
+    conn_cfg = VisionConnectorConfig.from_vision_encoder(
+        vis_cfg, output_dim=_LM_D_MODEL, mlp_hidden_size=32
+    )
+    cfg = MultimodalLMConfig(
+        lm=lm_cfg,
+        vision=vis_cfg,
+        connector=conn_cfg,
+        image_patch_token_id=_IMAGE_PATCH_TOKEN,
+        vit_layers=(-1,),
+    )
+    model = cfg.build(init_device="cpu").eval()
+    coll = MultimodalCollatorConfig(pad_token_id=0).build()
+
+    a = _packing_example(1, n_text=6, n_crops=1)
+    b = _packing_example(2, n_text=4, n_crops=2)
+
+    def run(example_list):
+        batch = coll(example_list)
+        kw = {k: v for k, v in batch.items() if k not in ("input_ids", "labels", "loss_masks")}
+        with torch.no_grad():
+            return model(batch["input_ids"], **kw)[0]
+
+    la, lb, lp = run([a]), run([b]), run([pack_examples([a, b])])
+    na, nb = len(a["input_ids"]), len(b["input_ids"])
+    torch.testing.assert_close(lp[:na], la, atol=1e-4, rtol=1e-4)
+    torch.testing.assert_close(lp[na : na + nb], lb, atol=1e-4, rtol=1e-4)
