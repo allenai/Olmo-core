@@ -1050,6 +1050,7 @@ class MultimodalOLMoDDPModel(MultimodalLM):
         # ``loss_chunk_size``), so the head must be able to hand them over unprojected.
         self._lm_head_forward = self.lm.lm_head.forward
         self._lm_head_hidden_states_only = False
+        self._response_positions: Optional[torch.Tensor] = None
         self.lm.lm_head.forward = self._lm_head_forward_or_hidden_states  # type: ignore[method-assign]
 
     def _lm_head_forward_or_hidden_states(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -1064,6 +1065,12 @@ class MultimodalOLMoDDPModel(MultimodalLM):
         head = self.lm.lm_head
         assert head is not None
         h = head.norm(x) if head.norm is not None else x
+        if self._response_positions is not None and kwargs.get("response_logits_only", False):
+            if kwargs.get("logits_to_keep", 0) != 0:
+                raise ValueError("response_logits_only and logits_to_keep are mutually exclusive")
+            # The same rows, in the same row-major order, that the boolean mask would select,
+            # but through host-computed positions: no device-to-host sync here or in the backward.
+            return h.reshape(-1, h.shape[-1]).index_select(0, self._response_positions)
         h, _ = _select_hidden_for_logits(
             h,
             None,
@@ -1075,13 +1082,20 @@ class MultimodalOLMoDDPModel(MultimodalLM):
         return h
 
     @contextlib.contextmanager
-    def _lm_head_hidden_states(self) -> Iterator[None]:
-        """Have the LM head return hidden states instead of logits within the block."""
+    def _lm_head_hidden_states(
+        self, response_positions: Optional[torch.Tensor] = None
+    ) -> Iterator[None]:
+        """
+        Have the LM head return hidden states instead of logits within the block, selecting the
+        response rows by ``response_positions`` (flat row-major indices) when given.
+        """
         self._lm_head_hidden_states_only = True
+        self._response_positions = response_positions
         try:
             yield
         finally:
             self._lm_head_hidden_states_only = False
+            self._response_positions = None
 
     def encode_images(
         self,
@@ -1287,6 +1301,12 @@ class MultimodalOLMoDDPModel(MultimodalLM):
             load-balancing and z-loss statistics include padding tokens (see the class docstring).
         """
         del router_token_mask
+        # The response positions are found on the host copy of the weights when there is one
+        # (the trainer hands them over on the host), so the selections below never wait on
+        # the device.
+        masks_host = (
+            loss_masks if loss_masks is not None and loss_masks.device.type == "cpu" else None
+        )
         if loss_masks is not None:
             loss_masks = loss_masks.to(device=self.lm.device, dtype=torch.float32)
         if labels is None:
@@ -1320,9 +1340,15 @@ class MultimodalOLMoDDPModel(MultimodalLM):
                 "output_vocab_size is not supported by the multimodal OLMoDDP loss"
             )
         labels = labels.to(self.lm.device)
-        response_mask = loss_masks > 0
-        flat_labels = labels.reshape(-1)[response_mask.reshape(-1)]
-        flat_weights = loss_masks.reshape(-1)[response_mask.reshape(-1)]
+        positions: Optional[torch.Tensor] = None
+        if masks_host is not None:
+            positions = (masks_host.reshape(-1) > 0).nonzero().squeeze(1).to(self.lm.device)
+            flat_labels = labels.reshape(-1).index_select(0, positions)
+            flat_weights = loss_masks.reshape(-1).index_select(0, positions)
+        else:
+            response_mask = loss_masks > 0
+            flat_labels = labels.reshape(-1)[response_mask.reshape(-1)]
+            flat_weights = loss_masks.reshape(-1)[response_mask.reshape(-1)]
         logits: Optional[torch.Tensor] = None
         if return_logits or self.cfg.loss_chunk_size <= 0:
             # Response logits are ``(N_response, vocab)`` in row-major mask order.
@@ -1341,7 +1367,7 @@ class MultimodalOLMoDDPModel(MultimodalLM):
         else:
             # The response hidden states ``(N_response, d_model)`` in the same order, scored a
             # chunk at a time so the micro-batch's logits never exist at once.
-            with self._lm_head_hidden_states():
+            with self._lm_head_hidden_states(positions):
                 hidden = super().forward(
                     input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
                 )
