@@ -84,9 +84,13 @@ from .vision_midtraining_data import (
 _DOLMA2_REVISION = "5292e5d6c0f40b67cc765fe41bec991cf4345b5c"
 _SOURCE_MIX_PATH = "src/olmo_core/data/source_mixtures/OLMo3-32B-midtraining-modelnamefilter.yaml"
 _LEGACY_MAX_TOKENS = 50_000_000_000
-_CONNECTOR_LR_SCALE = 2.0
-_VISION_LR_DIVISOR = 10
-"""Connector and vision learning rates relative to the LM's (Rustin's 2e-5 and 1e-6 at 1e-5)."""
+_ALIGNED_CONNECTOR_LR_DIVISOR = 2
+_ALIGNED_VISION_LR_DIVISOR = 2
+"""From an alignment checkpoint (trained connector and vision encoder): both at half the LM's LR."""
+_FRESH_CONNECTOR_LR_SCALE = 10
+_FRESH_VISION_LR_DIVISOR = 5
+"""From the text LM (fresh connector, pretrained SigLIP): the connector at 10x the LM's LR, the
+vision encoder at a fifth."""
 _NUM_NODES = 2
 """Mixed midtraining runs on two eight-GPU nodes, as Rustin ran it."""
 
@@ -439,19 +443,28 @@ def _build_train_module(
     *,
     text_only: bool,
     text: dict | None = None,
+    from_alignment: bool = True,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
     optim_settings, module_settings = text_train_settings(text)
     scheduler: Scheduler
     if text is not None:
         text_optim = text["train_module"]["optim"]
         lm_lr = float(text_optim["lr"])
-        connector_lr, vision_lr = _CONNECTOR_LR_SCALE * lm_lr, lm_lr / _VISION_LR_DIVISOR
+        if from_alignment:
+            connector_lr = lm_lr / _ALIGNED_CONNECTOR_LR_DIVISOR
+            vision_lr = lm_lr / _ALIGNED_VISION_LR_DIVISOR
+        else:
+            connector_lr = lm_lr * _FRESH_CONNECTOR_LR_SCALE
+            vision_lr = lm_lr / _FRESH_VISION_LR_DIVISOR
+        # Weight decay as the text config sets it for every parameter (David's 0.1).
+        component_decay: dict[str, Any] = {}
         scheduler = Scheduler.from_dict(text["train_module"]["scheduler"])
         lm_groups = [
             OptimGroupOverride.from_dict(group) for group in text_optim.get("group_overrides") or []
         ]
     else:
         lm_lr, connector_lr, vision_lr = 1e-5, 2e-5, 1e-6
+        component_decay = {"weight_decay": 0.0}
         scheduler = CosWithWarmup(
             warmup=200 * batch_size, alpha_f=0.1, t_max=budget, units=SchedulerUnits.tokens
         )
@@ -475,17 +488,13 @@ def _build_train_module(
             group_overrides=[
                 OptimGroupOverride(
                     params=["*connector.*"],
-                    opts={
-                        "lr": connector_lr,
-                        "weight_decay": 0.0,
-                        "scheduler_name": "connector",
-                    },
+                    opts={"lr": connector_lr, **component_decay, "scheduler_name": "connector"},
                 ),
                 OptimGroupOverride(
                     params=["*vision.*"],
                     opts={
                         "lr": 0.0 if text_only else vision_lr,
-                        "weight_decay": 0.0,
+                        **component_decay,
                         "scheduler_name": "vision",
                     },
                 ),
@@ -930,6 +939,7 @@ def build_config(
             loader.global_batch_size,
             text_only=recipe.text_loss_share == 1.0,
             text=text,
+            from_alignment=bool(recipe.parent_checkpoint),
         ),
         trainer=_build_trainer(cli, recipe, budget, text, token_ids),
         recipe=recipe,

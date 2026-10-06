@@ -732,8 +732,12 @@ def test_text_config_inherits_the_text_midtraining_recipe(mixed_recipe, text_con
     optim, lr = config.train_module.optim, text_module["optim"]["lr"]
     assert optim.lr == lr
     groups = {tuple(group.params): group.opts for group in optim.group_overrides}
-    assert groups[("*connector.*",)]["lr"] == 2 * lr
-    assert groups[("*vision.*",)]["lr"] == pytest.approx(0.1 * lr)
+    # From an alignment checkpoint: connector and vision at half the LM's LR, weight decay as the
+    # text config's (no override), on the text config's schedule.
+    assert groups[("*connector.*",)]["lr"] == lr / 2
+    assert groups[("*vision.*",)]["lr"] == lr / 2
+    assert "weight_decay" not in groups[("*connector.*",)]
+    assert "weight_decay" not in groups[("*vision.*",)]
     for group in text_module["optim"]["group_overrides"]:
         assert groups[tuple(group["params"])] == group["opts"]
     for name in ("betas", "eps", "weight_decay", "sigma_factor", "compile"):
@@ -1011,3 +1015,31 @@ def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
         f"--recipe.text_config={text_config.path}", "--recipe.prefetch_workers=32"
     )
     assert more.data_loader.prefetch_workers == 32
+
+
+def test_text_config_from_the_text_lm_scales_the_fresh_components(
+    mixed_recipe, text_config, tmp_path
+):
+    """From the text LM: the fresh connector at 10x the LM's LR, the pretrained vision encoder at
+    a fifth; weight decay as the text config's."""
+    # The checkpoint's LM is the text config's (the recipe checks they match).
+    lm = OLMoDDPModelConfig.from_dict(text_config.config["model"])
+    checkpoint = _write_text_lm_checkpoint(tmp_path / "text-lm" / "step100", lm)
+    config = _build_from_text_lm(
+        tmp_path,
+        f"--recipe.pretraining_checkpoint={checkpoint}",
+        f"--recipe.text_config={text_config.path}",
+    )
+    lr = text_config.config["train_module"]["optim"]["lr"]
+    assert config.train_module.optim.lr == lr
+    groups = {
+        tuple(group.params): group.opts for group in config.train_module.optim.group_overrides
+    }
+    assert groups[("*connector.*",)]["lr"] == lr * 10
+    assert groups[("*vision.*",)]["lr"] == lr / 5
+    assert "weight_decay" not in groups[("*connector.*",)]
+    assert "weight_decay" not in groups[("*vision.*",)]
+    assert (
+        config.train_module.optim.weight_decay
+        == text_config.config["train_module"]["optim"]["weight_decay"]
+    )
