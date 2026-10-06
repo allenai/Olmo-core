@@ -36,7 +36,7 @@ from olmo_core.nn.attention.ring import (
     RingContextParallelStyle,
     UlyssesContextParallelStyle,
 )
-from olmo_core.utils import get_default_device, mark_dynamic, move_to_device
+from olmo_core.utils import get_default_device, log_once, mark_dynamic, move_to_device
 
 from ..attention import (
     Attention,
@@ -618,11 +618,13 @@ class Transformer(nn.Module):
 
         emo_blocks = []
         emo_eos_token_ids = set()
+        emo_segment_sources = set()
         for block_idx, block in self.blocks.items():
             router = getattr(block, "routed_experts_router", None)
             if router is not None and getattr(router, "requires_segment_ids", False):
                 emo_blocks.append(int(block_idx))
                 emo_eos_token_ids.add(router.eos_token_id)
+                emo_segment_sources.add(getattr(router, "segment_ids_from", "eos"))
         if emo_blocks:
             if self._pp_enabled:
                 raise OLMoConfigurationError(
@@ -637,7 +639,31 @@ class Transformer(nn.Module):
                 raise OLMoConfigurationError(
                     "All EMO routers in a model must use the same eos_token_id"
                 )
-            segment_ids = moe_ops.segment_ids_from_eos(input_ids, emo_eos_token_ids.pop())
+            if len(emo_segment_sources) != 1:
+                raise OLMoConfigurationError(
+                    "All EMO routers in a model must use the same segment_ids_from"
+                )
+            segment_ids_from = emo_segment_sources.pop()
+            if segment_ids_from == "doc_lens" and doc_lens is not None:
+                segment_ids = move_to_device(
+                    moe_ops.segment_ids_from_doc_lens(doc_lens, input_ids.shape[1]), self.device
+                )
+            else:
+                if segment_ids_from == "doc_lens":
+                    # Training must see the boundaries it was configured for. Evaluation batches
+                    # may carry no doc_lens; there EOS is the only boundary information.
+                    if self.training:
+                        raise OLMoConfigurationError(
+                            "EMO segment_ids_from='doc_lens' requires 'doc_lens' in training "
+                            "batches (generate_doc_lengths=True)"
+                        )
+                    log_once(
+                        log,
+                        "EMO segment_ids_from='doc_lens' but the batch has no doc_lens; "
+                        "using EOS segments",
+                        level=logging.WARNING,
+                    )
+                segment_ids = moe_ops.segment_ids_from_eos(input_ids, emo_eos_token_ids.pop())
             for block_idx in emo_blocks:
                 per_block_kwargs[block_idx]["segment_ids"] = segment_ids
 

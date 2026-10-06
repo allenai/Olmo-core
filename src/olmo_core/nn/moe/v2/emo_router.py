@@ -46,6 +46,10 @@ class EmoRouterV2(MoERouterV2):
     def eos_token_id(self) -> int:
         return self.emo.eos_token_id
 
+    @property
+    def segment_ids_from(self) -> str:
+        return self.emo.segment_ids_from
+
     def _pool_sizes(self, segment_ids: torch.Tensor) -> torch.Tensor:
         if not self.training:
             return torch.full_like(segment_ids, self.emo.eval_pool_size())

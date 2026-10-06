@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import gzip
 import hashlib
 import logging
 import math
@@ -1448,8 +1449,11 @@ class NumpyPackedFSLDataset(NumpyFSLDatasetBase):
         metadata_path = resource_path(
             os.path.dirname(source_path), os.path.basename(source_path).replace(".npy", ".csv.gz")
         )
+        # Hash the decompressed boundaries, not the file: a gzip header carries the write time, so
+        # rewriting identical boundaries would otherwise change the fingerprint and the packing
+        # cache keys, and a resumed run would fail checkpoint fingerprint validation.
         digest = hashlib.sha256()
-        with metadata_path.open("rb") as f:
+        with gzip.open(metadata_path, "rb") as f:
             for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 digest.update(chunk)
         return digest.hexdigest()

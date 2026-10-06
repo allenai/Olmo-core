@@ -504,6 +504,23 @@ def segment_ids_from_eos(input_ids: torch.Tensor, eos_token_id: int) -> torch.Te
     return eos.cumsum(dim=1)
 
 
+def segment_ids_from_doc_lens(doc_lens: torch.Tensor, seq_len: int) -> torch.Tensor:
+    """Return per-token document IDs from per-instance document lengths.
+
+    ``doc_lens`` has shape ``(batch_size, max_docs)``, zero-padded on the right, and each row must
+    sum to ``seq_len``, as the collator produces for intra-document masking. IDs are contiguous,
+    nondecreasing and zero-based within each sequence, like :func:`segment_ids_from_eos`.
+    """
+    ends = torch.cumsum(doc_lens.to(torch.long), dim=1)
+    if not bool((ends[:, -1] == seq_len).all()):
+        raise ValueError(f"doc_lens must sum to the sequence length ({seq_len}) in every row")
+    starts = torch.zeros(doc_lens.shape[0], seq_len + 1, dtype=torch.long, device=doc_lens.device)
+    # Each document end is the next document's start; `scatter_` (not add) keeps IDs contiguous
+    # across zero-length entries, whose ends repeat.
+    starts.scatter_(1, ends, 1)
+    return starts[:, :seq_len].cumsum(dim=1)
+
+
 def doc_sum_scatter(per_token: torch.Tensor, segment_ids: torch.Tensor) -> torch.Tensor:
     """Sum values within each document and broadcast the sums back to its tokens."""
     batch_size, seq_len, num_experts = per_token.shape

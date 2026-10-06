@@ -276,3 +276,30 @@ def test_row_cut_across_parts_is_two_documents(tmp_path: Path):
 
     eos = _build(tmp_path / "eos", 32)
     assert _real_tokens(eos) == len(stream) - 5
+
+
+def test_metadata_fingerprint_ignores_gzip_mtime(tmp_path: Path):
+    """Rewriting the same boundaries at a different time changes the gzip header (it stores the
+    write time) but must not change the fingerprint or the packing cache keys, or resuming a run
+    after re-tokenizing identical rows would fail checkpoint fingerprint validation. Different
+    boundaries must still change both."""
+    _write_part(tmp_path, 0, ROWS)
+    metadata_path = tmp_path / "token_ids_part_0000.csv.gz"
+    boundaries = b"0,14\n14,22\n22,29\n"
+
+    def keys(mtime: int, contents: bytes = boundaries):
+        metadata_path.write_bytes(gzip.compress(contents, mtime=mtime))
+        ds = _build(tmp_path, 32, use_array_if_local=False)
+        path = ds.paths[0]
+        return (
+            ds.fingerprint,
+            ds._get_document_indices_path(path),
+            ds._get_instance_offsets_path(path),
+            ds._get_docs_by_instance_path(path),
+        )
+
+    first = keys(mtime=1)
+    assert metadata_path.read_bytes() != gzip.compress(boundaries, mtime=2)
+    assert keys(mtime=2) == first
+    changed = keys(mtime=2, contents=b"0,7\n7,22\n22,29\n")
+    assert all(a != b for a, b in zip(changed, first))
