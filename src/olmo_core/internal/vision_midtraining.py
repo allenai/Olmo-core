@@ -58,12 +58,18 @@ from .vision_alignment import (
     _image_token_rows,
     _load_text_config,
     _restore_pretraining_router_lb,
+    _sample_one_annotation,
     _uses_document_mode,
     parse_cli_args,
     run,
     text_train_settings,
 )
-from .vision_alignment_data import DEFAULT_ALIGNMENT_ARTIFACT_ROOT
+from .vision_alignment_data import (
+    DEFAULT_ALIGNMENT_ARTIFACT_ROOT,
+    STAGE1_V3_LOSS_TARGETS,
+    STAGE1_V3_MEAN_LOSS_WEIGHTS,
+    build_stage1_v3_sources,
+)
 from .vision_midtraining_data import (
     DEFAULT_MIDTRAINING_ARTIFACT_ROOT,
     DEFAULT_VISUAL_EXAMPLE_WEIGHTS,
@@ -138,6 +144,10 @@ class MixedMidtrainingRecipeConfig(Config):
     work_dir: str = "/weka/oe-training-default/rustin/dataset-cache/mixed-midtraining"
     hf_cache_dir: str | None = "/weka/oe-training-default/rustin/hf-cache/hub"
     tokenizer_revision: str | None = None
+    visual_data: str = "midtraining"
+    """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
+    Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
+    example, its calibrated means, and its loss shares within the visual share)."""
 
 
 @dataclass
@@ -212,6 +222,8 @@ def _build_recipe(
             continue
         if type(value) is not int or value < minimum:
             raise OLMoConfigurationError(f"recipe.{name} must be an integer of at least {minimum}")
+    if recipe.visual_data not in ("midtraining", "stage1_v3"):
+        raise OLMoConfigurationError("recipe.visual_data must be midtraining or stage1_v3")
     if (
         isinstance(recipe.text_loss_share, bool)
         or not isfinite(recipe.text_loss_share)
@@ -852,22 +864,32 @@ def build_config(
             tokenizer_cache_dir=recipe.hf_cache_dir,
         ).build_tokenizer()
         model = _build_lm_model(recipe, text, token_ids)
-    means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if recipe.text_loss_share < 1.0 else {}
+    stage1_v3 = recipe.visual_data == "stage1_v3" and recipe.text_loss_share < 1.0
+    if stage1_v3:
+        means = dict(STAGE1_V3_MEAN_LOSS_WEIGHTS)
+        recipe.visual_example_weights = {}
+        recipe.visual_loss_shares = dict(STAGE1_V3_LOSS_TARGETS)
+    else:
+        means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if recipe.text_loss_share < 1.0 else {}
     if text_data.label_mask_paths is None:
         means[TEXT_SOURCE_NAME] = float(recipe.sequence_length - 1)
     elif recipe.text_loss_share == 1.0:
         means[TEXT_SOURCE_NAME] = 1.0
     replaced_sources = any(name in {"dataset", "dataset.sources"} for name, _ in overrides)
-    visual_sources = (
-        build_visual_sources(
+    visual_sources: dict[str, Config] = {}
+    if stage1_v3 and not replaced_sources:
+        visual_sources = build_stage1_v3_sources(
+            "joint", recipe.sequence_length, recipe.alignment_artifact_root
+        )
+        # KDA's document mode isolates packed documents, not sibling annotation branches.
+        _sample_one_annotation(visual_sources)
+    elif recipe.text_loss_share < 1.0 and not replaced_sources:
+        visual_sources = build_visual_sources(
             sequence_length=recipe.sequence_length,
             max_crops=recipe.max_crops,
             alignment_artifact_root=recipe.alignment_artifact_root,
             midtraining_artifact_root=recipe.midtraining_artifact_root,
         )
-        if recipe.text_loss_share < 1.0 and not replaced_sources
-        else {}
-    )
     dataset = MultimodalMixtureConfig(
         tokenizer=text_data.tokenizer.copy(),
         sources=dict(
@@ -909,6 +931,11 @@ def build_config(
         init_seed=6198,
     ).merge(cli.overrides)
     reusable_visual_calibration = (
+        stage1_v3
+        and recipe.sequence_length == 8192
+        and tokenizer == TokenizerConfig.dolma2()
+        and revision == _DOLMA2_REVISION
+    ) or (
         recipe.sequence_length == 8192
         and recipe.max_crops == 8
         and recipe.alignment_artifact_root == DEFAULT_ALIGNMENT_ARTIFACT_ROOT
