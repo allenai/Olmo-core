@@ -22,6 +22,20 @@ def _project(
     return F.linear(hidden, weight, bias)
 
 
+def _mm_fp32(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """
+    ``a @ b`` with a float32 result. On the GPU the low-precision inputs feed the tensor-core
+    GEMM directly and only the output is float32 (what the one-shot bfloat16 matmul accumulates
+    in before rounding); elsewhere the inputs are upcast first.
+    """
+    if a.is_cuda and a.dtype != torch.float32:
+        try:
+            return torch.mm(a, b, out_dtype=torch.float32)
+        except (TypeError, NotImplementedError, RuntimeError):
+            pass
+    return torch.mm(a.float(), b.float())
+
+
 class _ChunkedWeightedCrossEntropy(torch.autograd.Function):
     """
     ``weighted_cross_entropy_loss(F.linear(hidden, weight, bias), labels, loss_weights)`` with
@@ -30,8 +44,9 @@ class _ChunkedWeightedCrossEntropy(torch.autograd.Function):
     The forward keeps no logits; the backward recomputes each chunk's logits, forms the
     gradient of the loss with respect to them in float32, casts it to the logits' dtype as the
     one-shot path does, and applies the projection's backward per chunk. The weight (and bias)
-    gradient is accumulated across chunks in float32 and cast once, so it matches the one-shot
-    single matmul up to float32 summation order even when the weight is bfloat16.
+    gradient is accumulated across chunks in float32 (each chunk's GEMM keeps its float32
+    result) and cast once, so it matches the one-shot single matmul up to float32 summation
+    order even when the weight is bfloat16.
     """
 
     @staticmethod
@@ -95,13 +110,15 @@ class _ChunkedWeightedCrossEntropy(torch.autograd.Function):
                     valid, w * (grad_z * ctx.z_loss_multiplier * 2.0) * lse, w.new_zeros(())
                 )
             grad_logits = softmax * scale.unsqueeze(1)
-            rows = torch.arange(y.shape[0], device=y.device)[valid]
-            grad_logits[rows, y[valid]] -= (w * grad_ce)[valid]
+            # The one-hot term, subtracted at each valid row's label (a zero for the others), as
+            # one scatter so nothing here waits on the device.
+            onehot = torch.where(valid, -(w * grad_ce), w.new_zeros(())).unsqueeze(1)
+            grad_logits.scatter_add_(1, y.clamp(min=0).unsqueeze(1), onehot)
             grad_logits = grad_logits.to(logits.dtype)
             if grad_hidden is not None:
                 grad_hidden[start:end] = torch.mm(grad_logits, weight)
             if grad_weight is not None:
-                grad_weight += torch.mm(grad_logits.t().float(), h.float())
+                grad_weight += _mm_fp32(grad_logits.t(), h)
             if grad_bias is not None:
                 grad_bias += grad_logits.float().sum(0)
             del logits, logits_f, softmax, grad_logits
