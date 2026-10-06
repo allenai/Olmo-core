@@ -1015,6 +1015,11 @@ def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
         f"--recipe.text_config={text_config.path}", "--recipe.prefetch_workers=32"
     )
     assert more.data_loader.prefetch_workers == 32
+    assert default.data_loader.prefetch_max_in_flight is None
+    deeper = mixed_recipe.build(
+        f"--recipe.text_config={text_config.path}", "--recipe.prefetch_max_in_flight=128"
+    )
+    assert deeper.data_loader.prefetch_max_in_flight == 128
 
 
 def test_text_config_from_the_text_lm_scales_the_fresh_components(

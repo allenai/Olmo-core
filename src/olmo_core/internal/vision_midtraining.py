@@ -153,6 +153,10 @@ class MixedMidtrainingRecipeConfig(Config):
     """Per-rank threads that load and preprocess examples ahead of the GPU step. ``None`` uses the
     text config's ``data_loader.num_workers`` (else 8). A ``recipe`` field so it can be set where
     ``--data_loader.*`` overrides also reach the text team's own loader (scaling-ladders)."""
+    prefetch_max_in_flight: int | None = None
+    """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
+    loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
+    examples; a deeper queue lets the loader work through the GPU step."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
@@ -431,6 +435,7 @@ def _build_data_loader(
         continuous_stream=True,
         batch_metadata=True,
         prefetch_workers=workers,
+        prefetch_max_in_flight=recipe.prefetch_max_in_flight,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
     ).merge(cli.overrides, prefix="data_loader")
