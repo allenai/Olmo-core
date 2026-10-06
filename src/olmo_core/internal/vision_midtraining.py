@@ -145,6 +145,10 @@ class MixedMidtrainingRecipeConfig(Config):
     work_dir: str = "/weka/oe-training-default/rustin/dataset-cache/mixed-midtraining"
     hf_cache_dir: str | None = "/weka/oe-training-default/rustin/hf-cache/hub"
     tokenizer_revision: str | None = None
+    prefetch_workers: int | None = None
+    """Per-rank threads that load and preprocess examples ahead of the GPU step. ``None`` uses the
+    text config's ``data_loader.num_workers`` (else 8). A ``recipe`` field so it can be set where
+    ``--data_loader.*`` overrides also reach the text team's own loader (scaling-ladders)."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
@@ -407,6 +411,8 @@ def _build_data_loader(
     if text is not None:
         batch_size = int(text["data_loader"]["global_batch_size"])
         workers = int(text["data_loader"].get("num_workers", workers))
+    if recipe.prefetch_workers is not None:
+        workers = recipe.prefetch_workers
     return MixtureDataLoaderConfig(
         global_batch_size=batch_size,
         sequence_length=recipe.sequence_length,

@@ -1002,3 +1002,12 @@ def test_stage1_v3_vision_installs_its_packages(
     else:
         assert config.launch.post_setup == "python -m build_ext"
     assert theirs.post_setup == "python -m build_ext"
+
+
+def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
+    default = mixed_recipe.build(f"--recipe.text_config={text_config.path}")
+    assert default.data_loader.prefetch_workers == text_config.config["data_loader"]["num_workers"]
+    more = mixed_recipe.build(
+        f"--recipe.text_config={text_config.path}", "--recipe.prefetch_workers=32"
+    )
+    assert more.data_loader.prefetch_workers == 32
