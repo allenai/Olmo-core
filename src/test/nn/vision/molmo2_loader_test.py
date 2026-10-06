@@ -29,6 +29,8 @@ from olmo_core.nn.vision import (
 )
 from olmo_core.nn.vision.molmo2_loader import (
     Molmo2LoaderError,
+    _attention_dims,
+    _has_qk_norm,
     molmo2_hf_state_dict_to_multimodal_lm,
     retie_word_embeddings,
 )
@@ -92,26 +94,6 @@ def _tiny_cfg(tie_word_embeddings: bool = False) -> MultimodalLMConfig:
         # The head spans the base vocab structurally, so no logit masking.
         output_vocab_size=None,
     )
-
-
-def _attention_dims(lm_cfg: TransformerConfig):
-    """Mirror of molmo2_loader._attention_dims so tests can construct fake weights."""
-    block: Any = lm_cfg.block
-    seq_mixer = block.attention if block.attention is not None else block.sequence_mixer
-    n_heads: Any = getattr(seq_mixer, "n_heads", None) or getattr(seq_mixer, "num_heads", None)
-    n_kv = (
-        getattr(seq_mixer, "n_kv_heads", None)
-        or getattr(seq_mixer, "num_kv_heads", None)
-        or n_heads
-    )
-    head_dim: Any = getattr(seq_mixer, "head_dim", None) or (lm_cfg.d_model // n_heads)
-    return int(n_heads), int(n_kv), int(head_dim)
-
-
-def _has_qk_norm(lm_cfg: TransformerConfig) -> bool:
-    block: Any = lm_cfg.block
-    seq_mixer = block.attention if block.attention is not None else block.sequence_mixer
-    return getattr(seq_mixer, "qk_norm", None) is not None
 
 
 # ---------------------------------------------------------------------------

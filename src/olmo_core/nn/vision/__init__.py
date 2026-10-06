@@ -22,10 +22,7 @@ from .image_vit import (
     siglip_state_dict_to_vision_encoder,
 )
 from .molmo2_image_processor import preprocess_image_molmo2
-from .molmo2_loader import (
-    molmo2_hf_state_dict_to_multimodal_lm,
-    multimodal_lm_state_dict_to_hf,
-)
+from .molmo2_loader import molmo2_hf_state_dict_to_multimodal_lm
 from .multimodal import MultimodalLM, MultimodalLMConfig
 
 __all__ = [

@@ -70,7 +70,6 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     "molmo2_hf_state_dict_to_multimodal_lm",
-    "multimodal_lm_state_dict_to_hf",
     "molmo2_config_from_hf_config",
     "ensure_default_rope_registered",
     "ensure_hf_masking_compat",
@@ -252,23 +251,6 @@ def _has_qk_norm(lm_cfg: TransformerConfig) -> bool:
     block = lm_cfg.block
     seq_mixer = getattr(block, "attention", None) or getattr(block, "sequence_mixer", None)
     return getattr(seq_mixer, "qk_norm", None) is not None
-
-
-def _convert_patch_embedding_to_hf(oc_patch_weight: torch.Tensor, patch_size: int) -> torch.Tensor:
-    """Inverse of :func:`_convert_patch_embedding` (channel-first → spatial-first)."""
-    d, total = oc_patch_weight.shape
-    expected = patch_size * patch_size * 3
-    if total != expected:
-        raise Molmo2LoaderError(
-            f"OLMo-core patch embedding weight has shape {(d, total)} but expected "
-            f"{(d, expected)} given patch_size={patch_size}"
-        )
-    return (
-        oc_patch_weight.reshape(d, 3, patch_size, patch_size)
-        .permute(0, 2, 3, 1)
-        .reshape(d, expected)
-        .contiguous()
-    )
 
 
 def _convert_patch_embedding(hf_patch_weight: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -460,123 +442,6 @@ def molmo2_hf_state_dict_to_multimodal_lm(
     for proj in ("w1", "w2", "w3"):
         out[f"connector.projector.{proj}.weight"] = _require(
             hf_state_dict, f"model.vision_backbone.image_projector.{proj}.weight"
-        )
-
-    return out
-
-
-def multimodal_lm_state_dict_to_hf(
-    oc_state_dict: Dict[str, torch.Tensor],
-    cfg: MultimodalLMConfig,
-    *,
-    base_vocab_size: int,
-) -> Dict[str, torch.Tensor]:
-    """Convert a :class:`MultimodalLM` state dict back to Molmo2 HF layout.
-
-    This is the inverse of :func:`molmo2_hf_state_dict_to_multimodal_lm` for
-    weight export (e.g. before running olmo-eval's HF multimodal provider).
-    """
-    out: Dict[str, torch.Tensor] = {}
-    lm_cfg = cfg.lm
-    n_layers = lm_cfg.n_layers
-    n_heads, n_kv_heads, head_dim = _attention_dims(lm_cfg)
-    has_qk_norm = _has_qk_norm(lm_cfg)
-    patch_size = cfg.vision.image_patch_size
-    vit_layers = cfg.vision.image_num_layers
-
-    # Our embedding table is split exactly like HF's (base + extra), so both map straight
-    # across. Older fused checkpoints (one `embeddings.weight` spanning base + extra) are
-    # still accepted by slicing.
-    embeddings = _require(oc_state_dict, "lm.embeddings.weight")
-    if embeddings.shape[0] < base_vocab_size:
-        raise Molmo2LoaderError(
-            f"OLMo-core embeddings have {embeddings.shape[0]} rows but "
-            f"base_vocab_size={base_vocab_size}"
-        )
-    out["model.transformer.wte.embedding"] = embeddings[:base_vocab_size].contiguous()
-    if (extra := _maybe(oc_state_dict, "lm.embeddings.extra_weight")) is not None:
-        out["model.transformer.wte.new_embedding"] = extra.contiguous()
-    elif embeddings.shape[0] > base_vocab_size:
-        out["model.transformer.wte.new_embedding"] = embeddings[base_vocab_size:].contiguous()
-
-    out["model.transformer.ln_f.weight"] = _require(oc_state_dict, "lm.lm_head.norm.weight")
-    lm_head = _require(oc_state_dict, "lm.lm_head.w_out.weight")
-    if lm_head.shape[0] < base_vocab_size:
-        raise Molmo2LoaderError(
-            f"OLMo-core lm_head has {lm_head.shape[0]} rows but base_vocab_size={base_vocab_size}"
-        )
-    out["lm_head.weight"] = lm_head[:base_vocab_size].contiguous()
-
-    for i in range(n_layers):
-        src = f"lm.blocks.{i}"
-        dst = f"model.transformer.blocks.{i}"
-        out[f"{dst}.attn_norm.weight"] = _require(oc_state_dict, f"{src}.attention_norm.weight")
-        out[f"{dst}.ff_norm.weight"] = _require(oc_state_dict, f"{src}.feed_forward_norm.weight")
-
-        q_w = _require(oc_state_dict, f"{src}.attention.w_q.weight")
-        k_w = _require(oc_state_dict, f"{src}.attention.w_k.weight")
-        v_w = _require(oc_state_dict, f"{src}.attention.w_v.weight")
-        out[f"{dst}.self_attn.att_proj.weight"] = torch.cat([q_w, k_w, v_w], dim=0).contiguous()
-        if (q_b := _maybe(oc_state_dict, f"{src}.attention.w_q.bias")) is not None:
-            k_b = _require(oc_state_dict, f"{src}.attention.w_k.bias")
-            v_b = _require(oc_state_dict, f"{src}.attention.w_v.bias")
-            out[f"{dst}.self_attn.att_proj.bias"] = torch.cat([q_b, k_b, v_b], dim=0).contiguous()
-
-        if has_qk_norm:
-            out[f"{dst}.self_attn.q_norm.weight"] = _require(
-                oc_state_dict, f"{src}.attention.q_norm.weight"
-            )
-            out[f"{dst}.self_attn.k_norm.weight"] = _require(
-                oc_state_dict, f"{src}.attention.k_norm.weight"
-            )
-
-        out[f"{dst}.self_attn.attn_out.weight"] = _require(
-            oc_state_dict, f"{src}.attention.w_out.weight"
-        )
-
-        mul_w = _require(oc_state_dict, f"{src}.feed_forward.w3.weight")
-        gate_w = _require(oc_state_dict, f"{src}.feed_forward.w1.weight")
-        out[f"{dst}.mlp.ff_proj.weight"] = torch.cat([mul_w, gate_w], dim=0).contiguous()
-        out[f"{dst}.mlp.ff_out.weight"] = _require(oc_state_dict, f"{src}.feed_forward.w2.weight")
-
-    oc_patch_w = _require(oc_state_dict, "vision.patch_embedding.weight")
-    out["model.vision_backbone.image_vit.patch_embedding.weight"] = _convert_patch_embedding_to_hf(
-        oc_patch_w, patch_size
-    )
-    out["model.vision_backbone.image_vit.patch_embedding.bias"] = _require(
-        oc_state_dict, "vision.patch_embedding.bias"
-    )
-    out["model.vision_backbone.image_vit.positional_embedding"] = _require(
-        oc_state_dict, "vision.positional_embedding"
-    )
-
-    for i in range(vit_layers):
-        src = f"vision.blocks.{i}"
-        dst = f"model.vision_backbone.image_vit.transformer.resblocks.{i}"
-        for ours_name, hf_name in (("attn_norm", "attention_norm"), ("ffn_norm", "ffn_norm")):
-            for suffix in ("weight", "bias"):
-                out[f"{dst}.{hf_name}.{suffix}"] = _require(
-                    oc_state_dict, f"{src}.{ours_name}.{suffix}"
-                )
-        for proj in ("wq", "wk", "wv", "wo"):
-            for suffix in ("weight", "bias"):
-                out[f"{dst}.attention.{proj}.{suffix}"] = _require(
-                    oc_state_dict, f"{src}.attn.{proj}.{suffix}"
-                )
-        for proj in ("w1", "w2"):
-            for suffix in ("weight", "bias"):
-                out[f"{dst}.feed_forward.{proj}.{suffix}"] = _require(
-                    oc_state_dict, f"{src}.ffn.{proj}.{suffix}"
-                )
-
-    for proj in ("wq", "wk", "wv", "wo"):
-        for suffix in ("weight", "bias"):
-            out[f"model.vision_backbone.image_pooling_2d.{proj}.{suffix}"] = _require(
-                oc_state_dict, f"connector.pooling.{proj}.{suffix}"
-            )
-    for proj in ("w1", "w2", "w3"):
-        out[f"model.vision_backbone.image_projector.{proj}.weight"] = _require(
-            oc_state_dict, f"connector.projector.{proj}.weight"
         )
 
     return out

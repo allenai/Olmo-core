@@ -1,32 +1,17 @@
-"""Memory-efficient SDPA helpers for vision modules (ViT + connector)."""
+"""SDPA restricted to the flash / memory-efficient kernels, as in mm_olmo's ViT."""
 
 from contextlib import contextmanager
-from typing import Iterator, List, Optional
+from typing import Iterator, Optional
 
 import torch
 import torch.nn.functional as F
-
-try:
-    from torch.nn.attention import SDPBackend, sdpa_kernel
-except ImportError:  # pragma: no cover
-    SDPBackend = None  # type: ignore
-    sdpa_kernel = None  # type: ignore
-
-
-def vision_sdpa_backends() -> List:
-    """Backends matching mm_olmo ViT (flash + efficient; exclude cuDNN math pitfalls)."""
-    if SDPBackend is None:
-        return []
-    return [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 @contextmanager
 def vision_sdpa_context() -> Iterator[None]:
-    backends = vision_sdpa_backends()
-    if backends and sdpa_kernel is not None:
-        with sdpa_kernel(backends):
-            yield
-    else:
+    """Restrict SDPA to the flash and memory-efficient backends (never cuDNN / math)."""
+    with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
         yield
 
 
@@ -41,10 +26,5 @@ def vision_scaled_dot_product_attention(
 ) -> torch.Tensor:
     with vision_sdpa_context():
         return F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=attn_mask,
-            is_causal=is_causal,
-            dropout_p=dropout_p,
+            q, k, v, attn_mask=attn_mask, is_causal=is_causal, dropout_p=dropout_p
         )
