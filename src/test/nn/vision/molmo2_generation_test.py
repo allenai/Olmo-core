@@ -26,15 +26,23 @@ from PIL import Image
 
 from olmo_core.nn.vision import MultimodalLM
 from olmo_core.nn.vision.molmo2_loader import (
-    ensure_default_rope_registered,
     molmo2_config_from_hf_config,
     molmo2_hf_state_dict_to_multimodal_lm,
-    reinit_rope_buffers,
     retie_word_embeddings,
+)
+from olmo_core.nn.vision.molmo2_tokens import IM_COL_ID as _IM_COL_ID
+from olmo_core.nn.vision.molmo2_tokens import IM_END_ID as _IM_END_ID
+from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID as _IM_PATCH_ID
+from olmo_core.nn.vision.molmo2_tokens import IM_START_ID as _IM_START_ID
+from olmo_core.nn.vision.molmo2_tokens import (
+    IMAGE_PLACEHOLDER_ID as _IMAGE_PLACEHOLDER_ID,
+)
+from olmo_core.nn.vision.molmo2_tokens import (
+    LOW_RES_IM_START_ID as _LOW_RES_IM_START_ID,
 )
 from olmo_core.testing import requires_gpu
 
-from ._molmo2_common import _hf_cache_has  # noqa: F401
+from ._molmo2_common import _hf_cache_has, _load_hf  # noqa: F401
 
 transformers = pytest.importorskip("transformers")
 
@@ -55,15 +63,6 @@ _POOL_W = 2
 #   ceil(27/2) = 14  → 14×14 = 196 low-res image tokens
 _GRID_H = 14
 _GRID_W = 14
-
-# Molmo2 special token IDs (same across all variants).
-_IM_PATCH_ID = 151938  # <im_patch>
-_IM_COL_ID = 151939  # <im_col>
-_IM_START_ID = 151936  # <im_start>   (high-res section boundary)
-_LOW_RES_IM_START_ID = 151940  # <low_res_im_start>
-_IM_END_ID = 151937  # <im_end>
-_IMAGE_PLACEHOLDER_ID = 151941  # <|image|>  (replaced in token sequence)
-
 
 # ────────────────────────────── helpers ─────────────────────────────────────
 
@@ -226,20 +225,15 @@ def test_molmo2_generation_parity():
     dtype = torch.bfloat16
 
     # ── Load HF model ────────────────────────────────────────────────────────
-    ensure_default_rope_registered()
-    from transformers import AutoModelForImageTextToText, AutoTokenizer
+    from transformers import AutoTokenizer
 
+    hf = _load_hf(_MODEL_ID)
     try:
-        hf = AutoModelForImageTextToText.from_pretrained(
-            _MODEL_ID, trust_remote_code=True, local_files_only=True
-        )
         tok = AutoTokenizer.from_pretrained(
             _MODEL_ID, trust_remote_code=True, local_files_only=True
         )
     except Exception as e:  # noqa: BLE001
-        pytest.skip(f"Could not load {_MODEL_ID}: {e}")
-
-    reinit_rope_buffers(hf)
+        pytest.skip(f"Could not load tokenizer for {_MODEL_ID}: {e}")
 
     # ── Build our model from converted weights ────────────────────────────────
     cfg = molmo2_config_from_hf_config(hf.config)
@@ -347,20 +341,15 @@ def test_molmo2_image_bidirectional_attention_parity():
     device = torch.device("cuda")
     dtype = torch.bfloat16
 
-    ensure_default_rope_registered()
-    from transformers import AutoModelForImageTextToText, AutoTokenizer
+    from transformers import AutoTokenizer
 
+    hf = _load_hf(_MODEL_ID)
     try:
-        hf = AutoModelForImageTextToText.from_pretrained(
-            _MODEL_ID, trust_remote_code=True, local_files_only=True
-        )
         tok = AutoTokenizer.from_pretrained(
             _MODEL_ID, trust_remote_code=True, local_files_only=True
         )
     except Exception as e:  # noqa: BLE001
-        pytest.skip(f"Could not load {_MODEL_ID}: {e}")
-
-    reinit_rope_buffers(hf)
+        pytest.skip(f"Could not load tokenizer for {_MODEL_ID}: {e}")
 
     cfg = molmo2_config_from_hf_config(hf.config)
     ours = MultimodalLM(cfg, init_device="meta")

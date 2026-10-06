@@ -80,12 +80,10 @@ def test_native_config_shape(factory_name: str, d_model: int, ffn_hidden_size: i
     assert cfg.lm.n_layers == 36
     assert cfg.lm.block.feed_forward.hidden_size == ffn_hidden_size
     # The table is split: `vocab_size` is the base vocab, the 128 image-special tokens live
-    # in a separate `embeddings.extra_weight` block, and the LM head spans the base only —
-    # so no logit masking (`output_vocab_size`) is needed.
+    # in a separate `embeddings.extra_weight` block, and the LM head spans the base only.
     assert cfg.lm.vocab_size == 151_936
     assert cfg.lm.n_extra_vocab == 128
     assert cfg.lm.tie_word_embeddings is tied
-    assert cfg.output_vocab_size is None
     # The vision stack is shared across variants.
     assert cfg.vision.image_num_layers == 25  # SigLIP2 blocks 0..24 of 27
     assert cfg.vit_layers == (24, 18)

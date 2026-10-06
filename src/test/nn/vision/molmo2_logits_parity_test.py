@@ -24,48 +24,15 @@ paths instead.
 import pytest
 import torch
 
-from olmo_core.nn.vision import MultimodalLM
-from olmo_core.nn.vision.molmo2_loader import (
-    ensure_default_rope_registered,
-    molmo2_config_from_hf_config,
-    molmo2_hf_state_dict_to_multimodal_lm,
-    reinit_rope_buffers,
-    retie_word_embeddings,
-)
 from olmo_core.testing import requires_gpu
 
 transformers = pytest.importorskip("transformers")
 
 from ._molmo2_common import (  # noqa: E402, F401 (re-exported)
     MOLMO2_VARIANTS,
+    _build_ours,
     _hf_cache_has,
 )
-
-
-def _build_ours(model_id: str, device, dtype):
-    """Load HF Molmo2, build our model + converted weights. Returns
-    (hf_model on CPU, ours on `device` with `dtype`, our config)."""
-    ensure_default_rope_registered()
-    from transformers import AutoModelForImageTextToText
-
-    ensure_default_rope_registered()
-    try:
-        hf = AutoModelForImageTextToText.from_pretrained(
-            model_id, trust_remote_code=True, local_files_only=True
-        )
-    except Exception as e:  # noqa: BLE001
-        pytest.skip(f"Could not load {model_id}: {e}")
-    reinit_rope_buffers(hf)
-    cfg = molmo2_config_from_hf_config(hf.config)
-    converted = molmo2_hf_state_dict_to_multimodal_lm(hf.state_dict(), cfg)
-    ours = MultimodalLM(cfg, init_device="meta")
-    ours.to_empty(device=torch.device("cpu"))
-    ours.load_state_dict(converted, strict=False)
-    retie_word_embeddings(ours)  # `to_empty` breaks the tied-embedding share (Molmo2-4B)
-    del converted
-    ours = ours.to(device=device, dtype=dtype).eval()
-    return hf, ours, cfg
-
 
 # ---------------------------------------------------------------------------
 # Token embedding parity

@@ -12,7 +12,6 @@ A separate ``@pytest.mark.slow`` numerical-parity test that requires a real
 HF Molmo2 checkpoint can be added later (task follow-up).
 """
 
-import dataclasses
 from typing import Any, Dict, cast
 
 import pytest
@@ -92,7 +91,6 @@ def _tiny_cfg(tie_word_embeddings: bool = False) -> MultimodalLMConfig:
         connector=conn_cfg,
         image_patch_token_id=_IMAGE_PATCH_ID,
         # The head spans the base vocab structurally, so no logit masking.
-        output_vocab_size=None,
     )
 
 
@@ -395,16 +393,3 @@ def test_retie_word_embeddings_after_to_empty():
         model.lm.embeddings.weight,
         hf_sd["model.transformer.wte.embedding"],
     )
-
-
-def test_labels_path_guarded_when_output_vocab_masked():
-    """Passing ``labels`` through MultimodalLM bypasses output-vocab masking — must raise.
-
-    Molmo2 no longer needs the masking (its head spans the base vocab structurally), so this
-    exercises the feature on a config that opts into it explicitly."""
-    cfg = _tiny_cfg()
-    cfg = dataclasses.replace(cfg, output_vocab_size=_BASE_VOCAB - 4)
-    model = MultimodalLM(cfg, init_device="cpu")
-    input_ids = torch.randint(0, _BASE_VOCAB - 4, (1, 8))
-    with pytest.raises(Exception, match="output_vocab_size"):
-        model(input_ids=input_ids, labels=input_ids.clone())

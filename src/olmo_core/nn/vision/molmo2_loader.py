@@ -5,33 +5,26 @@ state-dict converter.
 Loads weights from a public Molmo2 checkpoint on HuggingFace (e.g.
 ``allenai/Molmo2-O-7B``) into our composite multimodal model.
 
-The two architectures differ in four places that this converter handles:
+The two architectures differ in three places that this converter handles:
 
 1. **LM token embedding split.** HF Molmo2 keeps the base vocab and the extra
    image-special-token vocab in two separate parameters
-   (``transformer.wte.embedding`` and ``transformer.wte.new_embedding``);
-   our :class:`~olmo_core.nn.transformer.Transformer` uses a single
-   ``embeddings.weight`` table. We concatenate.
+   (``transformer.wte.embedding`` and ``transformer.wte.new_embedding``). We keep
+   them separate too (:class:`~olmo_core.nn.embedding.SplitVocabEmbedding`, via
+   ``TransformerConfig.n_extra_vocab``): ``embeddings.weight`` / ``embeddings.extra_weight``.
+   HF's ``lm_head`` covers only the base vocab (the extra tokens are inputs, never
+   predicted), and so does ours; under ``tie_word_embeddings`` (Molmo2-4B) it shares
+   storage with ``embeddings.weight``.
 
-2. **Input-only extra vocab in the LM head.** HF Molmo2's ``lm_head`` covers
-   only the *base* vocab — the extra image-special tokens can never be
-   predicted. Our LM head spans the full (input) vocab, so the extra rows are
-   filled depending on tying: under ``tie_word_embeddings`` (Molmo2-4B) the
-   head shares storage with the embedding table and receives the same
-   concatenated tensor; untied heads get zero rows. Either way the extra
-   logit columns are dead weight — :attr:`MultimodalLMConfig.output_vocab_size`
-   masks them to the dtype minimum at forward time so loss and sampling match
-   a base-vocab-only head exactly.
-
-3. **Fused QKV and gated MLP in the LM.** HF Molmo2 has
+2. **Fused QKV and gated MLP in the LM.** HF Molmo2 has
    ``self_attn.att_proj`` (fused Q+K+V) and ``mlp.ff_proj`` (fused gate+up
    for SwiGLU). Our LM uses ``w_q`` / ``w_k`` / ``w_v`` and ``w1`` / ``w3``.
    We split along the output dimension.
 
-4. **Patch-embedding flatten order in the vision encoder.** Molmo2's HF
+3. **Patch-embedding flatten order in the vision encoder.** Molmo2's HF
    ``image_processing_molmo2.batch_pixels_to_patches`` lays patches out
-   spatial-first (``kh, kw, c``), while our
-   the multimodal ``ImagePreprocessor`` (added in a later PR) uses channel-first
+   spatial-first (``kh, kw, c``), while our multimodal image preprocessor
+   (added in a later PR) uses channel-first
    (``c, kh, kw``) to match the HuggingFace ``Conv2d`` patch-embedding
    convention our CLIP/SigLIP parity tests verified against. We permute
    the patch-embedding weight to bridge the two.
@@ -622,11 +615,9 @@ def molmo2_config_from_hf_config(hf_config: Any) -> MultimodalLMConfig:
     vit_cfg = hf_config.vit_config
     adapter_cfg = hf_config.adapter_config
 
-    # HF Molmo2 keeps the extra image-token embeddings in a separate
-    # parameter (``new_embedding``); after concatenation our model needs the
-    # combined vocab as its *input* vocab. The extra tokens are inputs-only —
-    # HF's lm_head covers just ``text_cfg.vocab_size`` — so the base vocab
-    # becomes ``output_vocab_size`` (masking the extra logit columns).
+    # HF Molmo2 keeps the extra image-token embeddings in a separate parameter
+    # (``new_embedding``); we keep them separate too (``n_extra_vocab``), so the LM head
+    # spans only the base vocab, exactly like HF's.
     lm_cfg = _build_lm_config(
         text_cfg,
         total_vocab_size=text_cfg.vocab_size,
@@ -654,5 +645,4 @@ def molmo2_config_from_hf_config(hf_config: Any) -> MultimodalLMConfig:
         vit_layers=resolved_vit_layers,
         # No logit masking needed: the LM head now spans the base vocab only (the extra
         # image-token rows live in `embeddings.extra_weight` and are never prediction targets).
-        output_vocab_size=None,
     )

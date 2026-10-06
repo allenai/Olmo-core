@@ -26,10 +26,8 @@ import torch
 
 from olmo_core.nn.vision import MultimodalLM
 from olmo_core.nn.vision.molmo2_loader import (
-    ensure_default_rope_registered,
     molmo2_config_from_hf_config,
     molmo2_hf_state_dict_to_multimodal_lm,
-    reinit_rope_buffers,
     retie_word_embeddings,
 )
 from olmo_core.testing import requires_gpu
@@ -39,22 +37,8 @@ transformers = pytest.importorskip("transformers")
 from ._molmo2_common import (  # noqa: E402, F401 (re-exported)
     MOLMO2_VARIANTS,
     _hf_cache_has,
+    _load_hf,
 )
-
-
-def _load_hf(model_id: str):
-    """Load an HF Molmo2 model from the local cache, fp32. Skips on failure."""
-    ensure_default_rope_registered()
-    from transformers import AutoModelForImageTextToText
-
-    try:
-        hf = AutoModelForImageTextToText.from_pretrained(
-            model_id, trust_remote_code=True, local_files_only=True
-        )
-    except Exception as e:  # noqa: BLE001
-        pytest.skip(f"Could not load {model_id}: {e}")
-    reinit_rope_buffers(hf)
-    return hf
 
 
 def _patchify_spatial_to_c_first(img_spatial: torch.Tensor, patch_size: int) -> torch.Tensor:
