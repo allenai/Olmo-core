@@ -13,6 +13,11 @@ from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.tensor import Placement
 
 from olmo_core.config import DType
+from olmo_core.distributed.parallel.context_parallel import (
+    all_to_all_cp2hp,
+    all_to_all_single_cp2hp,
+    all_to_all_single_hp2cp,
+)
 from olmo_core.nn.attention.base import SequenceMixer, SequenceMixerConfig
 from olmo_core.nn.attention.flash_linear_attn_api import (
     dispatch_chunk_kda,
@@ -163,6 +168,14 @@ class KimiDeltaAttention(SequenceMixer):
         )
         self.w_out = nn.Linear(self.value_dim, d_model, bias=False, **factory)
 
+        # Ulysses context-parallel state, populated by :meth:`apply_cp`.
+        self.cp_enabled = False
+        self.uly: UlyssesContextParallelStyle | None = None
+        self._cp_mesh: DeviceMesh | None = None
+        self._cp_group: torch.distributed.ProcessGroup | None = None
+        self._cp_head_slice = slice(None)
+        self._cp_gate_slice = slice(None)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -172,6 +185,11 @@ class KimiDeltaAttention(SequenceMixer):
         del kwargs
         batch_size, seq_len, _ = x.shape
         output_shape = (batch_size, seq_len, self.d_model)
+        if self.cp_enabled and cu_doc_lens is not None and batch_size > 1:
+            raise RuntimeError(
+                "Batch size must equal 1 when using context parallelism with "
+                f"intra-document masking (got {batch_size} instances)"
+            )
         if cu_doc_lens is not None and batch_size > 1:
             # FLA's variable-length KDA and causal-convolution kernels represent packed
             # sequences as a single flattened batch, with document boundaries supplied by
@@ -180,18 +198,39 @@ class KimiDeltaAttention(SequenceMixer):
             x = x.reshape(1, batch_size * seq_len, self.d_model)
             batch_size, seq_len = 1, batch_size * seq_len
 
-        q = self.q_conv1d(x=self.w_q(x), cu_seqlens=cu_doc_lens)
-        k = self.k_conv1d(x=self.w_k(x), cu_seqlens=cu_doc_lens)
-        v = self.v_conv1d(x=self.w_v(x), cu_seqlens=cu_doc_lens)
+        # Per-token projections run on this rank's local tokens with all heads.
+        q, k, v = self.w_q(x), self.w_k(x), self.w_v(x)
         raw_decay = self.f_proj_2(self.f_proj_1(x))
         beta = self.w_b(x).float().sigmoid()
         if self.allow_neg_eigval:
             beta = beta * 2.0
 
-        q = q.view(batch_size, seq_len, self.n_heads, self.head_k_dim)
-        k = k.view(batch_size, seq_len, self.n_heads, self.head_k_dim)
-        v = v.view(batch_size, seq_len, self.n_v_heads, self.head_v_dim)
-        raw_decay = raw_decay.view(batch_size, seq_len, self.n_v_heads, self.head_k_dim)
+        A_log, dt_bias = self.A_log, self.dt_bias
+        if self.cp_enabled and self.uly is not None:
+            assert self._cp_group is not None
+            # Ulysses CP: switch from sequence-parallel to head-parallel so that the
+            # convolutions and the recurrent scan see the full sequence for a slice of heads.
+            # q, k, and raw_decay share ``key_dim`` channels, so they ride one collective.
+            # [B, T_local, C] -> [B, T_total, C/CP]
+            q, k, raw_decay = all_to_all_cp2hp([q, k, raw_decay], self._cp_group)
+            v = all_to_all_single_cp2hp(v, self._cp_group)
+            # [B, T_local, H] -> [B, T_total, H/CP]
+            beta = all_to_all_single_cp2hp(beta, self._cp_group)
+            # The gate is applied inside the kernel, after the exchange, so its per-head and
+            # per-channel parameters must be restricted to this rank's heads.
+            A_log = A_log[self._cp_head_slice]
+            dt_bias = dt_bias[self._cp_gate_slice]
+
+        q = self.q_conv1d(x=q, cu_seqlens=cu_doc_lens)
+        k = self.k_conv1d(x=k, cu_seqlens=cu_doc_lens)
+        v = self.v_conv1d(x=v, cu_seqlens=cu_doc_lens)
+
+        # Under CP this is the full sequence length and the head count below is local.
+        T = q.size(1)
+        q = q.view(batch_size, T, -1, self.head_k_dim)
+        k = k.view(batch_size, T, -1, self.head_k_dim)
+        v = v.view(batch_size, T, -1, self.head_v_dim)
+        raw_decay = raw_decay.view(batch_size, T, -1, self.head_k_dim)
 
         # No kernel-fun version log here. The package logs `kernel_fun.versions()` itself,
         # once per process, from inside its `torch.compiler.disable`d entry points — free,
@@ -204,13 +243,19 @@ class KimiDeltaAttention(SequenceMixer):
             v=v,
             g=raw_decay,
             beta=beta,
-            A_log=self.A_log,
-            dt_bias=self.dt_bias,
+            A_log=A_log,
+            dt_bias=dt_bias,
             use_qk_l2norm_in_kernel=True,
             use_gate_in_kernel=True,
             cu_seqlens=cu_doc_lens,
             use_experimental_kernels=self.use_experimental_kernels,
         )
+
+        if self.cp_enabled and self.uly is not None:
+            assert self._cp_group is not None
+            # [B, T_total, H/CP, D] -> [B, T_local, H, D]
+            o = all_to_all_single_hp2cp(o, self._cp_group)
+
         output_gate = self.g_proj_2(self.g_proj_1(x)).view(
             batch_size, seq_len, self.n_v_heads, self.head_v_dim
         )
@@ -235,8 +280,50 @@ class KimiDeltaAttention(SequenceMixer):
         ring: RingContextParallelStyle | None = None,
         uly: UlyssesContextParallelStyle | None = None,
     ) -> None:
-        del cp_mesh, ring, uly
-        raise NotImplementedError("Context parallelism is not yet implemented for KDA")
+        """
+        Prepare the layer for Ulysses-style context parallelism.
+
+        Each rank keeps its contiguous slice of the sequence for the per-token projections.
+        Inside `forward`, an all-to-all switches to head parallelism so the causal
+        convolutions and the recurrent kernel run over the full sequence for
+        ``n_heads / cp_degree`` heads, and a second all-to-all switches back.
+
+        :param cp_mesh: The context parallel device mesh.
+        :param ring: Ring context parallelism, which is not supported for KDA.
+        :param uly: The Ulysses context parallel style.
+        """
+        if ring is not None:
+            raise NotImplementedError(
+                "Ring context parallelism is not supported for KimiDeltaAttention"
+            )
+        assert uly is not None
+
+        cp_world_size = cp_mesh.size()
+        if cp_world_size == 1:
+            return
+
+        # Ulysses CP partitions heads across ranks. Every sliced quantity (key/value/gate
+        # channels) is ``n_heads`` times a head dim, so this one check covers them all.
+        if self.n_heads % cp_world_size != 0:
+            raise ValueError(
+                f"KimiDeltaAttention n_heads ({self.n_heads}) must be divisible by the "
+                f"context parallel degree ({cp_world_size})"
+            )
+
+        cp_rank = cp_mesh.get_local_rank()
+        local_heads = self.n_heads // cp_world_size
+        local_gate = self.gate_dim // cp_world_size
+        self._cp_head_slice = slice(cp_rank * local_heads, (cp_rank + 1) * local_heads)
+        self._cp_gate_slice = slice(cp_rank * local_gate, (cp_rank + 1) * local_gate)
+
+        self.uly = uly
+        self._cp_mesh = cp_mesh
+        self._cp_group = cp_mesh.get_group()
+        self.cp_enabled = True
+
+        self.q_conv1d.apply_cp(cp_mesh)
+        self.k_conv1d.apply_cp(cp_mesh)
+        self.v_conv1d.apply_cp(cp_mesh)
 
     @torch.no_grad()
     def init_weights(
