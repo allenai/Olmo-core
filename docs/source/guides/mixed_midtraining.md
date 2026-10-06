@@ -1,11 +1,35 @@
 # Mixed midtraining
 
-Run `src/scripts/train/Mixed-Midtraining.py` after the joint phase of
-[vision alignment](vision_alignment.md), using the standard internal experiment CLI.
-The training recipe is `olmo_core.internal.vision_midtraining`; sources and loss allocation
+Run `src/scripts/train/Mixed-Midtraining.py` to continue a model on mostly text plus a vision
+share, using the standard internal experiment CLI. The training recipe is `olmo_core.internal.vision_midtraining`; sources and loss allocation
 are defined in `olmo_core.internal.vision_midtraining_data`. Configuration uses ordinary
 dataclasses and dotted overrides. Data paths and launch defaults require access to Ai2
 infrastructure.
+
+## Starting point
+
+Set exactly one of:
+
+* `--recipe.parent_checkpoint`: the endpoint of any [vision alignment](vision_alignment.md)
+  stage (bridge, perception or joint), loaded model-only. Any stage is accepted so that the
+  alignment stage ablations can each feed midtraining. Bridge and perception switch router load
+  balancing off while the LM is frozen; since midtraining trains the LM, the recipe restores the
+  text LM's coefficients (from `recipe.text_config`, else the recorded pretraining checkpoint).
+* `--recipe.pretraining_checkpoint`: a text LM checkpoint, for midtraining without alignment. The
+  multimodal model is built around the LM as alignment's bridge builds it: pretrained SigLIP
+  (`recipe.vision_model_id`, `recipe.vision_revision`), a freshly initialized connector and
+  image-token embedding rows, all loaded by the `initialize_multimodal` callback.
+
+The resolved config records `alignment_phase` (`None` without alignment).
+
+## OLMo 3.5: inheriting the text team's recipe
+
+With `--recipe.text_config` (the text team's resolved mid-training `config.json`), the text
+mixture, token budget, global batch, LM learning rate and schedule, optimizer and train-module
+settings, checkpoint cadence and callbacks, and launch image and resources are inherited from it.
+The text mixture's cache lives in `recipe.work_dir`. The connector and vision learning rates
+scale with the LM's (2x and 1/10). Without `recipe.text_config`, the legacy s002 recipe below
+applies.
 
 ## Configure and launch
 
@@ -13,7 +37,7 @@ Inspect a configuration without loading weights, allocating text sources or repl
 
 ```bash
 python src/scripts/train/Mixed-Midtraining.py dry_run mixed-midtraining local \
-  --recipe.parent_checkpoint=/path/to/alignment-joint/stepN
+  --recipe.parent_checkpoint=/path/to/alignment-stage/stepN
 ```
 
 `recipe.text_loss_share` accepts values in `(0, 1]`. The default, `0.9`, allocates 90% of
@@ -22,7 +46,7 @@ training (T100):
 
 ```bash
 python src/scripts/train/Mixed-Midtraining.py dry_run text-midtraining local \
-  --recipe.parent_checkpoint=/path/to/alignment-joint/stepN \
+  --recipe.parent_checkpoint=/path/to/alignment-stage/stepN \
   --recipe.text_loss_share=1.0
 ```
 
@@ -35,30 +59,25 @@ Launch with the standard CLI:
 
 ```bash
 python src/scripts/train/Mixed-Midtraining.py launch mixed-midtraining ai2/holmes \
-  --recipe.parent_checkpoint=/path/to/alignment-joint/stepN
+  --recipe.parent_checkpoint=/path/to/alignment-stage/stepN
 ```
 
-Defaults are two eight-GPU nodes, EP8, urgent priority, an eight-hour minimum runtime,
-32 GiB shared memory and workspace `ai2/molmofication`. Change these with `--launch.*`
-overrides. The launcher clones a remote commit; `allow_dirty` does not upload local or
+Launches use two eight-GPU nodes, the alignment launcher's workspace (`ai2/oe-olmo3p5-mt`) and
+budget, an eight-hour minimum runtime, and (with `recipe.text_config`) the text run's image and
+resources; the legacy path uses EP8, urgent priority and 32 GiB shared memory. Change these with
+`--launch.*` overrides. The launcher clones a remote commit; `allow_dirty` does not upload local or
 untracked changes, so unpublished code requires an explicitly frozen source deployment.
 `prep` is an optional dataset-preparation command; `train` runs within an existing
 distributed allocation.
 Inspect `launch.env_secrets` and configure credentials for the submitting account and
-workspace. Defaults reference `JASONR_BEAKER_TOKEN`, `RUSTINS_WANDB_API_KEY` and
-`GOOGLE_CREDENTIALS`; the GCS text recipe does not require AWS credential mounts.
+workspace. Defaults reference `jasonr_BEAKER_TOKEN` and `jasonr_WANDB_API_KEY`; the GCS text
+mixtures read through the launch's Google credentials and do not require AWS credential mounts.
 
-The launcher sets `NVSHMEM_REMOTE_TRANSPORT=none` for node-local EP8 groups. Initialization
-checks same-host membership and full GPU peer access before starting NVSHMEM; cross-node
-NCCL data parallelism is unaffected. Cross-node EP requires a remote NVSHMEM transport
-and compatible network interfaces instead. Direct `torchrun` users must set the transport
-environment explicitly.
-
-## Training defaults
+## Legacy (s002) defaults, without `recipe.text_config`
 
 | Setting | Default |
 | --- | --- |
-| Parent | Completed joint-alignment checkpoint; model-only handoff |
+| Starting point | An alignment checkpoint (model-only handoff) or a text LM checkpoint |
 | Trainable components | Vision encoder, connector and LM, including full input/output embeddings |
 | Expected supervised-loss allocation | 90% text / 10% vision |
 | Context / global sequences / microbatch per GPU | 8,192 / 128 / 2 |
@@ -99,8 +118,9 @@ equal position budgets do not imply equal text exposure.
 
 ## Checkpoint handoff and resume
 
-Start from a completed joint-alignment checkpoint with compatible model and tokenizer
-metadata. A fresh handoff loads model weights and resets optimizer, loader and trainer state.
+Start from a completed alignment checkpoint (any stage) with compatible model and tokenizer
+metadata, or from a text LM checkpoint. A fresh handoff loads model weights and resets
+optimizer, loader and trainer state.
 Resuming the unchanged recipe in its existing output folder restores full state, including
 packing and RNG state. Output folders must be separate from the alignment parent.
 Full-state resumes require compatible configuration and runtime; preserve deployments
