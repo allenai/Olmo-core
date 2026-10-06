@@ -153,6 +153,11 @@ class MixedMidtrainingRecipeConfig(Config):
     """Per-rank threads that load and preprocess examples ahead of the GPU step. ``None`` uses the
     text config's ``data_loader.num_workers`` (else 8). A ``recipe`` field so it can be set where
     ``--data_loader.*`` overrides also reach the text team's own loader (scaling-ladders)."""
+    document_mode: bool | None = None
+    """How packed examples are isolated in the language model. ``None``: document boundaries
+    for recurrent (KDA) LMs, with the FLA kernels that support them. ``False``: no boundaries, the
+    text team's kernels (``kernel_fun``), packed examples separated only by their tokens as text
+    pretraining packs documents."""
     prefetch_max_in_flight: int | None = None
     """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
     loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
@@ -294,6 +299,19 @@ def _lm_tokenizer(text: dict | None, checkpoint: str) -> TokenizerConfig:
     return TokenizerConfig.from_dict(raw)
 
 
+def _apply_document_mode(model: MultimodalLMConfig, document_mode: bool | None) -> None:
+    """Force the wrapper's isolation mode and pick the matching KDA kernels: FLA for document
+    boundaries, the text team's ``kernel_fun`` without them."""
+    if document_mode is None:
+        return
+    model.document_mode = document_mode
+    lm = model.lm
+    for block in [lm.block, *(getattr(lm, "block_overrides", None) or {}).values()]:
+        mixer = getattr(block, "sequence_mixer", None)
+        if isinstance(mixer, KimiDeltaAttentionConfig):
+            mixer.use_experimental_kernels = not document_mode
+
+
 def _build_lm_model(
     recipe: MixedMidtrainingRecipeConfig, text: dict | None, token_ids: Molmo2TokenIds
 ) -> MultimodalLMConfig:
@@ -314,7 +332,9 @@ def _build_lm_model(
             if isinstance(mixer, KimiDeltaAttentionConfig):
                 mixer.use_experimental_kernels = False
     lm.two_batch_overlap = False
-    return MultimodalLMConfig.molmo2_vision_stack(lm, image_patch_token_id=token_ids.im_patch_id)
+    model = MultimodalLMConfig.molmo2_vision_stack(lm, image_patch_token_id=token_ids.im_patch_id)
+    _apply_document_mode(model, recipe.document_mode)
+    return model
 
 
 def _parent_tokenizer(parent: dict[str, Any], ancestry: str | None) -> TokenizerConfig:
@@ -880,6 +900,7 @@ def build_config(
     token_ids: Molmo2TokenIds | None = None
     if recipe.parent_checkpoint:
         model = _build_model(parent, text)
+        _apply_document_mode(model, recipe.document_mode)
         if phase != "joint":
             # Bridge and perception freeze the LM and switch router load balancing off; the LM
             # trains here, so the text LM's own coefficients come back.

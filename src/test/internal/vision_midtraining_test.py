@@ -1067,3 +1067,32 @@ def test_text_config_duration_in_steps_sizes_the_budget(mixed_recipe, text_confi
         config.dataset.sources["text_midtraining"].dataset.source_mixture_config.requested_tokens
         == 150 * batch
     )
+
+
+@pytest.mark.parametrize("document_mode", [None, False])
+def test_document_mode_off_uses_the_text_teams_kda_kernels(
+    mixed_recipe, text_config, tmp_path, document_mode
+):
+    from olmo_core.nn.attention.kda import KimiDeltaAttentionConfig
+
+    lm = OLMoDDPModelConfig.from_dict(text_config.config["model"])
+    checkpoint = _write_text_lm_checkpoint(tmp_path / "text-lm" / "step100", lm)
+    overrides = [
+        f"--recipe.pretraining_checkpoint={checkpoint}",
+        f"--recipe.text_config={text_config.path}",
+    ]
+    if document_mode is not None:
+        overrides.append(f"--recipe.document_mode={document_mode}")
+    config = _build_from_text_lm(tmp_path, *overrides)
+    mixers = [
+        block.sequence_mixer
+        for block in [config.model.lm.block, *(config.model.lm.block_overrides or {}).values()]
+        if isinstance(block.sequence_mixer, KimiDeltaAttentionConfig)
+    ]
+    assert mixers, "the OLMo 3.5 fixture has KDA layers"
+    if document_mode is None:
+        assert config.model.document_mode is None
+        assert all(m.use_experimental_kernels is False for m in mixers)  # FLA, boundaries
+    else:
+        assert config.model.document_mode is False
+        assert all(m.use_experimental_kernels is True for m in mixers)  # kernel_fun, no boundaries

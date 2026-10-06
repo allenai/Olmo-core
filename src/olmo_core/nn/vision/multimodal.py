@@ -116,6 +116,16 @@ class MultimodalLMConfig(Config):
     requires :attr:`connector.num_input_layers` to be ``2``.
     """
 
+    document_mode: Optional[bool] = None
+    """
+    How packed examples are isolated. ``None`` decides from the language model: document
+    boundaries (``doc_lens``) for recurrent sequence mixers, attention masks otherwise.
+    ``True`` forces boundaries. ``False`` switches boundaries off: a recurrent LM then runs
+    each packed sequence as one causal stream, its state carrying across the examples as text
+    pretraining carries it across packed documents, with no masks, boundaries or positions;
+    an attention LM keeps the mask path.
+    """
+
     output_vocab_size: Optional[int] = None
     """
     Number of token IDs the model may *predict*. Molmo2 extends the base text vocab
@@ -336,8 +346,10 @@ class MultimodalLM(nn.Module):
         self._collect_input_diagnostics = False
         self._input_diagnostic_sums: Dict[str, torch.Tensor] = {}
         self._input_diagnostic_counts: Dict[str, int] = {}
-        # Resolved lazily from the LM's sequence mixers; tests may set it directly.
-        self._document_mode: Optional[bool] = None
+        # Resolved lazily from the LM's sequence mixers unless the config decides; tests may
+        # set it directly.
+        self._document_mode: Optional[bool] = cfg.document_mode
+        self._recurrent_mixers: Optional[bool] = None
 
     def uses_document_boundaries(self) -> bool:
         """
@@ -352,12 +364,18 @@ class MultimodalLM(nn.Module):
         masks or positions. Image tokens are then causal like text.
         """
         if self._document_mode is None:
+            self._document_mode = self.has_recurrent_mixers()
+        return self._document_mode
+
+    def has_recurrent_mixers(self) -> bool:
+        """Whether any LM block uses a recurrent sequence mixer, which cannot apply masks."""
+        if self._recurrent_mixers is None:
             from olmo_core.nn.attention.kda import KimiDeltaAttention
 
-            self._document_mode = any(
+            self._recurrent_mixers = any(
                 isinstance(module, KimiDeltaAttention) for module in self.lm.modules()
             )
-        return self._document_mode
+        return self._recurrent_mixers
 
     # -- input-scale diagnostics ------------------------------------------------------------
 
@@ -695,6 +713,10 @@ class MultimodalLM(nn.Module):
             )
             kwargs["doc_lens"] = doc_lens
             kwargs["max_doc_lens"] = max_doc_lens
+        elif self.has_recurrent_mixers():
+            # Boundaries switched off (``document_mode=False``) for a recurrent LM: the packed
+            # sequence is one causal stream, so nothing is masked, bounded or positioned.
+            subsegment_ids = position_ids = example_ids = token_type_ids = None
 
         use_flex_attn = os.environ.get("OLMO2_FLEX_ATTN") == "1" and not document_mode
         or_mask: Optional[torch.Tensor] = None
