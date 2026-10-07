@@ -8,6 +8,7 @@ import pytest
 from olmo_core.config import Config
 from olmo_core.data import NumpyFSLDatasetConfig, TokenizerConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
+from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
 from olmo_core.data.multimodal.pixmo_cap import PixMoCapDatasetConfig
 from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.data.source_mixture import (
@@ -1161,6 +1162,15 @@ def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
         f"--recipe.text_config={text_config.path}", "--recipe.prefetch_max_in_flight=128"
     )
     assert deeper.data_loader.prefetch_max_in_flight == 128
+    # Whole-batch prefetching is on by default and a recipe knob; the loader itself defaults off.
+    assert default.data_loader.batch_prefetch_depth == 2
+    assert (
+        MixtureDataLoaderConfig(global_batch_size=8, sequence_length=8, work_dir="x")
+    ).batch_prefetch_depth == 0
+    sync = mixed_recipe.build(
+        f"--recipe.text_config={text_config.path}", "--recipe.batch_prefetch_depth=0"
+    )
+    assert sync.data_loader.batch_prefetch_depth == 0
 
 
 def test_text_config_from_the_text_lm_scales_the_fresh_components(

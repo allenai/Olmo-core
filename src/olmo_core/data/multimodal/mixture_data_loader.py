@@ -41,6 +41,7 @@ from olmo_core.distributed.utils import get_rank, get_world_size
 from olmo_core.exceptions import OLMoConfigurationError
 
 from ..data_loader import DataLoaderBase, DataLoaderConfig
+from .batch_prefetch import BatchPrefetcher, BatchPrefetchStats
 from .collator import MultimodalCollator
 from .packing import (
     _select_buffered_pack_indices,
@@ -109,6 +110,10 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
     """
     defer_packed_image_copy: bool | None = None
     """Copy packed float32 images directly into the final batch; disabled by default."""
+    batch_prefetch_depth: int = 0
+    """Collated rank batches to build ahead on one background thread (``0``, the default, packs
+    and collates on the caller's thread). See :class:`MixtureDataLoader`: the yielded batches,
+    their order and the checkpointed state are those of the thread-free loader."""
     max_consecutive_data_errors: int = DEFAULT_MAX_CONSECUTIVE_DATA_ERRORS
     max_total_data_errors: int = DEFAULT_MAX_TOTAL_DATA_ERRORS
     allow_legacy_state_without_dataset_fingerprints: bool = False
@@ -174,6 +179,7 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
             defer_packed_image_copy=(
                 False if self.defer_packed_image_copy is None else self.defer_packed_image_copy
             ),
+            batch_prefetch_depth=self.batch_prefetch_depth,
             max_consecutive_data_errors=self.max_consecutive_data_errors,
             max_total_data_errors=self.max_total_data_errors,
             dp_world_size=dp_world_size,
@@ -322,6 +328,15 @@ class MixtureDataLoader(DataLoaderBase):
     :param prefetch_max_in_flight: Maximum prepared examples in flight per source group.
         Defaults to ``max(2 * prefetch_workers, 4)``. Ignored when prefetching is disabled.
     :param defer_packed_image_copy: Copy packed float32 images directly into the final batch.
+    :param batch_prefetch_depth: With a positive depth, packing and collation run on one
+        background thread that keeps up to this many finished rank batches queued, so the
+        trainer's fetch returns as soon as a batch is ready instead of building it. The batch
+        sequence is exactly the thread-free one (the producer is the same single iterator) and
+        :meth:`state_dict` describes the batches the caller has *consumed*: every produced batch
+        is paired with the loader state right after it, the consumer adopts that state when it
+        takes the batch, and closing the iterator rewinds the loader to the last consumed state,
+        so a checkpoint resumes on the batch after the last one trained on, with or without
+        prefetching. ``0`` (the default) keeps everything on the caller's thread.
     :param allow_legacy_state_without_dataset_fingerprints: Allow restoring version 3 or 4
         buffered-packing cursor state, which predates per-source content fingerprints. This
         remains enabled by default for existing recipes and emits a warning. New recipes that
@@ -356,6 +371,7 @@ class MixtureDataLoader(DataLoaderBase):
         prefetch_workers: int = 0,
         prefetch_max_in_flight: int | None = None,
         defer_packed_image_copy: bool = False,
+        batch_prefetch_depth: int = 0,
         max_consecutive_data_errors: int = DEFAULT_MAX_CONSECUTIVE_DATA_ERRORS,
         max_total_data_errors: int = DEFAULT_MAX_TOTAL_DATA_ERRORS,
         dp_world_size: int = 1,
@@ -399,6 +415,12 @@ class MixtureDataLoader(DataLoaderBase):
             raise OLMoConfigurationError("prefetch_max_in_flight must be a positive integer")
         if not isinstance(defer_packed_image_copy, bool):
             raise OLMoConfigurationError("defer_packed_image_copy must be a boolean")
+        if (
+            isinstance(batch_prefetch_depth, bool)
+            or not isinstance(batch_prefetch_depth, int)
+            or batch_prefetch_depth < 0
+        ):
+            raise OLMoConfigurationError("batch_prefetch_depth must be a non-negative integer")
         self.datasets = list(datasets)
         if dataset_names is None:
             self.dataset_names = [str(i) for i in range(len(datasets))]
@@ -436,6 +458,8 @@ class MixtureDataLoader(DataLoaderBase):
         self.prefetch_workers = prefetch_workers
         self.prefetch_max_in_flight = prefetch_max_in_flight
         self.defer_packed_image_copy = defer_packed_image_copy
+        self.batch_prefetch_depth = batch_prefetch_depth
+        self.batch_prefetch_stats = BatchPrefetchStats()
         self.max_consecutive_data_errors = max_consecutive_data_errors
         self.max_total_data_errors = max_total_data_errors
         self._consecutive_data_errors = 0
@@ -445,6 +469,10 @@ class MixtureDataLoader(DataLoaderBase):
         self._order: Optional[List[ExampleRef]] = None
         self._active_packer: Optional[_BufferedPackingIterator] = None
         self._packing_state: Optional[Dict[str, Any]] = None
+        # While a prefetching iterator is live: the loader state as of the last batch the caller
+        # took from it (the state the thread-free loader would report), replacing the producer's
+        # live state in :meth:`state_dict`.
+        self._prefetch_consumed_state: Optional[Dict[str, Any]] = None
         self._group_loaders: Dict[str, MixtureDataLoader] = {}
         self.source_groups = dict(source_groups or {})
         self.group_sequence_quotas = dict(group_sequence_quotas or {})
@@ -663,6 +691,32 @@ class MixtureDataLoader(DataLoaderBase):
         self._order = order
 
     def _iter_batches(self) -> Iterable[Dict[str, Any]]:
+        if self.batch_prefetch_depth <= 0:
+            yield from self._iter_batches_sync()
+            return
+        # Before the first batch is taken, the consumed state is the state we start from.
+        self._prefetch_consumed_state = self._sync_state_dict()
+        prefetcher = BatchPrefetcher(
+            self._iter_batches_sync,
+            self._sync_state_dict,
+            depth=self.batch_prefetch_depth,
+            stats=self.batch_prefetch_stats,
+        )
+        try:
+            for batch, state_after in prefetcher:
+                self._prefetch_consumed_state = state_after
+                yield batch
+        finally:
+            prefetcher.close()
+            consumed = self._prefetch_consumed_state
+            self._prefetch_consumed_state = None
+            # The producer ran ahead of the caller (and its iterator's own cleanup recorded that
+            # ahead state); rewind to the last batch the caller actually took.
+            assert consumed is not None
+            self.load_state_dict({**consumed, "batches_processed": self.batches_processed})
+
+    def _iter_batches_sync(self) -> Iterable[Dict[str, Any]]:
+        """Pack and collate on the calling thread (the order every mode reproduces)."""
         if self._group_loaders:
             iterators = {
                 group: iter(loader._iter_example_batches())
@@ -1078,6 +1132,15 @@ class MixtureDataLoader(DataLoaderBase):
         return self.global_batch_size
 
     def state_dict(self) -> Dict[str, Any]:
+        consumed = self._prefetch_consumed_state
+        if consumed is None:
+            return self._sync_state_dict()
+        # ``batches_processed`` is the caller's count (incremented by ``DataLoaderBase.__iter__``
+        # as it hands the batch over); everything else is the snapshot taken with that batch.
+        return {**consumed, "batches_processed": self.batches_processed}
+
+    def _sync_state_dict(self) -> Dict[str, Any]:
+        """The state as the thread producing batches sees it (the thread-free loader's state)."""
         if self._group_loaders:
             return {
                 "grouped_version": 1,
