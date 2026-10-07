@@ -129,7 +129,7 @@ def stub_renderer(monkeypatch):
 
     calls = []
 
-    def fake_render(pdf_path, target_longest_image_dim):
+    def fake_render(pdf_path, target_longest_image_dim, render_workers=0):
         assert os.path.exists(pdf_path), pdf_path
         calls.append((pdf_path, target_longest_image_dim))
         return Image.new("RGB", (target_longest_image_dim // 2, target_longest_image_dim))
@@ -372,3 +372,125 @@ def test_stage1_ocr_group_is_opt_in_and_sqrt_split():
     np.testing.assert_allclose(
         mod._size_fractions([100, 400, 1600], "linear"), np.array([100, 400, 1600]) / 2100
     )
+
+
+# ---------------------------------------------------------------------------
+# Render helpers (PdfRenderPool)
+# ---------------------------------------------------------------------------
+
+
+def _write_pdf(path, size=(300, 200), pages=1):
+    """A page with a gradient (so a pixel mismatch would show), optionally repeated."""
+    from PIL import Image
+
+    pixels = (np.indices(size[::-1]).sum(0) % 256).astype(np.uint8)
+    image = Image.fromarray(pixels).convert("RGB")
+    image.save(str(path), "PDF", save_all=pages > 1, append_images=[image] * (pages - 1))
+    return str(path)
+
+
+def test_render_pool_matches_in_process_render(tmp_path):
+    """Helper renders are pixel-identical to the in-process lock path, at any target size."""
+    pytest.importorskip("pypdfium2")
+    pool = olmocr_mod.PdfRenderPool(2)
+    try:
+        paths = [_write_pdf(tmp_path / "a.pdf"), _write_pdf(tmp_path / "b.pdf", size=(120, 160))]
+        for path, target in [(paths[0], 1536), (paths[0], 1023), (paths[1], 640)]:
+            expected = olmocr_mod.render_pdf_page(path, target)
+            width, height, pixels = pool.render(path, target)
+            assert (width, height) == expected.size and max(width, height) == target
+            got = np.frombuffer(pixels, dtype=np.uint8).reshape(height, width, 3)
+            assert np.array_equal(got, np.asarray(expected))
+        assert pool.num_started >= 1 and not pool.disabled
+    finally:
+        pool.close()
+
+
+def test_render_pdf_page_uses_the_shared_pool(tmp_path, monkeypatch):
+    pytest.importorskip("pypdfium2")
+    pools = {}
+    monkeypatch.setattr(olmocr_mod, "_POOLS", pools)
+    path = _write_pdf(tmp_path / "a.pdf")
+    try:
+        expected = olmocr_mod.render_pdf_page(path, 400)
+        assert not pools  # render_workers=0 never starts helpers
+        for _ in range(2):
+            got = olmocr_mod.render_pdf_page(path, 400, render_workers=2)
+            assert np.array_equal(np.asarray(got), np.asarray(expected))
+        assert list(pools) == [2] and pools[2].num_started == 1  # one idle helper, reused
+    finally:
+        for pool in pools.values():
+            pool.close()
+
+
+def test_render_pool_reports_helper_errors_and_keeps_the_helper(tmp_path):
+    pytest.importorskip("pypdfium2")
+    two_pages = _write_pdf(tmp_path / "two.pdf", pages=2)
+    with pytest.raises(RuntimeError, match="single-page PDF, got 2") as in_process:
+        olmocr_mod.render_pdf_page(two_pages, 500)
+    pool = olmocr_mod.PdfRenderPool(1)
+    try:
+        with pytest.raises(RuntimeError, match="single-page PDF, got 2") as in_helper:
+            pool.render(two_pages, 500)
+        assert str(in_helper.value) == str(in_process.value)
+        # A bad page is not a dead helper: the same helper renders the next page.
+        width, height, _ = pool.render(_write_pdf(tmp_path / "ok.pdf"), 300)
+        assert max(width, height) == 300 and pool.num_started == 1 and not pool.disabled
+    finally:
+        pool.close()
+
+
+@pytest.mark.parametrize("command", ["exits", "unstartable"])
+def test_render_pool_gives_up_on_dead_helpers_and_the_lock_takes_over(
+    tmp_path, monkeypatch, command
+):
+    pytest.importorskip("pypdfium2")
+    if command == "exits":
+        pool = olmocr_mod.PdfRenderPool(
+            2, command=[sys.executable, "-c", "import sys; sys.exit(3)"]
+        )
+    else:
+        pool = olmocr_mod.PdfRenderPool(2, command=[str(tmp_path / "no-such-python")])
+    path = _write_pdf(tmp_path / "a.pdf")
+    try:
+        assert pool.render(path, 200) is None and pool.disabled
+        assert pool.render(path, 200) is None  # no further start attempts once disabled
+        monkeypatch.setattr(olmocr_mod, "get_render_pool", lambda n: pool)
+        image = olmocr_mod.render_pdf_page(path, 200, render_workers=2)
+        assert max(image.size) == 200 and image.mode == "RGB"
+    finally:
+        pool.close()
+
+
+def test_dataset_passes_render_workers_to_the_renderer(tmp_path, monkeypatch):
+    from PIL import Image
+
+    seen = []
+
+    def fake_render(pdf_path, target_longest_image_dim, render_workers=0):
+        seen.append(render_workers)
+        return Image.new("RGB", (target_longest_image_dim // 2, target_longest_image_dim))
+
+    monkeypatch.setattr(olmocr_mod, "render_pdf_page", fake_render)
+    root = _write_root(tmp_path)
+    _cfg(root).build(_FakeTok())[0]
+    _cfg(root, render_workers=3).build(_FakeTok())[0]
+    assert seen == [0, 3]
+    with pytest.raises(OLMoConfigurationError, match="render_workers"):
+        _cfg(root, render_workers=-1).validate()
+
+
+def test_render_pool_wakes_waiters_when_its_last_helper_dies(tmp_path):
+    """Threads queued for a helper must not block forever once the pool gives up."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    dies_on_request = [sys.executable, "-c", "import sys; sys.stdin.readline(); sys.exit(3)"]
+    pool = olmocr_mod.PdfRenderPool(1, command=dies_on_request)
+    path = _write_pdf(tmp_path / "a.pdf")
+    try:
+        with ThreadPoolExecutor(4) as threads:
+            futures = [threads.submit(pool.render, path, 100) for _ in range(4)]
+            assert [f.result(timeout=30) for f in futures] == [None] * 4
+        assert pool.disabled and pool.num_started == 1
+    finally:
+        pool.close()

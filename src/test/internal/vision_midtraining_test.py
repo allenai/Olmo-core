@@ -1096,3 +1096,39 @@ def test_document_mode_off_uses_the_text_teams_kda_kernels(
     else:
         assert config.model.document_mode is False
         assert all(m.use_experimental_kernels is True for m in mixers)  # kernel_fun, no boundaries
+
+
+def test_olmocr_render_workers_is_a_recipe_knob(mixed_recipe, monkeypatch):
+    """The olmOCR-mix sources of the v3 mixture render pages in the recipe's helper processes;
+    ``0`` keeps the in-process lock (the alignment recipes' default)."""
+    from olmo_core.data.multimodal.olmocr import OlmOcrMixDatasetConfig
+    from olmo_core.internal.vision_alignment_data import STAGE1_V3_MEAN_LOSS_WEIGHTS
+
+    def sources(phase, sequence_length, artifact_root):
+        built = {}
+        for name in STAGE1_V3_MEAN_LOSS_WEIGHTS:
+            if name.startswith("olmocr_"):
+                built[name] = OlmOcrMixDatasetConfig(
+                    subset=name[len("olmocr_") :], max_sequence_length=sequence_length
+                )
+            else:
+                built[name] = PixMoCapDatasetConfig(
+                    dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+                )
+        return built
+
+    monkeypatch.setattr(vision_midtraining, "build_stage1_v3_sources", sources)
+    default = mixed_recipe.build("--recipe.visual_data=stage1_v3")
+    olmocr = [s for s in default.dataset.sources.values() if isinstance(s, OlmOcrMixDatasetConfig)]
+    assert len(olmocr) == 4 and {s.render_workers for s in olmocr} == {4}
+    assert OlmOcrMixDatasetConfig().render_workers == 0
+    locked = mixed_recipe.build(
+        "--recipe.visual_data=stage1_v3", "--recipe.olmocr_render_workers=0"
+    )
+    assert {
+        s.render_workers
+        for s in locked.dataset.sources.values()
+        if isinstance(s, OlmOcrMixDatasetConfig)
+    } == {0}
+    with pytest.raises(OLMoConfigurationError, match="olmocr_render_workers"):
+        mixed_recipe.build("--recipe.olmocr_render_workers=-1")

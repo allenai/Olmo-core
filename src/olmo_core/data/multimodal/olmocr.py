@@ -13,7 +13,10 @@ the user turn is just the style tag, the bare ``"olmocr:"`` (mm_olmo's name; its
 template for this style), and the assistant turn is the transcription
 (``"No text found"`` for blank pages). Pages are rasterised on the fly with ``pypdfium2`` at a
 longest side sampled from ``target_longest_image_dim_range`` for training (mm_olmo: 1024-2048)
-and fixed (1536) otherwise, following olmOCR's own per-page DPI rule.
+and fixed (1536) otherwise, following olmOCR's own per-page DPI rule. pypdfium2 is not
+thread-safe: by default pages render one at a time under a process-wide lock, and with
+``render_workers > 0`` they render in parallel in small helper processes
+(:class:`PdfRenderPool`; the same pypdfium2 call, identical pixels).
 
 Transcriptions run long (documents pages: median ~580 tokens, p99 ~2900 with the Molmo2
 tokenizer), so ``max_sequence_length`` should be set to the training sequence length; the
@@ -22,11 +25,16 @@ sequence is then tail-truncated like mm_olmo's preprocessor does.
 
 from __future__ import annotations
 
+import atexit
+import json
 import logging
 import os
+import queue
+import subprocess
+import sys
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -51,8 +59,10 @@ __all__ = [
     "OLMOCR_SPLITS",
     "OlmOcrMixDatasetConfig",
     "OlmOcrMixDataset",
+    "PdfRenderPool",
     "canonical_subset",
     "canonical_split",
+    "get_render_pool",
     "render_pdf_page",
 ]
 
@@ -120,8 +130,15 @@ def pdf_path_for(root: str, pdf_relpath: str) -> str:
 
 _PDFIUM_LOCK = threading.Lock()
 
+#: Command that starts one render helper (see :mod:`.olmocr_render_worker`); the worker file is
+#: run by path so the helper imports pdfium only, not ``olmo_core`` / ``torch``.
+_WORKER_COMMAND: List[str] = [
+    sys.executable,
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "olmocr_render_worker.py"),
+]
 
-def render_pdf_page(pdf_path: str, target_longest_image_dim: int):
+
+def render_pdf_page(pdf_path: str, target_longest_image_dim: int, render_workers: int = 0):
     """Render a single-page PDF to an RGB PIL image whose longest side is
     ``target_longest_image_dim`` pixels.
 
@@ -131,34 +148,231 @@ def render_pdf_page(pdf_path: str, target_longest_image_dim: int):
     so fonts / antialiasing can differ slightly from pypdfium2's output.
 
     The shipped files are single-page extracts (the row's ``page_number`` is provenance in the
-    original document), so only page 0 exists. pypdfium2 is not thread-safe; the render is
-    serialised behind a lock because :class:`~.mixture_data_loader.MixtureDataLoader` prefetches
-    examples on a thread pool.
+    original document), so only page 0 exists. pypdfium2 is not thread-safe, and
+    :class:`~.mixture_data_loader.MixtureDataLoader` prefetches examples on a thread pool, so
+    with ``render_workers == 0`` the render is serialised behind a process-wide lock, and with
+    ``render_workers > 0`` it runs in one of that many helper processes (:class:`PdfRenderPool`,
+    shared by every caller in this process) so pages render in parallel. Both paths make the
+    same pypdfium2 call and return identical pixels; the lock is the fallback when the helpers
+    cannot start.
+
+    :param render_workers: Helper processes to render in, ``0`` for in-process rendering.
 
     :raises ImportError: If ``pypdfium2`` is not installed (``pip install pypdfium2``).
     :raises RuntimeError: If the PDF has more than one page.
     """
+    from PIL import Image
+
+    if render_workers > 0:
+        rendered = get_render_pool(render_workers).render(pdf_path, target_longest_image_dim)
+        if rendered is not None:
+            width, height, pixels = rendered
+            return Image.frombytes("RGB", (width, height), pixels)
+
     try:
-        import pypdfium2
+        import pypdfium2  # noqa: F401
     except ImportError as e:
         raise ImportError(
             "olmOCR-mix stores source PDFs, so rendering a page needs pypdfium2 "
             "(`pip install pypdfium2`)."
         ) from e
 
+    from .olmocr_render_worker import render_rgb
+
     with _PDFIUM_LOCK:
-        pdf = pypdfium2.PdfDocument(pdf_path)
+        width, height, pixels = render_rgb(pdf_path, target_longest_image_dim)
+    return Image.frombytes("RGB", (width, height), pixels)
+
+
+class PdfRenderPool:
+    """Up to ``max_workers`` helper processes rendering PDF pages for this process.
+
+    Each helper is a copy of :mod:`.olmocr_render_worker` started lazily on first demand (an idle
+    pool costs nothing) and used by one loader thread at a time, so renders of different pages
+    proceed in parallel and never hold the GIL or pypdfium2's lock in the trainer. A request
+    whose helper dies is retried once on a fresh helper; after ``max_workers`` such deaths
+    (or if a helper cannot be started at all) the pool disables itself and
+    :meth:`render` returns ``None``, which sends callers to the in-process lock.
+
+    :param max_workers: Helper processes to run at most.
+    :param command: The helper's command line, for tests; defaults to the module's worker.
+    """
+
+    def __init__(self, max_workers: int, command: Optional[List[str]] = None):
+        if max_workers <= 0:
+            raise ValueError("max_workers must be positive")
+        self.max_workers = max_workers
+        self.command = list(_WORKER_COMMAND if command is None else command)
+        # Idle helpers; a ``None`` in it tells waiters the pool is disabled.
+        self._idle: "queue.Queue[Optional[subprocess.Popen]]" = queue.Queue()
+        self._lock = threading.Lock()
+        self._started = 0  # helpers started and still counted as live
+        self._deaths = 0
+        self._disabled = False
+        self._procs: List[subprocess.Popen] = []
+
+    @property
+    def disabled(self) -> bool:
+        """Whether the pool has given up on its helpers (callers render in-process)."""
+        return self._disabled
+
+    @property
+    def num_started(self) -> int:
+        """Helpers started so far (live or not), for tests and logs."""
+        return len(self._procs)
+
+    def _start(self) -> Optional[subprocess.Popen]:
         try:
-            if len(pdf) != 1:
-                raise RuntimeError(
-                    f"{pdf_path}: expected a pre-split single-page PDF, got {len(pdf)}"
+            proc = subprocess.Popen(
+                self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None
+            )
+        except OSError as e:
+            log.warning(
+                "olmOCR render helper %s could not start (%s); rendering pages in-process",
+                self.command,
+                e,
+            )
+            return None
+        self._procs.append(proc)
+        return proc
+
+    def _acquire(self) -> Optional[subprocess.Popen]:
+        """An idle helper, a new one while under ``max_workers``, else wait for one."""
+        with self._lock:
+            if self._disabled:
+                return None
+            try:
+                return self._idle.get_nowait()
+            except queue.Empty:
+                pass
+            if self._started < self.max_workers:
+                proc = self._start()  # under the lock: one starter at a time
+                if proc is None:
+                    self._disabled = True
+                    return None
+                self._started += 1
+                return proc
+        proc = self._idle.get()
+        if proc is None:  # the pool was disabled while waiting; leave the wake-up for the next
+            self._idle.put(None)
+        return proc
+
+    def _discard(self, proc: subprocess.Popen) -> None:
+        """Drop a dead (or misbehaving) helper and count the death."""
+        for stream in (proc.stdin, proc.stdout):
+            try:
+                if stream is not None:
+                    stream.close()
+            except OSError:
+                pass
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        proc.wait()
+        with self._lock:
+            self._started -= 1
+            self._deaths += 1
+            if self._deaths >= self.max_workers and not self._disabled:
+                self._disabled = True
+                self._idle.put(None)  # wake threads waiting for a helper that will not come
+                log.warning(
+                    "olmOCR render helpers died %d times (last exit code %s); "
+                    "rendering pages in-process from now on",
+                    self._deaths,
+                    proc.returncode,
                 )
-            page = pdf[0]
-            longest_dim = max(page.get_size())  # (width, height) in PDF points
-            scale = target_longest_image_dim / longest_dim
-            return page.render(scale=scale).to_pil().convert("RGB")
-        finally:
-            pdf.close()
+
+    @staticmethod
+    def _request(
+        proc: subprocess.Popen, pdf_path: str, target_longest_image_dim: int
+    ) -> Tuple[int, int, bytes]:
+        assert proc.stdin is not None and proc.stdout is not None
+        request = {"pdf_path": pdf_path, "target": int(target_longest_image_dim)}
+        proc.stdin.write(json.dumps(request).encode("utf-8") + b"\n")
+        proc.stdin.flush()
+        line = proc.stdout.readline()
+        if not line:
+            raise EOFError("render helper closed its output")
+        header = json.loads(line)
+        if not header.get("ok"):
+            raise RuntimeError(header.get("error", "render failed in the helper"))
+        size = int(header["size"])
+        pixels = proc.stdout.read(size)
+        if len(pixels) != size:
+            raise EOFError("render helper closed its output mid-image")
+        return int(header["width"]), int(header["height"]), pixels
+
+    def render(
+        self, pdf_path: str, target_longest_image_dim: int
+    ) -> Optional[Tuple[int, int, bytes]]:
+        """Render in a helper, as :func:`~.olmocr_render_worker.render_rgb` would in-process.
+
+        :returns: ``(width, height, rgb_bytes)``, or ``None`` when the pool is disabled and the
+            caller should render in-process.
+        :raises RuntimeError: When the helper could not render the page (its error message).
+        """
+        for _attempt in range(2):
+            proc = self._acquire()
+            if proc is None:
+                return None
+            try:
+                result = self._request(proc, pdf_path, target_longest_image_dim)
+            except RuntimeError:
+                self._idle.put(proc)  # the helper is healthy; the page is not
+                raise
+            except (OSError, EOFError, ValueError):
+                self._discard(proc)
+                continue
+            self._idle.put(proc)
+            return result
+        return None
+
+    def close(self) -> None:
+        """Stop every helper (they also exit on their own when the trainer's stdin pipe closes)."""
+        with self._lock:
+            self._disabled = True
+            self._idle.put(None)
+            procs, self._procs = self._procs, []
+        for proc in procs:
+            for stream in (proc.stdin, proc.stdout):
+                try:
+                    if stream is not None:
+                        stream.close()
+                except OSError:
+                    pass
+            if proc.poll() is None:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+            proc.wait()
+
+
+_POOLS: Dict[int, PdfRenderPool] = {}
+_POOLS_LOCK = threading.Lock()
+
+
+def get_render_pool(max_workers: int) -> PdfRenderPool:
+    """The process's shared :class:`PdfRenderPool` of ``max_workers`` helpers, created on first
+    use. Every olmOCR source of a run asks for the same size, so a run has one pool."""
+    with _POOLS_LOCK:
+        pool = _POOLS.get(max_workers)
+        if pool is None:
+            pool = _POOLS[max_workers] = PdfRenderPool(max_workers)
+            log.info("olmOCR pages render in up to %d helper processes", max_workers)
+        return pool
+
+
+def _close_render_pools() -> None:
+    with _POOLS_LOCK:
+        pools = list(_POOLS.values())
+        _POOLS.clear()
+    for pool in pools:
+        pool.close()
+
+
+atexit.register(_close_render_pools)
 
 
 @dataclass
@@ -182,6 +396,14 @@ class OlmOcrMixDatasetConfig(Config):
 
     target_longest_image_dim: int = 1536
     """Render size (longest side) for the eval split, or for training when no range is set."""
+
+    render_workers: int = 0
+    """Helper processes that rasterise pages. ``0`` renders in the loader thread under a
+    process-wide lock (pypdfium2 is not thread-safe), so concurrent pages queue behind each
+    other: a national-archives page takes about a second. ``N > 0`` renders in up to ``N`` small
+    helper processes shared by every olmOCR source of this process (:class:`PdfRenderPool`), so
+    pages render in parallel and the loader threads only wait on a pipe. The pixels are
+    identical either way; the lock is the fallback when the helpers cannot start."""
 
     languages: Optional[Tuple[str, ...]] = ("en",)
     """Keep only rows whose ``primary_language`` (ISO 639-1; English is ~94% of the corpus) is
@@ -217,6 +439,8 @@ class OlmOcrMixDatasetConfig(Config):
                 )
         if self.target_longest_image_dim <= 0:
             raise OLMoConfigurationError("target_longest_image_dim must be positive")
+        if self.render_workers < 0:
+            raise OLMoConfigurationError("render_workers must be >= 0 (0 renders in-process)")
         if self.languages is not None and len(self.languages) == 0:
             raise OLMoConfigurationError(
                 "languages=() would filter out every row; use None to keep all languages"
@@ -317,7 +541,7 @@ class OlmOcrMixDataset(EpochSeededExamples):
         # mm_olmo draw order: the render size in `format_example`, then the formatter's prefix.
         target_dim = self.target_dim_for(rng)
         text = self.transcription(row)
-        image = render_pdf_page(self.pdf_path(row), target_dim)
+        image = render_pdf_page(self.pdf_path(row), target_dim, render_workers=cfg.render_workers)
         prompt = self.user_prompt()
         # One image, one (tag, transcription) turn: the shared message encoder builds exactly the
         # stage-1 single-branch layout (user header + image block + tag, then the response).

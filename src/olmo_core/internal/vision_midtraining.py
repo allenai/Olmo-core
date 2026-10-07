@@ -10,6 +10,7 @@ from olmo_core.config import Config, DType, _clean_opts
 from olmo_core.data import InstanceFilterConfig, NumpyFSLDatasetConfig, TokenizerConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
+from olmo_core.data.multimodal.olmocr import OlmOcrMixDatasetConfig
 from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.data.source_mixture import SourceMixtureDatasetConfig, SourceMixtureList
 from olmo_core.exceptions import OLMoConfigurationError
@@ -166,6 +167,12 @@ class MixedMidtrainingRecipeConfig(Config):
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
     example, its calibrated means, and its loss shares within the visual share)."""
+    olmocr_render_workers: int = 4
+    """Helper processes per rank in which the olmOCR-mix sources rasterise their PDF pages
+    (:attr:`~olmo_core.data.multimodal.olmocr.OlmOcrMixDatasetConfig.render_workers`). pypdfium2
+    is not thread-safe, so ``0`` renders pages one at a time in the loader threads and a slow
+    page (national archives: about a second) holds back the in-order example stream; the
+    helpers render in parallel with identical pixels."""
 
 
 @dataclass
@@ -242,6 +249,8 @@ def _build_recipe(
             raise OLMoConfigurationError(f"recipe.{name} must be an integer of at least {minimum}")
     if recipe.visual_data not in ("midtraining", "stage1_v3"):
         raise OLMoConfigurationError("recipe.visual_data must be midtraining or stage1_v3")
+    if type(recipe.olmocr_render_workers) is not int or recipe.olmocr_render_workers < 0:
+        raise OLMoConfigurationError("recipe.olmocr_render_workers must be an integer >= 0")
     if (
         isinstance(recipe.text_loss_share, bool)
         or not isfinite(recipe.text_loss_share)
@@ -941,6 +950,9 @@ def build_config(
             alignment_artifact_root=recipe.alignment_artifact_root,
             midtraining_artifact_root=recipe.midtraining_artifact_root,
         )
+    for source in visual_sources.values():
+        if isinstance(source, OlmOcrMixDatasetConfig):
+            source.render_workers = recipe.olmocr_render_workers
     dataset = MultimodalMixtureConfig(
         tokenizer=text_data.tokenizer.copy(),
         sources=dict(

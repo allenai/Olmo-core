@@ -592,3 +592,63 @@ def test_v2_recipe_validates_and_splits_its_groups():
     share = dict(zip(ocr_names, r["ocr_rate"] * ocr))
     assert share["nvidia_synth_en"] == pytest.approx(share["olmocr_documents"])
     assert share["nvidia_synth_en"] == pytest.approx(0.0382, abs=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# Thread-local shard handles
+# ---------------------------------------------------------------------------
+
+
+def test_thread_local_files_are_per_thread_and_bounded(tmp_path):
+    import threading
+
+    paths = []
+    for i in range(3):
+        paths.append(str(tmp_path / f"f{i}.bin"))
+        with open(paths[-1], "wb") as f:
+            f.write(bytes([i]) * 8)
+    files = ct.ThreadLocalFiles(max_open=2)
+    first = files.get(paths[0])
+    assert files.get(paths[0]) is first  # the same thread reuses its handle
+    seen_elsewhere = {}
+
+    def other():
+        seen_elsewhere["handle"] = files.get(paths[0])
+        files.close()
+
+    t = threading.Thread(target=other)
+    t.start()
+    t.join()
+    assert seen_elsewhere["handle"] is not first and seen_elsewhere["handle"].closed
+    assert not first.closed  # another thread's close never touches this thread's handles
+    files.get(paths[1])
+    files.get(paths[0])  # most recently used again
+    files.get(paths[2])  # evicts paths[1], the least recently used, not paths[0]
+    assert not first.closed and files.get(paths[0]) is first
+    files.get(paths[2])  # order is now paths[0], paths[2]
+    second = files.get(paths[1])
+    assert second is not first and first.closed  # paths[0] was the oldest this time
+    files.close()
+    assert second.closed
+    with pytest.raises(ValueError):
+        ct.ThreadLocalFiles(max_open=0)
+
+
+def test_read_sample_through_thread_local_handles_matches_fresh_opens(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    root = _write_tars(tmp_path)
+    index = ct.TarShardIndex.build(ct.TarShardIndex.list_shards(root))
+    expected = [index.read_sample(i) for i in range(len(index))]
+    files = ct.ThreadLocalFiles(max_open=1)  # two shards: every switch re-opens, reads stay right
+
+    def read_all(_):
+        # Interleave reads of both shards and read every sample twice.
+        return [index.read_sample(i % len(index), files) for i in range(2 * len(index))]
+
+    with ThreadPoolExecutor(8) as pool:
+        for got in pool.map(read_all, range(16)):
+            assert got == expected + expected
+    ds = _cfg(root, tmp_path).build(_FakeTok())
+    assert isinstance(ds._files, ct.ThreadLocalFiles)
+    assert ds[0]["input_ids"].shape[0] > 0

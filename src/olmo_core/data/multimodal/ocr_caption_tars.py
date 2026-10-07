@@ -11,6 +11,10 @@ shard's headers once (seeking over member data, roughly a second per GB) and cac
 offsets as an ``.npz`` keyed by the shards' names, sizes and mtimes, so later ranks and runs load
 it instantly. Examples are built like olmOCR-mix pages: the user turn is the style tag only, the
 assistant turn is the text, tail-truncated to ``max_sequence_length``.
+
+Samples are read with plain seeks at the indexed offsets, on a shard handle each loader thread
+keeps for itself (:class:`ThreadLocalFiles`): nothing is shared between threads, so reads never
+serialise behind one another, and a thread's reads from one shard skip the ``open`` per sample.
 """
 
 from __future__ import annotations
@@ -46,6 +50,7 @@ from .sft_common import (
 
 __all__ = [
     "TarShardIndex",
+    "ThreadLocalFiles",
     "OcrCaptionTarsDatasetConfig",
     "OcrCaptionTarsDataset",
     "strip_text_tags",
@@ -79,6 +84,50 @@ def default_index_cache_dir() -> str:
     if hf:
         return os.path.join(hf, "olmo_core_tar_index")
     return os.path.join(os.path.expanduser("~"), ".cache", "olmo_core", "tar_index")
+
+
+class ThreadLocalFiles:
+    """Read-only file handles cached per thread and path, so threads reading the same shards
+    never share (and so never serialise on) a handle, and a thread's repeated reads from one
+    shard skip the ``open``.
+
+    A thread keeps at most ``max_open`` handles, dropping the least recently used, which bounds
+    the file descriptors at ``max_open`` per thread however many shards a source has. Handles
+    are closed when their thread ends (or on :meth:`close`).
+
+    :param max_open: Handles each thread keeps open at most.
+    """
+
+    def __init__(self, max_open: int = 16):
+        if max_open <= 0:
+            raise ValueError("max_open must be positive")
+        self.max_open = max_open
+        self._local = threading.local()
+
+    def _handles(self) -> Dict[str, io.BufferedReader]:
+        handles = getattr(self._local, "handles", None)
+        if handles is None:
+            handles = self._local.handles = {}
+        return handles
+
+    def get(self, path: str) -> io.BufferedReader:
+        """The calling thread's open handle for ``path`` (opened on first use, binary, read-only).
+        It is positioned wherever the thread's last read left it, so seek before reading."""
+        handles = self._handles()
+        f = handles.pop(path, None)
+        if f is None or f.closed:
+            if len(handles) >= self.max_open:
+                handles.pop(next(iter(handles))).close()
+            f = open(path, "rb")
+        handles[path] = f  # (re)inserting last keeps the dict in LRU order
+        return f
+
+    def close(self) -> None:
+        """Close the calling thread's handles."""
+        handles = self._handles()
+        for f in handles.values():
+            f.close()
+        handles.clear()
 
 
 def _scan_shard(path: str) -> Tuple[List[str], np.ndarray]:
@@ -239,10 +288,19 @@ class TarShardIndex:
         log.info("Indexed %d samples -> %s", len(index), cache_path)
         return index
 
-    def read_sample(self, i: int) -> Tuple[bytes, bytes]:
-        """``(image_bytes, json_bytes)`` of sample ``i`` (one open + two seek-reads)."""
+    def read_sample(self, i: int, files: Optional[ThreadLocalFiles] = None) -> Tuple[bytes, bytes]:
+        """``(image_bytes, json_bytes)`` of sample ``i``: two seek-reads on the shard, through the
+        calling thread's cached handle when ``files`` is given, else on a fresh ``open``."""
         img_off, img_size, js_off, js_size = (int(x) for x in self.offsets[i])
-        with open(self.shards[int(self.shard_idx[i])], "rb") as f:
+        path = self.shards[int(self.shard_idx[i])]
+        if files is not None:
+            f = files.get(path)
+            f.seek(img_off)
+            image = f.read(img_size)
+            f.seek(js_off)
+            meta = f.read(js_size)
+            return image, meta
+        with open(path, "rb") as f:
             f.seek(img_off)
             image = f.read(img_size)
             f.seek(js_off)
@@ -313,7 +371,7 @@ class OcrCaptionTarsDataset(EpochSeededExamples):
             cache_dir=config.index_cache_dir,
             num_threads=config.index_threads,
         )
-        self._lock = threading.Lock()
+        self._files = ThreadLocalFiles()
         self._warned = 0
         log.info(
             "caption tars %s (style=%s): %d samples in %d shards",
@@ -358,7 +416,7 @@ class OcrCaptionTarsDataset(EpochSeededExamples):
         from PIL import Image
 
         cfg = self.config
-        image_bytes, json_bytes = self.index.read_sample(i)
+        image_bytes, json_bytes = self.index.read_sample(i, self._files)
         text = self.text(json.loads(json_bytes))
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         rng = self.epoch_rng(i, epoch)
