@@ -5,21 +5,26 @@ stubbed so the logic runs on CPU; the shared optimizer is exercised by its own t
 """
 
 from types import SimpleNamespace
+from typing import Dict, Tuple
 from unittest.mock import patch
 
 import pytest
 import torch
 from torch.distributed.tensor import Replicate
 
+import olmo_core.optim.multimodal_optimizer as multimodal_optimizer_module
 from olmo_core.config import Config
 from olmo_core.optim import OLMoDDPOptimizerConfig
+from olmo_core.optim.moe_optimizer import OLMoDDPOptimizer
 from olmo_core.optim.multimodal_optimizer import (
     MultimodalOLMoDDPOptimizer,
     MultimodalOLMoDDPOptimizerConfig,
 )
 
 
-def _stub_optimizer(*, by_group: bool, grads: dict, groups: list) -> MultimodalOLMoDDPOptimizer:
+def _stub_optimizer(
+    *, by_group: bool, grads: dict, groups: list, single_rank_meshes: bool = False
+) -> MultimodalOLMoDDPOptimizer:
     optim = object.__new__(MultimodalOLMoDDPOptimizer)
     optim.param_groups = groups
     optim.states = {f"{name}.main": SimpleNamespace(placements=[Replicate()]) for name in grads}
@@ -31,11 +36,21 @@ def _stub_optimizer(*, by_group: bool, grads: dict, groups: list) -> MultimodalO
     optim.latest_clip_group_grad_norms = {}
     optim.latest_clip_group_coefficients = {}
     optim._component_grad_norm_patterns = None
-    # Single-rank stand-ins for the mesh reductions.
-    optim._compute_total_grad_norm = lambda *parts: torch.linalg.vector_norm(
-        torch.cat([g.reshape(-1) for part in parts for g in part] or [torch.zeros(1)])
-    )
-    optim._maybe_debug_nan_inf_grad_norm = lambda *args, **kwargs: None
+    optim._grad_norm_plan_cache = None
+    optim._step_local_norms = None
+    optim._maybe_debug_nan_inf_grad_norm = lambda *args, **kwargs: None  # type: ignore[method-assign]
+    if single_rank_meshes:
+        # Run the parent's real norm tree on one rank: no MoE / PP meshes, reductions are no-ops.
+        optim._device = torch.device("cpu")
+        optim.dp_mesh = SimpleNamespace(get_group=lambda: None)
+        optim.moe_mesh = None
+        optim.dense_mesh = SimpleNamespace(mesh_dim_names=("dp",))
+        optim._reduce_norm = lambda norm, pg: norm  # type: ignore[method-assign]
+    else:
+        # Single-rank stand-in for the whole norm tree.
+        optim._compute_total_grad_norm = lambda *parts: torch.linalg.vector_norm(  # type: ignore[method-assign]
+            torch.cat([g.reshape(-1) for part in parts for g in part] or [torch.zeros(1)])
+        )
     return optim
 
 
@@ -70,6 +85,7 @@ def _params_and_grads():
 def test_logical_clip_groups_merge_by_scheduler_name():
     params, grads = _params_and_grads()
     params["lm.b"].requires_grad_(False)
+    del grads["lm.b"]
     optim = _stub_optimizer(by_group=True, grads=grads, groups=_groups(params))
     groups = optim._logical_grad_clip_groups()
     assert list(groups) == [optim.DEFAULT_CLIP_GROUP_NAME, "connector"]
@@ -103,6 +119,98 @@ def test_component_grad_norms_are_reported_without_changing_clipping():
         optim._compute_component_grad_norms()
     with pytest.raises(ValueError, match="non-empty"):
         optim.set_component_grad_norm_patterns({"": ("lm.*",)})
+
+
+def _count_parameter_norm_kernels(grads: dict):
+    """Patch ``vector_norm`` to count calls on the gradient tensors (not on stacked norms)."""
+    grad_storages = {grad.data_ptr() for grad in grads.values()}
+    original = torch.linalg.vector_norm
+    calls = []
+
+    def counting(tensor, *args, **kwargs):
+        if tensor.data_ptr() in grad_storages:
+            calls.append(tensor.data_ptr())
+        return original(tensor, *args, **kwargs)
+
+    return patch.object(torch.linalg, "vector_norm", counting), calls
+
+
+def test_each_parameter_norm_is_computed_once_and_shared_with_the_components():
+    params, grads = _params_and_grads()
+    optim = _stub_optimizer(
+        by_group=True, grads=grads, groups=_groups(params), single_rank_meshes=True
+    )
+    patterns: Dict[str, Tuple[str, ...]] = {"LM": ("lm.*",), "connector": ("connector.*",)}
+
+    # Reference: the parent's unmemoized norm on the same gradient lists, before clipping.
+    unmemoized = OLMoDDPOptimizer._local_total_norm
+    expected_group_norms = {
+        optim.DEFAULT_CLIP_GROUP_NAME: unmemoized(optim, [grads["lm.a"], grads["lm.b"]]),
+        "connector": unmemoized(optim, [grads["connector.w"]]),
+    }
+    expected_coefficients = {
+        name: torch.clamp(optim.max_grad_norm / (norm + 1e-6), max=1.0)
+        for name, norm in expected_group_norms.items()
+    }
+
+    # A diagnostics step: every parameter norm is one kernel, shared by group and component.
+    optim.set_component_grad_norm_patterns(patterns)
+    counter, calls = _count_parameter_norm_kernels(grads)
+    with counter, patch.object(
+        multimodal_optimizer_module, "fnmatch", wraps=multimodal_optimizer_module.fnmatch
+    ) as matcher:
+        total = optim._clip_grad()
+    assert sorted(calls) == sorted(grad.data_ptr() for grad in grads.values())
+    assert matcher.call_count > 0
+    assert optim._step_local_norms is None
+    for name, expected in expected_coefficients.items():
+        assert torch.equal(optim.latest_clip_group_coefficients[name], expected)
+        assert torch.equal(optim.latest_clip_group_grad_norms[name], expected_group_norms[name])
+    assert torch.equal(optim.latest_component_grad_norms["LM"], expected_group_norms["<default>"])
+    assert torch.equal(
+        optim.latest_component_grad_norms["connector"], expected_group_norms["connector"]
+    )
+    torch.testing.assert_close(total, torch.tensor((5.0**2 + 0.5**2) ** 0.5))
+
+    # Main gradients are rebuilt every step; the plan and the component matching are not.
+    optim.set_component_grad_norm_patterns(None)
+    _, fresh_grads = _params_and_grads()
+    optim.main_grad = fresh_grads
+    plan = optim._grad_norm_plan()
+    counter, calls = _count_parameter_norm_kernels(fresh_grads)
+    with counter, patch.object(multimodal_optimizer_module, "fnmatch") as matcher:
+        optim._clip_grad()
+    assert sorted(calls) == sorted(grad.data_ptr() for grad in fresh_grads.values())
+    matcher.assert_not_called()
+    assert optim.latest_component_grad_norms == {}
+    assert optim._grad_norm_plan() is plan
+
+    # Requesting the same patterns again reuses the cached parameter matching.
+    _, fresh_grads = _params_and_grads()
+    optim.main_grad = fresh_grads
+    optim.set_component_grad_norm_patterns(dict(patterns))
+    with patch.object(multimodal_optimizer_module, "fnmatch") as matcher:
+        optim._clip_grad()
+    matcher.assert_not_called()
+    assert set(optim.latest_component_grad_norms) == {"LM", "connector"}
+    assert torch.equal(optim.latest_component_grad_norms["connector"], torch.tensor(0.5))
+
+
+def test_grad_norm_plan_follows_parameter_freezing():
+    params, grads = _params_and_grads()
+    optim = _stub_optimizer(by_group=True, grads=grads, groups=_groups(params))
+    plan = optim._grad_norm_plan()
+    assert plan.trainable_names == ("lm.a", "lm.b", "connector.w")
+    assert plan.all_params == (["lm.a", "lm.b", "connector.w"], [], [], [])
+
+    params["lm.b"].requires_grad_(False)
+    with pytest.raises(RuntimeError, match="disjoint, exhaustive"):
+        optim._grad_norm_plan()
+    del grads["lm.b"]
+    rebuilt = optim._grad_norm_plan()
+    assert rebuilt is not plan
+    assert rebuilt.trainable_names == ("lm.a", "connector.w")
+    assert optim._logical_grad_clip_groups()[optim.DEFAULT_CLIP_GROUP_NAME] == ["lm.a"]
 
 
 def test_global_clipping_path_is_the_parent_one():

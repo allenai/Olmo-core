@@ -11,7 +11,7 @@ subclass that the text recipes never build.
 
 import logging
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -24,6 +24,7 @@ from olmo_core.optim.moe_optimizer import (
     OLMoDDPOptimizerConfig,
     _assert_finite_async,
     _is_fp8_weight_store,
+    _to_local_tensor,
     assign_full_tensor_to_dtensor,
 )
 
@@ -32,6 +33,31 @@ __all__ = ["MultimodalOLMoDDPOptimizer", "MultimodalOLMoDDPOptimizerConfig"]
 log = logging.getLogger(__name__)
 
 _DEFAULT_CLIP_GROUP = "<default>"
+
+# Parameter names split the way ``OLMoDDPOptimizer._compute_total_grad_norm`` wants its gradients:
+# DP replicated, DP sharded, EP-DP replicated, EP-DP sharded.
+_NamePartition = Tuple[List[str], List[str], List[str], List[str]]
+
+
+def _empty_partition() -> _NamePartition:
+    return ([], [], [], [])
+
+
+@dataclass
+class _GradNormPlan:
+    """
+    Gradient-norm bookkeeping resolved once per set of trainable parameters: the mesh partition
+    each parameter's main gradient belongs to, the logical clip groups and, once requested, the
+    parameters behind each diagnostic component. Only the names are cached; the main gradients
+    themselves are rebuilt by the optimizer every step.
+    """
+
+    trainable_names: Tuple[str, ...]
+    partition_index: Dict[str, int]
+    all_params: _NamePartition
+    clip_groups: "OrderedDict[str, _NamePartition]"
+    component_patterns: Optional[Dict[str, Tuple[str, ...]]] = None
+    components: Dict[str, _NamePartition] = field(default_factory=dict)
 
 
 class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
@@ -75,6 +101,8 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
         self.latest_clip_group_grad_norms: Dict[str, torch.Tensor] = {}
         self.latest_clip_group_coefficients: Dict[str, torch.Tensor] = {}
         self._component_grad_norm_patterns: Optional[Dict[str, Tuple[str, ...]]] = None
+        self._grad_norm_plan_cache: Optional[_GradNormPlan] = None
+        self._step_local_norms: Optional[Dict[int, Optional[torch.Tensor]]] = None
 
     @property
     def foreach_chunk_size(self) -> int:
@@ -87,6 +115,9 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
         """
         Configure optional named-parameter patterns for the next gradient-norm report.
 
+        The patterns are matched against the trainable parameters once and the result is cached,
+        so setting the same patterns again (after a step without them) costs nothing.
+
         :param patterns: Mapping from metric component name to ``fnmatch`` patterns, or ``None``
             to disable component diagnostics. The total clipping norm is unchanged.
         """
@@ -96,115 +127,181 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
                     raise ValueError("Component gradient-norm patterns must be non-empty")
         self._component_grad_norm_patterns = patterns
 
-    def _partition_main_grads(
-        self, param_names: Optional[Set[str]] = None
-    ) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
-        dp_grads_replicated: List[torch.Tensor] = []
-        dp_grads_sharded: List[torch.Tensor] = []
-        ep_dp_grads_replicated: List[torch.Tensor] = []
-        ep_dp_grads_sharded: List[torch.Tensor] = []
-
-        for param_group in self.param_groups:
-            for name, param in param_group["named_params"].items():
-                if not param.requires_grad or (param_names is not None and name not in param_names):
-                    continue
-                placements = self.states[f"{name}.main"].placements
-                assert len(placements) == 1, "Expect only one placement per tensor"
-                main_grad = self.main_grad[name]
-
-                if param_group["pg"] == "dp":
-                    if placements[0].is_shard():
-                        dp_grads_sharded.append(main_grad)
-                    else:
-                        dp_grads_replicated.append(main_grad)
-                elif param_group["pg"] == "ep_dp":
-                    if placements[0].is_shard():
-                        ep_dp_grads_sharded.append(main_grad)
-                    else:
-                        ep_dp_grads_replicated.append(main_grad)
-        return (
-            dp_grads_replicated,
-            dp_grads_sharded,
-            ep_dp_grads_replicated,
-            ep_dp_grads_sharded,
-        )
-
-    def _compute_component_grad_norms(self) -> Dict[str, torch.Tensor]:
-        patterns = self._component_grad_norm_patterns
-        if patterns is None:
-            return {}
-
-        norms: Dict[str, torch.Tensor] = {}
-        all_names = {
+    def _trainable_param_names(self) -> Tuple[str, ...]:
+        """Names of the optimizer parameters that receive gradients, in parameter-group order."""
+        return tuple(
             name
             for param_group in self.param_groups
             for name, param in param_group["named_params"].items()
             if param.requires_grad
-        }
+        )
+
+    def _grad_norm_plan(self) -> _GradNormPlan:
+        """
+        Return the gradient-norm plan for the current set of trainable parameters, resolving it
+        once and reusing it until a parameter is frozen or unfrozen.
+
+        :raises RuntimeError: If the logical clip groups are not a disjoint, exhaustive partition
+            of the optimizer gradients.
+        """
+        trainable_names = self._trainable_param_names()
+        plan = self._grad_norm_plan_cache
+        if plan is not None and plan.trainable_names == trainable_names:
+            return plan
+
+        partition_index: Dict[str, int] = {}
+        all_params = _empty_partition()
+        clip_groups: "OrderedDict[str, _NamePartition]" = OrderedDict()
+        for param_group in self.param_groups:
+            group_name = param_group.get("scheduler_name") or _DEFAULT_CLIP_GROUP
+            group_partition = clip_groups.setdefault(group_name, _empty_partition())
+            for name, param in param_group["named_params"].items():
+                if not param.requires_grad:
+                    continue
+                placements = self.states[f"{name}.main"].placements
+                assert len(placements) == 1, "Expect only one placement per tensor"
+                if param_group["pg"] == "dp":
+                    index = 1 if placements[0].is_shard() else 0
+                elif param_group["pg"] == "ep_dp":
+                    index = 3 if placements[0].is_shard() else 2
+                else:
+                    raise RuntimeError(f"Unknown pg tag: {param_group['pg']}")
+                if name in partition_index:
+                    raise RuntimeError(f"Optimizer parameter {name!r} appears in two groups")
+                partition_index[name] = index
+                all_params[index].append(name)
+                group_partition[index].append(name)
+        if set(trainable_names) != set(self.main_grad):
+            raise RuntimeError(
+                "Logical gradient-clip groups must be a disjoint, exhaustive partition of "
+                "optimizer gradients"
+            )
+        plan = _GradNormPlan(
+            trainable_names=trainable_names,
+            partition_index=partition_index,
+            all_params=all_params,
+            clip_groups=clip_groups,
+        )
+        self._grad_norm_plan_cache = plan
+        return plan
+
+    def _component_partitions(self, plan: _GradNormPlan) -> Dict[str, _NamePartition]:
+        """
+        Resolve the configured component patterns against the plan's trainable parameters, once
+        per distinct set of patterns.
+
+        :raises ValueError: If a component matches no trainable parameter.
+        """
+        patterns = self._component_grad_norm_patterns
+        if patterns is None:
+            return {}
+        if plan.component_patterns == patterns:
+            return plan.components
+        components: Dict[str, _NamePartition] = {}
         for component, component_patterns in patterns.items():
-            names = {
-                name
-                for name in all_names
-                if any(fnmatch(name, pattern) for pattern in component_patterns)
-            }
-            if not names:
+            partition = _empty_partition()
+            for name in plan.trainable_names:
+                if any(fnmatch(name, pattern) for pattern in component_patterns):
+                    partition[plan.partition_index[name]].append(name)
+            if not any(partition):
                 raise ValueError(
                     f"No trainable optimizer parameters match component {component!r} patterns "
                     f"{component_patterns!r}"
                 )
-            norms[component] = self._compute_total_grad_norm(*self._partition_main_grads(names))
-        return norms
+            components[component] = partition
+        plan.component_patterns = dict(patterns)
+        plan.components = components
+        return components
+
+    def _main_grads(self, partition: _NamePartition) -> Tuple[List[torch.Tensor], ...]:
+        """Materialize a name partition as the main-gradient lists the parent norm expects."""
+        return tuple([self.main_grad[name] for name in names] for names in partition)
+
+    def _compute_component_grad_norms(self) -> Dict[str, torch.Tensor]:
+        components = self._component_partitions(self._grad_norm_plan())
+        return {
+            component: self._compute_total_grad_norm(*self._main_grads(partition))
+            for component, partition in components.items()
+        }
 
     def _logical_grad_clip_groups(self) -> "OrderedDict[str, List[str]]":
         """Collect parameter names into logical groups shared across DP and EP partitions."""
-        groups: "OrderedDict[str, List[str]]" = OrderedDict()
-        for param_group in self.param_groups:
-            group_name = param_group.get("scheduler_name") or _DEFAULT_CLIP_GROUP
-            names = groups.setdefault(group_name, [])
-            names.extend(
-                name for name, param in param_group["named_params"].items() if param.requires_grad
-            )
-        return groups
+        return OrderedDict(
+            (group_name, [name for names in partition for name in names])
+            for group_name, partition in self._grad_norm_plan().clip_groups.items()
+        )
+
+    def _local_total_norm(self, grads: List[torch.Tensor]) -> torch.Tensor:
+        """
+        The parent method with a per-step memo of the per-parameter norms, so that the clip
+        groups and the component diagnostics share one norm kernel per parameter. Outside
+        :meth:`_clip_grad` the memo is off and this is exactly the parent method.
+        """
+        memo = self._step_local_norms
+        if memo is None:
+            return super()._local_total_norm(grads)
+        norms: List[torch.Tensor] = []
+        for grad in grads:
+            # Main gradients are distinct tensors that stay alive for the whole step.
+            key = id(grad)
+            try:
+                norm = memo[key]
+            except KeyError:
+                local_grad = _to_local_tensor(grad)
+                norm = (
+                    None
+                    if local_grad.numel() == 0
+                    else torch.linalg.vector_norm(local_grad.detach().float(), ord=2)
+                )
+                memo[key] = norm
+            if norm is not None:
+                norms.append(norm)
+        if not norms:
+            return torch.zeros((), device=self.device, dtype=torch.float32)
+        return torch.linalg.vector_norm(torch.stack(norms), ord=2)
 
     def _clip_grad(self) -> torch.Tensor:
         """
         Clip gradients globally, or independently per logical scheduler group when
         ``clip_grad_norm_by_scheduler_group`` is set. See the parent method for how the norms are
-        reduced across the DP, EP and PP meshes.
+        reduced across the DP, EP and PP meshes. Component gradient norms are computed only when
+        patterns were set for this step, and every parameter's norm is computed once and shared
+        between the clip groups and the components.
         """
+        self._step_local_norms = {}
+        try:
+            return self._clip_grad_once()
+        finally:
+            self._step_local_norms = None
+
+    def _clip_grad_once(self) -> torch.Tensor:
+        plan = self._grad_norm_plan()
         self.latest_component_grad_norms = self._compute_component_grad_norms()
         self.latest_clip_group_grad_norms = {}
         self.latest_clip_group_coefficients = {}
         if not self.clip_grad_norm_by_scheduler_group:
             return super()._clip_grad()
 
-        logical_groups = self._logical_grad_clip_groups()
-        ordered_names = [name for names in logical_groups.values() for name in names]
-        if len(ordered_names) != len(set(ordered_names)) or set(ordered_names) != set(
-            self.main_grad
-        ):
-            raise RuntimeError(
-                "Logical gradient-clip groups must be a disjoint, exhaustive partition of "
-                "optimizer gradients"
-            )
-        for group_name, names in logical_groups.items():
+        for group_name, partition in plan.clip_groups.items():
             self.latest_clip_group_grad_norms[group_name] = self._compute_total_grad_norm(
-                *self._partition_main_grads(set(names))
+                *self._main_grads(partition)
             )
         total_grad_norm = torch.linalg.vector_norm(
             torch.stack(list(self.latest_clip_group_grad_norms.values())), ord=2
         )
 
-        self._maybe_debug_nan_inf_grad_norm(total_grad_norm, *self._partition_main_grads())
+        self._maybe_debug_nan_inf_grad_norm(total_grad_norm, *self._main_grads(plan.all_params))
         if self.check_nan_inf_grad:
             _assert_finite_async(total_grad_norm, "total grad norm")
 
-        for group_name, names in logical_groups.items():
+        for group_name, partition in plan.clip_groups.items():
             group_norm = self.latest_clip_group_grad_norms[group_name]
             clip_coefficient = torch.clamp(self.max_grad_norm / (group_norm + 1e-6), max=1.0).to(
                 group_norm.device
             )
-            torch._foreach_mul_([self.main_grad[name] for name in names], clip_coefficient)
+            torch._foreach_mul_(
+                [self.main_grad[name] for names in partition for name in names], clip_coefficient
+            )
             self.latest_clip_group_coefficients[group_name] = clip_coefficient
         return total_grad_norm
 

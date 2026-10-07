@@ -98,7 +98,7 @@ def _retain_embedding_gradient_rows(grad: torch.Tensor, row_ids: Tuple[int, ...]
 
 
 def _matched_component_grad_norm_patterns(
-    component_patterns: Mapping[str, Tuple[str, ...]], trainable_names: set[str]
+    component_patterns: Mapping[str, Tuple[str, ...]], trainable_names: Collection[str]
 ) -> Dict[str, Tuple[str, ...]]:
     """Keep diagnostic components that match at least one trainable optimizer parameter."""
     return {
@@ -106,6 +106,26 @@ def _matched_component_grad_norm_patterns(
         for component, patterns in component_patterns.items()
         if any(fnmatch(name, pattern) for name in trainable_names for pattern in patterns)
     }
+
+
+COMPONENT_GRAD_NORM_PATTERNS: Dict[str, Tuple[str, ...]] = {
+    "vision": ("vision.*", "*vision.*"),
+    "connector": ("connector.*", "*connector.*"),
+    "input embeddings": ("lm.embeddings.weight", "*lm.embeddings.weight"),
+    "LM output head": ("lm.lm_head.w_out.*", "*lm.lm_head.w_out.*"),
+    "LM attention": ("lm.blocks.*.attention.*", "*lm.blocks.*.attention.*"),
+    "LM routed experts": ("lm.blocks.*.routed_experts.*", "*lm.blocks.*.routed_experts.*"),
+    "LM shared experts": ("lm.blocks.*.shared_experts.*", "*lm.blocks.*.shared_experts.*"),
+    "LM routers": (
+        "lm.blocks.*.routed_experts_router.*",
+        "*lm.blocks.*.routed_experts_router.*",
+    ),
+    "LM normalization": ("lm.*norm*", "*lm.*norm*"),
+}
+"""
+Optimizer parameter-name patterns behind each ``optim/<component> grad norm`` metric that
+:class:`MultimodalOLMoDDPTrainModule` records every ``diagnostics_interval`` steps.
+"""
 
 
 def _validate_loss_group_weights(weights: Optional[Dict[str, float]]) -> Dict[str, float]:
@@ -832,6 +852,9 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         self.response_logits_only = response_logits_only
         self.loss_group_weights = _validate_loss_group_weights(loss_group_weights)
         self.diagnostics_interval = diagnostics_interval
+        self._component_grad_norm_patterns_cache: Optional[
+            Tuple[Tuple[str, ...], Dict[str, Tuple[str, ...]]]
+        ] = None
         self.source_loss_mass_targets = dict(source_loss_mass_targets or {})
         if self.source_loss_mass_targets and (
             any(
@@ -1122,6 +1145,25 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
                     namespace="data",
                 )
 
+    def _component_grad_norm_patterns(
+        self, optim: MultimodalOLMoDDPOptimizer
+    ) -> Dict[str, Tuple[str, ...]]:
+        """
+        The entries of :data:`COMPONENT_GRAD_NORM_PATTERNS` that match a trainable optimizer
+        parameter, matched once and reused until a parameter is frozen or unfrozen.
+        """
+        trainable_names = optim._trainable_param_names()
+        cached = self._component_grad_norm_patterns_cache
+        if cached is None or cached[0] != trainable_names:
+            cached = (
+                trainable_names,
+                _matched_component_grad_norm_patterns(
+                    COMPONENT_GRAD_NORM_PATTERNS, set(trainable_names)
+                ),
+            )
+            self._component_grad_norm_patterns_cache = cached
+        return cached[1]
+
     def _diagnostics_enabled_for_step(self) -> bool:
         return bool(
             self.diagnostics_interval is not None
@@ -1185,35 +1227,7 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             )
         if collect_diagnostics:
             assert isinstance(optim, MultimodalOLMoDDPOptimizer)
-            component_patterns = {
-                "vision": ("vision.*", "*vision.*"),
-                "connector": ("connector.*", "*connector.*"),
-                "input embeddings": ("lm.embeddings.weight", "*lm.embeddings.weight"),
-                "LM output head": ("lm.lm_head.w_out.*", "*lm.lm_head.w_out.*"),
-                "LM attention": ("lm.blocks.*.attention.*", "*lm.blocks.*.attention.*"),
-                "LM routed experts": (
-                    "lm.blocks.*.routed_experts.*",
-                    "*lm.blocks.*.routed_experts.*",
-                ),
-                "LM shared experts": (
-                    "lm.blocks.*.shared_experts.*",
-                    "*lm.blocks.*.shared_experts.*",
-                ),
-                "LM routers": (
-                    "lm.blocks.*.routed_experts_router.*",
-                    "*lm.blocks.*.routed_experts_router.*",
-                ),
-                "LM normalization": ("lm.*norm*", "*lm.*norm*"),
-            }
-            trainable_names = {
-                name
-                for group in optim.param_groups
-                for name, param in group["named_params"].items()
-                if param.requires_grad
-            }
-            optim.set_component_grad_norm_patterns(
-                _matched_component_grad_norm_patterns(component_patterns, trainable_names)
-            )
+            optim.set_component_grad_norm_patterns(self._component_grad_norm_patterns(optim))
         try:
             super().optim_step()
             if collect_diagnostics:
