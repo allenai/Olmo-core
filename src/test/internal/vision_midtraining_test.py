@@ -864,9 +864,9 @@ def test_midtraining_without_alignment_starts_from_the_text_lm(mixed_recipe, tmp
     assert config.pretraining_checkpoint == str(checkpoint)
     assert config.model.lm.d_model == lm.d_model and config.model.lm.n_layers == lm.n_layers
     assert config.model.image_patch_token_id == 100280
-    assert config.model == MultimodalLMConfig.molmo2_vision_stack(
-        config.model.lm, image_patch_token_id=100280
-    )
+    expected = MultimodalLMConfig.molmo2_vision_stack(config.model.lm, image_patch_token_id=100280)
+    expected.compile_loss = True  # the recipe's default, on top of alignment's stack
+    assert config.model == expected
     # The initialization callback loads the LM and the vision encoder; resume uses the run's own
     # checkpoints.
     assert config.trainer.load_path is None
