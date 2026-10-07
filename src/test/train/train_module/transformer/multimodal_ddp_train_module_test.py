@@ -1,7 +1,7 @@
 """Multimodal OLMoDDP training, metrics, and native checkpoint contracts."""
 
 from types import SimpleNamespace
-from typing import Optional
+from typing import Dict, List, Optional
 
 import pytest
 import torch
@@ -884,8 +884,12 @@ def _run_skipping_rank_reduces_a_zero_vision_gradient():
     multimodal = train_module.multimodal_model
     # ``eval_only`` builds neither the fused optimizer (it needs CUDA parameters) nor the DDP
     # wrapper; wrap exactly as the train module does, with the production FP32 buckets.
+    world_mesh = train_module.world_mesh
+    assert world_mesh is not None
+    dense_mesh = world_mesh["dense"]
+    assert dense_mesh is not None
     ddp = multimodal.apply_dp(
-        dp_mesh=train_module.world_mesh["dense"]["dp"],
+        dp_mesh=dense_mesh["dp"],
         ep_mesh=None,
         accumulate_grads_in_fp32=True,
         reduce_grads_in_fp32=True,
@@ -900,12 +904,14 @@ def _run_skipping_rank_reduces_a_zero_vision_gradient():
     reference.to(torch.bfloat16).train()
     reference.load_state_dict(multimodal.state_dict())
 
-    encode_calls = []
+    encode_calls: List[int] = []
     encode = multimodal.encode_images
-    multimodal.encode_images = lambda *args, **kwargs: (  # type: ignore[method-assign]
-        encode_calls.append(1),
-        encode(*args, **kwargs),
-    )[1]
+
+    def counting_encode(*args, **kwargs):
+        encode_calls.append(1)
+        return encode(*args, **kwargs)
+
+    multimodal.encode_images = counting_encode  # type: ignore[method-assign]
 
     for step, image_rank in enumerate((0, 1)):
         ddp.zero_grad(set_to_none=False)
@@ -916,7 +922,7 @@ def _run_skipping_rank_reduces_a_zero_vision_gradient():
         ddp.finalize_grad_reduce()
         assert len(encode_calls) == (1 if rank == image_rank else 0)
 
-        expected = {}
+        expected: Dict[str, torch.Tensor] = {}
         for other in range(world_size):
             reference.zero_grad(set_to_none=True)
             _skipping_backward(reference, _skipping_batches(step, image=other == image_rank))
@@ -1003,12 +1009,14 @@ def _run_multimodal_text_only_step_skips_vision():
             "pooled_patches_idx": pooled,
         }
 
-    encode_calls = []
+    encode_calls: List[int] = []
     encode = multimodal.encode_images
-    multimodal.encode_images = lambda *args, **kwargs: (  # type: ignore[method-assign]
-        encode_calls.append(1),
-        encode(*args, **kwargs),
-    )[1]
+
+    def counting_encode(*args, **kwargs):
+        encode_calls.append(1)
+        return encode(*args, **kwargs)
+
+    multimodal.encode_images = counting_encode  # type: ignore[method-assign]
 
     for image in (False, True):
         connector_before = [param.detach().clone() for param in connector_params]
