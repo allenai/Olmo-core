@@ -10,6 +10,7 @@ from olmo_core.config import Config, DType, _clean_opts
 from olmo_core.data import InstanceFilterConfig, NumpyFSLDatasetConfig, TokenizerConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
+from olmo_core.data.multimodal.prefetch import PREFETCH_BACKENDS
 from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.data.source_mixture import SourceMixtureDatasetConfig, SourceMixtureList
 from olmo_core.exceptions import OLMoConfigurationError
@@ -162,6 +163,10 @@ class MixedMidtrainingRecipeConfig(Config):
     """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
     loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
     examples; a deeper queue lets the loader work through the GPU step."""
+    prefetch_backend: str = "process"
+    """Where the prefetch workers build examples: ``process`` (worker processes forked on the
+    first batch, so example construction does not share the training process's GIL) or
+    ``thread`` (a thread pool in the training process, the alignment recipes' default)."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
@@ -242,6 +247,8 @@ def _build_recipe(
             raise OLMoConfigurationError(f"recipe.{name} must be an integer of at least {minimum}")
     if recipe.visual_data not in ("midtraining", "stage1_v3"):
         raise OLMoConfigurationError("recipe.visual_data must be midtraining or stage1_v3")
+    if recipe.prefetch_backend not in PREFETCH_BACKENDS:
+        raise OLMoConfigurationError(f"recipe.prefetch_backend must be one of {PREFETCH_BACKENDS}")
     if (
         isinstance(recipe.text_loss_share, bool)
         or not isfinite(recipe.text_loss_share)
@@ -458,6 +465,7 @@ def _build_data_loader(
         image_dtype=DType.bfloat16,
         prefetch_workers=workers,
         prefetch_max_in_flight=recipe.prefetch_max_in_flight,
+        prefetch_backend=recipe.prefetch_backend,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
     ).merge(cli.overrides, prefix="data_loader")

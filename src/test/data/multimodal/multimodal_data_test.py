@@ -359,17 +359,55 @@ def test_pack_examples_concat_and_offsets():
     )  # b crop 1
 
 
-def test_prefetch_map_order_and_completeness():
+@pytest.mark.parametrize("backend", ["thread", "process"])
+def test_prefetch_map_order_and_completeness(backend):
     import time
 
     def slow(x):
-        time.sleep(0.001 * ((x * 7) % 5))  # uneven work so threads finish out of order
+        time.sleep(0.001 * ((x * 7) % 5))  # uneven work so workers finish out of order
         return x * x
 
     items = list(range(50))
     for workers in (0, 1, 4):
-        out = list(prefetch_map(slow, iter(items), num_workers=workers, max_in_flight=8))
+        out = list(
+            prefetch_map(slow, iter(items), num_workers=workers, max_in_flight=8, backend=backend)
+        )
         assert out == [x * x for x in items]  # order preserved, nothing dropped
+
+
+def test_prefetch_map_process_backend_matches_thread_backend_and_bounds_in_flight():
+    import os
+    import time
+
+    seen = []  # items pulled from the (shared) input iterator, in the parent
+
+    def produce():
+        for x in range(40):
+            seen.append(x)
+            yield x
+
+    def slow(x):
+        time.sleep(0.002 * ((x * 7) % 5))
+        return x * x, os.getpid()
+
+    threaded = list(prefetch_map(slow, produce(), num_workers=3, max_in_flight=5))
+    seen.clear()
+    forked = prefetch_map(slow, produce(), num_workers=3, max_in_flight=5, backend="process")
+    out = []
+    for result in forked:
+        assert len(seen) <= len(out) + 5 + 1  # at most max_in_flight items beyond the consumed
+        out.append(result)
+    assert [r[0] for r in out] == [r[0] for r in threaded] == [x * x for x in range(40)]
+    assert all(pid == os.getpid() for _, pid in threaded)
+    assert len({pid for _, pid in out} - {os.getpid()}) == 3  # built in three worker processes
+    with pytest.raises(ValueError, match="backend"):
+        next(prefetch_map(slow, iter(range(2)), num_workers=1, backend="greenlet"))
+
+    def fails(x):
+        raise RuntimeError(f"boom {x}")
+
+    with pytest.raises(RuntimeError, match="boom 0"):
+        next(prefetch_map(fails, iter(range(2)), num_workers=1, backend="process"))
 
 
 def test_mixture_data_loader_packs(tmp_path):
@@ -496,7 +534,8 @@ def test_mixture_data_loader_v5_validates_source_content_fingerprints(tmp_path):
         next(iter(changed))
 
 
-def test_mixture_data_loader_prefetch_skips_errors_in_reference_order(tmp_path):
+@pytest.mark.parametrize("backend", ["thread", "process"])
+def test_mixture_data_loader_prefetch_skips_errors_in_reference_order(tmp_path, backend):
     collator = MultimodalCollatorConfig(pad_token_id=0, pad_sequence_length=_SEQ).build()
 
     def build_loader(work_dir, workers):
@@ -513,6 +552,7 @@ def test_mixture_data_loader_prefetch_skips_errors_in_reference_order(tmp_path):
             pack_buffer_size=4,
             continuous_stream=True,
             prefetch_workers=workers,
+            prefetch_backend=backend,
         )
         loader.reshuffle(epoch=2)
         refs = list(itertools.islice(loader._rank_refs_from_cursor(), 3))

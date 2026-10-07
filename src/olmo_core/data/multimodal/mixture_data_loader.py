@@ -49,7 +49,7 @@ from .packing import (
     iter_packs,
     pack_examples,
 )
-from .prefetch import prefetch_map
+from .prefetch import PREFETCH_BACKENDS, prefetch_map
 from .rng import make_random_state
 
 if TYPE_CHECKING:
@@ -102,6 +102,11 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
     Defaults to ``max(2 * prefetch_workers, 4)`` when prefetching is enabled.
     This bounds prepared-example read-ahead without changing packing or resume state.
     """
+    prefetch_backend: str = "thread"
+    """Where ``prefetch_workers`` build examples: ``thread`` (a thread pool in the training
+    process) or ``process`` (worker processes forked on the first batch, after the datasets are
+    built). Same example stream, packing and resume state either way; see
+    :mod:`olmo_core.data.multimodal.prefetch`."""
     defer_packed_image_copy: bool | None = None
     """Copy packed float32 images directly into the final batch; disabled by default."""
     max_consecutive_data_errors: int = DEFAULT_MAX_CONSECUTIVE_DATA_ERRORS
@@ -165,6 +170,7 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
             est_tokens_per_example=self.est_tokens_per_example,
             prefetch_workers=self.prefetch_workers,
             prefetch_max_in_flight=self.prefetch_max_in_flight,
+            prefetch_backend=self.prefetch_backend,
             defer_packed_image_copy=(
                 False if self.defer_packed_image_copy is None else self.defer_packed_image_copy
             ),
@@ -200,6 +206,7 @@ class _OrderedExampleStream(Iterator[Tuple[ExampleRef, Dict[str, Any]]]):
                 loader._rank_refs_from_cursor(refs_consumed),
                 num_workers=loader.prefetch_workers,
                 max_in_flight=loader.prefetch_max_in_flight,
+                backend=loader.prefetch_backend,
             )
         )
 
@@ -315,6 +322,8 @@ class MixtureDataLoader(DataLoaderBase):
         ``defer_packed_image_copy`` apply only to this mode.
     :param prefetch_max_in_flight: Maximum prepared examples in flight per source group.
         Defaults to ``max(2 * prefetch_workers, 4)``. Ignored when prefetching is disabled.
+    :param prefetch_backend: ``"thread"`` or ``"process"`` workers for prefetching (see
+        :func:`~olmo_core.data.multimodal.prefetch.prefetch_map`).
     :param defer_packed_image_copy: Copy packed float32 images directly into the final batch.
     :param allow_legacy_state_without_dataset_fingerprints: Allow restoring version 3 or 4
         buffered-packing cursor state, which predates per-source content fingerprints. This
@@ -349,6 +358,7 @@ class MixtureDataLoader(DataLoaderBase):
         est_tokens_per_example: int = 1400,
         prefetch_workers: int = 0,
         prefetch_max_in_flight: int | None = None,
+        prefetch_backend: str = "thread",
         defer_packed_image_copy: bool = False,
         max_consecutive_data_errors: int = DEFAULT_MAX_CONSECUTIVE_DATA_ERRORS,
         max_total_data_errors: int = DEFAULT_MAX_TOTAL_DATA_ERRORS,
@@ -391,6 +401,10 @@ class MixtureDataLoader(DataLoaderBase):
             or prefetch_max_in_flight <= 0
         ):
             raise OLMoConfigurationError("prefetch_max_in_flight must be a positive integer")
+        if prefetch_backend not in PREFETCH_BACKENDS:
+            raise OLMoConfigurationError(
+                f"prefetch_backend must be one of {PREFETCH_BACKENDS}, got {prefetch_backend!r}"
+            )
         if not isinstance(defer_packed_image_copy, bool):
             raise OLMoConfigurationError("defer_packed_image_copy must be a boolean")
         self.datasets = list(datasets)
@@ -429,6 +443,7 @@ class MixtureDataLoader(DataLoaderBase):
         self.est_tokens_per_example = est_tokens_per_example
         self.prefetch_workers = prefetch_workers
         self.prefetch_max_in_flight = prefetch_max_in_flight
+        self.prefetch_backend = prefetch_backend
         self.defer_packed_image_copy = defer_packed_image_copy
         self.max_consecutive_data_errors = max_consecutive_data_errors
         self.max_total_data_errors = max_total_data_errors
@@ -498,6 +513,7 @@ class MixtureDataLoader(DataLoaderBase):
                     est_tokens_per_example=self.est_tokens_per_example,
                     prefetch_workers=self.prefetch_workers,
                     prefetch_max_in_flight=self.prefetch_max_in_flight,
+                    prefetch_backend=self.prefetch_backend,
                     defer_packed_image_copy=self.defer_packed_image_copy,
                     max_consecutive_data_errors=self.max_consecutive_data_errors,
                     max_total_data_errors=self.max_total_data_errors,
@@ -850,7 +866,7 @@ class MixtureDataLoader(DataLoaderBase):
 
     def _example_stream(self, rank_refs: Sequence) -> Iterator[Dict[str, Any]]:
         """Infinite stream of example dicts for this rank: cycle the refs, load each example
-        (heavy image preprocessing) on a background thread pool when ``prefetch_workers > 0``
+        (heavy image preprocessing) on a background worker pool when ``prefetch_workers > 0``
         so it overlaps the GPU step, yielding in order to keep packing deterministic."""
         if not rank_refs:
             raise OLMoConfigurationError("No examples are available for this data-parallel rank")
@@ -860,6 +876,7 @@ class MixtureDataLoader(DataLoaderBase):
                 itertools.cycle(rank_refs),
                 num_workers=self.prefetch_workers,
                 max_in_flight=self.prefetch_max_in_flight,
+                backend=self.prefetch_backend,
             )
         )
         try:

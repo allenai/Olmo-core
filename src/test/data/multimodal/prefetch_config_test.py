@@ -42,7 +42,7 @@ class _Dataset:
         }
 
 
-def _loader(path, *, depth=None, workers=8, grouped=False, buffer_size=4, rank=0):
+def _loader(path, *, depth=None, workers=8, grouped=False, buffer_size=4, rank=0, backend="thread"):
     return MixtureDataLoader(
         [_Dataset(100), _Dataset(200)],
         [0.4, 0.6],
@@ -58,6 +58,7 @@ def _loader(path, *, depth=None, workers=8, grouped=False, buffer_size=4, rank=0
         continuous_stream=buffer_size > 0,
         prefetch_workers=workers,
         prefetch_max_in_flight=depth,
+        prefetch_backend=backend,
         dp_world_size=2,
         dp_rank=rank,
         dataset_names=["caption", "transcript"],
@@ -87,13 +88,15 @@ def _assert_equal(actual, expected):
 
 
 @pytest.mark.parametrize("depth", [None, 64])
-def test_prefetch_config_round_trip_and_build(tmp_path, depth):
+@pytest.mark.parametrize("backend", ["thread", "process"])
+def test_prefetch_config_round_trip_and_build(tmp_path, depth, backend):
     config = MixtureDataLoaderConfig(
         global_batch_size=128,
         sequence_length=16,
         work_dir=str(tmp_path),
         prefetch_workers=4,
         prefetch_max_in_flight=depth,
+        prefetch_backend=backend,
     )
     restored = MixtureDataLoaderConfig.from_dict(config.as_config_dict())
     assert restored == config
@@ -106,12 +109,21 @@ def test_prefetch_config_round_trip_and_build(tmp_path, depth):
     loader = restored.build(dataset)
     assert loader.prefetch_workers == 4
     assert loader.prefetch_max_in_flight == depth
+    assert loader.prefetch_backend == backend
     legacy = config.as_config_dict()
     if depth is None:
         assert "prefetch_max_in_flight" not in legacy
     else:
         assert legacy.pop("prefetch_max_in_flight") == depth
     assert MixtureDataLoaderConfig.from_dict(legacy).prefetch_max_in_flight is None
+    legacy.pop("prefetch_backend", None)
+    assert MixtureDataLoaderConfig.from_dict(legacy).prefetch_backend == "thread"
+
+
+@pytest.mark.parametrize("backend", ["greenlet", None, 1])
+def test_invalid_prefetch_backend_rejected(tmp_path, backend):
+    with pytest.raises(OLMoConfigurationError, match="prefetch_backend"):
+        _loader(tmp_path, backend=backend)
 
 
 @pytest.mark.parametrize("depth", [0, "64"])
@@ -129,9 +141,11 @@ def test_prefetch_depth_reaches_both_streams_and_group_children(
     calls = []
     native_prefetch = mixture_data_loader.prefetch_map
 
-    def record(fn, values, *, num_workers, max_in_flight=None):
-        calls.append((num_workers, max_in_flight))
-        return native_prefetch(fn, values, num_workers=num_workers, max_in_flight=max_in_flight)
+    def record(fn, values, *, num_workers, max_in_flight=None, backend="thread"):
+        calls.append((num_workers, max_in_flight, backend))
+        return native_prefetch(
+            fn, values, num_workers=num_workers, max_in_flight=max_in_flight, backend=backend
+        )
 
     monkeypatch.setattr(mixture_data_loader, "prefetch_map", record)
     loader = _loader(tmp_path, depth=depth, grouped=grouped, buffer_size=buffer_size)
@@ -143,7 +157,7 @@ def test_prefetch_depth_reaches_both_streams_and_group_children(
         next(iterator)
     finally:
         iterator.close()
-    assert calls == [(8, depth)] * (2 if grouped else 1)
+    assert calls == [(8, depth, "thread")] * (2 if grouped else 1)
 
 
 @pytest.mark.parametrize("grouped", [False])
@@ -154,7 +168,15 @@ def test_native_prefetch_preserves_every_batch_field_and_state(
 ):
     expected = None
     expected_state = None
-    for workers, depth in [(0, None), (8, None), (8, 16), (4, 64), (4, 128)]:
+    for workers, depth, backend in [
+        (0, None, "thread"),
+        (8, None, "thread"),
+        (8, 16, "thread"),
+        (4, 64, "thread"),
+        (4, 128, "thread"),
+        (4, None, "process"),
+        (3, 16, "process"),
+    ]:
         loader = _loader(
             tmp_path,
             workers=workers,
@@ -162,6 +184,7 @@ def test_native_prefetch_preserves_every_batch_field_and_state(
             grouped=grouped,
             buffer_size=buffer_size,
             rank=rank,
+            backend=backend,
         )
         loader.reshuffle(epoch=2)
         iterator = iter(loader)

@@ -136,6 +136,7 @@ def test_mixed_recipe_defaults_and_roundtrip(mixed_recipe):
     assert config.data_loader.group_sequence_quotas is None
     assert config.train_module.loss_group_weights is None
     assert config.data_loader.prefetch_workers == 8
+    assert config.data_loader.prefetch_backend == "process"
     assert config.data_loader.max_consecutive_data_errors == 0
     assert config.data_loader.max_total_data_errors == 0
     assert config.trainer.max_duration.value == 50000297984
@@ -1020,6 +1021,15 @@ def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
         f"--recipe.text_config={text_config.path}", "--recipe.prefetch_max_in_flight=128"
     )
     assert deeper.data_loader.prefetch_max_in_flight == 128
+    assert default.data_loader.prefetch_backend == "process"
+    threaded = mixed_recipe.build(
+        f"--recipe.text_config={text_config.path}", "--recipe.prefetch_backend=thread"
+    )
+    assert threaded.data_loader.prefetch_backend == "thread"
+    with pytest.raises(OLMoConfigurationError, match="prefetch_backend"):
+        mixed_recipe.build(
+            f"--recipe.text_config={text_config.path}", "--recipe.prefetch_backend=greenlet"
+        )
 
 
 def test_text_config_from_the_text_lm_scales_the_fresh_components(
