@@ -166,6 +166,9 @@ class MixedMidtrainingRecipeConfig(Config):
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
     example, its calibrated means, and its loss shares within the visual share)."""
+    compile_loss: bool = True
+    """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs
+    (see :attr:`~olmo_core.nn.vision.MultimodalLMConfig.compile_loss`) instead of eagerly."""
 
 
 @dataclass
@@ -917,6 +920,7 @@ def build_config(
             tokenizer_cache_dir=recipe.hf_cache_dir,
         ).build_tokenizer()
         model = _build_lm_model(recipe, text, token_ids)
+    model.compile_loss = recipe.compile_loss
     stage1_v3 = recipe.visual_data == "stage1_v3" and recipe.text_loss_share < 1.0
     if stage1_v3:
         means = dict(STAGE1_V3_MEAN_LOSS_WEIGHTS)

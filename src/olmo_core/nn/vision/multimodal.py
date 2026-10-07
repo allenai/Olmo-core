@@ -143,6 +143,14 @@ class MultimodalLMConfig(Config):
     ``0`` scores every response token at once.
     """
 
+    compile_loss: bool = False
+    """
+    Run the per-chunk math of that weighted loss (projection, log-sum-exp and partial sums in
+    the forward; recomputed logits, softmax and their gradient in the backward) as static-shape
+    :func:`torch.compile` graphs instead of eagerly. The arithmetic is unchanged up to the
+    summation order within a chunk. Off by default; the mixed mid-training recipe turns it on.
+    """
+
     output_vocab_size: Optional[int] = None
     """
     Number of token IDs the model may *predict*. Molmo2 extends the base text vocab
@@ -1428,6 +1436,7 @@ class MultimodalOLMoDDPModel(MultimodalLM):
                 compute_z_loss=z_loss_multiplier is not None,
                 z_loss_multiplier=z_loss_multiplier or 0.0,
                 chunk_size=self.cfg.loss_chunk_size,
+                compile=self.cfg.compile_loss,
             )
         div_factor = (
             loss_weight_div_factor if loss_weight_div_factor is not None else loss_div_factor
