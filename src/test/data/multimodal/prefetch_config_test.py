@@ -42,7 +42,17 @@ class _Dataset:
         }
 
 
-def _loader(path, *, depth=None, workers=8, grouped=False, buffer_size=4, rank=0):
+def _loader(
+    path,
+    *,
+    depth=None,
+    workers=8,
+    grouped=False,
+    buffer_size=4,
+    rank=0,
+    keep_full=False,
+    max_ready=None,
+):
     return MixtureDataLoader(
         [_Dataset(100), _Dataset(200)],
         [0.4, 0.6],
@@ -58,6 +68,8 @@ def _loader(path, *, depth=None, workers=8, grouped=False, buffer_size=4, rank=0
         continuous_stream=buffer_size > 0,
         prefetch_workers=workers,
         prefetch_max_in_flight=depth,
+        prefetch_keep_full=keep_full,
+        prefetch_max_ready=max_ready,
         dp_world_size=2,
         dp_rank=rank,
         dataset_names=["caption", "transcript"],
@@ -87,13 +99,16 @@ def _assert_equal(actual, expected):
 
 
 @pytest.mark.parametrize("depth", [None, 64])
-def test_prefetch_config_round_trip_and_build(tmp_path, depth):
+@pytest.mark.parametrize("keep_full,max_ready", [(False, None), (True, None), (True, 8)])
+def test_prefetch_config_round_trip_and_build(tmp_path, depth, keep_full, max_ready):
     config = MixtureDataLoaderConfig(
         global_batch_size=128,
         sequence_length=16,
         work_dir=str(tmp_path),
         prefetch_workers=4,
         prefetch_max_in_flight=depth,
+        prefetch_keep_full=keep_full,
+        prefetch_max_ready=max_ready,
     )
     restored = MixtureDataLoaderConfig.from_dict(config.as_config_dict())
     assert restored == config
@@ -106,18 +121,42 @@ def test_prefetch_config_round_trip_and_build(tmp_path, depth):
     loader = restored.build(dataset)
     assert loader.prefetch_workers == 4
     assert loader.prefetch_max_in_flight == depth
+    assert loader.prefetch_keep_full is keep_full
+    assert loader.prefetch_max_ready == max_ready
     legacy = config.as_config_dict()
+    assert legacy.pop("prefetch_keep_full") is keep_full
+    if max_ready is not None:
+        assert legacy.pop("prefetch_max_ready") == max_ready
+    else:
+        assert "prefetch_max_ready" not in legacy
     if depth is None:
         assert "prefetch_max_in_flight" not in legacy
     else:
         assert legacy.pop("prefetch_max_in_flight") == depth
-    assert MixtureDataLoaderConfig.from_dict(legacy).prefetch_max_in_flight is None
+    # A config saved before these fields existed restores to the old behaviour.
+    restored_legacy = MixtureDataLoaderConfig.from_dict(legacy)
+    assert restored_legacy.prefetch_max_in_flight is None
+    assert restored_legacy.prefetch_keep_full is False
+    assert restored_legacy.prefetch_max_ready is None
 
 
 @pytest.mark.parametrize("depth", [0, "64"])
 def test_invalid_prefetch_depth_rejected_even_without_workers(tmp_path, depth):
     with pytest.raises(OLMoConfigurationError, match="prefetch_max_in_flight"):
         _loader(tmp_path, depth=depth, workers=0)
+
+
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"keep_full": "yes"}, "prefetch_keep_full"),
+        ({"keep_full": True, "max_ready": -1}, "prefetch_max_ready"),
+        ({"keep_full": True, "max_ready": True}, "prefetch_max_ready"),
+    ],
+)
+def test_invalid_keep_full_settings_rejected(tmp_path, kwargs, match):
+    with pytest.raises(OLMoConfigurationError, match=match):
+        _loader(tmp_path, **kwargs)
 
 
 @pytest.mark.parametrize("depth", [64])
@@ -129,32 +168,50 @@ def test_prefetch_depth_reaches_both_streams_and_group_children(
     calls = []
     native_prefetch = mixture_data_loader.prefetch_map
 
-    def record(fn, values, *, num_workers, max_in_flight=None):
-        calls.append((num_workers, max_in_flight))
-        return native_prefetch(fn, values, num_workers=num_workers, max_in_flight=max_in_flight)
+    def record(fn, values, *, num_workers, max_in_flight=None, keep_full=False, **kwargs):
+        calls.append((num_workers, max_in_flight, keep_full))
+        return native_prefetch(
+            fn, values, num_workers=num_workers, max_in_flight=max_in_flight, keep_full=keep_full
+        )
 
     monkeypatch.setattr(mixture_data_loader, "prefetch_map", record)
-    loader = _loader(tmp_path, depth=depth, grouped=grouped, buffer_size=buffer_size)
+    loader = _loader(
+        tmp_path, depth=depth, grouped=grouped, buffer_size=buffer_size, keep_full=True
+    )
     for child in loader._group_loaders.values():
         assert child.prefetch_max_in_flight == depth
+        assert child.prefetch_keep_full is True
     loader.reshuffle(epoch=1)
     iterator = iter(loader)
     try:
         next(iterator)
     finally:
         iterator.close()
-    assert calls == [(8, depth)] * (2 if grouped else 1)
+    assert calls == [(8, depth, True)] * (2 if grouped else 1)
 
 
-@pytest.mark.parametrize("grouped", [False])
+@pytest.mark.parametrize("grouped", [False, True])
 @pytest.mark.parametrize("buffer_size", [4])
-@pytest.mark.parametrize("rank", [0])
+@pytest.mark.parametrize("rank", [0, 1])
 def test_native_prefetch_preserves_every_batch_field_and_state(
     tmp_path, grouped, buffer_size, rank
 ):
+    """Every prefetch policy and depth, keep-full included, yields exactly the batches and
+    loader state of the thread-free (synchronous) loader."""
     expected = None
     expected_state = None
-    for workers, depth in [(0, None), (8, None), (8, 16), (4, 64), (4, 128)]:
+    settings = [
+        (0, None, False, None),  # synchronous reference
+        (8, None, False, None),
+        (8, 16, False, None),
+        (4, 64, False, None),
+        (4, 128, False, None),
+        (8, None, True, None),
+        (8, 16, True, 16),
+        (8, 4, True, 0),
+        (4, 64, True, 8),
+    ]
+    for workers, depth, keep_full, max_ready in settings:
         loader = _loader(
             tmp_path,
             workers=workers,
@@ -162,6 +219,8 @@ def test_native_prefetch_preserves_every_batch_field_and_state(
             grouped=grouped,
             buffer_size=buffer_size,
             rank=rank,
+            keep_full=keep_full,
+            max_ready=max_ready,
         )
         loader.reshuffle(epoch=2)
         iterator = iter(loader)
@@ -174,5 +233,10 @@ def test_native_prefetch_preserves_every_batch_field_and_state(
             else:
                 _assert_equal(batches, expected)
                 _assert_equal(state, expected_state)
+            stats = loader.prefetch_stats()
+            assert stats["yielded"] >= 4 * (loader.rank_batch_size // 64)
+            if keep_full:
+                cap = (depth or 16) + ((depth or 16) if max_ready is None else max_ready)
+                assert stats["max_unconsumed"] <= cap
         finally:
             iterator.close()

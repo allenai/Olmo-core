@@ -233,6 +233,11 @@ class VisionAlignmentRecipeConfig(Config):
     """Native replay windows withheld in joint; zero requires separate text validation."""
     text_validation_seed: int = 6198
     """Seed shared by the complementary native replay training and validation splits."""
+    prefetch_keep_full: bool = True
+    """Keep the loader's prefetch window full of in-progress examples rather than refilling it
+    only as the next in-order example is consumed, so one slow example does not idle the pool
+    (:attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.prefetch_keep_full`).
+    Same examples in the same order; resume state is unchanged."""
     router_lb_loss_weight: float | None = None
     """Override routed experts' load-balancing coefficients.
 
@@ -936,6 +941,7 @@ def _build_data_loader(
         # Only the real crops are collated and copied (no padding to the batch's crop maximum).
         compact_images=True,
         prefetch_workers=workers,
+        prefetch_keep_full=recipe.prefetch_keep_full,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
         group_sequence_quotas={"text": 16, "vision": 112}

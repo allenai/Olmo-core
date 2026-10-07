@@ -162,6 +162,15 @@ class MixedMidtrainingRecipeConfig(Config):
     """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
     loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
     examples; a deeper queue lets the loader work through the GPU step."""
+    prefetch_keep_full: bool = True
+    """Keep the prefetch window full of in-progress examples: submit the next example whenever
+    any in-flight one finishes rather than only when the next in-order example is consumed, so a
+    slow olmOCR page render does not idle the pool (same examples in the same order; resume state
+    is unchanged). See
+    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.prefetch_keep_full`."""
+    prefetch_max_ready: int | None = None
+    """With ``prefetch_keep_full``, finished examples the loader may buffer beyond the in-progress
+    ones; ``None`` is ``prefetch_max_in_flight``."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
@@ -463,6 +472,8 @@ def _build_data_loader(
         compact_images=True,
         prefetch_workers=workers,
         prefetch_max_in_flight=recipe.prefetch_max_in_flight,
+        prefetch_keep_full=recipe.prefetch_keep_full,
+        prefetch_max_ready=recipe.prefetch_max_ready,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
     ).merge(cli.overrides, prefix="data_loader")
