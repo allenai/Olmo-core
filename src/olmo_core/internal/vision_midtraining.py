@@ -163,10 +163,13 @@ class MixedMidtrainingRecipeConfig(Config):
     """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
     loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
     examples; a deeper queue lets the loader work through the GPU step."""
-    prefetch_backend: str = "process"
-    """Where the prefetch workers build examples: ``process`` (worker processes forked on the
-    first batch, so example construction does not share the training process's GIL) or
-    ``thread`` (a thread pool in the training process, the alignment recipes' default)."""
+    prefetch_backend: str = "thread"
+    """Where the prefetch workers build examples: ``thread`` (a thread pool in the training
+    process) or ``process`` (worker processes forked on the first batch, so example construction
+    does not share the training process's GIL). Measured on the 150-step mixed mb6 smoke (16 GPUs,
+    8 workers): ``process`` built the same batches but spent 1.40 s/step waiting for data against
+    ``thread``'s 0.87 s (3.92 vs 3.40 s/step), the ~13 MB example dicts being pickled back
+    through the pool's single result pipe; ``thread`` stays the default."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
