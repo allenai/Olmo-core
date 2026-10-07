@@ -930,6 +930,8 @@ def _build_data_loader(
         batch_metadata=True,
         # Half the pixel bytes copied to the device; the bf16 tower sees the same values.
         image_dtype=DType.bfloat16,
+        # Only the real crops are collated and copied (no padding to the batch's crop maximum).
+        compact_images=True,
         prefetch_workers=workers,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,

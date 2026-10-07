@@ -44,6 +44,12 @@ class MultimodalCollatorConfig(Config):
     model casts pixels to its vision tower's dtype anyway, so ``bfloat16`` halves what is
     copied to the device for a bf16 tower without changing what it computes."""
 
+    compact_images: bool = False
+    """Emit ``images`` as the batch's real crops only, ``(total_crops, n_patches, patch_dim)``,
+    with ``image_crop_counts`` saying how many belong to each example, instead of padding every
+    example's crop axis to the batch maximum (see :class:`MultimodalCollator`). Consumed by the
+    OLMoDDP multimodal train module; off by default."""
+
     def build(self) -> "MultimodalCollator":
         return MultimodalCollator(
             pad_token_id=self.pad_token_id,
@@ -51,6 +57,7 @@ class MultimodalCollatorConfig(Config):
             pad_sequence_length=self.pad_sequence_length,
             batch_metadata=self.batch_metadata,
             image_dtype=self.image_dtype.as_pt() if self.image_dtype is not None else None,
+            compact_images=self.compact_images,
         )
 
 
@@ -63,12 +70,20 @@ class MultimodalCollator:
     their original float32 image parts for direct assembly into the final batch.
 
     Token fields are right-padded to the batch's max sequence length; ``images`` is
-    padded along the crop axis and ``pooled_patches_idx`` along the pooled-token axis
-    (with ``-1``, which the connector treats as padding).
+    padded along the crop axis (or compacted, see ``compact_images``) and
+    ``pooled_patches_idx`` along the pooled-token axis (with ``-1``, which the connector
+    treats as padding).
 
     :param batch_metadata: Also emit a boolean ``router_token_mask`` (real, non-padding token
         slots) and per-row ``image_crop_counts`` / ``pooled_token_counts``. Off by default,
         so the batch keys match the Molmo2 training scripts.
+    :param compact_images: Emit ``images`` as the batch's real crops concatenated in example
+        order, ``(total_crops, n_patches, patch_dim)``, together with ``image_crop_counts``
+        (``(B,)``, crops per example), instead of the ``(B, max_crops, ...)`` layout padded with
+        zero crops. ``pooled_patches_idx`` is unchanged: its indices address each example's own
+        crop axis. A batch without any crop emits an empty ``(0, n_patches, patch_dim)`` tensor;
+        the model then runs its one dummy crop itself. Off by default (the stage-1 train module
+        and the Molmo2 scripts read the padded layout).
     """
 
     def __init__(
@@ -78,12 +93,14 @@ class MultimodalCollator:
         pad_sequence_length: Optional[int] = None,
         batch_metadata: bool = False,
         image_dtype: Optional[torch.dtype] = None,
+        compact_images: bool = False,
     ):
         self.pad_token_id = pad_token_id
         self.label_ignore_index = label_ignore_index
         self.pad_sequence_length = pad_sequence_length
         self.batch_metadata = batch_metadata
         self.image_dtype = image_dtype
+        self.compact_images = compact_images
 
     def _pad_1d(self, arrays: List[np.ndarray], value, max_len: int, dtype) -> torch.Tensor:
         out = np.full((len(arrays), max_len), value, dtype=dtype)
@@ -133,13 +150,14 @@ class MultimodalCollator:
                 max_len,
                 np.bool_,
             )
-            # Diagnostic-only metadata. The train module records these before removing them
-            # from model kwargs, so they cannot change the forward signature.
-            batch["image_crop_counts"] = torch.tensor(
-                [ex["images"].shape[0] for ex in examples], dtype=torch.int64
-            )
+            # Diagnostic-only metadata (with padded images; compact images need the crop
+            # counts). The train module records these before removing them from model kwargs.
             batch["pooled_token_counts"] = torch.tensor(
                 [ex["pooled_patches_idx"].shape[0] for ex in examples], dtype=torch.int64
+            )
+        if self.batch_metadata or self.compact_images:
+            batch["image_crop_counts"] = torch.tensor(
+                [ex["images"].shape[0] for ex in examples], dtype=torch.int64
             )
 
         # Images. Text-only examples contribute 0 real crops / 0 pooled rows. We *always*
@@ -150,11 +168,22 @@ class MultimodalCollator:
         # when a rank's whole microbatch is text-only (a mismatch there deadlocks NCCL).
         # ``MultimodalLM.forward`` adds a 0-weighted tie so the connector also participates
         # in the backward pass for these dummy crops.
-        crops = max(max_crops, 1)
-        images = np.zeros((len(examples), crops, n_patches, patch_dim), dtype=np.float32)
+        #
+        # With ``compact_images`` the real crops are concatenated instead (no padded slots, no
+        # dummy crop: the model adds its own when the tensor is empty).
         # Pooled patch indices: (B, max_pool, pool_size), pad with -1 (connector ignores;
         # text-only rows are entirely -1 -> contribute no spliced features).
         pooled = np.full((len(examples), max(max_pool, 1), pool_size), -1, dtype=np.int64)
+        for i, ex in enumerate(examples):
+            pp = ex["pooled_patches_idx"]
+            if pp.shape[0]:
+                pooled[i, : pp.shape[0]] = pp
+        batch["pooled_patches_idx"] = torch.from_numpy(pooled)
+        if self.compact_images:
+            batch["images"] = self._compact_images(examples, n_patches, patch_dim)
+            return self._finish(batch, examples, max_len)
+        crops = max(max_crops, 1)
+        images = np.zeros((len(examples), crops, n_patches, patch_dim), dtype=np.float32)
         for i, ex in enumerate(examples):
             im = ex["images"]
             if isinstance(im, _PackedImageParts):
@@ -165,13 +194,38 @@ class MultimodalCollator:
                     offset = end
             elif im.shape[0]:
                 images[i, : im.shape[0]] = im
-            pp = ex["pooled_patches_idx"]
-            if pp.shape[0]:
-                pooled[i, : pp.shape[0]] = pp
         batch["images"] = torch.from_numpy(images)
         if self.image_dtype is not None:
             batch["images"] = batch["images"].to(self.image_dtype)
-        batch["pooled_patches_idx"] = torch.from_numpy(pooled)
+        return self._finish(batch, examples, max_len)
+
+    def _compact_images(
+        self, examples: List[Dict[str, Any]], n_patches: int, patch_dim: int
+    ) -> torch.Tensor:
+        """The batch's real crops in example order, ``(total_crops, n_patches, patch_dim)``.
+
+        Each part is cast to ``image_dtype`` before the concatenation so the float32 crops never
+        exist as one batch-sized tensor.
+        """
+        parts: List[torch.Tensor] = []
+        for ex in examples:
+            im = ex["images"]
+            for part in im.parts if isinstance(im, _PackedImageParts) else (im,):
+                if part.shape[0] == 0:
+                    continue
+                crops = torch.from_numpy(np.ascontiguousarray(part))
+                parts.append(crops if self.image_dtype is None else crops.to(self.image_dtype))
+        if parts:
+            return torch.cat(parts)
+        return torch.zeros(
+            (0, n_patches, patch_dim),
+            dtype=torch.float32 if self.image_dtype is None else self.image_dtype,
+        )
+
+    def _finish(
+        self, batch: Dict[str, torch.Tensor], examples: List[Dict[str, Any]], max_len: int
+    ) -> Dict[str, torch.Tensor]:
+        """Add the packing fields (subsegment / example ids, source names) and return the batch."""
 
         # Subsegment ids only when at least one example is multi-branch (packed). For
         # padded / single-branch positions a uniform id leaves attention unrestricted.

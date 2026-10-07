@@ -557,30 +557,52 @@ class MultimodalLM(nn.Module):
         refers to no crop at all (text only) still runs one crop, so the vision path and its
         parameters take part in every step.
 
-        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``.
+        Compact images, ``(total_crops, n_patches, patch_dim)`` with ``counts`` saying how many
+        consecutive crops belong to each example, are the real crops already and go to the
+        encoder as they are.
+
+        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``, or compact
+            ``(total_crops, n_patches, patch_dim)``.
         :param pooled_patches_idx: Shape ``(B, n_pooled, pool_size)`` —
             indices into the flattened ``(n_crops * n_patches)`` patch axis
             for each pool group, with ``-1`` marking padded slots.
         :param counts: Crops per example as :func:`_crop_counts` derives them; computed here
-            from ``pooled_patches_idx`` (one device-to-host sync) when not given.
+            from ``pooled_patches_idx`` (one device-to-host sync) when not given. Required with
+            compact images, whose crop axis is the sum of the counts.
         :returns: Shape ``(B, n_pooled, lm_d_model)``.
         """
-        B, T, N, _ = images.shape
         device = images.device
         microbatch = self._vit_crop_microbatch()
-
-        if counts is None:
-            counts = _crop_counts(pooled_patches_idx, N)
-        if max(counts) > T:
-            raise ValueError(
-                f"pooled_patches_idx refers to crop {max(counts) - 1} but images has {T} crops"
-            )
+        compact = images.ndim == 3
+        if compact:
+            if counts is None:
+                raise ValueError("Compact images need the crops per example (`counts`)")
+            B, N = pooled_patches_idx.shape[0], images.shape[1]
+            if len(counts) != B or sum(counts) != images.shape[0]:
+                raise ValueError(
+                    f"Compact images carry {images.shape[0]} crops but the crop counts of the "
+                    f"{len(counts)} examples sum to {sum(counts)} ({B} pooled rows)"
+                )
+        else:
+            B, T, N, _ = images.shape
+            if counts is None:
+                counts = _crop_counts(pooled_patches_idx, N)
+            if max(counts) > T:
+                raise ValueError(
+                    f"pooled_patches_idx refers to crop {max(counts) - 1} but images has {T} crops"
+                )
         n_used = max(max(counts), 1)
-        rows = [b * T + c for b, n in enumerate(counts) for c in range(n)]
         dest = [b * n_used + c for b, n in enumerate(counts) for c in range(n)]
-        if not rows:
-            rows, dest = [0], [0]
-        flat = images.reshape(B * T, N, -1).index_select(0, torch.tensor(rows, device=device))
+        if compact:
+            # One zero crop stands in for a batch without any, as the padded collator's dummy.
+            flat = images if dest else images.new_zeros((1, N, images.shape[-1]))
+        else:
+            rows = [b * T + c for b, n in enumerate(counts) for c in range(n)]
+            if not rows:
+                rows = [0]
+            flat = images.reshape(B * T, N, -1).index_select(0, torch.tensor(rows, device=device))
+        if not dest:
+            dest = [0]
         n_real = flat.shape[0]
 
         if self.sync_vit_crops and is_distributed():
@@ -619,15 +641,20 @@ class MultimodalLM(nn.Module):
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        image_crop_counts: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Encode images into the compact ``(total_valid_pooled_rows, d_model)`` features that
         :meth:`forward` splices at the ``<im_patch>`` positions, so they can be computed once and
         reused across autoregressive forwards (``encoded_image_features``).
 
-        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``.
+        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``, or the batch's real crops
+            in example order, ``(total_crops, n_patches, patch_dim)``, with ``image_crop_counts``.
         :param pooled_patches_idx: Shape ``(B, n_pooled, pool_size)``; a row whose indices are
-            all ``-1`` is collator padding and is dropped.
+            all ``-1`` is collator padding and is dropped. With compact images its indices still
+            address each example's own crop axis.
+        :param image_crop_counts: ``(B,)`` crops per example; required with compact images and
+            ignored otherwise.
         """
         device = self.lm.device
         # Row bookkeeping runs on the host copy of the indices when the caller hands one over
@@ -638,7 +665,18 @@ class MultimodalLM(nn.Module):
         # computed in the tower's; the cast is a no-op when they already match.
         images = images.to(device=device, dtype=next(self.vision.parameters()).dtype)
         pooled_patches_idx = pooled_patches_idx.to(device)
-        counts = _crop_counts(idx_host, images.shape[2]) if idx_host is not None else None
+        n_patches = images.shape[1] if images.ndim == 3 else images.shape[2]
+        referenced = _crop_counts(idx_host, n_patches) if idx_host is not None else None
+        counts = referenced
+        if images.ndim == 3:
+            if image_crop_counts is None:
+                raise ValueError("Compact `images` require `image_crop_counts`")
+            counts = [int(n) for n in image_crop_counts.tolist()]
+            if referenced is not None and any(r > n for r, n in zip(referenced, counts)):
+                raise ValueError(
+                    "pooled_patches_idx refers to crops beyond image_crop_counts: "
+                    f"{referenced} referenced, {counts} given"
+                )
         image_features = self._encode_images(images, pooled_patches_idx, counts)  # (B, n_pooled, d)
         self._record_input_diagnostic("connector output RMS", image_features)
 
@@ -671,6 +709,7 @@ class MultimodalLM(nn.Module):
         subsegment_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         example_ids: Optional[torch.Tensor] = None,
+        image_crop_counts: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
         """
@@ -680,12 +719,15 @@ class MultimodalLM(nn.Module):
             :attr:`cfg.image_patch_token_id` will be overwritten (via ``+=``)
             with projected image features.
         :param images: Pre-patchified image patches, shape
-            ``(B, n_crops, n_patches, patch_dim)``. Pass ``None`` for
-            text-only batches.
+            ``(B, n_crops, n_patches, patch_dim)``, or the real crops of the batch in example
+            order, ``(total_crops, n_patches, patch_dim)``, with ``image_crop_counts``. Pass
+            ``None`` for text-only batches.
         :param pooled_patches_idx: Per-group patch indices,
             shape ``(B, n_pooled, pool_size)``. Required when *images* is not
             ``None``. The number of non-padding pooled rows must equal the number of
             ``<im_patch>`` tokens per sequence.
+        :param image_crop_counts: ``(B,)`` crops per example, required with compact ``images``
+            (see :meth:`encode_images`).
         :param encoded_image_features: Optional output of :meth:`encode_images`, reused across
             autoregressive forwards; mutually exclusive with ``images``.
         :param labels: Target token IDs, shape ``(B, seq_len)``.
@@ -825,7 +867,7 @@ class MultimodalLM(nn.Module):
         if images is not None:
             if pooled_patches_idx is None:
                 raise ValueError("`pooled_patches_idx` is required when `images` is provided")
-            image_features = self.encode_images(images, pooled_patches_idx)
+            image_features = self.encode_images(images, pooled_patches_idx, image_crop_counts)
 
             # Tie the connector output into the autograd graph on *every* forward that ran
             # the vision path, even when no rows are spliced below (e.g. an all-text
@@ -1103,6 +1145,7 @@ class MultimodalOLMoDDPModel(MultimodalLM):
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        image_crop_counts: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Encode images with the pixels cast to the vision tower's parameter dtype.
@@ -1112,7 +1155,9 @@ class MultimodalOLMoDDPModel(MultimodalLM):
         required here; it is a no-op when the tower already runs in the pixels' dtype.
         """
         vision_dtype = next(self.vision.parameters()).dtype
-        return super().encode_images(images.to(dtype=vision_dtype), pooled_patches_idx)
+        return super().encode_images(
+            images.to(dtype=vision_dtype), pooled_patches_idx, image_crop_counts
+        )
 
     @property
     def _olmo_lm(self):
