@@ -1096,3 +1096,20 @@ def test_document_mode_off_uses_the_text_teams_kda_kernels(
     else:
         assert config.model.document_mode is False
         assert all(m.use_experimental_kernels is True for m in mixers)  # kernel_fun, no boundaries
+
+
+@pytest.mark.parametrize("compile_loss", [None, False])
+def test_the_chunked_loss_is_compiled_unless_the_recipe_says_otherwise(
+    text_config, tmp_path, compile_loss
+):
+    lm = OLMoDDPModelConfig.from_dict(text_config.config["model"])
+    checkpoint = _write_text_lm_checkpoint(tmp_path / "text-lm" / "step100", lm)
+    overrides = [
+        f"--recipe.pretraining_checkpoint={checkpoint}",
+        f"--recipe.text_config={text_config.path}",
+    ]
+    if compile_loss is not None:
+        overrides.append(f"--recipe.compile_loss={compile_loss}")
+    config = _build_from_text_lm(tmp_path, *overrides)
+    assert config.model.loss_chunk_size > 0
+    assert config.model.compile_loss is (compile_loss is None)
