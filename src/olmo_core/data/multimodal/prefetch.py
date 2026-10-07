@@ -62,7 +62,7 @@ def prefetch_map(
     *,
     num_workers: int,
     max_in_flight: Optional[int] = None,
-    backend: PrefetchBackend = "thread",
+    backend: str = "thread",
 ) -> Iterator[R]:
     """Lazily apply ``fn`` over ``iterable`` on a worker pool, yielding results in order.
 
