@@ -556,3 +556,92 @@ class TestCropCompaction:
         self.model.sync_vit_crops = False
         _, images, idx = _ragged_inputs([1, 2])
         assert self.model._encode_images(images, idx).shape == (2, 2, _LM_D_MODEL)
+
+
+# ---------------------------------------------------------------------------
+# Compact images: the collator hands over the real crops only, plus crops per example
+# ---------------------------------------------------------------------------
+
+
+def _compact(images: torch.Tensor, counts):
+    """The padded ``(B, T, N, D)`` crops as the collator's compact layout plus crop counts."""
+    compact = torch.cat([images[b, :n] for b, n in enumerate(counts)])
+    return compact, torch.tensor(counts, dtype=torch.long)
+
+
+class TestCompactImages:
+    def setup_method(self):
+        torch.manual_seed(0)
+        self.model = _tiny_multimodal_cfg().build(init_device="cpu")
+        self.model.eval()
+
+    @pytest.mark.parametrize("counts", [[3, 1, 0], [0, 2], [1]])
+    def test_compact_and_padded_images_give_the_same_features_and_logits(self, counts):
+        input_ids, images, idx = _ragged_inputs(counts)
+        compact, crop_counts = _compact(images, counts)
+        assert compact.shape[0] == sum(counts)
+        padded_features = self.model.encode_images(images, idx)
+        compact_features = self.model.encode_images(compact, idx, crop_counts)
+        torch.testing.assert_close(compact_features, padded_features, rtol=0, atol=0)
+        padded_out = self.model(input_ids, images=images, pooled_patches_idx=idx)
+        compact_out = self.model(
+            input_ids, images=compact, pooled_patches_idx=idx, image_crop_counts=crop_counts
+        )
+        torch.testing.assert_close(compact_out, padded_out, rtol=0, atol=0)
+
+    def test_compact_crops_reach_the_encoder_without_a_gather(self, monkeypatch):
+        counts = [2, 0, 1]
+        _, images, idx = _ragged_inputs(counts)
+        compact, crop_counts = _compact(images, counts)
+        seen = []
+        original = self.model._vit_forward_features
+
+        def record(crops):
+            seen.append(crops)
+            return original(crops)
+
+        monkeypatch.setattr(self.model, "_vit_forward_features", record)
+        self.model.encode_images(compact, idx, crop_counts)
+        assert len(seen) == 1 and seen[0].shape[0] == 3
+        torch.testing.assert_close(seen[0], compact, rtol=0, atol=0)
+
+    def test_text_only_compact_batch_runs_one_zero_crop(self, monkeypatch):
+        _, images, idx = _ragged_inputs([0, 0])
+        compact, crop_counts = _compact(images, [0, 0])
+        assert compact.shape == (0, 4, 14 * 14 * 3)
+        seen = []
+        original = self.model._vit_forward_features
+
+        def record(crops):
+            seen.append(crops)
+            return original(crops)
+
+        monkeypatch.setattr(self.model, "_vit_forward_features", record)
+        features = self.model.encode_images(compact, idx, crop_counts)
+        assert len(seen) == 1 and seen[0].shape == (1, 4, 14 * 14 * 3)
+        assert not bool(seen[0].any())
+        assert features.shape == (0, _LM_D_MODEL)
+
+    def test_gradients_match_the_padded_layout(self):
+        counts = [2, 0, 1]
+        _, images, idx = _ragged_inputs(counts)
+        compact, crop_counts = _compact(images, counts)
+        self.model.train()
+        params = list(self.model.vision.parameters()) + list(self.model.connector.parameters())
+        padded = torch.autograd.grad(self.model.encode_images(images, idx).sum(), params)
+        compacted = torch.autograd.grad(
+            self.model.encode_images(compact, idx, crop_counts).sum(), params
+        )
+        for a, b in zip(padded, compacted):
+            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-6)
+
+    def test_compact_images_need_matching_crop_counts(self):
+        _, images, idx = _ragged_inputs([1, 1])
+        compact, crop_counts = _compact(images, [1, 1])
+        with pytest.raises(ValueError, match="image_crop_counts"):
+            self.model.encode_images(compact, idx)
+        with pytest.raises(ValueError, match="crop counts"):
+            self.model.encode_images(compact, idx, torch.tensor([2, 1]))
+        # Pooled indices must stay within the crops the counts give each example.
+        with pytest.raises(ValueError, match="beyond image_crop_counts"):
+            self.model.encode_images(compact[:1], idx, torch.tensor([1, 0]))

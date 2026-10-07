@@ -94,6 +94,11 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
     ``pooled_token_counts`` for the OLMoDDP multimodal train module."""
     image_dtype: Optional[DType] = None
     """Dtype of the collated ``images`` tensor (see :class:`MultimodalCollatorConfig`)."""
+    compact_images: bool = False
+    """Collate ``images`` as the real crops only, ``(total_crops, n_patches, patch_dim)`` with
+    ``image_crop_counts``, instead of padding every example to the batch's crop maximum (see
+    :class:`~olmo_core.data.multimodal.collator.MultimodalCollator`). Read by the OLMoDDP
+    multimodal train module only; off by default."""
     est_tokens_per_example: int = 1400
     prefetch_workers: int = 0
     prefetch_max_in_flight: int | None = None
@@ -152,6 +157,7 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
                 pad_sequence_length=self.sequence_length,
                 batch_metadata=self.batch_metadata,
                 image_dtype=self.image_dtype.as_pt() if self.image_dtype is not None else None,
+                compact_images=self.compact_images,
             ),
             work_dir=self.work_dir,
             global_batch_size=self.global_batch_size,
