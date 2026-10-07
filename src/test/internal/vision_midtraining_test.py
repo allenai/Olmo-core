@@ -1096,3 +1096,14 @@ def test_document_mode_off_uses_the_text_teams_kda_kernels(
     else:
         assert config.model.document_mode is False
         assert all(m.use_experimental_kernels is True for m in mixers)  # kernel_fun, no boundaries
+
+
+def test_skip_vision_on_text_is_a_recipe_knob(mixed_recipe):
+    """Off by default: the resolved model keeps the dummy-crop vision path and the crop sync of
+    alignment. On, the model skips the vision path on all-text micro-batches, which also needs
+    the per-micro-batch crop all-reduce and barrier off."""
+    default = mixed_recipe.build()
+    assert default.model.skip_vision_on_text is False and default.model.sync_vit_crops is True
+    skipping = mixed_recipe.build("--recipe.skip_vision_on_text=true")
+    assert skipping.model.skip_vision_on_text is True and skipping.model.sync_vit_crops is False
+    assert skipping.recipe.skip_vision_on_text is True

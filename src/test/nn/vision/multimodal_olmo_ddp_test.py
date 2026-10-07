@@ -9,6 +9,7 @@ import torch
 
 import olmo_core.nn.vision.chunked_loss as chunked_loss
 from olmo_core.config import DType
+from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.attention import AttentionBackendName, AttentionConfig, AttentionType
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
 from olmo_core.nn.functional import weighted_cross_entropy_loss
@@ -436,3 +437,85 @@ def test_lm_head_returns_its_own_logits_outside_the_hidden_states_block():
         head_out = model.lm.lm_head(head_in)
     assert logits.shape == (2, 8, _VOCAB) and head_out.shape == (2, 8, _VOCAB)
     assert model._lm_head_hidden_states_only is False
+
+
+def _dummy_crop_batch(batch: int = 2):
+    """What the collator hands over for an all-text micro-batch: one zero crop nobody refers to."""
+    return torch.zeros(batch, 1, 4, 14 * 14 * 3), torch.full((batch, 1, 4), -1, dtype=torch.long)
+
+
+def _loss_kwargs(labels, loss_masks):
+    return dict(
+        labels=labels, loss_masks=loss_masks, loss_reduction="sum", loss_weight_div_factor=4.0
+    )
+
+
+def test_skip_vision_on_text_leaves_the_vision_path_out_of_all_text_batches(monkeypatch):
+    model = _model().train()
+    model.sync_vit_crops = False
+    input_ids, labels, loss_masks = _text_batch()
+    images, no_crops = _dummy_crop_batch()
+    kwargs = _loss_kwargs(labels, loss_masks)
+
+    # The dummy crop's contribution: exactly 0 to the loss and to every vision/connector grad.
+    reference = model(input_ids, images=images, pooled_patches_idx=no_crops, **kwargs)
+    reference.loss.backward()
+    assert all(
+        param.grad is not None and not param.grad.any()
+        for module in (model.vision, model.connector)
+        for param in module.parameters()
+    )
+    lm_grads = {name: param.grad.clone() for name, param in model.lm.named_parameters()}
+    model.zero_grad(set_to_none=True)
+
+    model.skip_vision_on_text = True
+    calls = []
+    monkeypatch.setattr(model, "encode_images", lambda *args, **kw: calls.append(1))
+    skipped = model(input_ids, images=images, pooled_patches_idx=no_crops, **kwargs)
+    skipped.loss.backward()
+    assert not calls
+    torch.testing.assert_close(skipped.loss, reference.loss, rtol=0, atol=0)
+    for name, param in model.lm.named_parameters():
+        torch.testing.assert_close(param.grad, lm_grads[name], rtol=0, atol=0, msg=name)
+    assert all(
+        param.grad is None
+        for module in (model.vision, model.connector)
+        for param in module.parameters()
+    )
+
+
+def test_skip_vision_on_text_keeps_image_batches_unchanged(monkeypatch):
+    model = _model()
+    model.sync_vit_crops = False
+    input_ids, images, pooled = _image_batch()
+    with torch.no_grad():
+        reference = model(input_ids, images=images, pooled_patches_idx=pooled)
+    model.skip_vision_on_text = True
+    calls = []
+    encode = model.encode_images
+    monkeypatch.setattr(
+        model, "encode_images", lambda *args, **kw: (calls.append(1), encode(*args, **kw))[1]
+    )
+    with torch.no_grad():
+        logits = model(input_ids, images=images, pooled_patches_idx=pooled)
+    assert calls == [1]
+    torch.testing.assert_close(logits, reference, rtol=0, atol=0)
+    # A row of indices is enough: the batch is text-only only when no entry refers to a crop.
+    mixed = pooled.clone()
+    mixed[1] = -1
+    assert not model.skips_vision(mixed) and model.skips_vision(torch.full_like(pooled, -1))
+
+
+def test_skip_vision_on_text_needs_a_wrapper_without_forward_collectives():
+    model = _model()
+    model.skip_vision_on_text = True
+    input_ids, labels, loss_masks = _text_batch()
+    images, no_crops = _dummy_crop_batch()
+    assert model.sync_vit_crops
+    with pytest.raises(OLMoConfigurationError, match="sync_vit_crops=False"):
+        model(input_ids, images=images, pooled_patches_idx=no_crops)
+    model.sync_vit_crops = False
+    # Skipping must not hide ids that still expect features.
+    input_ids[0, 0] = _IMAGE_PATCH_TOKEN
+    with pytest.raises(ValueError, match="refers to no crop"):
+        model(input_ids, images=images, pooled_patches_idx=no_crops)

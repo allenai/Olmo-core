@@ -166,6 +166,13 @@ class MixedMidtrainingRecipeConfig(Config):
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
     example, its calibrated means, and its loss shares within the visual share)."""
+    skip_vision_on_text: bool = False
+    """Leave the vision encoder and the connector out of all-text micro-batches
+    (:attr:`~olmo_core.nn.vision.MultimodalLMConfig.skip_vision_on_text`), instead of running
+    them on the collator's dummy crop for a contribution of exactly zero. Also switches the
+    per-micro-batch crop all-reduce and barrier off
+    (:attr:`~olmo_core.nn.vision.MultimodalLMConfig.sync_vit_crops`), which OLMoDDP, issuing no
+    forward collective, never needed; a skipping rank could not take part in them."""
 
 
 @dataclass
@@ -915,6 +922,9 @@ def build_config(
             tokenizer_cache_dir=recipe.hf_cache_dir,
         ).build_tokenizer()
         model = _build_lm_model(recipe, text, token_ids)
+    if recipe.skip_vision_on_text:
+        model.skip_vision_on_text = True
+        model.sync_vit_crops = False
     stage1_v3 = recipe.visual_data == "stage1_v3" and recipe.text_loss_share < 1.0
     if stage1_v3:
         means = dict(STAGE1_V3_MEAN_LOSS_WEIGHTS)

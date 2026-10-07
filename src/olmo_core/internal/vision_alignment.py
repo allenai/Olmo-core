@@ -101,6 +101,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "model.vit_layers": "vision features taken from these ViT layers",
     "model.loss_chunk_size": "the weighted loss scores this many tokens at a time (no full logits)",
     "model.sync_vit_crops": "the vision encoder pads its crops to the data-parallel maximum only under FSDP",
+    "model.skip_vision_on_text": "off: alignment runs the vision path on every micro-batch (mid-training may skip it on all-text ones)",
     "model.lm.block*.routed_experts_router.lb_loss_weight": (
         "router load balancing off while the LM is frozen (bridge, perception, also when "
         "started from the pretraining checkpoint); joint restores the pretrained coefficients"

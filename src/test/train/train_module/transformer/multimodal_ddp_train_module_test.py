@@ -813,3 +813,232 @@ def _build_ddp_train_module_for_checkpoint(
         ),
     )
     return config.build(model, device=torch.device("cuda"), eval_only=False)
+
+
+# -- skipping the vision path on all-text micro-batches ---------------------------------------
+
+
+def _skipping_model_config() -> MultimodalLMConfig:
+    """A dense (shared-experts-only) multimodal OLMoDDP model that runs on CPU, skipping the
+    vision path on all-text micro-batches."""
+    from test.nn.vision.multimodal_olmo_ddp_test import _config
+
+    config = _config()
+    config.skip_vision_on_text = True
+    config.sync_vit_crops = False
+    return config
+
+
+def _skipping_batches(seed: int, *, image: bool):
+    """One sequence of eight tokens; with ``image`` its first token takes one pooled feature of
+    a random crop, otherwise the collator's dummy zero crop that nothing refers to."""
+    from test.nn.vision.multimodal_olmo_ddp_test import _IMAGE_PATCH_TOKEN, _VOCAB
+
+    generator = torch.Generator().manual_seed(seed)
+    input_ids = torch.randint(2, _VOCAB, (1, 8), generator=generator)
+    labels = torch.randint(2, _VOCAB, (1, 8), generator=generator)
+    batch = {
+        "input_ids": input_ids,
+        "labels": labels,
+        "loss_masks": torch.ones(1, 8),
+        "images": torch.zeros(1, 1, 4, 14 * 14 * 3),
+        "pooled_patches_idx": torch.full((1, 1, 4), -1, dtype=torch.long),
+    }
+    if image:
+        input_ids[0, 0] = _IMAGE_PATCH_TOKEN
+        batch["images"] = torch.randn(1, 1, 4, 14 * 14 * 3, generator=generator)
+        batch["pooled_patches_idx"] = torch.arange(4, dtype=torch.long).view(1, 1, 4)
+    return batch
+
+
+def _skipping_backward(module, batch) -> torch.Tensor:
+    kwargs = dict(batch)
+    output = module(
+        kwargs.pop("input_ids"), **kwargs, loss_reduction="sum", loss_weight_div_factor=8.0
+    )
+    output.loss.backward()
+    return output.loss.detach()
+
+
+def _run_skipping_rank_reduces_a_zero_vision_gradient():
+    """Under MultiGroupDDP a rank whose vision backward never ran contributes exactly zero (not a
+    stale gradient) to the reduced vision and connector gradients: its FP32 bucket views are
+    zeroed when the accumulation window opens and ``finalize_grad_reduce`` marks the untouched
+    parameters ready without writing to them."""
+    torch.set_num_threads(1)
+    rank, world_size = dist.get_rank(), dist.get_world_size()
+    config = _skipping_model_config()
+    train_module = MultimodalOLMoDDPTrainModuleConfig(
+        rank_microbatch_size=8,
+        max_sequence_length=8,
+        optim=MultimodalOLMoDDPOptimizerConfig(lr=1e-3),
+        response_logits_only=True,
+        compile_model=False,
+        dp_config=TransformerDataParallelConfig(
+            name=DataParallelType.ddp,
+            only_allreduce_last_microbatch=True,
+            accumulate_grads_in_fp32=True,
+            reduce_grads_in_fp32=True,
+        ),
+    ).build(config.build(init_device="meta"), device=torch.device("cpu"), eval_only=True)
+    multimodal = train_module.multimodal_model
+    # ``eval_only`` builds neither the fused optimizer (it needs CUDA parameters) nor the DDP
+    # wrapper; wrap exactly as the train module does, with the production FP32 buckets.
+    ddp = multimodal.apply_dp(
+        dp_mesh=train_module.world_mesh["dense"]["dp"],
+        ep_mesh=None,
+        accumulate_grads_in_fp32=True,
+        reduce_grads_in_fp32=True,
+    )
+    ddp.train()
+    assert all(param.requires_grad for param in multimodal.vision.parameters())
+
+    # The same weights outside DDP: the reduced gradient must be the data-parallel average of
+    # the per-rank gradients, with the skipping rank's vision/connector term exactly zero.
+    reference = config.build(init_device="cpu")
+    reference.init_weights(max_seq_len=8, device=torch.device("cpu"))
+    reference.to(torch.bfloat16).train()
+    reference.load_state_dict(multimodal.state_dict())
+
+    encode_calls = []
+    encode = multimodal.encode_images
+    multimodal.encode_images = lambda *args, **kwargs: (  # type: ignore[method-assign]
+        encode_calls.append(1),
+        encode(*args, **kwargs),
+    )[1]
+
+    for step, image_rank in enumerate((0, 1)):
+        ddp.zero_grad(set_to_none=False)
+        encode_calls.clear()
+        batch = _skipping_batches(step, image=rank == image_rank)
+        with train_module._model_forward_context():
+            _skipping_backward(ddp, batch)
+        ddp.finalize_grad_reduce()
+        assert len(encode_calls) == (1 if rank == image_rank else 0)
+
+        expected = {}
+        for other in range(world_size):
+            reference.zero_grad(set_to_none=True)
+            _skipping_backward(reference, _skipping_batches(step, image=other == image_rank))
+            for name, param in reference.named_parameters():
+                grad = param.grad.float() if param.grad is not None else torch.zeros_like(param)
+                expected[name] = expected.get(name, 0.0) + grad.float() / world_size
+        for name, param in multimodal.named_parameters():
+            reduced = param._main_grad_fp32  # type: ignore[attr-defined]
+            assert reduced is not None and reduced.dtype == torch.float32, name
+            torch.testing.assert_close(reduced, expected[name], rtol=0, atol=0, msg=name)
+        vision_norm = sum(
+            float(param._main_grad_fp32.norm())  # type: ignore[attr-defined]
+            for module in (multimodal.vision, multimodal.connector)
+            for param in module.parameters()
+        )
+        assert vision_norm > 0, "the image rank's vision gradient reached every rank"
+    dist.barrier()
+
+
+def test_skipping_rank_reduces_a_zero_vision_gradient():
+    run_distributed_test(
+        _run_skipping_rank_reduces_a_zero_vision_gradient,
+        world_size=2,
+        backend="gloo",
+        start_method="spawn",
+    )
+
+
+def _run_multimodal_text_only_step_skips_vision():
+    """A text-only optimizer step with the vision path skipped on every rank: the connector's
+    FP32 gradient buffers stay zero, the fused optimizer steps, and only the LM moves; a mixed
+    step afterwards moves the connector again."""
+    model_config = _tiny_multimodal_model_config(dtype=DType.bfloat16)
+    model_config.skip_vision_on_text = True
+    model_config.sync_vit_crops = False
+    config = MultimodalOLMoDDPTrainModuleConfig(
+        rank_microbatch_size=8,
+        max_sequence_length=8,
+        optim=MultimodalOLMoDDPOptimizerConfig(
+            lr=1e-3,
+            weight_decay=0.0,
+            group_overrides=[
+                OptimGroupOverride(params=["*connector.*"], opts={"scheduler_name": "connector"}),
+            ],
+            foreach_chunk_size=32,
+            max_grad_norm=1.0,
+            clip_grad_norm_by_scheduler_group=True,
+            check_nan_inf_grad=True,
+        ),
+        freeze_params=["vision.*", "lm.lm_head.w_out.weight"],
+        response_logits_only=True,
+        dp_config=TransformerDataParallelConfig(
+            name=DataParallelType.ddp,
+            only_allreduce_last_microbatch=True,
+            accumulate_grads_in_fp32=True,
+            reduce_grads_in_fp32=True,
+        ),
+        ep_config=TransformerExpertParallelConfig(degree=2),
+    )
+    train_module = config.build(model_config.build(init_device="meta"), device=torch.device("cuda"))
+    multimodal = train_module.multimodal_model
+    train_module._trainer = _MetricTrainerStub()  # type: ignore[assignment]
+    optim = train_module._require_optimizer()
+    connector_params = list(multimodal.connector.parameters())
+    routed_params = [
+        param for name, param in multimodal.lm.named_parameters() if "routed_experts.w_" in name
+    ]
+    rank = dist.get_rank()
+
+    def batch(image: bool):
+        input_ids = torch.tensor([[3, 2 + rank, 4, 5, 6, 7, 8, 9]], device="cuda")
+        labels = torch.tensor([[2 + rank, 4, 5, 6, 7, 8, 9, 10]], device="cuda")
+        images = torch.zeros(1, 1, 4, 14 * 14 * 3)
+        pooled = torch.full((1, 1, 4), -1, dtype=torch.long)
+        if image:
+            input_ids[0, 0] = 120
+            images = torch.randn(1, 1, 4, 14 * 14 * 3)
+            pooled = torch.arange(4, dtype=torch.long).view(1, 1, 4)
+        return {
+            "input_ids": input_ids,
+            "labels": labels,
+            "loss_masks": torch.ones(1, 8),
+            "images": images,
+            "pooled_patches_idx": pooled,
+        }
+
+    encode_calls = []
+    encode = multimodal.encode_images
+    multimodal.encode_images = lambda *args, **kwargs: (  # type: ignore[method-assign]
+        encode_calls.append(1),
+        encode(*args, **kwargs),
+    )[1]
+
+    for image in (False, True):
+        connector_before = [param.detach().clone() for param in connector_params]
+        routed_before = [param.detach().clone() for param in routed_params]
+        encode_calls.clear()
+        train_module.zero_grads()
+        train_module.train_batch(batch(image), dry_run=True)
+        assert len(encode_calls) == int(image)
+        buffers = [param._main_grad_fp32 for param in connector_params]  # type: ignore[attr-defined]
+        assert all(buffer is not None for buffer in buffers)
+        assert any(buffer.any() for buffer in buffers) == image
+        assert all(param.grad is None for param in multimodal.vision.parameters())
+        optim.latest_loss = torch.zeros((), device="cuda")
+        train_module.optim_step()
+        assert torch.isfinite(optim.latest_grad_norm)
+        assert any(
+            not torch.equal(param, before) for param, before in zip(routed_params, routed_before)
+        )
+        connector_moved = any(
+            not torch.equal(param, before)
+            for param, before in zip(connector_params, connector_before)
+        )
+        assert connector_moved == image
+
+
+@requires_multi_gpu
+def test_multimodal_olmo_ddp_text_only_step_skips_vision():
+    run_distributed_test(
+        _run_multimodal_text_only_step_skips_vision,
+        world_size=2,
+        backend="nccl",
+        start_method="spawn",
+    )

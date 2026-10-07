@@ -122,8 +122,24 @@ class MultimodalLMConfig(Config):
     """
     Pad the crops the vision encoder runs on to the maximum over data-parallel ranks, and
     barrier after it, so every rank issues the same number of encoder forwards. FSDP needs this
-    (its all-gathers would otherwise desynchronize); the OLMoDDP train module switches it off,
-    since DDP issues no collective in the forward pass.
+    (its all-gathers would otherwise desynchronize). A data-parallel wrapper that issues no
+    collective in the forward pass (DDP, OLMoDDP) does not: the DDP branch of the FSDP train
+    module switches it off, and so does :attr:`skip_vision_on_text`, which cannot keep ranks in
+    lockstep.
+    """
+
+    skip_vision_on_text: bool = False
+    """
+    Run neither the vision encoder nor the connector on a micro-batch whose
+    ``pooled_patches_idx`` refers to no crop (an all-text micro-batch, for which the collator
+    emits one dummy zero crop). The dummy crop's features contribute exactly ``0`` to the
+    activations and ``0`` to every vision and connector gradient, so skipping it changes no
+    number; it saves the encoder's forward and backward. Only valid under a data-parallel
+    wrapper without forward collectives (:attr:`sync_vit_crops` must be off): the vision and
+    connector gradient buffers of a skipping rank stay at the zero the step started from and
+    reduce with the other ranks' gradients as usual (see
+    :class:`~olmo_core.nn.parallel.distributed.MultiGroupDistributedDataParallel`, which marks
+    parameters whose backward never ran as ready without touching their buffers).
     """
 
     document_mode: Optional[bool] = None
@@ -368,6 +384,28 @@ class MultimodalLM(nn.Module):
         self._document_mode: Optional[bool] = cfg.document_mode
         self._recurrent_mixers: Optional[bool] = None
         self.sync_vit_crops: bool = cfg.sync_vit_crops
+        self.skip_vision_on_text: bool = cfg.skip_vision_on_text
+
+    def skips_vision(self, pooled_patches_idx: torch.Tensor) -> bool:
+        """
+        Whether :meth:`forward` leaves the vision encoder and the connector out for this
+        micro-batch: :attr:`MultimodalLMConfig.skip_vision_on_text` is on and
+        ``pooled_patches_idx`` refers to no crop (every entry is ``-1``).
+
+        The check runs where the indices live; the trainer hands them over on the host, where it
+        costs no device synchronization.
+
+        :raises OLMoConfigurationError: If skipping is on together with :attr:`sync_vit_crops`,
+            whose per-micro-batch crop all-reduce and barrier a skipping rank would never reach.
+        """
+        if not self.skip_vision_on_text:
+            return False
+        if self.sync_vit_crops:
+            raise OLMoConfigurationError(
+                "skip_vision_on_text needs sync_vit_crops=False: a rank that skips the vision "
+                "encoder cannot take part in the crop all-reduce and barrier of sync_vit_crops"
+            )
+        return not bool((pooled_patches_idx >= 0).any())
 
     def uses_document_boundaries(self) -> bool:
         """
@@ -555,7 +593,8 @@ class MultimodalLM(nn.Module):
         collator pads every example's crop axis to the longest in the batch with zero crops, and
         each of those would otherwise cost a full encoder forward and backward. A batch that
         refers to no crop at all (text only) still runs one crop, so the vision path and its
-        parameters take part in every step.
+        parameters take part in every step (unless :meth:`forward` skipped the path altogether;
+        see :attr:`MultimodalLMConfig.skip_vision_on_text`).
 
         :param images: Shape ``(B, n_crops, n_patches, patch_dim)``.
         :param pooled_patches_idx: Shape ``(B, n_pooled, pool_size)`` —
@@ -825,15 +864,28 @@ class MultimodalLM(nn.Module):
         if images is not None:
             if pooled_patches_idx is None:
                 raise ValueError("`pooled_patches_idx` is required when `images` is provided")
-            image_features = self.encode_images(images, pooled_patches_idx)
+            if self.skips_vision(pooled_patches_idx):
+                # An all-text micro-batch under a wrapper without forward collectives: the
+                # collator's dummy crop would add exactly 0 below, so neither the encoder nor
+                # the connector runs. The ids must then carry no <im_patch> either, which the
+                # feature-count check below would otherwise have caught.
+                ids = input_ids_host if input_ids_host is not None else input_ids
+                if bool((ids == self.cfg.image_patch_token_id).any()):
+                    raise ValueError(
+                        "input_ids contain <im_patch> tokens but pooled_patches_idx refers to "
+                        "no crop; the data preprocessor must insert exactly one <im_patch> per "
+                        "pooled feature"
+                    )
+            else:
+                image_features = self.encode_images(images, pooled_patches_idx)
 
-            # Tie the connector output into the autograd graph on *every* forward that ran
-            # the vision path, even when no rows are spliced below (e.g. an all-text
-            # microbatch handed a dummy zero crop by the collator). This adds exactly 0 to
-            # the activations but keeps the connector's FSDP reduce-scatter — and the vision
-            # all-gather — firing on every rank each step, so collectives stay in lockstep
-            # across ranks regardless of how text-only vs image examples are distributed.
-            h = h + 0.0 * image_features.sum().to(h.dtype)
+                # Tie the connector output into the autograd graph on *every* forward that ran
+                # the vision path, even when no rows are spliced below (e.g. an all-text
+                # microbatch handed a dummy zero crop by the collator). This adds exactly 0 to
+                # the activations but keeps the connector's FSDP reduce-scatter — and the vision
+                # all-gather — firing on every rank each step, so collectives stay in lockstep
+                # across ranks regardless of how text-only vs image examples are distributed.
+                h = h + 0.0 * image_features.sum().to(h.dtype)
 
         is_image_patch: Optional[torch.Tensor] = None
         if image_features is not None:
