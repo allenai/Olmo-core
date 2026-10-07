@@ -13,6 +13,7 @@ import contextlib
 import logging
 import math
 import os
+import time
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from functools import lru_cache
@@ -779,10 +780,15 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         source_loss_mass_targets: Optional[Dict[str, float]] = None,
         loss_group_weights: Optional[Dict[str, float]] = None,
         trim_microbatch_image_padding: bool = False,
+        pinned_image_transfer: bool = True,
         **kwargs,
     ):
         from olmo_core.nn.vision import MultimodalOLMoDDPModel
 
+        self.pinned_image_transfer = pinned_image_transfer
+        self._pinned_images: Optional[torch.Tensor] = None
+        self._image_copy_stream: Optional[torch.cuda.Stream] = None
+        self._image_copy_event: Optional[torch.cuda.Event] = None
         if not isinstance(model, MultimodalOLMoDDPModel):
             raise TypeError(
                 f"{type(self).__name__} requires MultimodalOLMoDDPModel, got {type(model).__name__}"
@@ -1129,7 +1135,66 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             and self.trainer.global_step % self.diagnostics_interval == 0
         )
 
+    def _stage_images_on_device(self, batch: Dict[str, Any]) -> Optional[float]:
+        """
+        Start the device copy of ``batch["images"]`` before the step's host-side work.
+
+        The trainer hands the batch over on the host, and the model's ``images.to(device)`` from
+        pageable memory blocks the host for the whole transfer (hundreds of MB of pixels per rank
+        batch). Here the pixels are staged through a reusable page-locked buffer, grown to the
+        largest batch seen, and copied on a side stream with ``non_blocking=True``, so the
+        transfer overlaps the batch preparation on the host and any work still queued on the
+        compute stream; the compute stream waits on the copy before any later kernel, and the
+        model's own ``.to(device)`` becomes a no-op. Only ``images`` moves: ``input_ids``,
+        ``loss_masks`` and ``pooled_patches_idx`` stay on the host, where the model's index
+        bookkeeping relies on them. Does nothing when disabled, without a CUDA device, without
+        images, or when the images already live on the device.
+
+        :returns: Host seconds spent staging (the page-locked copy, plus the buffer allocation
+            when it grows), or ``None`` when nothing was staged.
+        """
+        images = batch.get("images")
+        if (
+            not getattr(self, "pinned_image_transfer", False)
+            or not isinstance(images, torch.Tensor)
+            or images.device.type != "cpu"
+            or self.device.type != "cuda"
+        ):
+            return None
+        start = time.perf_counter()
+        numel = images.numel()
+        staging = self._pinned_images
+        # The previous step's transfer read the buffer; it has long finished by now, but the
+        # buffer may not be overwritten (or released) before it has.
+        if self._image_copy_event is not None:
+            self._image_copy_event.synchronize()
+        if staging is None or staging.dtype != images.dtype or staging.numel() < numel:
+            staging = torch.empty(numel, dtype=images.dtype, pin_memory=True)
+            self._pinned_images = staging
+        staging = staging[:numel].view(images.shape)
+        staging.copy_(images)
+
+        if self._image_copy_stream is None:
+            self._image_copy_stream = torch.cuda.Stream(device=self.device)
+        stream, current = self._image_copy_stream, torch.cuda.current_stream(self.device)
+        with torch.cuda.stream(stream):
+            device_images = torch.empty_like(images, device=self.device)
+            device_images.copy_(staging, non_blocking=True)
+            event = torch.cuda.Event()
+            event.record(stream)
+        # The block was allocated on the side stream; its consumers run on the compute stream.
+        device_images.record_stream(current)
+        current.wait_event(event)
+        self._image_copy_event = event
+        batch["images"] = device_images
+        return time.perf_counter() - start
+
     def train_batch(self, batch: Dict[str, Any], dry_run: bool = False):
+        staging_seconds = self._stage_images_on_device(batch)
+        if staging_seconds is not None and not dry_run:
+            self.record_metric(
+                "image staging (s)", staging_seconds, ReduceType.max, namespace="data"
+            )
         original_batch = batch
         if self.loss_group_weights:
             batch, global_mass = _normalize_loss_groups(
@@ -1781,6 +1846,12 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     When images are supplied, requires collator ``image_crop_counts`` / ``pooled_token_counts``
     metadata and zero vision dropout. Retains at least one dummy crop and pooled row, existing
     vision collectives, and all LM token slots. FLOP estimates retain untrimmed batch shapes.
+    """
+    pinned_image_transfer: bool = True
+    """Copy each batch's pixels to the device through a reusable page-locked buffer on a side
+    stream at the start of the step, overlapping the transfer with the host-side batch
+    preparation, instead of the model's blocking copy from pageable memory. Numerics are
+    unchanged; see :meth:`MultimodalOLMoDDPTrainModule._stage_images_on_device`.
     """
 
     def _build_train_module(self, **kwargs) -> MultimodalOLMoDDPTrainModule:

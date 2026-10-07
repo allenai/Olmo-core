@@ -113,6 +113,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "train_module._CLASS_": "multimodal OLMoDDP train module",
     "train_module.rank_microbatch_size": "4 x seq (joint 2 x seq): vision tower cost per sequence",
     "train_module.trim_microbatch_image_padding": "multimodal microbatch image padding trim",
+    "train_module.pinned_image_transfer": "pixels reach the device via a pinned buffer, async",
     "train_module.freeze_params": "phase policy: what trains",
     "train_module.train_embedding_rows": "image token rows are the only trainable embeddings",
     "train_module.vision_activation_checkpointing": "vision tower memory",
