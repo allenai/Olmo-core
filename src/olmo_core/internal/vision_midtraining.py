@@ -162,6 +162,12 @@ class MixedMidtrainingRecipeConfig(Config):
     """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
     loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
     examples; a deeper queue lets the loader work through the GPU step."""
+    batch_prefetch_depth: int = 2
+    """Finished rank batches the loader builds ahead on a background thread, so the trainer's
+    fetch returns as soon as one is queued (the batch order and the checkpointed cursor are the
+    thread-free loader's; see
+    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.batch_prefetch_depth`).
+    ``0`` packs and collates on the trainer's thread."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups) or ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
@@ -463,6 +469,7 @@ def _build_data_loader(
         compact_images=True,
         prefetch_workers=workers,
         prefetch_max_in_flight=recipe.prefetch_max_in_flight,
+        batch_prefetch_depth=recipe.batch_prefetch_depth,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
     ).merge(cli.overrides, prefix="data_loader")

@@ -936,6 +936,9 @@ def _build_data_loader(
         # Only the real crops are collated and copied (no padding to the batch's crop maximum).
         compact_images=True,
         prefetch_workers=workers,
+        # Two finished rank batches built ahead on a background thread; the batch order and the
+        # checkpointed cursor are the thread-free loader's.
+        batch_prefetch_depth=2,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
         group_sequence_quotas={"text": 16, "vision": 112}
