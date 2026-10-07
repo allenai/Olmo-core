@@ -11,13 +11,13 @@ import torch
 from ..config import Config, Registrable, StrEnum
 from ..distributed.utils import get_rank
 from ..exceptions import OLMoConfigurationError
+from ..distributed.utils import get_rank
 from .config import INITIAL_LR_FIELD, LR_FIELD
 
 if TYPE_CHECKING:
     from olmo_core.train import Trainer
 
 log = logging.getLogger(__name__)
-
 
 def _warn_rank0(message: str, category: type[Warning], *, stacklevel: int = 1) -> None:
     if get_rank() == 0:
@@ -52,45 +52,50 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
     def set_lr(self, group: Dict[str, Any], trainer: "Trainer") -> Union[float, torch.Tensor]:
         """
         Set the learning rate on an optimizer param group given a trainer's state.
+
+        Dion3's `lr` is a live GPU tensor with no protected `initial_lr` field (see
+        Dion3Config.create_optimizer for why), so the true base LR for each group is
+        captured once per run from `pristine_lr` (falling back to `initial_lr`/`lr`
+        for optimizers that don't set it) and reused on every subsequent call, rather
+        than re-read from the group each time.
         """
-        if (lr_field := self.lr_field) not in group and (
-            initial_lr_field := self.initial_lr_field
-        ) not in group:
-            group_fields_list = "\n - ".join(
-                [f"{k}: {v}" for k, v in group.items() if k != "params"]
-            )
-            raise RuntimeError(
-                f"learning rate field '{lr_field}' and initial learning rate field "
-                f"'{initial_lr_field}' not found in optimizer param group "
-                f"with {len(group['params'])} parameter(s):\n"
-                f" - {group_fields_list}"
-            )
+        # Capture each group's base LR exactly once, on the first step this scheduler
+        # instance is used. Assumes set_lr is called once per group per step, in the
+        # same group order, for the lifetime of this scheduler instance.
+        if getattr(self, "_record_step", None) is None:
+            self._base_lrs = []
+            self._call_idx = 0
+            self._record_step = trainer.global_step
 
-        # Ensure 'initial_lr' is set.
-        if group.get(self.initial_lr_field) is None:
-            group[self.initial_lr_field] = group[self.lr_field]
+        if trainer.global_step == self._record_step:
+            raw_lr = group.get("pristine_lr")
+            if raw_lr is None:
+                raw_lr = group.get(self.initial_lr_field)
+            if raw_lr is None:
+                raw_lr = group.get(self.lr_field)
+            if raw_lr is None:
+                raise RuntimeError(f"learning rate field '{self.lr_field}' not found in param group.")
 
-        # Set new LR.
+            # Store as a plain float so later reads don't depend on the live tensor,
+            # which may have already been mutated by the time this value is reused.
+            safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else float(raw_lr)
+            self._base_lrs.append(safe_lr)
+
+        num_groups = len(self._base_lrs)
+        group_idx = self._call_idx % num_groups
+        base_lr = self._base_lrs[group_idx]
+        self._call_idx += 1
+
+        group[self.initial_lr_field] = base_lr
+
         if self.units == SchedulerUnits.steps:
             if trainer.max_steps is None:
-                raise OLMoConfigurationError(
-                    "'max_steps' must be known in the trainer for step-based scheduling."
-                )
-            new_lr = self.get_lr(
-                group[self.initial_lr_field],
-                trainer.global_step,
-                trainer.max_steps,
-            )
+                raise OLMoConfigurationError("'max_steps' must be known for step-based scheduling.")
+            new_lr = self.get_lr(base_lr, trainer.global_step, trainer.max_steps)
         elif self.units == SchedulerUnits.tokens:
             if trainer.max_tokens is None:
-                raise OLMoConfigurationError(
-                    "'max_tokens' must be known in the trainer for token-based scheduling."
-                )
-            new_lr = self.get_lr(
-                group[self.initial_lr_field],
-                trainer.global_train_tokens_seen,
-                trainer.max_tokens,
-            )
+                raise OLMoConfigurationError("'max_tokens' must be known for token-based scheduling.")
+            new_lr = self.get_lr(base_lr, trainer.global_train_tokens_seen, trainer.max_tokens)
         else:
             raise NotImplementedError(self.units)
 
@@ -100,7 +105,6 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
             group[self.lr_field] = new_lr
 
         return new_lr
-
 
 @Scheduler.register("constant")
 @dataclass
