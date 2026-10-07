@@ -162,12 +162,14 @@ class MixedMidtrainingRecipeConfig(Config):
     """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
     loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
     examples; a deeper queue lets the loader work through the GPU step."""
-    prefetch_keep_full: bool = True
+    prefetch_keep_full: bool = False
     """Keep the prefetch window full of in-progress examples: submit the next example whenever
     any in-flight one finishes rather than only when the next in-order example is consumed, so a
     slow olmOCR page render does not idle the pool (same examples in the same order; resume state
     is unchanged). See
-    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.prefetch_keep_full`."""
+    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.prefetch_keep_full`.
+    Off: in the 16-GPU mixed smoke of 2026-10-07 it raised the per-step data wait (0.99 s against
+    0.73 s for the control in the same window) and the step time (3.31 s against 3.10 s)."""
     prefetch_max_ready: int | None = None
     """With ``prefetch_keep_full``, finished examples the loader may buffer beyond the in-progress
     ones; ``None`` is ``prefetch_max_in_flight``."""

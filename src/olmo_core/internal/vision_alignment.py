@@ -233,11 +233,13 @@ class VisionAlignmentRecipeConfig(Config):
     """Native replay windows withheld in joint; zero requires separate text validation."""
     text_validation_seed: int = 6198
     """Seed shared by the complementary native replay training and validation splits."""
-    prefetch_keep_full: bool = True
+    prefetch_keep_full: bool = False
     """Keep the loader's prefetch window full of in-progress examples rather than refilling it
     only as the next in-order example is consumed, so one slow example does not idle the pool
     (:attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.prefetch_keep_full`).
-    Same examples in the same order; resume state is unchanged."""
+    Same examples in the same order; resume state is unchanged. Off: the mixed-midtraining smoke
+    measured no gain from it (see
+    :class:`~olmo_core.internal.vision_midtraining.MixedMidtrainingRecipeConfig`)."""
     router_lb_loss_weight: float | None = None
     """Override routed experts' load-balancing coefficients.
 
