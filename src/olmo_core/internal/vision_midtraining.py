@@ -62,7 +62,9 @@ from .vision_alignment import (
     _sample_one_annotation,
     _uses_document_mode,
     parse_cli_args,
+    resolve_hf_datasets_cache_dir,
     run,
+    set_hf_datasets_cache,
     text_train_settings,
 )
 from .vision_alignment_data import (
@@ -148,6 +150,17 @@ class MixedMidtrainingRecipeConfig(Config):
     )
     work_dir: str = "/weka/oe-training-default/rustin/dataset-cache/mixed-midtraining"
     hf_cache_dir: str | None = "/weka/oe-training-default/rustin/hf-cache/hub"
+    """The Hugging Face Hub cache (tokenizer and vision-encoder downloads)."""
+    hf_datasets_cache_dir: str | None = None
+    """The ``HF_DATASETS_CACHE`` of the launched job: where the ``datasets`` library builds the
+    Arrow caches of the parquet sources (olmOCR-mix, FineVision, MM-FineReason), once, shared by
+    every job, instead of on each node's local disk (the library default, ``~/.cache``, which a
+    full node disk turns into ``OSError: Not enough disk space``). Derived from ``hf_cache_dir``
+    when the recipe is built, as :class:`~olmo_core.internal.vision_alignment.VisionAlignmentRecipeConfig`
+    derives it; an explicit value wins, and an explicit ``null`` leaves the library default in
+    place. Set in the launch environment (this recipe's own launch and a launcher-supplied one,
+    such as scaling-ladders'), and exported by the training process when the environment lacks
+    it."""
     tokenizer_revision: str | None = None
     prefetch_workers: int | None = None
     """Per-rank threads that load and preprocess examples ahead of the GPU step. ``None`` uses the
@@ -251,6 +264,7 @@ def _build_recipe(
         or not 0 < recipe.text_loss_share <= 1
     ):
         raise OLMoConfigurationError("recipe.text_loss_share must be finite and in (0, 1]")
+    resolve_hf_datasets_cache_dir(recipe, overrides)
     return recipe
 
 
@@ -651,10 +665,13 @@ def _build_launch(
     *,
     work_dir: str = MixedMidtrainingRecipeConfig.work_dir,
     text: dict | None = None,
+    hf_datasets_cache_dir: str | None = None,
 ) -> BeakerLaunchConfig | None:
     # The alignment launcher: workspace, budget, secrets, and (with a text config) the text
     # run's image, install step, resources and environment.
-    launch = _build_alignment_launch(cli, work_dir=work_dir, text=text)
+    launch = _build_alignment_launch(
+        cli, work_dir=work_dir, text=text, hf_datasets_cache_dir=hf_datasets_cache_dir
+    )
     if launch is not None:
         launch.num_nodes = _NUM_NODES
     return launch
@@ -967,7 +984,12 @@ def build_config(
     config = MixedMidtrainingExperimentConfig(
         run_name=cli.run_name,
         launch=(
-            _build_launch(cli, work_dir=recipe.work_dir, text=text)
+            _build_launch(
+                cli,
+                work_dir=recipe.work_dir,
+                text=text,
+                hf_datasets_cache_dir=recipe.hf_datasets_cache_dir,
+            )
             if launch is None
             else launch.replace(num_nodes=_NUM_NODES)
         ),
@@ -988,6 +1010,10 @@ def build_config(
         alignment_phase=phase,
         init_seed=6198,
     ).merge(cli.overrides)
+    if launch is not None and config.launch is not None:
+        # A launcher-supplied launch config (scaling-ladders) skips the alignment launcher's
+        # environment composition; the parquet sources' Arrow caches still go to shared storage.
+        set_hf_datasets_cache(config.launch, config.recipe.hf_datasets_cache_dir)
     if stage1_v3 and config.launch is not None:
         # The v3 Stage-1 sources need packages beyond the text image (PDF rendering, HDF5), as
         # alignment installs them for its stage1_v3 data.
