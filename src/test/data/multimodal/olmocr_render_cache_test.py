@@ -279,25 +279,36 @@ def _loader(root, tmp_path, *, workers, cache_dir=None, write=True):
     )
 
 
+def _prewarm(root, cache_dir, epochs=48):
+    """Render every page of both splits at the sizes the training path draws for the first
+    ``epochs`` source epochs, so a loader over the cache hits whatever its read-ahead touches."""
+    tok = _FakeTok()
+    cache = RenderCache(cache_dir, root=root)
+    for ds in (_cfg(root, split="train").build(tok), _cfg(root, split="eval", seed=3).build(tok)):
+        for i in range(len(ds)):
+            pdf = ds.pdf_path(ds._data[int(ds._index[i])])
+            for dim in {ds.target_dim_for(ds.epoch_rng(i, epoch)) for epoch in range(epochs)}:
+                render_pdf_page(pdf, dim, cache=cache)
+
+
 def test_mixture_order_matches_synchronous_loading_with_and_without_cache(tmp_path):
     """The batches (and the loader's resume state) are the same whether examples are built on
     the calling thread or on a prefetch pool, and whether the pages come from the renderer, a
-    cold cache (every page a miss that is stored) or a warm cache (every page a hit)."""
+    cold cache (misses that are rendered and stored) or a warm cache (every page a hit)."""
     pytest.importorskip("pypdfium2")
     root = _write_root(tmp_path)
-    cache_dir = str(tmp_path / "cache")
+    cold_dir, warm_dir = str(tmp_path / "cold"), str(tmp_path / "warm")
+    _prewarm(root, warm_dir)
     expected = None
     expected_state = None
-    for label, workers, use_cache in (
-        ("sync", 0, False),
-        ("threads", 8, False),
-        ("threads-cold-cache", 8, True),
-        ("threads-warm-cache", 8, True),
-        ("sync-warm-cache", 0, True),
+    for label, workers, cache_dir in (
+        ("sync", 0, None),
+        ("threads", 8, None),
+        ("threads-cold-cache", 8, cold_dir),
+        ("threads-warm-cache", 8, warm_dir),
+        ("sync-warm-cache", 0, warm_dir),
     ):
-        loader = _loader(
-            root, tmp_path, workers=workers, cache_dir=cache_dir if use_cache else None
-        )
+        loader = _loader(root, tmp_path, workers=workers, cache_dir=cache_dir)
         loader.reshuffle(epoch=1)
         iterator = iter(loader)
         try:
@@ -310,11 +321,13 @@ def test_mixture_order_matches_synchronous_loading_with_and_without_cache(tmp_pa
         else:
             _assert_equal(batches, expected)
             _assert_equal(state, expected_state)
-        if use_cache:
+        if cache_dir is not None:
             stats = {
                 name: ds.render_cache.stats()
                 for name, ds in zip(loader.dataset_names, loader.datasets)
             }
+            # The pool's read-ahead renders a few refs past the consumed ones, so a cold cache
+            # only has to show misses; the pre-warmed one must never render.
             if label == "threads-cold-cache":
                 assert all(s["misses"] > 0 for s in stats.values()), stats
             else:
