@@ -41,6 +41,10 @@ from olmo_core.nn.vision import (
 from olmo_core.optim import Scheduler
 from olmo_core.train import Duration, LoadStrategy
 
+OUR_HUB_CACHE = "/weka/oe-training-default/jasonr/hf-home/hub"
+OUR_DATASETS_CACHE = "/weka/oe-training-default/jasonr/hf-home/datasets"
+RUSTINS_DATASETS_CACHE = "/weka/oe-training-default/rustin/hf-cache/datasets"
+
 
 @pytest.fixture
 def mixed_recipe(tmp_path, monkeypatch):
@@ -122,6 +126,7 @@ def test_mixed_recipe_defaults_and_roundtrip(mixed_recipe):
     )
     assert restored == config
     assert config.recipe.text_loss_share == 0.9
+    assert config.recipe.hf_datasets_cache_dir == RUSTINS_DATASETS_CACHE
     assert config.launch is None
     assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
     assert len(config.dataset.sources) == 9
@@ -571,6 +576,7 @@ def test_launch_uses_standard_two_node_alignment_settings(
                 f"--recipe.parent_checkpoint={mixed_recipe.parent}",
                 f"--recipe.text_loss_share={text_loss_share}",
                 "--recipe.work_dir=/tmp/mixed-data-cache",
+                f"--recipe.hf_cache_dir={OUR_HUB_CACHE}",
             ],
         )
     )
@@ -595,11 +601,146 @@ def test_launch_uses_standard_two_node_alignment_settings(
     assert config.launch.aws_credentials_secret is None
     env = {item.name: item.value for item in config.launch.env_vars}
     assert env["OLMO_CORE_DATA_VERIFICATION_CACHE_DIR"] == "/tmp/mixed-data-cache/data-verification"
+    assert env["HF_DATASETS_CACHE"] == OUR_DATASETS_CACHE
     assert "OLMO_CORE_FS_CACHE_DIR" not in env
     secrets = {item.name: item.secret for item in config.launch.env_secrets}
     assert secrets["BEAKER_TOKEN"] == "jasonr_BEAKER_TOKEN"
     assert secrets["WANDB_API_KEY"] == "jasonr_WANDB_API_KEY"
     assert len(secrets) == len(config.launch.env_secrets)
+
+
+def _launch_env(config) -> dict[str, str]:
+    env = {item.name: item.value for item in config.launch.env_vars}
+    assert len(env) == len(config.launch.env_vars)
+    return env
+
+
+@pytest.mark.parametrize(
+    "overrides,expected",
+    [
+        ([], RUSTINS_DATASETS_CACHE),
+        ([f"--recipe.hf_cache_dir={OUR_HUB_CACHE}"], OUR_DATASETS_CACHE),
+        (
+            [f"--recipe.hf_cache_dir={OUR_HUB_CACHE}", "--recipe.hf_datasets_cache_dir=/arrow"],
+            "/arrow",
+        ),
+        ([f"--recipe.hf_cache_dir={OUR_HUB_CACHE}", "--recipe.hf_datasets_cache_dir=null"], None),
+        (["--recipe.hf_cache_dir=null"], None),
+    ],
+)
+def test_own_launch_carries_the_recipe_hf_datasets_cache(
+    mixed_recipe, monkeypatch, overrides, expected
+):
+    """The recipe's own (alignment-style) launch: derived from the Hub cache, an explicit value
+    wins, ``null`` leaves the library default, the other entries do not change."""
+    from gantry.api import GitRepoState
+
+    monkeypatch.setattr(
+        vision_alignment,
+        "build_launch_config",
+        lambda **kwargs: BeakerLaunchConfig(
+            name="mixed-test",
+            cmd=["train"],
+            git=GitRepoState(
+                repo="allenai/OLMo-core",
+                repo_url="https://github.com/allenai/OLMo-core",
+                ref="a" * 40,
+                branch="vision",
+            ),
+        ),
+    )
+
+    def build(*extra):
+        return build_config(
+            CliContext(
+                script="src/scripts/train/Mixed-Midtraining.py",
+                cmd=SubCmd.launch,
+                run_name="mixed-test",
+                cluster="ai2/holmes",
+                overrides=[f"--recipe.parent_checkpoint={mixed_recipe.parent}", *extra],
+            )
+        )
+
+    config = build(*overrides)
+    assert config.recipe.hf_datasets_cache_dir == expected
+    env = _launch_env(config)
+    assert env.pop("HF_DATASETS_CACHE", None) == expected
+    reference = _launch_env(build("--recipe.hf_datasets_cache_dir=null"))
+    assert "HF_DATASETS_CACHE" not in reference and env == reference
+
+
+@pytest.mark.parametrize(
+    "overrides,expected",
+    [
+        ([], RUSTINS_DATASETS_CACHE),
+        ([f"--recipe.hf_cache_dir={OUR_HUB_CACHE}"], OUR_DATASETS_CACHE),
+        (
+            [f"--recipe.hf_cache_dir={OUR_HUB_CACHE}", "--recipe.hf_datasets_cache_dir=/arrow"],
+            "/arrow",
+        ),
+        ([f"--recipe.hf_cache_dir={OUR_HUB_CACHE}", "--recipe.hf_datasets_cache_dir=null"], None),
+    ],
+)
+def test_a_supplied_launch_carries_the_recipe_hf_datasets_cache(
+    mixed_recipe, text_config, overrides, expected
+):
+    """The scaling-ladders path (text config and launch passed in) skips the alignment launcher's
+    environment composition; the ``datasets`` cache still reaches the job, the launcher's own
+    entries and its launch config untouched."""
+    from gantry.api import GitRepoState
+
+    from olmo_core.launch.beaker import BeakerEnvVar
+
+    theirs = BeakerLaunchConfig(
+        name="ladders-mixed",
+        cmd=["ladders/olmoe3/workloads/mixed_midtraining.py", "train"],
+        num_nodes=1,
+        env_vars=[
+            BeakerEnvVar(name="PYTHONPATH", value="/gantry-runtime"),
+            BeakerEnvVar(name="OLMO_SHARED_FS", value="1"),
+        ],
+        git=GitRepoState(
+            repo="allenai/scaling-ladders",
+            repo_url="https://github.com/allenai/scaling-ladders",
+            ref="a" * 40,
+            branch="main",
+        ),
+    )
+    config = build_config(
+        CliContext(
+            script="ladders/olmoe3/workloads/mixed_midtraining.py",
+            cmd=SubCmd.dry_run,
+            run_name="mixed-test",
+            cluster="ai2/holmes",
+            overrides=[f"--recipe.parent_checkpoint={mixed_recipe.parent}", *overrides],
+        ),
+        text_config=text_config.config,
+        launch=theirs,
+    )
+    assert config.recipe.hf_datasets_cache_dir == expected
+    env = _launch_env(config)
+    assert env.pop("HF_DATASETS_CACHE", None) == expected
+    assert env == {"PYTHONPATH": "/gantry-runtime", "OLMO_SHARED_FS": "1"}
+    assert [entry.name for entry in theirs.env_vars] == ["PYTHONPATH", "OLMO_SHARED_FS"]
+    assert config.launch is not None
+    assert config.launch.cmd == theirs.cmd and config.launch.num_nodes == 2
+
+
+def test_hf_datasets_cache_dir_changes_nothing_else(mixed_recipe):
+    """Model, train module, data loader, dataset and trainer are untouched by the recipe field:
+    the resolved dumps differ only by it (``as_config_dict`` omits the ``None`` of the disabled
+    one)."""
+    default = mixed_recipe.build()
+    disabled = mixed_recipe.build("--recipe.hf_datasets_cache_dir=null")
+    default_dump, disabled_dump = default.as_config_dict(), disabled.as_config_dict()
+    assert default_dump["recipe"].pop("hf_datasets_cache_dir") == RUSTINS_DATASETS_CACHE
+    assert "hf_datasets_cache_dir" not in disabled_dump["recipe"]
+    assert default_dump == disabled_dump
+    for config in (default, disabled):
+        restored = MixedMidtrainingExperimentConfig.from_dict(
+            {"launch": None, **config.as_config_dict()}
+        )
+        assert restored == config
 
 
 @pytest.mark.parametrize(
