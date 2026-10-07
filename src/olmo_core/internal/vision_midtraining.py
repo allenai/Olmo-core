@@ -51,7 +51,7 @@ from olmo_core.train.train_module.transformer.multimodal_train_module import (
 )
 
 from .experiment import CliContext, ExperimentConfig
-from .vision_alignment import _STAGE1_V3_POST_SETUP
+from .vision_alignment import _STAGE1_V3_POST_SETUP, DEFAULT_OLMOCR_RENDER_CACHE_DIR
 from .vision_alignment import _build_launch as _build_alignment_launch
 from .vision_alignment import (
     _check_text_lm_matches_checkpoint,
@@ -60,6 +60,7 @@ from .vision_alignment import (
     _load_text_config,
     _restore_pretraining_router_lb,
     _sample_one_annotation,
+    _set_olmocr_render_cache,
     _uses_document_mode,
     parse_cli_args,
     run,
@@ -169,6 +170,10 @@ class MixedMidtrainingRecipeConfig(Config):
     compile_loss: bool = True
     """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs
     (see :attr:`~olmo_core.nn.vision.MultimodalLMConfig.compile_loss`) instead of eagerly."""
+    olmocr_render_cache_dir: str | None = DEFAULT_OLMOCR_RENDER_CACHE_DIR
+    """Render cache of the ``stage1_v3`` olmOCR-mix sources: a page already in it is decoded
+    instead of rasterised, any other page is rendered as before (the examples are identical
+    either way, so this is safe across a resume). ``None`` always renders."""
 
 
 @dataclass
@@ -940,6 +945,7 @@ def build_config(
         )
         # KDA's document mode isolates packed documents, not sibling annotation branches.
         _sample_one_annotation(visual_sources)
+        _set_olmocr_render_cache(visual_sources, recipe.olmocr_render_cache_dir)
     elif recipe.text_loss_share < 1.0 and not replaced_sources:
         visual_sources = build_visual_sources(
             sequence_length=recipe.sequence_length,

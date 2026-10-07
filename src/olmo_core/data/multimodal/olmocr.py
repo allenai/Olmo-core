@@ -18,6 +18,13 @@ and fixed (1536) otherwise, following olmOCR's own per-page DPI rule.
 Transcriptions run long (documents pages: median ~580 tokens, p99 ~2900 with the Molmo2
 tokenizer), so ``max_sequence_length`` should be set to the training sequence length; the
 sequence is then tail-truncated like mm_olmo's preprocessor does.
+
+Rendering is the slow part of an example (tens of ms for born-digital ``documents`` pages, up to
+seconds for scanned ``national_archives`` pages), and it serialises behind a lock. An optional
+persistent :class:`RenderCache` (``render_cache_dir``) stores each rendered page losslessly,
+keyed by (PDF path, page, longest side), so a pre-rendered page (see
+``src/scripts/prerender_olmocr_pages.py``) is decoded instead of rasterised; a page missing from
+the cache is rendered as before.
 """
 
 from __future__ import annotations
@@ -25,10 +32,14 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from PIL.Image import Image as PILImage
 
 from olmo_core.config import Config
 from olmo_core.exceptions import OLMoConfigurationError
@@ -51,6 +62,8 @@ __all__ = [
     "OLMOCR_SPLITS",
     "OlmOcrMixDatasetConfig",
     "OlmOcrMixDataset",
+    "RENDER_CACHE_FORMATS",
+    "RenderCache",
     "canonical_subset",
     "canonical_split",
     "render_pdf_page",
@@ -120,24 +133,136 @@ def pdf_path_for(root: str, pdf_relpath: str) -> str:
 
 _PDFIUM_LOCK = threading.Lock()
 
+#: Image formats a :class:`RenderCache` can store pages in. ``webp`` and ``png`` are lossless
+#: (the decoded page is pixel-identical to the live render); ``jpeg`` (quality 95) is not.
+RENDER_CACHE_FORMATS: Tuple[str, ...] = ("webp", "png", "jpeg")
 
-def render_pdf_page(pdf_path: str, target_longest_image_dim: int):
-    """Render a single-page PDF to an RGB PIL image whose longest side is
-    ``target_longest_image_dim`` pixels.
+# Encoder settings per format, chosen on 1536px olmOCR-mix pages: lossless WebP at effort 1 is
+# about half the bytes of PNG (270 KB vs 490 KB for a documents page, 1.1 MB vs 1.7 MB for a
+# national-archives scan) and decodes as fast (14 / 32 ms); PNG at level 1 encodes fastest.
+_RENDER_CACHE_ENCODERS: Dict[str, Dict[str, Any]] = {
+    "webp": {"format": "WEBP", "lossless": True, "quality": 0, "method": 1},
+    "png": {"format": "PNG", "compress_level": 1},
+    "jpeg": {"format": "JPEG", "quality": 95},
+}
+_RENDER_CACHE_EXTENSIONS: Dict[str, str] = {"webp": "webp", "png": "png", "jpeg": "jpg"}
 
-    Follows olmOCR's convention (``render_pdf_to_base64png``): the DPI is chosen per page as
-    ``target * 72 / longest_mediabox_dim_in_points``, i.e. a render ``scale`` of
-    ``target / longest_dim`` -- page sizes vary, so no fixed DPI. olmOCR rasterises with poppler,
-    so fonts / antialiasing can differ slightly from pypdfium2's output.
 
-    The shipped files are single-page extracts (the row's ``page_number`` is provenance in the
-    original document), so only page 0 exists. pypdfium2 is not thread-safe; the render is
-    serialised behind a lock because :class:`~.mixture_data_loader.MixtureDataLoader` prefetches
-    examples on a thread pool.
+class RenderCache:
+    """A persistent store of rendered PDF pages, keyed by (PDF path, page, longest side).
 
-    :raises ImportError: If ``pypdfium2`` is not installed (``pip install pypdfium2``).
-    :raises RuntimeError: If the PDF has more than one page.
+    A cached page is decoded instead of rasterised, which is both faster (the WebP decode of a
+    page takes 15-30 ms; the render 20 ms to 2 s) and lock-free, so a slow page no longer stalls
+    the loader's whole read-ahead window. Entries are written atomically (temporary file, then
+    ``os.replace``), so a reader never sees a partial file and concurrent writers of one key
+    just overwrite each other with identical content. Every failure on the cache path -- an
+    unreadable or corrupt entry, a directory that cannot be written -- falls back to the live
+    render and warns once; the cache changes timing only, never the example.
+
+    :param cache_dir: Directory holding the cache tree.
+    :param image_format: One of :data:`RENDER_CACHE_FORMATS`.
+    :param root: Directory the PDF paths are keyed relative to (``dataset_path``), so the cache
+        tree mirrors ``pdfs/<chunk>/<arcname>``; a PDF outside it is keyed by its absolute path.
+    :param write: Whether a page rendered on a cache miss is stored.
     """
+
+    def __init__(
+        self,
+        cache_dir: str,
+        image_format: str = "webp",
+        root: Optional[str] = None,
+        write: bool = True,
+    ):
+        if image_format not in RENDER_CACHE_FORMATS:
+            raise OLMoConfigurationError(
+                f"render cache format must be one of {RENDER_CACHE_FORMATS}, got {image_format!r}"
+            )
+        self.cache_dir = cache_dir
+        self.image_format = image_format
+        self.root = root
+        self.write = write
+        self.hits = 0
+        self.misses = 0
+        self.hit_seconds = 0.0
+        self.render_seconds = 0.0
+        self.store_seconds = 0.0
+        self._stats_lock = threading.Lock()
+        self._warned_load = False
+        self._warned_store = False
+
+    @property
+    def lossless(self) -> bool:
+        """Whether a cached page decodes to exactly the pixels of the live render."""
+        return self.image_format != "jpeg"
+
+    def path_for(self, pdf_path: str, page: int, target_longest_image_dim: int) -> str:
+        """The cache entry of ``page`` of ``pdf_path`` rendered at ``target_longest_image_dim``."""
+        key = os.path.abspath(pdf_path)
+        if self.root is not None:
+            rel = os.path.relpath(key, os.path.abspath(self.root))
+            if not rel.startswith(os.pardir):
+                key = rel
+        key = key.lstrip(os.sep)
+        ext = _RENDER_CACHE_EXTENSIONS[self.image_format]
+        return os.path.join(self.cache_dir, f"{key}.p{page}.d{target_longest_image_dim}.{ext}")
+
+    def load(self, path: str) -> Optional["PILImage"]:
+        """The cached RGB image at ``path``, or ``None`` when there is no usable entry."""
+        from PIL import Image
+
+        if not os.path.exists(path):
+            return None
+        try:
+            with Image.open(path) as image:
+                return image.convert("RGB")
+        except Exception as e:  # a truncated or corrupt entry: render instead
+            if not self._warned_load:
+                self._warned_load = True
+                log.warning("olmOCR render cache: cannot read %s (%s); rendering instead", path, e)
+            return None
+
+    def store(self, path: str, image: "PILImage") -> bool:
+        """Write ``image`` to ``path`` atomically. Returns whether it was written."""
+        tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            image.save(tmp, **_RENDER_CACHE_ENCODERS[self.image_format])
+            os.replace(tmp, path)
+            return True
+        except Exception as e:
+            if not self._warned_store:
+                self._warned_store = True
+                log.warning("olmOCR render cache: cannot write %s (%s)", path, e)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            return False
+
+    def record(self, hit: bool, seconds: float, store_seconds: float = 0.0) -> None:
+        """Account one page: a hit (decode time) or a miss (render time, plus the store)."""
+        with self._stats_lock:
+            if hit:
+                self.hits += 1
+                self.hit_seconds += seconds
+            else:
+                self.misses += 1
+                self.render_seconds += seconds
+                self.store_seconds += store_seconds
+
+    def stats(self) -> Dict[str, float]:
+        """Counts and mean seconds per page of the hit and miss paths so far."""
+        with self._stats_lock:
+            return {
+                "hits": self.hits,
+                "misses": self.misses,
+                "hit_mean_s": self.hit_seconds / max(self.hits, 1),
+                "render_mean_s": self.render_seconds / max(self.misses, 1),
+                "store_mean_s": self.store_seconds / max(self.misses, 1),
+            }
+
+
+def _render_pdf_page(pdf_path: str, target_longest_image_dim: int) -> "PILImage":
     try:
         import pypdfium2
     except ImportError as e:
@@ -159,6 +284,46 @@ def render_pdf_page(pdf_path: str, target_longest_image_dim: int):
             return page.render(scale=scale).to_pil().convert("RGB")
         finally:
             pdf.close()
+
+
+def render_pdf_page(
+    pdf_path: str, target_longest_image_dim: int, cache: Optional[RenderCache] = None
+) -> "PILImage":
+    """Render a single-page PDF to an RGB PIL image whose longest side is
+    ``target_longest_image_dim`` pixels.
+
+    Follows olmOCR's convention (``render_pdf_to_base64png``): the DPI is chosen per page as
+    ``target * 72 / longest_mediabox_dim_in_points``, i.e. a render ``scale`` of
+    ``target / longest_dim`` -- page sizes vary, so no fixed DPI. olmOCR rasterises with poppler,
+    so fonts / antialiasing can differ slightly from pypdfium2's output.
+
+    The shipped files are single-page extracts (the row's ``page_number`` is provenance in the
+    original document), so only page 0 exists. pypdfium2 is not thread-safe; the render is
+    serialised behind a lock because :class:`~.mixture_data_loader.MixtureDataLoader` prefetches
+    examples on a thread pool.
+
+    :param cache: With a :class:`RenderCache`, a cached entry for (``pdf_path``, page 0,
+        ``target_longest_image_dim``) is decoded instead (no lock); otherwise the page is
+        rendered and, if the cache writes, stored for next time.
+
+    :raises ImportError: If ``pypdfium2`` is not installed (``pip install pypdfium2``).
+    :raises RuntimeError: If the PDF has more than one page.
+    """
+    if cache is None:
+        return _render_pdf_page(pdf_path, target_longest_image_dim)
+    path = cache.path_for(pdf_path, 0, target_longest_image_dim)
+    t0 = time.perf_counter()
+    image = cache.load(path)
+    if image is not None:
+        cache.record(True, time.perf_counter() - t0)
+        return image
+    t0 = time.perf_counter()
+    image = _render_pdf_page(pdf_path, target_longest_image_dim)
+    rendered = time.perf_counter() - t0
+    if cache.write:
+        cache.store(path, image)
+    cache.record(False, rendered, time.perf_counter() - t0 - rendered)
+    return image
 
 
 @dataclass
@@ -205,9 +370,27 @@ class OlmOcrMixDatasetConfig(Config):
 
     seed: int = 0
 
+    render_cache_dir: Optional[str] = None
+    """Directory of a persistent :class:`RenderCache` of rendered pages. A page already in it
+    (pre-rendered with ``src/scripts/prerender_olmocr_pages.py``, or stored by an earlier miss)
+    is decoded instead of rasterised; a missing page is rendered as without a cache. ``None``
+    (the default) always renders. A lossless format keeps the examples identical, so a cache may
+    be switched on or off across a resume."""
+    render_cache_format: str = "webp"
+    """Entry format, one of :data:`RENDER_CACHE_FORMATS`; ``webp`` and ``png`` are lossless."""
+    render_cache_write: bool = True
+    """Whether a page rendered on a cache miss is stored (encoding a page costs 50-300 ms on the
+    loader thread). The training-time render size is drawn per (page, source epoch), so a miss
+    stored during training is reused only when that draw recurs (a replay of the same epoch)."""
+
     def validate(self):
         canonical_subset(self.subset)
         canonical_split(self.split)
+        if self.render_cache_format not in RENDER_CACHE_FORMATS:
+            raise OLMoConfigurationError(
+                f"render_cache_format must be one of {RENDER_CACHE_FORMATS}, "
+                f"got {self.render_cache_format!r}"
+            )
         if self.target_longest_image_dim_range is not None:
             lo, hi = self.target_longest_image_dim_range
             if lo <= 0 or hi < lo:
@@ -246,6 +429,14 @@ class OlmOcrMixDataset(EpochSeededExamples):
         self._data = load_hf_dataset(self.parquet_path, split="train", keep_columns=_COLUMNS)
         self._index = self._build_index()
         self._warned = 0
+        self.render_cache: Optional[RenderCache] = None
+        if config.render_cache_dir is not None:
+            self.render_cache = RenderCache(
+                config.render_cache_dir,
+                image_format=config.render_cache_format,
+                root=config.dataset_path,
+                write=config.render_cache_write,
+            )
         log.info(
             "olmOCR-mix %s/%s: %d of %d pages kept (languages=%s)",
             self.subset,
@@ -317,7 +508,7 @@ class OlmOcrMixDataset(EpochSeededExamples):
         # mm_olmo draw order: the render size in `format_example`, then the formatter's prefix.
         target_dim = self.target_dim_for(rng)
         text = self.transcription(row)
-        image = render_pdf_page(self.pdf_path(row), target_dim)
+        image = render_pdf_page(self.pdf_path(row), target_dim, cache=self.render_cache)
         prompt = self.user_prompt()
         # One image, one (tag, transcription) turn: the shared message encoder builds exactly the
         # stage-1 single-branch layout (user header + image block + tag, then the response).

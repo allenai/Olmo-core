@@ -129,7 +129,7 @@ def stub_renderer(monkeypatch):
 
     calls = []
 
-    def fake_render(pdf_path, target_longest_image_dim):
+    def fake_render(pdf_path, target_longest_image_dim, cache=None):
         assert os.path.exists(pdf_path), pdf_path
         calls.append((pdf_path, target_longest_image_dim))
         return Image.new("RGB", (target_longest_image_dim // 2, target_longest_image_dim))

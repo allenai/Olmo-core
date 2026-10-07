@@ -83,6 +83,13 @@ log = logging.getLogger(__name__)
 
 _DOLMA2_REVISION = "5292e5d6c0f40b67cc765fe41bec991cf4345b5c"
 
+DEFAULT_OLMOCR_RENDER_CACHE_DIR = (
+    "/weka/oe-training-default/jasonr/olmo35-vision-alignment/olmocr-render-cache"
+)
+"""Persistent cache of rendered olmOCR-mix pages (lossless WebP) for the stage-1 v3 sources,
+populated with ``src/scripts/prerender_olmocr_pages.py``; see
+:class:`~olmo_core.data.multimodal.olmocr.RenderCache`."""
+
 MULTIMODAL_OVERRIDES: dict[str, str] = {
     # Resolved-config keys (fnmatch patterns over the flattened ``ExperimentConfig`` dict, with
     # the text LM at ``model.lm``) where an alignment phase built from ``recipe.text_config``
@@ -221,6 +228,10 @@ class VisionAlignmentRecipeConfig(Config):
     pretraining_checkpoint: str | None = None
     parent_checkpoint: str | None = None
     artifact_root: str = DEFAULT_ALIGNMENT_ARTIFACT_ROOT
+    olmocr_render_cache_dir: str | None = DEFAULT_OLMOCR_RENDER_CACHE_DIR
+    """Render cache of the ``stage1_v3`` olmOCR-mix sources: a page already in it is decoded
+    instead of rasterised, any other page is rendered as before (the examples are identical
+    either way, so this is safe across a resume). ``None`` always renders."""
     output_root: str = (
         "/weka/oe-training-default/rustin/experiments/vision-moe/vision-alignment/checkpoints"
     )
@@ -368,6 +379,17 @@ def _uses_document_mode(lm: Any) -> bool:
         isinstance(getattr(block, "sequence_mixer", None), KimiDeltaAttentionConfig)
         for block in [lm.block, *(getattr(lm, "block_overrides", None) or {}).values()]
     )
+
+
+def _set_olmocr_render_cache(sources: dict[str, Any], cache_dir: str | None) -> None:
+    """Point every olmOCR-mix source at the persistent render cache (``None`` leaves them
+    rendering every page)."""
+    from olmo_core.data.multimodal.olmocr import OlmOcrMixDatasetConfig
+
+    for source in sources.values():
+        config = getattr(source, "dataset", source)  # unwrap MultimodalSourceConfig
+        if isinstance(config, OlmOcrMixDatasetConfig):
+            config.render_cache_dir = cache_dir
 
 
 def _sample_one_annotation(sources: dict[str, Any]) -> None:
@@ -829,6 +851,7 @@ def _build_datasets(
     )
     if stage1_v3:
         sources = build_stage1_v3_sources(phase, sequence_length, recipe.artifact_root)
+        _set_olmocr_render_cache(sources, recipe.olmocr_render_cache_dir)
         target_loss_mass = _stage1_v3_loss_targets(phase)
         # Measured with one annotation per example; a branch-packing LM needs its own means.
         mean_loss_weight = STAGE1_V3_MEAN_LOSS_WEIGHTS.copy() if document_mode else {}
