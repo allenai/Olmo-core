@@ -192,7 +192,8 @@ def load_maxtext_params(items_dir: str) -> Dict[str, np.ndarray]:
     if "params" not in tree:
         raise KeyError(f"{items_dir} has no params; found {sorted(tree)}")
     tree = {"params": tree["params"]}
-    mesh = jax.sharding.Mesh(np.array(jax.devices()[:1]), ("x",))
+    # Restore to host memory: on an accelerator this would be a second copy of the model.
+    mesh = jax.sharding.Mesh(np.array(jax.devices("cpu")[:1]), ("x",))
     sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
     restore_args = jax.tree_util.tree_map(
         lambda x: ocp.ArrayRestoreArgs(sharding=sharding, dtype=np.float32),
