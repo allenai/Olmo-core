@@ -95,6 +95,8 @@ def main() -> None:
     parser.add_argument("--min-top1-agreement", type=float, default=0.999)
     parser.add_argument("--max-mean-abs-dloss", type=float, default=1e-3)
     args = parser.parse_args(argv)
+    # MaxText code paths may hand sys.argv to absl, which rejects this script's flags.
+    sys.argv = sys.argv[:1]
     prepare_cli_environment()
 
     import jax  # type: ignore
