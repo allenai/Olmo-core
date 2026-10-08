@@ -151,6 +151,10 @@ def test_hero_bridge_inherits_text_side_settings(alignment_recipe, hero_checkpoi
     assert trainer.callbacks["checkpointer"].ephemeral_save_interval == 50
     assert config.data_loader.prefetch_workers == 8
     assert config.data_loader.batch_prefetch_depth == 2
+    sync = alignment_recipe.build(
+        overrides=[f"--recipe.text_config={FIXTURE}", "--recipe.batch_prefetch_depth=0"]
+    )
+    assert sync.data_loader.batch_prefetch_depth == 0
 
 
 def test_document_mode_turns_the_experimental_kda_kernels_off(alignment_recipe, hero_checkpoint):

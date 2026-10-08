@@ -313,6 +313,12 @@ class VisionAlignmentRecipeConfig(Config):
     ``/hub``, else a ``datasets`` subdirectory; ``None`` when ``hf_cache_dir`` is. An explicit
     value wins, and an explicit ``null`` leaves the library default in place. Set in the launch
     environment, and exported by the training process when the environment lacks it."""
+    batch_prefetch_depth: int = 2
+    """Finished rank batches the loader builds ahead on a background thread, so the trainer's
+    fetch returns as soon as one is queued (the batch order and the checkpointed cursor are the
+    thread-free loader's; see
+    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.batch_prefetch_depth`).
+    ``0`` packs and collates on the trainer's thread."""
     tokenizer_revision: str | None = None
     vision_model_id: str = "google/siglip2-so400m-patch14-384"
     vision_revision: str = "e8e487298228002f3d8a82e0cd5c8ea9c567f57f"
@@ -1024,9 +1030,7 @@ def _build_data_loader(
         # Only the real crops are collated and copied (no padding to the batch's crop maximum).
         compact_images=True,
         prefetch_workers=workers,
-        # Two finished rank batches built ahead on a background thread; the batch order and the
-        # checkpointed cursor are the thread-free loader's.
-        batch_prefetch_depth=2,
+        batch_prefetch_depth=recipe.batch_prefetch_depth,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
         group_sequence_quotas={"text": 16, "vision": 112}
