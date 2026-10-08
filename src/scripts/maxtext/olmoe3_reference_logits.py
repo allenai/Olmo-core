@@ -23,10 +23,22 @@ import argparse
 import copy
 import json
 import logging
+import os
 from typing import Any, Dict
 
-import numpy as np
-import torch
+# A reference has to be true fp32. On Ampere and newer, Triton's fp32 tl.dot defaults to TF32,
+# and FLA's KDA kernels also hard-code TF32 for the triangular solve whenever the GPU supports
+# it; together they move logits by ~1e-2 relative. Both must be set before FLA's kernels import.
+os.environ.setdefault("TRITON_F32_DEFAULT", "ieee")
+try:
+    import fla.utils  # type: ignore
+
+    fla.utils.IS_TF32_SUPPORTED = False
+except ImportError:
+    pass
+
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
 
 from olmo_core.nn.hf.convert_checkpoint import _normalize_legacy_latent_moe_config
 from olmo_core.nn.maxtext.checkpoint import (
