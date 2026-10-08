@@ -69,6 +69,8 @@ def build_model(model_config: Dict[str, Any], device: torch.device):
 @torch.no_grad()
 def _randomize(model: torch.nn.Module, seed: int) -> None:
     model.init_weights(device=next(model.parameters()).device)
+    # The OLMoDDP model casts itself to its bf16 training dtype while initializing.
+    model.float()
     gen = torch.Generator(device="cpu").manual_seed(seed)
     for name, p in model.named_parameters():
         # Norm gains (all ones), SSMax gains and zero biases would map correctly even if the
