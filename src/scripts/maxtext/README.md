@@ -54,6 +54,12 @@ Converted OLMo Core checkpoints have `model_and_optim/` (DCP, `model.<name>` key
 
 ## Checking parity
 
+On GPU, MaxText needs a node whose driver works with JAX's CUDA build. A B300 (driver 590) works with
+`jax[cuda13]==0.11.2` and `nvidia-cublas>=13.2`; A100 nodes with driver 570 fail at cuDNN init. Set
+`JAX_DEFAULT_MATMUL_PRECISION=highest`, because the delta rule's raw `einsum`s otherwise use TF32,
+and pass `-- megablox=False attention=dot_product` to avoid Pallas GPU kernels that this JAX version
+breaks.
+
 Reference side: a GPU with the official OLMo Core image. On A100 that's
 `beaker://akshitab/olmo-core-tch2130cu129-sm80-2026-09-11`. Generic images won't work:
 
@@ -120,7 +126,41 @@ Per layer, measured by feeding each MaxText layer the OLMo Core input to that la
   MoE and shared expert).
 - **About 1e-4:** the KDA blocks.
 
+**Real checkpoint** (`olmo35-small-hero-20260907-emo/step834466`, copied to
+`/weka/olmo-3p5-checkpoints/scratch/calebo/olmo35-small-hero-20260907-emo/`):
+
+- **Conversion:** OLMo Core → MaxText (scanned) → OLMo Core is bit-identical for all 415 parameters.
+  The converted checkpoint is in `maxtext-step834466/`, the round trip in `roundtrip-step834466/`,
+  and the logit summaries and tokens in `parity/`.
+- **Logits:** compared on real text (dolma2-tokenized MaxText docs), with the OLMo Core reference
+  from an A100 and `--exact-kda`. MaxText ran on CPU, and again on a B300 with
+  `JAX_DEFAULT_MATMUL_PRECISION=highest` and the overrides `megablox=False attention=dot_product`.
+
+| MaxText setting | Tokens | Mean KL | Top-1 agreement | Mean \|Δ loss\| | Loss (MaxText / OLMo Core) |
+|---|---|---|---|---|---|
+| exact scan KDA (`gdn_chunk_size=0`, or a length not divisible by 64) | 256 / 255 | 9e-11 | 100% | 1.2e-5 | 2.671 / 2.671 |
+| chunked KDA (default) | 256 | 4e-2 | 96% | 0.12 | 2.697 / 2.671 |
+| chunked KDA (default) | 2 × 1024 | 3e-2 | 91.5% | 0.16 | 2.694 / 2.658 |
+
+With the exact scan path, the converted checkpoint reproduces OLMo Core to fp32 noise on real
+weights and real text, so the conversion is verified. With trained weights, the L2-norm epsilon
+difference below is negligible.
+
 ## Known differences between the frameworks
+
+- **MaxText's chunked KDA (`_delta_rule_chunked` in `olmoe3.py`) is wrong on trained weights.** It
+  passes on random-init weights, but on the real checkpoint it changes the loss by ~0.03, and the
+  error grows with sequence position. The exact token scan in the same file matches OLMo Core.
+
+  This affects any sequence length divisible by `gdn_chunk_size` (64) when `use_tokamax_kda=false`,
+  which is the production v4 training setting.
+
+  Root cause not yet found. Called directly on real layer inputs at full precision, it matches the
+  scan to ~1e-6 in layers 0–5 and 2.7e-5 in layer 6, where chunk size 64 is worse than 16. So the
+  error builds up in some layers rather than being a plain algebra bug. Next step: per-layer checks on
+  the scanned-cycle layers 8–14, and the Newton-iteration inverse vs. a triangular solve.
+
+  For parity checks, use `gdn_chunk_size=0`.
 
 - **KDA q/k L2 norm.** MaxText's pure-JAX KDA path (`use_tokamax_kda=false`, which the v4 job uses)
   computes `x * rsqrt(max(sum(x²), 1e-12))`. OLMo Core/FLA, and MaxText's tokamax path, compute
@@ -133,8 +173,10 @@ Per layer, measured by feeding each MaxText layer the OLMo Core input to that la
 
 ## Not done yet
 
-- A real checkpoint (`gs://olmo-3p5-checkpoints/external/olmo-3p5-tiny/emo/checkpoints/`):
-  structure, logits on real text at long sequence lengths, and a bit-exact round trip.
+- Root-cause and fix MaxText's chunked KDA (above), then re-check the real checkpoint at 1024+ tokens.
+- Packed documents (several per row): KDA state resets, SSMax per-document positions, and EMO
+  per-document pools are all untested so far.
+- Production settings on TPU: bf16, megablox.
 - A short MaxText training run on TPU v4 from a converted checkpoint.
 - The step-0 training comparison: same init and batch, EMO off. No optimizer conversion is needed,
   since AdamW starts from zero moments.
