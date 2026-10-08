@@ -24,7 +24,7 @@ import copy
 import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 # A reference has to be true fp32. On Ampere and newer, Triton's fp32 tl.dot defaults to TF32,
 # and FLA's KDA kernels also hard-code TF32 for the triangular solve whenever the GPU supports
@@ -93,6 +93,44 @@ def _randomize(model: torch.nn.Module, seed: int) -> None:
             log.info(f"Perturbed constant-initialized {name}")
 
 
+def _use_exact_kda() -> None:
+    """
+    Swap FLA's fused KDA kernel for its naive recurrence in float64, with the same gate and q/k
+    L2 norm. FLA's chunked kernel is ~1e-3 relative from float64 even with IEEE fp32 dots, which
+    is larger than the fp32 noise a conversion check wants to resolve.
+    """
+    import torch.nn.functional as F
+    from fla.ops.kda.naive import naive_recurrent_kda  # type: ignore
+
+    import olmo_core.nn.attention.kda as kda
+
+    def exact_kda(
+        q, k, v, g, beta, A_log, dt_bias, scale=None, cu_seqlens=None, **kwargs
+    ) -> Tuple[torch.Tensor, None]:
+        if cu_seqlens is not None:
+            raise NotImplementedError("--exact-kda doesn't support packed documents")
+        if not (kwargs.get("use_qk_l2norm_in_kernel") and kwargs.get("use_gate_in_kernel")):
+            raise NotImplementedError("--exact-kda assumes the in-kernel gate and L2 norm")
+        f64 = torch.float64
+        H, K = q.shape[-2:]
+        # Same as FLA's in-kernel gate and l2norm.
+        gate = -A_log.to(f64).exp().view(1, 1, H, 1) * F.softplus(
+            g.to(f64) + dt_bias.to(f64).view(1, 1, H, K)
+        )
+
+        def l2(x):
+            x = x.to(f64)
+            return x * torch.rsqrt((x * x).sum(-1, keepdim=True) + 1e-6)
+
+        o, _ = naive_recurrent_kda(
+            l2(q), l2(k), v.to(f64), gate, beta.to(f64), scale=K**-0.5 if scale is None else scale
+        )
+        return o.to(q.dtype), None
+
+    kda.dispatch_chunk_kda = exact_kda
+    log.info("Using a float64 naive KDA recurrence instead of FLA's fused kernel")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
@@ -117,8 +155,16 @@ def main() -> None:
         "--n-positions", type=int, default=16, help="positions with full logits kept"
     )
     parser.add_argument("--output", required=True, help="where to write the .npz summary")
+    parser.add_argument(
+        "--exact-kda",
+        action="store_true",
+        help="run KDA as a float64 naive recurrence instead of FLA's fused kernel (slow; "
+        "single-document rows only)",
+    )
     args = parser.parse_args()
     prepare_cli_environment()
+    if args.exact_kda:
+        _use_exact_kda()
 
     device = torch.device("cuda")
     torch.backends.cuda.matmul.allow_tf32 = False
