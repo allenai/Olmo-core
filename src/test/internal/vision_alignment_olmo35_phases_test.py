@@ -329,6 +329,7 @@ def test_stage1_defaults(stage1, alignment_recipe):
     # In-loop evaluation at startup and each quarter (~12 minutes per pass on 16 GPUs).
     evaluator = config.trainer.callbacks["multimodal_evaluator"]
     assert (evaluator.eval_interval, evaluator.eval_on_startup) == (3906, True)
+    assert evaluator.rank_batch_size == 2
     restored = VisionAlignmentExperimentConfig.from_dict(
         json.loads(json.dumps(config.as_config_dict()))
     )

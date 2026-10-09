@@ -1122,7 +1122,13 @@ def _build_trainer(
             MultimodalEvaluatorCallbackConfig(
                 eval_dataset=validation,
                 sequence_length=sequence_length,
-                rank_batch_size=1 if is_joint else policy.microbatch_instances,
+                # Stage 1 runs on 16 or 32 GPUs: 2 per rank keeps examples_per_source (64)
+                # divisible by the global evaluation batch at both.
+                rank_batch_size=1
+                if is_joint
+                else 2
+                if phase == AlignmentPhase.stage1
+                else policy.microbatch_instances,
                 examples_per_source=64,
                 eval_interval=policy.eval_interval or max(1, round(steps / 4)),
                 eval_on_startup=True,
