@@ -8,12 +8,27 @@ the next-token log-probability and the argmax. That's enough to compare per-toke
 sequences and KL / top-1 agreement where it matters.
 """
 
+import logging
+import os
+import sys
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Dict, Optional, Sequence
 
 import numpy as np
 
-__all__ = ["LogitSummary", "summarize_logits", "concat", "compare_summaries", "default_positions"]
+if TYPE_CHECKING:
+    from .config import MaxTextModelConfig
+
+__all__ = [
+    "LogitSummary",
+    "summarize_logits",
+    "concat",
+    "compare_summaries",
+    "default_positions",
+    "maxtext_logit_summary",
+]
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -121,3 +136,108 @@ def compare_summaries(reference: LogitSummary, actual: LogitSummary) -> Dict[str
         "ref_loss": float(-reference.next_token_logprob.mean()),
         "actual_loss": float(-actual.next_token_logprob.mean()),
     }
+
+
+def maxtext_logit_summary(
+    config: "MaxTextModelConfig",
+    items_path: str,
+    tokens: np.ndarray,
+    positions: np.ndarray,
+    *,
+    scan_layers: bool = True,
+    extra_overrides: Sequence[str] = (),
+) -> LogitSummary:
+    """
+    Run a converted checkpoint in MaxText, in fp32 at the highest matmul precision, and summarize
+    its logits for ``[B, S]`` ``tokens``. Each row is one document.
+
+    Weights load through MaxText's own ``load_parameters_path``, so this also checks that MaxText
+    accepts the checkpoint, and every loaded parameter is checked against the checkpoint so a model
+    that fell back to its own init can't pass. Needs MaxText and JAX; CPU JAX works.
+
+    :param extra_overrides: More MaxText ``key=value`` overrides, applied last.
+    """
+    import jax  # type: ignore
+    import jax.numpy as jnp  # type: ignore
+    from flax import nnx  # type: ignore
+    from maxtext.common.common_types import MODEL_MODE_TRAIN  # type: ignore
+    from maxtext.configs import pyconfig  # type: ignore
+    from maxtext.utils import maxtext_utils, model_creation_utils  # type: ignore
+    from maxtext.utils.globals import MAXTEXT_PKG_DIR  # type: ignore
+
+    from .checkpoint import load_maxtext_params
+
+    _, S = tokens.shape
+    settings = []
+    if config.moe is not None and config.moe.emo_pools is not None:
+        # MaxText samples EMO pool sizes whenever the call isn't in inference mode, regardless of
+        # enable_dropout, while OLMo Core samples only in train(). Pin the pool to the eval size.
+        pool = config.moe.emo_pools[2]
+        settings += [f"emo_min_document_expert_pool={pool}", f"emo_max_document_expert_pool={pool}"]
+    if config.kda is not None:
+        settings.append("use_tokamax_kda=False")
+    # MaxText code paths may hand sys.argv to absl, which rejects the caller's flags.
+    argv, sys.argv = sys.argv, sys.argv[:1]
+    try:
+        mt_config = pyconfig.initialize(
+            [
+                "",
+                os.path.join(MAXTEXT_PKG_DIR, "configs", "base.yml"),
+                f"model_name={config.model_name}",
+                "override_model_config=True",
+                *config.overrides(),
+                *settings,
+                "run_name=olmo_core_parity",
+                "enable_checkpointing=True",
+                f"load_parameters_path={items_path}",
+                f"scan_layers={scan_layers}",
+                "skip_jax_distributed_system=True",
+                f"max_target_length={S}",
+                "dtype=float32",
+                "weight_dtype=float32",
+                "matmul_precision=highest",
+                "per_device_batch_size=1",
+                *extra_overrides,
+            ]
+        )
+    finally:
+        sys.argv = argv
+    mesh = jax.sharding.Mesh(maxtext_utils.create_device_mesh(mt_config), mt_config.mesh_axes)
+    model = model_creation_utils.from_pretrained(mt_config, mesh=mesh, model_mode=MODEL_MODE_TRAIN)
+
+    stored = load_maxtext_params(items_path)
+    loaded = {
+        "/".join(str(p) for p in path): v
+        for path, v in nnx.to_flat_state(nnx.state(model, nnx.Param))
+    }
+    if loaded.keys() != stored.keys():
+        raise KeyError(
+            f"model/checkpoint params differ: only in model {sorted(loaded.keys() - stored.keys())[:5]}, "
+            f"only in checkpoint {sorted(stored.keys() - loaded.keys())[:5]}"
+        )
+    for k, v in loaded.items():
+        value = np.asarray(jax.experimental.multihost_utils.process_allgather(v[...], tiled=True))
+        if not np.array_equal(value, stored[k].numpy()):
+            raise ValueError(f"{k}: MaxText isn't running the checkpoint's weights")
+    log.info(f"All {len(loaded)} MaxText params match the checkpoint")
+    del stored
+
+    global_batch = mt_config.global_batch_size_to_load
+    decoder_positions = jnp.broadcast_to(jnp.arange(S, dtype=jnp.int32), (global_batch, S))
+    segments = jnp.ones((global_batch, S), dtype=jnp.int32)
+    summaries = []
+    for row in tokens:
+        # One sequence per call, replicated across the global batch.
+        ids = jnp.broadcast_to(jnp.asarray(row, dtype=jnp.int32), (global_batch, S))
+        logits = model(
+            decoder_input_tokens=ids,
+            decoder_positions=decoder_positions,
+            decoder_segment_ids=segments,
+            enable_dropout=False,
+        )
+        logits = np.asarray(
+            jax.experimental.multihost_utils.process_allgather(logits, tiled=True)[:1],
+            dtype=np.float32,
+        )
+        summaries.append(summarize_logits(row[None], logits, positions))
+    return concat(summaries)

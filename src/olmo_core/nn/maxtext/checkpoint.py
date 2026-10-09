@@ -1,16 +1,18 @@
 """
-Reading and writing OLMo Core (torch DCP) and MaxText (Orbax) weights for OLMoE3 conversion.
+Reading and writing OLMo Core (torch DCP) and MaxText (Orbax) weights, and converting between
+MaxText's scanned and unscanned parameter layouts.
 
 The OLMo Core side only needs torch. The MaxText side imports JAX, Orbax and MaxText lazily, so it
-only needs them installed when it's used: install the MaxText checkout that has the ``olmoe3``
-decoder into the same environment (CPU JAX is enough).
+only needs them installed when it's used: install a MaxText checkout that has the model's decoder
+into the same environment (CPU JAX is enough).
 """
 
 import json
 import logging
+import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import numpy as np
 import torch
@@ -30,7 +32,8 @@ from olmo_core.io import (
     upload,
 )
 
-from .olmoe3 import OLMoE3Geometry, normalize_olmo_core_key, olmo_core_shapes
+from .config import MaxTextModelConfig, ScanLayout
+from .convert import normalize_olmo_core_key, olmo_core_shapes
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +43,9 @@ __all__ = [
     "save_olmo_core_weights",
     "load_maxtext_params",
     "save_maxtext_params",
+    "scan_params",
+    "unscan_params",
+    "is_scanned",
     "write_json",
 ]
 
@@ -57,20 +63,20 @@ def load_olmo_core_config(checkpoint_dir: PathOrStr) -> Dict[str, Any]:
 
 
 def load_olmo_core_weights(
-    checkpoint_dir: PathOrStr, geometry: OLMoE3Geometry
-) -> Dict[str, np.ndarray]:
+    checkpoint_dir: PathOrStr, config: MaxTextModelConfig
+) -> Dict[str, torch.Tensor]:
     """
     Load unsharded fp32 weights from an OLMo Core checkpoint's ``model_and_optim/`` directory.
 
     Handles both ``model.<name>`` entries (the FSDP train module, and the converted checkpoints
     written by :func:`save_olmo_core_weights`) and the flattened fp32 master copies
     ``module.<name>.main`` that the OLMoDDP train module saves instead. The model isn't built;
-    shapes come from ``geometry``, so this runs on CPU without the GPU kernel packages.
+    shapes come from ``config``, so this runs on CPU without the GPU kernel packages.
     """
     model_and_optim = join_path(checkpoint_dir, "model_and_optim")
     reader = RemoteFileSystemReader(model_and_optim)
     metadata = reader.read_metadata().state_dict_metadata
-    shapes = olmo_core_shapes(geometry)
+    shapes = olmo_core_shapes(config)
 
     # Prefer the model weights; fall back to the fp32 master copies.
     by_name: Dict[str, Dict[str, str]] = {"model": {}, "main": {}}
@@ -88,7 +94,7 @@ def load_olmo_core_weights(
         raise KeyError(f"{model_and_optim} is missing parameters: {missing[:10]}")
     extra = sorted(set(keys) - set(shapes))
     if extra:
-        raise KeyError(f"{model_and_optim} has parameters the geometry doesn't: {extra[:10]}")
+        raise KeyError(f"{model_and_optim} has parameters the config doesn't: {extra[:10]}")
 
     to_load: Dict[str, torch.Tensor] = {}
     for name, shape in shapes.items():
@@ -109,13 +115,13 @@ def load_olmo_core_weights(
         if tensor.dtype != torch.float32:
             log.warning(f"{name} is stored as {tensor.dtype}; upcasting to float32")
             tensor = tensor.float()
-        out[name] = tensor.reshape(shape).numpy()
+        out[name] = tensor.reshape(shape)
     return out
 
 
 def save_olmo_core_weights(
     output_dir: PathOrStr,
-    state: Mapping[str, np.ndarray],
+    state: Mapping[str, torch.Tensor],
     experiment_config: Mapping[str, Any],
     *,
     save_overwrite: bool = False,
@@ -129,7 +135,7 @@ def save_olmo_core_weights(
     model_and_optim = join_path(output_dir, "model_and_optim")
     if file_exists(f"{normalize_path(model_and_optim)}/.metadata") and not save_overwrite:
         raise FileExistsError(f"{model_and_optim} already holds a checkpoint")
-    tensors = {f"model.{k}": torch.from_numpy(np.ascontiguousarray(v)) for k, v in state.items()}
+    tensors = {f"model.{k}": v.contiguous() for k, v in state.items()}
     log.info(f"Saving {len(tensors)} parameters to '{model_and_optim}'")
     dist_cp.save(tensors, storage_writer=RemoteFileSystemWriter(model_and_optim), no_dist=True)
 
@@ -176,9 +182,9 @@ def _unflatten(flat: Mapping[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def load_maxtext_params(items_dir: str) -> Dict[str, np.ndarray]:
+def load_maxtext_params(items_dir: str) -> Dict[str, torch.Tensor]:
     """
-    Load the parameters of a MaxText checkpoint as a flat ``/``-joined dict of fp32 numpy arrays.
+    Load the parameters of a MaxText checkpoint as a flat ``/``-joined dict of fp32 tensors.
     ``items_dir`` is a checkpoint step's ``items`` directory, e.g. ``.../checkpoints/50/items``.
     Optimizer state, if present, is skipped.
     """
@@ -206,11 +212,11 @@ def load_maxtext_params(items_dir: str) -> Dict[str, np.ndarray]:
     )
     # On disk: params/params/<tree> (the item key, then Flax's params collection).
     params = restored["params"]["params"]
-    return {k: np.asarray(v) for k, v in _flatten(params).items()}
+    return {k: torch.from_numpy(np.array(v)) for k, v in _flatten(params).items()}
 
 
 def save_maxtext_params(
-    output_dir: str, params: Mapping[str, np.ndarray], *, device_count: Optional[int] = None
+    output_dir: str, params: Mapping[str, torch.Tensor], *, device_count: Optional[int] = None
 ) -> None:
     """
     Write a flat ``/``-joined parameter dict as a MaxText checkpoint at ``<output_dir>/0/items``,
@@ -224,8 +230,85 @@ def save_maxtext_params(
 
     save_weights_to_checkpoint(
         output_dir,
-        _unflatten(params),
+        _unflatten({k: v.numpy() for k, v in params.items()}),
         device_count=device_count or jax.device_count(),
         use_ocdbt=True,
         use_zarr3=True,
     )
+
+
+_UNSCANNED_RE = re.compile(r"^decoder/layers_(?P<layer>\d+)/(?P<rest>.+)$")
+
+
+def _scanned_res(layout: ScanLayout) -> List[re.Pattern]:
+    slot = re.escape(layout.slot).replace(re.escape("{}"), r"(?P<slot>\d+)")
+    groups = [(layout.stacked, "stacked")]
+    if layout.unrolled is not None:
+        groups.append((layout.unrolled, "unrolled"))
+    return [
+        re.compile(rf"^(?P<{name}>{re.escape(prefix)})/{slot}/(?P<rest>.+)$")
+        for prefix, name in groups
+    ]
+
+
+def is_scanned(params: Mapping[str, Any], layout: ScanLayout) -> bool:
+    """Whether ``params`` is in the ``scan_layers=True`` layout."""
+    res = _scanned_res(layout)
+    return any(r.match(k) for k in params for r in res)
+
+
+def scan_params(
+    params: Mapping[str, torch.Tensor], layout: ScanLayout, n_layers: int
+) -> Dict[str, torch.Tensor]:
+    """
+    Convert an unscanned MaxText parameter tree (``decoder/layers_{i}/...``) to the layout MaxText
+    uses with ``scan_layers=True``; see :class:`~olmo_core.nn.maxtext.config.ScanLayout`.
+    """
+    if n_layers % layout.cycle:
+        raise ValueError(f"n_layers={n_layers} isn't a multiple of the scan cycle ({layout.cycle})")
+    n_unrolled = 1 if layout.unrolled is not None else 0
+    n_stacked = n_layers // layout.cycle - n_unrolled
+    out: Dict[str, torch.Tensor] = {}
+    per_slot: Dict[tuple, list] = {}
+    for key, value in params.items():
+        m = _UNSCANNED_RE.match(key)
+        if m is None:
+            out[key] = value
+            continue
+        cycle, slot = divmod(int(m["layer"]), layout.cycle)
+        slot_name = layout.slot.format(slot)
+        if cycle < n_unrolled:
+            out[f"{layout.unrolled}/{slot_name}/{m['rest']}"] = value
+        else:
+            per_slot.setdefault((slot_name, m["rest"]), [None] * n_stacked)[
+                cycle - n_unrolled
+            ] = value
+    for (slot_name, rest), values in per_slot.items():
+        if any(v is None for v in values):
+            raise KeyError(f"{slot_name}/{rest} is missing from some cycles")
+        out[f"{layout.stacked}/{slot_name}/{rest}"] = torch.stack(values, dim=layout.axis)
+    return out
+
+
+def unscan_params(
+    params: Mapping[str, torch.Tensor], layout: ScanLayout
+) -> Dict[str, torch.Tensor]:
+    """The inverse of :func:`scan_params`."""
+    res = _scanned_res(layout)
+    n_unrolled = 1 if layout.unrolled is not None else 0
+    out: Dict[str, torch.Tensor] = {}
+    for key, value in params.items():
+        m = next((m for r in res if (m := r.match(key)) is not None), None)
+        if m is None:
+            if _UNSCANNED_RE.match(key):
+                raise ValueError(f"{key} is already unscanned")
+            out[key] = value
+            continue
+        slot = int(m["slot"])
+        if m.groupdict().get("unrolled") is not None:
+            out[f"decoder/layers_{slot}/{m['rest']}"] = value
+            continue
+        for c in range(value.shape[layout.axis]):
+            layer = (c + n_unrolled) * layout.cycle + slot
+            out[f"decoder/layers_{layer}/{m['rest']}"] = value.select(layout.axis, c)
+    return out

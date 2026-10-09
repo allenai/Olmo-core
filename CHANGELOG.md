@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added Ulysses context parallelism for `KimiDeltaAttention` (`apply_cp`), mirroring the `GatedDeltaNet` all-to-all head/sequence exchange, with the in-kernel gate parameters sliced to each rank's heads.
+- Added `olmo_core.nn.maxtext` for converting model weights between OLMo Core and MaxText checkpoints in both directions, built on `StateConverter` like the Hugging Face converter. It picks the MaxText decoder from the OLMo Core config (dense `olmo3`, and the hybrid KDA/MoE `olmoe3`), handles MaxText's scanned and unscanned layouts, and checks that converting back is bit-exact. Example CLIs and logit-parity scripts are in `src/examples/maxtext/`.
 - Added a Ulysses context-parallel parity test for the recurrent mixers (`GatedDeltaNet`, `KimiDeltaAttention`) that compares per-stage activations, outputs, and gradients against a single-process reference, including packed documents that straddle the CP split, plus a model-level gradient-parity test for `gdn` and `kda` under Ulysses CP.
 
 ## [v3.0.0](https://github.com/allenai/Olmo-core/releases/tag/v3.0.0) - 2026-09-30
