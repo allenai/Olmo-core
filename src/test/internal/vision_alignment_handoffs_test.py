@@ -85,7 +85,7 @@ def test_phase_loader_checkpoint_and_evaluation_defaults(
     alignment_recipe, phase, microbatch, max_checkpoints, eval_batch_size
 ):
     parent = None
-    for stage in vision_alignment.AlignmentPhase:
+    for stage in vision_alignment.ALIGNMENT_CHAIN:
         config = alignment_recipe.build(stage, parent)
         if stage == phase:
             break

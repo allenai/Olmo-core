@@ -21,6 +21,7 @@ from olmo_core.utils import prepare_cli_environment
 
 from .experiment import CliContext, SubCmd
 from .vision_alignment import (
+    ALIGNMENT_CHAIN,
     AlignmentPhase,
     VisionAlignmentExperimentConfig,
     build_config,
@@ -31,7 +32,7 @@ from .vision_alignment import (
 
 log = logging.getLogger(__name__)
 
-_STAGES = (AlignmentPhase.bridge, AlignmentPhase.perception, AlignmentPhase.joint)
+_STAGES = ALIGNMENT_CHAIN
 _SUCCESS_FILE = "stage_complete.json"
 _WORKER_ENV = "OLMO_ALIGNMENT_PIPELINE_STAGE"
 
@@ -41,7 +42,7 @@ def _selected_phase(cli: CliContext) -> str:
     for arg in cli.overrides:
         if arg.startswith("--recipe.phase="):
             phase = arg.partition("=")[2]
-    if phase not in ("all", *_STAGES):
+    if phase not in ("all", *AlignmentPhase):
         raise OLMoConfigurationError(f"Unknown alignment phase: {phase!r}")
     return phase
 

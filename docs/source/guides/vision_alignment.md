@@ -215,6 +215,23 @@ dolma2, 8,192 tokens); other models must supply their own. The launch installs `
 `pypdfium2` and `h5py`. Validation keeps the alignment sources and adds v3's caption and
 transcript prompts (`v3_long_caption`, `v3_transcript`).
 
+### Stage 1 on its own
+
+`--recipe.phase=stage1 --recipe.data=stage1_v3` trains a Molmo2-style Stage 1 outside the
+alignment chain: a reference for the chained phases and for mixed midtraining. It starts from
+`recipe.pretraining_checkpoint` (no parent; the all-stage pipeline never runs it), trains on
+the v3 visual sources at their full loss targets with no text replay, and trains every
+component with Molmo2-Stage1's learning rates: connector `2e-4` (warmup 200), vision `6e-6`
+and LM `2e-5` (warmup 2,000), cosine to a 10% floor. The input embeddings stay frozen except
+the image-token rows; the output projection trains; router load balancing keeps the pretrained
+coefficients. The default 15,625 steps x 128 x 8,192 tokens equal the 16.4B tokens of the v3
+Stage-1 run (50,000 x 128 x 2,560). A permanent checkpoint is kept at each quarter of
+`recipe.steps`, and an ephemeral one every 250 steps.
+
+`recipe.connector_lr`, `recipe.vision_lr` and `recipe.lm_lr` set this phase's peak learning
+rates for ablations. Zero freezes the vision encoder or the LM; a frozen LM also turns router
+load balancing off, as in bridge and perception.
+
 `recipe.sequence_length` updates training lengths without changing RoPE. Source serialization,
 crop, packing or split changes require compatible calibration and a fresh data stream.
 Loader fingerprints validate resume compatibility.

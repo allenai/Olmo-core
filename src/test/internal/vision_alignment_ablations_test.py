@@ -18,7 +18,7 @@ def _chain(alignment_recipe, phase, overrides=()):
     saved once per test)."""
     parents = alignment_recipe.__dict__.setdefault("chain_parents", {None: None})
     previous = None
-    for stage in vision_alignment.AlignmentPhase:
+    for stage in vision_alignment.ALIGNMENT_CHAIN:
         if stage == phase:
             return alignment_recipe.build(stage, parents[previous], overrides=overrides)
         if stage not in parents:

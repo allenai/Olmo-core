@@ -104,18 +104,30 @@ def _hero_phases(alignment_recipe) -> dict[str, dict]:
     return configs
 
 
+@pytest.fixture
+def stage1(alignment_recipe, hero_checkpoint, tmp_path):
+    """Build the stage1 phase on the OLMo 3.5 checkpoint with the v3 data."""
+    _write_caption_manifest(tmp_path / "artifacts")
+
+    def build(overrides=()):
+        return alignment_recipe.build(
+            "stage1", include_means=False, overrides=["--recipe.data=stage1_v3", *overrides]
+        )
+
+    return build
+
+
 def _covered(key: str, pattern: str) -> bool:
     return fnmatch.fnmatchcase(key, pattern) or key.startswith(pattern + ".")
 
 
 def test_all_hero_phases_differ_from_the_text_config_only_by_the_override_table(
-    alignment_recipe, hero_checkpoint, text_config
+    alignment_recipe, hero_checkpoint, text_config, stage1
 ):
     text = _round_trip(text_config)
-    differing_by_phase = {
-        phase: _differing_keys(text, config)
-        for phase, config in _hero_phases(alignment_recipe).items()
-    }
+    configs = _hero_phases(alignment_recipe)
+    configs["stage1"] = stage1([f"--recipe.text_config={FIXTURE}"]).as_config_dict()
+    differing_by_phase = {phase: _differing_keys(text, config) for phase, config in configs.items()}
     for phase, differing in differing_by_phase.items():
         uncovered = sorted(
             key
@@ -260,3 +272,124 @@ def test_stage1_v3_data_switch(alignment_recipe, request, tmp_path, document_mod
             evaluator.eval_dataset.sources
         )
         parent = alignment_recipe.save(config)
+
+
+def _group_lrs(config) -> dict[str, float]:
+    optim = config.train_module.optim
+    lrs = {o.opts["scheduler_name"]: o.opts["lr"] for o in optim.group_overrides}
+    return {"connector": lrs["connector"], "vision": lrs["vision"], "lm": optim.lr}
+
+
+def test_stage1_defaults(stage1, alignment_recipe):
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_LOSS_TARGETS,
+        STAGE1_V3_SOURCES,
+    )
+    from olmo_core.train import LoadStrategy
+
+    config = stage1()
+    # Started from the text LM like bridge, never from a parent phase.
+    assert config.recipe.parent_checkpoint is None and config.trainer.load_path is None
+    assert config.trainer.load_strategy == LoadStrategy.if_available
+    assert "initialize_multimodal" in config.trainer.callbacks
+    # Molmo2-Stage1's learning rates and warmups over the token-matched step budget.
+    assert config.trainer.max_duration.value == 15_625
+    scheduler = config.train_module.scheduler
+    schedules = {"lm": scheduler.default, **scheduler.schedulers}
+    assert {name: (s.warmup, s.t_max, s.alpha_f) for name, s in schedules.items()} == {
+        "connector": (200, 15_625, 0.1),
+        "vision": (2000, 15_625, 0.1),
+        "lm": (2000, 15_625, 0.1),
+    }
+    assert _group_lrs(config) == {"connector": 2e-4, "vision": 6e-6, "lm": 2e-5}
+    # Every component trains; only the image-token rows of the embeddings.
+    assert config.train_module.freeze_params == []
+    assert config.train_module.train_embedding_rows == vision_alignment._image_token_rows(
+        alignment_recipe.token_ids
+    )
+    assert config.recipe.restore_pretraining_router_lb
+    assert config.model.lm.block.routed_experts_router.lb_loss_weight == 0.01
+    # Visual data only, at the v3 run's full loss shares.
+    assert set(config.dataset.sources) == set(STAGE1_V3_SOURCES)
+    total = sum(STAGE1_V3_LOSS_TARGETS.values())
+    assert config.train_module.source_loss_mass_targets == pytest.approx(
+        {name: value / total for name, value in STAGE1_V3_LOSS_TARGETS.items()}
+    )
+    assert config.data_loader.group_sequence_quotas is None
+    assert config.data_loader.source_groups is None
+    assert config.train_module.loss_group_weights is None
+    loader, module = config.data_loader, config.train_module
+    assert loader.global_batch_size == 128 * 8192
+    assert module.rank_microbatch_size == 4 * 8192
+    # A permanent checkpoint at each quarter, none pruned.
+    checkpointer = config.trainer.callbacks["checkpointer"]
+    assert checkpointer.fixed_steps == [3906, 7812, 11719, 15625]
+    assert checkpointer.max_checkpoints == 4
+    assert (checkpointer.save_interval, checkpointer.ephemeral_save_interval) == (15_625, 250)
+    restored = VisionAlignmentExperimentConfig.from_dict(
+        json.loads(json.dumps(config.as_config_dict()))
+    )
+    assert restored == config
+
+
+def test_stage1_steps_set_the_horizons_and_checkpoint_quarters(stage1):
+    config = stage1(["--recipe.steps=4000"])
+    scheduler = config.train_module.scheduler
+    assert config.trainer.max_duration.value == 4000
+    assert {s.t_max for s in (scheduler.default, *scheduler.schedulers.values())} == {4000}
+    assert config.trainer.callbacks["checkpointer"].fixed_steps == [1000, 2000, 3000, 4000]
+
+
+@pytest.mark.parametrize(
+    "overrides,lrs,frozen,lb_loss_weight",
+    [
+        (["--recipe.lm_lr=1e-6"], {"connector": 2e-4, "vision": 6e-6, "lm": 1e-6}, [], 0.01),
+        (
+            ["--recipe.lm_lr=0"],
+            {"connector": 2e-4, "vision": 6e-6, "lm": 2e-4},
+            ["lm.embedding_norm.*", "lm.blocks.*", "lm.lm_head.*"],
+            0.0,
+        ),
+        (
+            ["--recipe.vision_lr=0", "--recipe.connector_lr=1e-4"],
+            {"connector": 1e-4, "vision": 0.0, "lm": 2e-5},
+            ["vision.*"],
+            0.01,
+        ),
+    ],
+)
+def test_stage1_learning_rate_ablations(stage1, overrides, lrs, frozen, lb_loss_weight):
+    config = stage1(overrides)
+    assert _group_lrs(config) == lrs
+    assert config.train_module.freeze_params == frozen
+    assert config.model.lm.block.routed_experts_router.lb_loss_weight == lb_loss_weight
+    assert config.recipe.restore_pretraining_router_lb == (lb_loss_weight > 0)
+
+
+@pytest.mark.parametrize(
+    "overrides,match",
+    [
+        (["--recipe.lm_lr=-1e-5"], "finite and nonnegative"),
+        (["--recipe.connector_lr=0"], "connector_lr must be positive"),
+    ],
+)
+def test_stage1_rejects_invalid_learning_rates(stage1, overrides, match):
+    from olmo_core.exceptions import OLMoConfigurationError
+
+    with pytest.raises(OLMoConfigurationError, match=match):
+        stage1(overrides)
+
+
+def test_stage1_guards(alignment_recipe, stage1):
+    from olmo_core.exceptions import OLMoConfigurationError
+
+    stage1()  # writes the caption manifest
+    with pytest.raises(OLMoConfigurationError, match="trains on recipe.data=stage1_v3"):
+        alignment_recipe.build("stage1", include_means=False)
+    parent = alignment_recipe.save(alignment_recipe.build())
+    with pytest.raises(OLMoConfigurationError, match="Stage 1 starts from the text LM"):
+        alignment_recipe.build(
+            "stage1", parent, include_means=False, overrides=["--recipe.data=stage1_v3"]
+        )
+    with pytest.raises(OLMoConfigurationError, match="apply to the stage1 phase only"):
+        alignment_recipe.build(overrides=["--recipe.lm_lr=1e-6"])

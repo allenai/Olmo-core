@@ -101,7 +101,8 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "model.vit_layers": "vision features taken from these ViT layers",
     "model.lm.block*.routed_experts_router.lb_loss_weight": (
         "router load balancing off while the LM is frozen (bridge, perception, also when "
-        "started from the pretraining checkpoint); joint restores the pretrained coefficients"
+        "started from the pretraining checkpoint); joint and stage 1 restore the pretrained "
+        "coefficients"
     ),
     "model.lm.block*.sequence_mixer.use_experimental_kernels": (
         "document mode passes cu_seqlens to KDA; kernel_fun.kda.chunk_kda's is_supported() "
@@ -136,8 +137,9 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "trainer.max_duration": "phase step budget",
     "trainer.callbacks.checkpointer._CLASS_": "alignment checkpointer subclass (phase retention)",
     "trainer.callbacks.beaker._CLASS_": "alignment Beaker subclass (W&B config on resumed runs)",
-    "trainer.callbacks.checkpointer.save_interval": "short phases: 500",
-    "trainer.callbacks.checkpointer.ephemeral_save_interval": "short phases: 50",
+    "trainer.callbacks.checkpointer.save_interval": "short phases: 500; stage 1: its last step",
+    "trainer.callbacks.checkpointer.ephemeral_save_interval": "short phases: 50; stage 1: 250",
+    "trainer.callbacks.checkpointer.fixed_steps": "stage 1: a permanent checkpoint at each quarter",
     "trainer.callbacks.checkpointer.max_checkpoints": "phase retention",
     "trainer.callbacks.wandb": "alignment W&B project, auto-resume",
     "trainer.callbacks.slack_notifier": "text run's notifier is not carried",
@@ -154,11 +156,20 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
 
 
 class AlignmentPhase(StrEnum):
-    """Successive training phases before mixed vision/text midtraining."""
+    """Training phases of a multimodal model built on a text LM."""
 
     bridge = "bridge"
     perception = "perception"
     joint = "joint"
+    stage1 = "stage1"
+    """Molmo2-style Stage 1 on its own, outside the alignment chain: visual data only
+    (``recipe.data=stage1_v3``), started from the text LM, with Molmo2-Stage1's learning rates
+    and every component trained. A reference for the chained alignment and for mixed
+    midtraining."""
+
+
+ALIGNMENT_CHAIN = (AlignmentPhase.bridge, AlignmentPhase.perception, AlignmentPhase.joint)
+"""The alignment phases before mixed vision/text midtraining, in handoff order."""
 
 
 class AlignmentData(StrEnum):
@@ -213,6 +224,16 @@ class VisionAlignmentRecipeConfig(Config):
     component's learning-rate schedule (bridge's shorter connector decay scales with it).
     Warmups and the final learning-rate fraction keep the phase defaults. ``None`` uses the
     phase default (bridge 500, perception 2,000, joint 1,500)."""
+    connector_lr: float | None = None
+    """Stage 1 only: peak learning rate of the connector and image-token rows (``None`` uses
+    2e-4)."""
+    vision_lr: float | None = None
+    """Stage 1 only: peak learning rate of the vision encoder; zero freezes it (``None`` uses
+    6e-6)."""
+    lm_lr: float | None = None
+    """Stage 1 only: peak learning rate of the LM body and output projection; zero freezes them
+    and turns router load balancing off, as a frozen LM does in bridge and perception (``None``
+    uses 2e-5)."""
     pretraining_checkpoint: str | None = None
     parent_checkpoint: str | None = None
     artifact_root: str = DEFAULT_ALIGNMENT_ARTIFACT_ROOT
@@ -284,6 +305,11 @@ class _PhaseDefaults:
     pack_max_crops: int = 64
     connector_decay_steps: int | None = None
     validation_sequence_length: int | None = None
+    save_interval: int | None = 500
+    """Permanent checkpoint interval; ``None`` keeps one permanent checkpoint at each quarter of
+    the phase's steps instead (none pruned)."""
+    ephemeral_save_interval: int = 50
+    max_checkpoints: int = 2
 
 
 _PHASES = {
@@ -322,8 +348,64 @@ _PHASES = {
         connector_warmup=50,
         vision_warmup=100,
         lm_warmup=100,
+        max_checkpoints=3,
+    ),
+    # Molmo2-Stage1's learning rates and warmups (mm_olmo train_captioner.py), every component
+    # trained (the base embeddings stay frozen; only the image-token rows learn), at OLMo 3.5's
+    # context length. 15,625 steps x 128 x 8,192 tokens = the 16.4B tokens of the v3 Stage-1
+    # run (50,000 steps x 128 x 2,560).
+    AlignmentPhase.stage1: _PhaseDefaults(
+        microbatch_instances=4,
+        steps=15_625,
+        freeze_params=(),
+        connector_lr=2e-4,
+        vision_lr=6e-6,
+        lm_lr=2e-5,
+        connector_warmup=200,
+        vision_warmup=2000,
+        lm_warmup=2000,
+        validation_sequence_length=2560,
+        save_interval=None,
+        ephemeral_save_interval=250,
     ),
 }
+
+_FROZEN_LM_PARAMS = ("lm.embedding_norm.*", "lm.blocks.*", "lm.lm_head.*")
+"""What a frozen LM holds fixed (bridge and perception; stage 1 with ``recipe.lm_lr=0``)."""
+
+
+def _phase_policy(recipe: VisionAlignmentRecipeConfig) -> _PhaseDefaults:
+    """The phase's defaults with the recipe's stage-1 learning-rate overrides applied."""
+    policy = _PHASES[recipe.phase]
+    lrs = {
+        name: value
+        for name in ("connector_lr", "vision_lr", "lm_lr")
+        if (value := getattr(recipe, name)) is not None
+    }
+    if not lrs:
+        return policy
+    if recipe.phase != AlignmentPhase.stage1:
+        raise OLMoConfigurationError(
+            f"recipe.{', recipe.'.join(lrs)} apply to the stage1 phase only"
+        )
+    for name, value in lrs.items():
+        if not isfinite(value) or value < 0:
+            raise OLMoConfigurationError(f"recipe.{name} must be finite and nonnegative")
+    if lrs.get("connector_lr") == 0:
+        raise OLMoConfigurationError("recipe.connector_lr must be positive: the connector is new")
+    policy = replace(policy, **lrs)
+    frozen = list(policy.freeze_params)
+    if policy.vision_lr == 0:
+        frozen.append("vision.*")
+    if policy.lm_lr == 0:
+        frozen.extend(_FROZEN_LM_PARAMS)
+    return replace(policy, freeze_params=tuple(frozen))
+
+
+def _trains_lm(recipe: VisionAlignmentRecipeConfig) -> bool:
+    if recipe.phase == AlignmentPhase.stage1:
+        return _phase_policy(recipe).lm_lr > 0
+    return recipe.phase == AlignmentPhase.joint
 
 
 def _read_checkpoint_config(checkpoint: str) -> dict:
@@ -405,6 +487,13 @@ def _resolve_parent(recipe: VisionAlignmentRecipeConfig) -> tuple[str, dict | No
                 "Bridge requires recipe.pretraining_checkpoint and no recipe.parent_checkpoint"
             )
         return recipe.pretraining_checkpoint, None
+    if recipe.phase == AlignmentPhase.stage1:
+        if recipe.parent_checkpoint is not None or not recipe.pretraining_checkpoint:
+            raise OLMoConfigurationError(
+                "Stage 1 starts from the text LM: set recipe.pretraining_checkpoint and no "
+                "recipe.parent_checkpoint"
+            )
+        return recipe.pretraining_checkpoint, None
     if not recipe.parent_checkpoint:
         if recipe.pretraining_checkpoint:
             return recipe.pretraining_checkpoint, None
@@ -414,8 +503,7 @@ def _resolve_parent(recipe: VisionAlignmentRecipeConfig) -> tuple[str, dict | No
         )
     parent = _read_checkpoint_config(recipe.parent_checkpoint)
     previous = parent.get("recipe", {}).get("phase", parent.get("phase"))
-    order = list(AlignmentPhase)
-    expected = order[: order.index(recipe.phase)]
+    expected = ALIGNMENT_CHAIN[: ALIGNMENT_CHAIN.index(recipe.phase)]
     if previous not in expected:
         raise OLMoConfigurationError(
             f"{recipe.phase} requires a {' or '.join(expected)} checkpoint, got {previous}"
@@ -482,7 +570,7 @@ def _build_model(
     if not isinstance(model.lm, OLMoDDPModelConfig):
         raise OLMoConfigurationError("This alignment recipe currently requires an OLMoDDP LM")
     lb_loss_weight = recipe.router_lb_loss_weight
-    if parent is None and recipe.phase != AlignmentPhase.joint and lb_loss_weight is None:
+    if parent is None and not _trains_lm(recipe) and lb_loss_weight is None:
         # The LM is frozen; a later phase inherits this through its parent.
         lb_loss_weight = 0.0
     blocks: list[OLMoDDPTransformerBlockConfig] = []
@@ -517,15 +605,16 @@ def _build_train_module(
     text: dict | None = None,
     steps: int | None = None,
     fresh_connector: bool = False,
+    policy: _PhaseDefaults | None = None,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
-    policy = _PHASES[phase]
+    policy = _PHASES[phase] if policy is None else policy
     horizon = policy.steps if steps is None else steps
     connector_horizon = horizon
     connector_lr, connector_warmup = policy.connector_lr, policy.connector_warmup
     if policy.connector_decay_steps is not None:
         # Bridge decays the connector over a fixed fraction of the phase.
         connector_horizon = round(policy.connector_decay_steps * horizon / policy.steps)
-    elif fresh_connector:
+    elif fresh_connector and phase != AlignmentPhase.stage1:
         # A later phase started from the text LM has a freshly initialized connector and image
         # rows: give them bridge's connector schedule (peak, warmup, absolute decay length). Its
         # 10% floor is the later phases' own connector LR, so after the decay they match the
@@ -800,6 +889,10 @@ def _build_datasets(
         raise OLMoConfigurationError(
             "recipe.data=stage1_v3 selects perception and joint data; bridge is caption-only"
         )
+    if phase == AlignmentPhase.stage1 and not stage1_v3:
+        raise OLMoConfigurationError("The stage1 phase trains on recipe.data=stage1_v3")
+    # Stage 1's visual sources (and validation) are perception's: visual data only.
+    source_phase = AlignmentPhase.perception if phase == AlignmentPhase.stage1 else phase
     replay = PretrainingReplayConfig(
         checkpoint=checkpoint, sequence_length=sequence_length, work_dir=recipe.work_dir
     )
@@ -810,7 +903,7 @@ def _build_datasets(
         OLMoDDPModelConfig.from_dict(_checkpoint_lm_config(checkpoint))
     )
     if stage1_v3:
-        sources = build_stage1_v3_sources(phase, sequence_length, recipe.artifact_root)
+        sources = build_stage1_v3_sources(source_phase, sequence_length, recipe.artifact_root)
         target_loss_mass = _stage1_v3_loss_targets(phase)
         # Measured with one annotation per example; a branch-packing LM needs its own means.
         mean_loss_weight = STAGE1_V3_MEAN_LOSS_WEIGHTS.copy() if document_mode else {}
@@ -862,7 +955,7 @@ def _build_datasets(
         else min(sequence_length, policy.validation_sequence_length)
     )
     validation.sources = _visual_sources(
-        phase, validation_sequence_length, recipe.artifact_root, split="validation"
+        source_phase, validation_sequence_length, recipe.artifact_root, split="validation"
     )
     if stage1_v3:
         validation.sources.update(
@@ -944,12 +1037,27 @@ def _build_trainer(
         "config_saver": ConfigSaverCallback(),
         "garbage_collector": GarbageCollectorCallback(),
     }
+    steps = _phase_steps(recipe)
+    cadence: dict[str, Any] = dict(
+        save_interval=policy.save_interval,
+        ephemeral_save_interval=policy.ephemeral_save_interval,
+        max_checkpoints=policy.max_checkpoints,
+    )
+    if policy.save_interval is None:
+        # Stage 1 keeps a checkpoint at each quarter of the run for the benchmark curve. Every
+        # setting is explicit: a saved config drops ``None`` fields, which would reload as the
+        # checkpointer's defaults (an interval of 250 and pruning to 3).
+        quarters = sorted({max(1, round(steps * k / 4)) for k in range(1, 5)})
+        cadence.update(
+            save_interval=steps,
+            fixed_steps=quarters,
+            max_checkpoints=len(quarters),
+            ephemeral_save_interval=policy.ephemeral_save_interval
+            if policy.ephemeral_save_interval < steps
+            else None,
+        )
     checkpointer = MultimodalCheckpointerCallback(
-        save_interval=500,
-        ephemeral_save_interval=50,
-        save_async=False,
-        pre_train_checkpoint=False,
-        max_checkpoints=3 if is_joint else 2,
+        save_async=False, pre_train_checkpoint=False, **cadence
     )
     if text is not None:
         text_trainer = TrainerConfig.from_dict(text["trainer"])
@@ -976,12 +1084,7 @@ def _build_trainer(
                     if f.init and not f.name.startswith("_")
                 }
             )
-            checkpointer = replace(
-                checkpointer,
-                save_interval=500,
-                ephemeral_save_interval=50,
-                max_checkpoints=3 if is_joint else 2,
-            )
+            checkpointer = replace(checkpointer, **cadence)
     trainer = TrainerConfig(
         save_folder=f"{recipe.output_root}/{cli.run_name}",
         work_dir=f"{recipe.work_dir}/{cli.run_name}",
@@ -989,7 +1092,7 @@ def _build_trainer(
         load_strategy=LoadStrategy.if_available if fresh else LoadStrategy.always,
         load_optim_state=None if fresh else False,
         load_trainer_state=None if fresh else False,
-        max_duration=Duration.steps(_phase_steps(recipe)),
+        max_duration=Duration.steps(steps),
         **bookkeeping,
     )
     for name, callback in inherited_callbacks.items():
@@ -1167,6 +1270,7 @@ def build_config(cli: CliContext) -> VisionAlignmentExperimentConfig:
             text=text,
             steps=recipe.steps,
             fresh_connector=recipe.parent_checkpoint is None,
+            policy=_phase_policy(recipe),
         ),
         trainer=_build_trainer(
             cli, recipe, checkpoint, validation, token_ids, sequence_length, text=text
@@ -1207,9 +1311,7 @@ def _validate_config(
             "restore_pretraining_router_lb is mutually exclusive with explicit router LB overrides"
         )
     if recipe.restore_pretraining_router_lb is None:
-        recipe.restore_pretraining_router_lb = (
-            phase == AlignmentPhase.joint and not explicit_router_lb
-        )
+        recipe.restore_pretraining_router_lb = _trains_lm(recipe) and not explicit_router_lb
     if recipe.restore_pretraining_router_lb:
         if not isinstance(config.model.lm, OLMoDDPModelConfig):
             raise OLMoConfigurationError("Router LB restoration requires an OLMoDDP LM")
