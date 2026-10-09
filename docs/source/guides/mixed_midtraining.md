@@ -27,10 +27,9 @@ The resolved config records `alignment_phase` (`None` without alignment).
 With `--recipe.text_config` (the text team's resolved mid-training `config.json`), the text
 mixture, token budget, global batch, LM learning rate and schedule, optimizer and train-module
 settings, checkpoint cadence and callbacks, and launch image and resources are inherited from it.
-The text mixture's cache lives in `recipe.work_dir`. The connector and vision learning rates are set
-relative to the LM's: from an alignment checkpoint, both at half the LM's LR; from the text LM,
-the fresh connector at 10x and the pretrained vision encoder at a fifth. Weight decay is the text
-config's for every parameter. Without `recipe.text_config`, the legacy s002 recipe below applies.
+The text mixture's cache lives in `recipe.work_dir`. The connector and vision learning rates
+scale with the LM's (2x and 1/10), with no weight decay on either. Without `recipe.text_config`,
+the legacy s002 recipe below applies.
 
 ## Configure and launch
 
