@@ -310,6 +310,9 @@ class _PhaseDefaults:
     the phase's steps instead (none pruned)."""
     ephemeral_save_interval: int = 50
     max_checkpoints: int = 2
+    eval_interval: int | None = 500
+    """In-loop evaluation interval; ``None`` evaluates at each quarter of the phase's steps (one
+    pass over the validation sources takes ~12 minutes on 16 GPUs)."""
 
 
 _PHASES = {
@@ -367,6 +370,7 @@ _PHASES = {
         validation_sequence_length=2560,
         save_interval=None,
         ephemeral_save_interval=250,
+        eval_interval=None,
     ),
 }
 
@@ -1120,7 +1124,7 @@ def _build_trainer(
                 sequence_length=sequence_length,
                 rank_batch_size=1 if is_joint else policy.microbatch_instances,
                 examples_per_source=64,
-                eval_interval=500,
+                eval_interval=policy.eval_interval or max(1, round(steps / 4)),
                 eval_on_startup=True,
                 eval_on_finish=True,
                 blank_image_sources=["pixmo_caption", "pixmo_transcript"],

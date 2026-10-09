@@ -326,6 +326,9 @@ def test_stage1_defaults(stage1, alignment_recipe):
     assert checkpointer.fixed_steps == [3906, 7812, 11719, 15625]
     assert checkpointer.max_checkpoints == 4
     assert (checkpointer.save_interval, checkpointer.ephemeral_save_interval) == (15_625, 250)
+    # In-loop evaluation at startup and each quarter (~12 minutes per pass on 16 GPUs).
+    evaluator = config.trainer.callbacks["multimodal_evaluator"]
+    assert (evaluator.eval_interval, evaluator.eval_on_startup) == (3906, True)
     restored = VisionAlignmentExperimentConfig.from_dict(
         json.loads(json.dumps(config.as_config_dict()))
     )
