@@ -108,11 +108,13 @@ To run MaxText on GPU:
 - **MaxText samples EMO expert pools unless `model_call_mode=inference`.** `enable_dropout=False` does not turn this
   off. OLMo Core only samples in `train()` mode. `maxtext_logit_summary()` pins the pool size to the eval pool. The
   same applies to eval losses that MaxText reports during training.
-- **MaxText's chunked KDA path (`gdn_chunk_size` > 0) isn't exact.** The scan path (`gdn_chunk_size=0`) is. Use the
-  scan path for parity checks, or a sequence length that isn't a multiple of the chunk size.
-- **KDA's q/k L2 norm differs between the frameworks.** MaxText's pure-JAX path computes
-  `x * rsqrt(max(sum(x²), 1e-12))`. FLA computes `x * rsqrt(sum(x²) + 1e-6)`. This only shows up when q and k are
-  small, e.g. in a randomly initialized model.
+- **KDA numerics in MaxText's pure-JAX path (`use_tokamax_kda=false`).** Before commit `016268285` (fork branch
+  `olmo35-kda-numerics`), it had two problems:
+  - The chunked delta rule (`gdn_chunk_size` > 0) inverted each chunk's system with a Newton-Schulz iteration. That
+    loses precision, or overflows, on the correlated keys of trained models.
+  - Its q/k L2 norm used `rsqrt(max(sum(x²), 1e-12))` rather than FLA's `rsqrt(sum(x²) + 1e-6)`.
+
+  On MaxText without that fix, check parity with the exact scan path (`gdn_chunk_size=0`).
 - **OLMoDDP's `init_weights()` casts the model to its bf16 training dtype.** `reference_logits.py` casts it back to
   fp32 after random init.
 - **The official OLMo Core image sets `UV_SYSTEM_PYTHON=1`,** so `uv pip install` goes into `/opt/conda` even with
