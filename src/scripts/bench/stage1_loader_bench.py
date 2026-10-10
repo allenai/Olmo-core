@@ -11,6 +11,7 @@ usage: [BENCH_RANK=r] python src/scripts/bench/stage1_loader_bench.py <n_refs> <
    from a fresh cursor position, for ``n_batches`` batches after one warm-up batch.
 """
 
+import logging
 import os
 import socket
 import statistics
@@ -80,6 +81,7 @@ def latency_pass(loader, refs, label: str) -> dict:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     n_refs, n_batches, world = (int(a) for a in sys.argv[1:4])
     overrides = sys.argv[sys.argv.index("--") + 1 :]
     mdl.get_world_size = lambda group=None: world

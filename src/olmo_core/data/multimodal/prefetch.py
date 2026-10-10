@@ -30,6 +30,7 @@ def prefetch_map(
     *,
     num_workers: int,
     max_in_flight: Optional[int] = None,
+    stats: Optional[dict] = None,
 ) -> Iterator[R]:
     """Lazily apply ``fn`` over ``iterable`` on a thread pool, yielding results in order.
 
@@ -38,6 +39,8 @@ def prefetch_map(
     :param num_workers: thread-pool size. ``<= 0`` runs synchronously (no threads).
     :param max_in_flight: cap on submitted-but-unconsumed items (bounds memory / read-ahead).
         Defaults to ``max(2 * num_workers, 4)``.
+    :param stats: optional profiling counters (run-branch tooling): ``ready`` / ``blocked`` results
+        when consumed, ``wait_s`` blocked on unfinished results, ``work_s`` summed worker time.
     """
     if num_workers <= 0:
         for item in iterable:
@@ -52,6 +55,18 @@ def prefetch_map(
 
     it = iter(iterable)
     executor = ThreadPoolExecutor(max_workers=num_workers)
+    if stats is not None:
+        import time
+
+        inner = fn
+
+        def fn(item):  # type: ignore[no-redef]
+            t = time.perf_counter()
+            try:
+                return inner(item)
+            finally:
+                stats["work_s"] = stats.get("work_s", 0.0) + time.perf_counter() - t
+
     futures: deque = deque()
     try:
         for _ in range(max_in_flight):
@@ -60,7 +75,16 @@ def prefetch_map(
             except StopIteration:
                 break
         while futures:
-            result = futures.popleft().result()
+            future = futures.popleft()
+            if stats is None:
+                result = future.result()
+            else:
+                ready = future.done()
+                t = time.perf_counter()
+                result = future.result()
+                key = "ready" if ready else "blocked"
+                stats[key] = stats.get(key, 0) + 1
+                stats["wait_s"] = stats.get("wait_s", 0.0) + time.perf_counter() - t
             try:
                 futures.append(executor.submit(fn, next(it)))
             except StopIteration:

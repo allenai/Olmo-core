@@ -17,9 +17,12 @@ checkpoint resumes the exact example stream.
 
 from __future__ import annotations
 
+import gc
 import itertools
 import logging
 import math
+import os
+import time
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
@@ -55,6 +58,22 @@ if TYPE_CHECKING:
     from .alignment import MultimodalDatasetMixture
 
 log = logging.getLogger(__name__)
+
+_PROFILE = os.environ.get("OLMO_LOADER_PROFILE") == "1"
+"""Run-branch tooling: per-rank loader timing logged every ``OLMO_LOADER_PROFILE_EVERY`` batches."""
+_PROFILE_EVERY = int(os.environ.get("OLMO_LOADER_PROFILE_EVERY", "50"))
+
+
+def _rss_gib() -> float:
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 2**20
+    except OSError:
+        pass
+    return float("nan")
+
 
 DEFAULT_MAX_CONSECUTIVE_DATA_ERRORS = 10
 DEFAULT_MAX_TOTAL_DATA_ERRORS = 1000
@@ -196,6 +215,7 @@ class _OrderedExampleStream(Iterator[Tuple[ExampleRef, Dict[str, Any]]]):
                 loader._rank_refs_from_cursor(refs_consumed),
                 num_workers=loader.prefetch_workers,
                 max_in_flight=loader.prefetch_max_in_flight,
+                **({"stats": loader._profile_stats()} if _PROFILE else {}),
             )
         )
 
@@ -689,8 +709,53 @@ class MixtureDataLoader(DataLoaderBase):
                     if close is not None:
                         close()
             return
-        for examples in self._iter_example_batches():
-            yield self.collator(examples)
+        if not _PROFILE:
+            for examples in self._iter_example_batches():
+                yield self.collator(examples)
+            return
+        stats = self._profile_stats()
+        batches = iter(self._iter_example_batches())
+        n, window_start, outside_start = 0, dict(stats), None
+        while True:
+            t0 = time.perf_counter()
+            if outside_start is not None:
+                stats["outside_s"] = stats.get("outside_s", 0.0) + t0 - outside_start
+            examples = next(batches)
+            t1 = time.perf_counter()
+            batch = self.collator(examples)
+            t2 = time.perf_counter()
+            stats["pack_s"] = stats.get("pack_s", 0.0) + t1 - t0
+            stats["collate_s"] = stats.get("collate_s", 0.0) + t2 - t1
+            stats["next_s"] = stats.get("next_s", 0.0) + t2 - t0
+            stats["next_max_s"] = max(stats.get("next_max_s", 0.0), t2 - t0)
+            n += 1
+            if n % _PROFILE_EVERY == 0:
+                d = {
+                    k: stats.get(k, 0) - window_start.get(k, 0) for k in stats if k != "next_max_s"
+                }
+                ready, blocked = d.get("ready", 0), d.get("blocked", 0)
+                log.info(
+                    "[loader-profile] rank=%d batches=%d per-batch: next %.2fs (max %.2fs) = pack+wait %.2fs "
+                    "(blocked on futures %.2fs, %d/%d results unfinished when needed) + collate %.2fs | "
+                    "worker time %.2fs/batch | outside (training) %.2fs/batch | rss %.1f GiB | gc %s",
+                    get_rank(),
+                    n,
+                    d.get("next_s", 0) / _PROFILE_EVERY,
+                    stats.get("next_max_s", 0.0),
+                    d.get("pack_s", 0) / _PROFILE_EVERY,
+                    d.get("wait_s", 0) / _PROFILE_EVERY,
+                    blocked,
+                    ready + blocked,
+                    d.get("collate_s", 0) / _PROFILE_EVERY,
+                    d.get("work_s", 0) / _PROFILE_EVERY,
+                    d.get("outside_s", 0) / _PROFILE_EVERY,
+                    _rss_gib(),
+                    gc.get_count(),
+                )
+                stats["next_max_s"] = 0.0
+                window_start = dict(stats)
+            outside_start = time.perf_counter()
+            yield batch
 
     def _iter_example_batches(self) -> Iterable[List[Dict[str, Any]]]:
         """Yield uncollated sequence batches, also reused by explicit group quotas."""
@@ -735,6 +800,12 @@ class MixtureDataLoader(DataLoaderBase):
             ref_iter: Iterator = itertools.chain(rank_slice, itertools.cycle(self._order))
             examples = [self._load_example(ref_iter) for _ in range(ri)]
             yield examples
+
+    def _profile_stats(self) -> dict:
+        stats = getattr(self, "_loader_profile", None)
+        if stats is None:
+            stats = self._loader_profile = {}
+        return stats
 
     def _try_load_example(self, ref) -> Dict[str, Any]:
         src_idx, example_idx, source_epoch = ref
