@@ -1,7 +1,7 @@
 """Stage-1 data-loader benchmark for one data-parallel rank, built exactly as ``recipe.phase=stage1``
 builds it (run-branch tooling, not for review).
 
-usage: python src/scripts/bench/stage1_loader_bench.py <n_refs> <n_batches> <world_size> -- <Vision-Align overrides...>
+usage: [BENCH_RANK=r] python src/scripts/bench/stage1_loader_bench.py <n_refs> <n_batches> <world_size> -- <Vision-Align overrides...>
 
 1. Node facts: hostname, CPU model, load average, pressure-stall info.
 2. Per-source single-thread latency of this rank's first ``n_refs`` example refs in the job's order,
@@ -34,7 +34,11 @@ def _read(path: str) -> str:
 
 def node_facts() -> None:
     cpu = next(
-        (l.split(":", 1)[1].strip() for l in _read("/proc/cpuinfo").splitlines() if "model name" in l),
+        (
+            l.split(":", 1)[1].strip()
+            for l in _read("/proc/cpuinfo").splitlines()
+            if "model name" in l
+        ),
         "?",
     )
     print(f"host={socket.gethostname()} cpus={os.cpu_count()} model={cpu}")
@@ -58,8 +62,12 @@ def latency_pass(loader, refs, label: str) -> dict:
             errors[name] += 1
         times[name].append(time.perf_counter() - t)
     total = sum(sum(v) for v in times.values())
-    print(f"\n[{label}] {len(refs)} refs in {total:.1f}s single-thread = {total / len(refs) * 1000:.0f} ms/example")
-    print(f"{'source':34s} {'n':>5s} {'share':>6s} {'median':>8s} {'p90':>8s} {'max':>8s} {'err':>4s}")
+    print(
+        f"\n[{label}] {len(refs)} refs in {total:.1f}s single-thread = {total / len(refs) * 1000:.0f} ms/example"
+    )
+    print(
+        f"{'source':34s} {'n':>5s} {'share':>6s} {'median':>8s} {'p90':>8s} {'max':>8s} {'err':>4s}"
+    )
     for name, v in sorted(times.items(), key=lambda kv: -sum(kv[1])):
         s = sorted(v)
         p90 = s[min(len(s) - 1, int(0.9 * len(s)))]
@@ -75,9 +83,16 @@ def main() -> None:
     n_refs, n_batches, world = (int(a) for a in sys.argv[1:4])
     overrides = sys.argv[sys.argv.index("--") + 1 :]
     mdl.get_world_size = lambda group=None: world
-    mdl.get_rank = lambda group=None: 0
+    rank = int(os.environ.get("BENCH_RANK", "0"))  # concurrent copies emulate a node's ranks
+    mdl.get_rank = lambda group=None: rank
     node_facts()
-    cli = CliContext("src/scripts/train/Vision-Align.py", SubCmd.dry_run, "stage1-loader-bench", "ai2/holmes", overrides)
+    cli = CliContext(
+        "src/scripts/train/Vision-Align.py",
+        SubCmd.dry_run,
+        "stage1-loader-bench",
+        "ai2/holmes",
+        overrides,
+    )
     config = build_config(cli)
     t0 = time.time()
     loader = config.data_loader.build(config.dataset.build(), dp_process_group=None)
@@ -93,7 +108,9 @@ def main() -> None:
     warm = latency_pass(loader, refs, "warm (same refs)")
     print("\ncold/warm median ratio per source:")
     for name in sorted(cold, key=lambda n: -sum(cold[n])):
-        print(f"  {name[:34]:34s} {statistics.median(cold[name]) / max(statistics.median(warm[name]), 1e-6):6.2f}x")
+        print(
+            f"  {name[:34]:34s} {statistics.median(cold[name]) / max(statistics.median(warm[name]), 1e-6):6.2f}x"
+        )
     # Batch timing from a fresh position, so these examples are cold too.
     loader.reshuffle(epoch=2)
     batches = iter(loader)
