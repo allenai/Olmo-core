@@ -1,5 +1,6 @@
 """Vision-language models with pooled image features in the language-model embedding stream."""
 
+import contextlib
 import os
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Iterator, List, Literal, Optional, Tuple, Union, cast
@@ -15,8 +16,9 @@ from olmo_core.distributed.utils import barrier, is_distributed
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.embedding import SplitVocabEmbedding
 from olmo_core.nn.functional import weighted_cross_entropy_loss
-from olmo_core.nn.lm_head import LMOutputWithLoss
+from olmo_core.nn.lm_head import LMOutputWithLoss, _select_hidden_for_logits
 from olmo_core.nn.transformer.config import TransformerBlockConfig, TransformerConfig
+from olmo_core.nn.vision.chunked_loss import chunked_weighted_cross_entropy_loss
 from olmo_core.nn.vision.config import VisionEncoderConfig
 from olmo_core.nn.vision.connector import (
     ImagePoolingType,
@@ -114,6 +116,39 @@ class MultimodalLMConfig(Config):
     the connector. Negative indices count from the last layer. For example,
     ``(-1,)`` uses only the final layer; a two-layer selection such as ``(-2, -9)``
     requires :attr:`connector.num_input_layers` to be ``2``.
+    """
+
+    sync_vit_crops: bool = True
+    """
+    Pad the crops the vision encoder runs on to the maximum over data-parallel ranks, and
+    barrier after it, so every rank issues the same number of encoder forwards. FSDP needs this
+    (its all-gathers would otherwise desynchronize); the OLMoDDP train module switches it off,
+    since DDP issues no collective in the forward pass.
+    """
+
+    document_mode: Optional[bool] = None
+    """
+    How packed examples are isolated. ``None`` decides from the language model: document
+    boundaries (``doc_lens``) for recurrent sequence mixers, attention masks otherwise.
+    ``True`` forces boundaries. ``False`` switches boundaries off: a recurrent LM then runs
+    each packed sequence as one causal stream, its state carrying across the examples as text
+    pretraining carries it across packed documents, with no masks, boundaries or positions;
+    an attention LM keeps the mask path.
+    """
+
+    loss_chunk_size: int = 4096
+    """
+    Tokens scored per chunk by the OLMoDDP model's weighted loss, so that a micro-batch's
+    logits never exist all at once (each chunk's are recomputed in the backward pass).
+    ``0`` scores every response token at once.
+    """
+
+    compile_loss: bool = False
+    """
+    Run the per-chunk math of that weighted loss (projection, log-sum-exp and partial sums in
+    the forward; recomputed logits, softmax and their gradient in the backward) as static-shape
+    :func:`torch.compile` graphs instead of eagerly. The arithmetic is unchanged up to the
+    summation order within a chunk. Off by default; the mixed mid-training recipe turns it on.
     """
 
     output_vocab_size: Optional[int] = None
@@ -336,8 +371,11 @@ class MultimodalLM(nn.Module):
         self._collect_input_diagnostics = False
         self._input_diagnostic_sums: Dict[str, torch.Tensor] = {}
         self._input_diagnostic_counts: Dict[str, int] = {}
-        # Resolved lazily from the LM's sequence mixers; tests may set it directly.
-        self._document_mode: Optional[bool] = None
+        # Resolved lazily from the LM's sequence mixers unless the config decides; tests may
+        # set it directly.
+        self._document_mode: Optional[bool] = cfg.document_mode
+        self._recurrent_mixers: Optional[bool] = None
+        self.sync_vit_crops: bool = cfg.sync_vit_crops
 
     def uses_document_boundaries(self) -> bool:
         """
@@ -352,12 +390,18 @@ class MultimodalLM(nn.Module):
         masks or positions. Image tokens are then causal like text.
         """
         if self._document_mode is None:
+            self._document_mode = self.has_recurrent_mixers()
+        return self._document_mode
+
+    def has_recurrent_mixers(self) -> bool:
+        """Whether any LM block uses a recurrent sequence mixer, which cannot apply masks."""
+        if self._recurrent_mixers is None:
             from olmo_core.nn.attention.kda import KimiDeltaAttention
 
-            self._document_mode = any(
+            self._recurrent_mixers = any(
                 isinstance(module, KimiDeltaAttention) for module in self.lm.modules()
             )
-        return self._document_mode
+        return self._recurrent_mixers
 
     # -- input-scale diagnostics ------------------------------------------------------------
 
@@ -510,72 +554,143 @@ class MultimodalLM(nn.Module):
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        counts: Optional[List[int]] = None,
     ) -> torch.Tensor:
         """
         Encode pre-patchified images into LM-space pooled features.
 
-        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``.
+        Only the crops that ``pooled_patches_idx`` refers to go through the vision encoder. The
+        collator pads every example's crop axis to the longest in the batch with zero crops, and
+        each of those would otherwise cost a full encoder forward and backward. A batch that
+        refers to no crop at all (text only) still runs one crop, so the vision path and its
+        parameters take part in every step.
+
+        Compact images, ``(total_crops, n_patches, patch_dim)`` with ``counts`` saying how many
+        consecutive crops belong to each example, are the real crops already and go to the
+        encoder as they are.
+
+        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``, or compact
+            ``(total_crops, n_patches, patch_dim)``.
         :param pooled_patches_idx: Shape ``(B, n_pooled, pool_size)`` —
             indices into the flattened ``(n_crops * n_patches)`` patch axis
             for each pool group, with ``-1`` marking padded slots.
+        :param counts: Crops per example as :func:`_crop_counts` derives them; computed here
+            from ``pooled_patches_idx`` (one device-to-host sync) when not given. Required with
+            compact images, whose crop axis is the sum of the counts.
         :returns: Shape ``(B, n_pooled, lm_d_model)``.
         """
-        B, T, N, _ = images.shape
+        device = images.device
         microbatch = self._vit_crop_microbatch()
-
-        # Pad crop axis to the DP max so every rank runs the same number of ViT
-        # microbatch chunks (avoids FSDP collective desync when ``n_crops`` differs).
-        if is_distributed():
-            t_local = torch.tensor([T], device=images.device, dtype=torch.int32)
-            t_max = t_local.clone()
-            dist.all_reduce(t_max, op=dist.ReduceOp.MAX)
-            t_pad = int(t_max.item())
-            if t_pad > T:
-                pad = torch.zeros(
-                    (B, t_pad - T, N, images.shape[-1]),
-                    device=images.device,
-                    dtype=images.dtype,
+        compact = images.ndim == 3
+        if compact:
+            if counts is None:
+                raise ValueError("Compact images need the crops per example (`counts`)")
+            B, N = pooled_patches_idx.shape[0], images.shape[1]
+            if len(counts) != B or sum(counts) != images.shape[0]:
+                raise ValueError(
+                    f"Compact images carry {images.shape[0]} crops but the crop counts of the "
+                    f"{len(counts)} examples sum to {sum(counts)} ({B} pooled rows)"
                 )
-                images = torch.cat([images, pad], dim=1)
-                T = t_pad
-
-        if microbatch <= 0 or T <= microbatch:
-            features = self._vit_forward_features(images.reshape(B * T, N, -1))
-            features = features.reshape(B, T * features.shape[1], features.shape[-1])
         else:
-            parts: List[torch.Tensor] = []
-            for start in range(0, T, microbatch):
-                end = min(start + microbatch, T)
-                chunk = images[:, start:end].reshape(B * (end - start), N, -1)
-                chunk_features = self._vit_forward_features(chunk)
-                parts.append(chunk_features.reshape(B, (end - start) * chunk_features.shape[1], -1))
-            features = torch.cat(parts, dim=1)
+            B, T, N, _ = images.shape
+            if counts is None:
+                counts = _crop_counts(pooled_patches_idx, N)
+            if max(counts) > T:
+                raise ValueError(
+                    f"pooled_patches_idx refers to crop {max(counts) - 1} but images has {T} crops"
+                )
+        n_used = max(max(counts), 1)
+        dest = [b * n_used + c for b, n in enumerate(counts) for c in range(n)]
+        if compact:
+            # One zero crop stands in for a batch without any, as the padded collator's dummy.
+            flat = images if dest else images.new_zeros((1, N, images.shape[-1]))
+        else:
+            rows = [b * T + c for b, n in enumerate(counts) for c in range(n)]
+            if not rows:
+                rows = [0]
+            flat = images.reshape(B * T, N, -1).index_select(0, torch.tensor(rows, device=device))
+        if not dest:
+            dest = [0]
+        n_real = flat.shape[0]
 
-        return self.connector(features, pooled_patches_idx)
+        if self.sync_vit_crops and is_distributed():
+            # Same number of encoder forwards on every rank (FSDP all-gathers stay in lockstep).
+            n_max = torch.tensor([n_real], device=device, dtype=torch.int32)
+            dist.all_reduce(n_max, op=dist.ReduceOp.MAX)
+            n_pad = int(n_max.item())
+            if n_pad > n_real:
+                flat = torch.cat([flat, flat.new_zeros((n_pad - n_real, N, flat.shape[-1]))])
+
+        # ``VIT_CROP_MICROBATCH`` counts crops per batch row, as it did on the padded layout.
+        chunk = microbatch * B
+        if chunk <= 0 or flat.shape[0] <= chunk:
+            features = self._vit_forward_features(flat)
+        else:
+            features = torch.cat(
+                [
+                    self._vit_forward_features(flat[start : start + chunk])
+                    for start in range(0, flat.shape[0], chunk)
+                ]
+            )
+        features = features[:n_real]
+        if features.shape[1] != N:
+            raise OLMoConfigurationError(
+                f"The vision encoder returned {features.shape[1]} features per crop for {N} "
+                "patches; pooled_patches_idx assumes one feature per patch"
+            )
+
+        # Back to one row of ``n_used * N`` features per example, the layout the indices address.
+        placed = features.new_zeros((B * n_used, N, features.shape[-1])).index_copy(
+            0, torch.tensor(dest, device=device), features
+        )
+        return self.connector(placed.reshape(B, n_used * N, -1), pooled_patches_idx)
 
     def encode_images(
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        image_crop_counts: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Encode images into the compact ``(total_valid_pooled_rows, d_model)`` features that
         :meth:`forward` splices at the ``<im_patch>`` positions, so they can be computed once and
         reused across autoregressive forwards (``encoded_image_features``).
 
-        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``.
+        :param images: Shape ``(B, n_crops, n_patches, patch_dim)``, or the batch's real crops
+            in example order, ``(total_crops, n_patches, patch_dim)``, with ``image_crop_counts``.
         :param pooled_patches_idx: Shape ``(B, n_pooled, pool_size)``; a row whose indices are
-            all ``-1`` is collator padding and is dropped.
+            all ``-1`` is collator padding and is dropped. With compact images its indices still
+            address each example's own crop axis.
+        :param image_crop_counts: ``(B,)`` crops per example; required with compact images and
+            ignored otherwise.
         """
         device = self.lm.device
-        images = images.to(device)
+        # Row bookkeeping runs on the host copy of the indices when the caller hands one over
+        # (the trainer does): the crop counts and the valid-row selection then cost no
+        # device-to-host sync.
+        idx_host = pooled_patches_idx if pooled_patches_idx.device.type == "cpu" else None
+        # Pixels arrive in the collator's dtype (float32, or bfloat16 to halve the copy) and are
+        # computed in the tower's; the cast is a no-op when they already match.
+        images = images.to(device=device, dtype=next(self.vision.parameters()).dtype)
         pooled_patches_idx = pooled_patches_idx.to(device)
-        image_features = self._encode_images(images, pooled_patches_idx)  # (B, n_pooled, d)
+        n_patches = images.shape[1] if images.ndim == 3 else images.shape[2]
+        referenced = _crop_counts(idx_host, n_patches) if idx_host is not None else None
+        counts = referenced
+        if images.ndim == 3:
+            if image_crop_counts is None:
+                raise ValueError("Compact `images` require `image_crop_counts`")
+            counts = [int(n) for n in image_crop_counts.tolist()]
+            if referenced is not None and any(r > n for r, n in zip(referenced, counts)):
+                raise ValueError(
+                    "pooled_patches_idx refers to crops beyond image_crop_counts: "
+                    f"{referenced} referenced, {counts} given"
+                )
+        image_features = self._encode_images(images, pooled_patches_idx, counts)  # (B, n_pooled, d)
         self._record_input_diagnostic("connector output RMS", image_features)
 
         # ViT may run extra crop microbatches when ``n_crops`` differs across DP ranks;
         # sync before the LM forward so all-gather collectives stay aligned.
-        if is_distributed():
+        if self.sync_vit_crops and is_distributed():
             barrier()
 
         # Keep only valid pooled rows (a row is padding iff *all* its patch indices are -1,
@@ -583,6 +698,11 @@ class MultimodalLM(nn.Module):
         # row-major order keeps each example's features aligned with its ``<im_patch>``
         # positions, so batches with a variable number of image tokens per example work. For
         # unpadded / B=1 inputs every row is valid and this is a no-op.
+        if idx_host is not None:
+            valid = (idx_host >= 0).any(dim=-1).reshape(-1).nonzero().squeeze(1)
+            return image_features.reshape(-1, image_features.shape[-1]).index_select(
+                0, valid.to(device)
+            )
         valid_rows = (pooled_patches_idx >= 0).any(dim=-1)  # (B, n_pooled)
         return image_features[valid_rows]  # (total_valid, d)
 
@@ -597,6 +717,7 @@ class MultimodalLM(nn.Module):
         subsegment_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         example_ids: Optional[torch.Tensor] = None,
+        image_crop_counts: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
         """
@@ -606,12 +727,15 @@ class MultimodalLM(nn.Module):
             :attr:`cfg.image_patch_token_id` will be overwritten (via ``+=``)
             with projected image features.
         :param images: Pre-patchified image patches, shape
-            ``(B, n_crops, n_patches, patch_dim)``. Pass ``None`` for
-            text-only batches.
+            ``(B, n_crops, n_patches, patch_dim)``, or the real crops of the batch in example
+            order, ``(total_crops, n_patches, patch_dim)``, with ``image_crop_counts``. Pass
+            ``None`` for text-only batches.
         :param pooled_patches_idx: Per-group patch indices,
             shape ``(B, n_pooled, pool_size)``. Required when *images* is not
             ``None``. The number of non-padding pooled rows must equal the number of
             ``<im_patch>`` tokens per sequence.
+        :param image_crop_counts: ``(B,)`` crops per example, required with compact ``images``
+            (see :meth:`encode_images`).
         :param encoded_image_features: Optional output of :meth:`encode_images`, reused across
             autoregressive forwards; mutually exclusive with ``images``.
         :param labels: Target token IDs, shape ``(B, seq_len)``.
@@ -671,6 +795,8 @@ class MultimodalLM(nn.Module):
         ), "MultimodalLM requires the LM to have an embedding table"
 
         device = self.lm.device
+        # The trainer hands the ids over on the host; index work done there costs no device sync.
+        input_ids_host = input_ids if input_ids.device.type == "cpu" else None
         input_ids = input_ids.to(device)
         if labels is not None:
             labels = labels.to(device)
@@ -695,6 +821,10 @@ class MultimodalLM(nn.Module):
             )
             kwargs["doc_lens"] = doc_lens
             kwargs["max_doc_lens"] = max_doc_lens
+        elif self.has_recurrent_mixers():
+            # Boundaries switched off (``document_mode=False``) for a recurrent LM: the packed
+            # sequence is one causal stream, so nothing is masked, bounded or positioned.
+            subsegment_ids = position_ids = example_ids = token_type_ids = None
 
         use_flex_attn = os.environ.get("OLMO2_FLEX_ATTN") == "1" and not document_mode
         or_mask: Optional[torch.Tensor] = None
@@ -745,7 +875,7 @@ class MultimodalLM(nn.Module):
         if images is not None:
             if pooled_patches_idx is None:
                 raise ValueError("`pooled_patches_idx` is required when `images` is provided")
-            image_features = self.encode_images(images, pooled_patches_idx)
+            image_features = self.encode_images(images, pooled_patches_idx, image_crop_counts)
 
             # Tie the connector output into the autograd graph on *every* forward that ran
             # the vision path, even when no rows are spliced below (e.g. an all-text
@@ -757,10 +887,12 @@ class MultimodalLM(nn.Module):
 
         is_image_patch: Optional[torch.Tensor] = None
         if image_features is not None:
-            # Splice into LM embeddings at every <im_patch> position.
+            # Splice into LM embeddings at every <im_patch> position. The positions are found
+            # on the host copy of the ids when there is one, so nothing waits on the device.
             image_features = image_features.to(device)
-            is_image_patch = input_ids.view(-1) == self.cfg.image_patch_token_id
-            n_patches_in_seq = int(is_image_patch.sum())
+            ids = input_ids_host if input_ids_host is not None else input_ids
+            positions = (ids.view(-1) == self.cfg.image_patch_token_id).nonzero().squeeze(1)
+            n_patches_in_seq = positions.numel()
             n_features = image_features.shape[0]
             if n_patches_in_seq != n_features:
                 raise ValueError(
@@ -774,8 +906,9 @@ class MultimodalLM(nn.Module):
             # the contiguous ``h``, so the in-place add below propagates back into ``h``.
             h = h.contiguous()
             flat = h.view(-1, d)
-            image_features = image_features.to(flat.dtype)
-            flat[is_image_patch] = flat[is_image_patch] + image_features.reshape(-1, d)
+            flat.index_add_(0, positions.to(device), image_features.reshape(-1, d).to(flat.dtype))
+            if self._collect_input_diagnostics:
+                is_image_patch = input_ids.view(-1) == self.cfg.image_patch_token_id
 
         if self._collect_input_diagnostics:
             valid_tokens = torch.ones_like(input_ids, dtype=torch.bool)
@@ -846,6 +979,15 @@ class MultimodalLM(nn.Module):
         ):
             out[..., output_vocab_size:] = torch.finfo(out.dtype).min
         return out
+
+
+def _crop_counts(pooled_patches_idx: torch.Tensor, n_patches: int) -> List[int]:
+    """
+    Crops per example: one past the highest crop any pool group refers to, ``0`` for an example
+    whose indices are all ``-1``. Crop ``c`` owns patch indices ``[c * n_patches, (c + 1) * n_patches)``.
+    """
+    max_idx = pooled_patches_idx.reshape(pooled_patches_idx.shape[0], -1).amax(dim=1)
+    return torch.where(max_idx >= 0, max_idx // n_patches + 1, torch.zeros_like(max_idx)).tolist()
 
 
 def has_sibling_branches(
@@ -954,11 +1096,64 @@ class MultimodalOLMoDDPModel(MultimodalLM):
                 f"{type(self).__name__} requires an OLMoDDPModel language model, "
                 f"got {type(self.lm).__name__}"
             )
+        if self.lm.lm_head is None:
+            raise OLMoConfigurationError(f"{type(self).__name__} requires an LM head")
+        # The weighted loss scores the LM head's hidden states a chunk at a time (see
+        # ``loss_chunk_size``), so the head must be able to hand them over unprojected.
+        self._lm_head_forward = self.lm.lm_head.forward
+        self._lm_head_hidden_states_only = False
+        self._response_positions: Optional[torch.Tensor] = None
+        self.lm.lm_head.forward = self._lm_head_forward_or_hidden_states  # type: ignore[method-assign]
+
+    def _lm_head_forward_or_hidden_states(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        The LM head's own forward or, inside :meth:`_lm_head_hidden_states`, its normed and
+        response-selected hidden states ``(N_response, d_model)`` instead of their logits.
+        """
+        if not self._lm_head_hidden_states_only:
+            return self._lm_head_forward(x, **kwargs)
+        if kwargs.get("labels") is not None:
+            raise ValueError("The LM head computes no loss while handing over hidden states")
+        head = self.lm.lm_head
+        assert head is not None
+        h = head.norm(x) if head.norm is not None else x
+        if self._response_positions is not None and kwargs.get("response_logits_only", False):
+            if kwargs.get("logits_to_keep", 0) != 0:
+                raise ValueError("response_logits_only and logits_to_keep are mutually exclusive")
+            # The same rows, in the same row-major order, that the boolean mask would select,
+            # but through host-computed positions: no device-to-host sync here or in the backward.
+            return h.reshape(-1, h.shape[-1]).index_select(0, self._response_positions)
+        h, _ = _select_hidden_for_logits(
+            h,
+            None,
+            logits_to_keep=kwargs.get("logits_to_keep", 0),
+            response_logits_only=kwargs.get("response_logits_only", False),
+            response_mask=kwargs.get("response_mask"),
+            ignore_index=kwargs.get("ignore_index", -100),
+        )
+        return h
+
+    @contextlib.contextmanager
+    def _lm_head_hidden_states(
+        self, response_positions: Optional[torch.Tensor] = None
+    ) -> Iterator[None]:
+        """
+        Have the LM head return hidden states instead of logits within the block, selecting the
+        response rows by ``response_positions`` (flat row-major indices) when given.
+        """
+        self._lm_head_hidden_states_only = True
+        self._response_positions = response_positions
+        try:
+            yield
+        finally:
+            self._lm_head_hidden_states_only = False
+            self._response_positions = None
 
     def encode_images(
         self,
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        image_crop_counts: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Encode images with the pixels cast to the vision tower's parameter dtype.
@@ -968,7 +1163,9 @@ class MultimodalOLMoDDPModel(MultimodalLM):
         required here; it is a no-op when the tower already runs in the pixels' dtype.
         """
         vision_dtype = next(self.vision.parameters()).dtype
-        return super().encode_images(images.to(dtype=vision_dtype), pooled_patches_idx)
+        return super().encode_images(
+            images.to(dtype=vision_dtype), pooled_patches_idx, image_crop_counts
+        )
 
     @property
     def _olmo_lm(self):
@@ -1159,6 +1356,12 @@ class MultimodalOLMoDDPModel(MultimodalLM):
             load-balancing and z-loss statistics include padding tokens (see the class docstring).
         """
         del router_token_mask
+        # The response positions are found on the host copy of the weights when there is one
+        # (the trainer hands them over on the host), so the selections below never wait on
+        # the device.
+        masks_host = (
+            loss_masks if loss_masks is not None and loss_masks.device.type == "cpu" else None
+        )
         if loss_masks is not None:
             loss_masks = loss_masks.to(device=self.lm.device, dtype=torch.float32)
         if labels is None:
@@ -1192,22 +1395,49 @@ class MultimodalOLMoDDPModel(MultimodalLM):
                 "output_vocab_size is not supported by the multimodal OLMoDDP loss"
             )
         labels = labels.to(self.lm.device)
-        response_mask = loss_masks > 0
-        # Response logits are ``(N_response, vocab)`` in row-major mask order.
-        logits = super().forward(
-            input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
-        )
-        assert isinstance(logits, torch.Tensor)
-        flat_labels = labels.reshape(-1)[response_mask.reshape(-1)]
-        flat_weights = loss_masks.reshape(-1)[response_mask.reshape(-1)]
-        ce_loss, z_loss = weighted_cross_entropy_loss(
-            logits,
-            flat_labels,
-            flat_weights,
-            ignore_index=ignore_index,
-            compute_z_loss=z_loss_multiplier is not None,
-            z_loss_multiplier=z_loss_multiplier or 0.0,
-        )
+        positions: Optional[torch.Tensor] = None
+        if masks_host is not None:
+            positions = (masks_host.reshape(-1) > 0).nonzero().squeeze(1).to(self.lm.device)
+            flat_labels = labels.reshape(-1).index_select(0, positions)
+            flat_weights = loss_masks.reshape(-1).index_select(0, positions)
+        else:
+            response_mask = loss_masks > 0
+            flat_labels = labels.reshape(-1)[response_mask.reshape(-1)]
+            flat_weights = loss_masks.reshape(-1)[response_mask.reshape(-1)]
+        logits: Optional[torch.Tensor] = None
+        if return_logits or self.cfg.loss_chunk_size <= 0:
+            # Response logits are ``(N_response, vocab)`` in row-major mask order.
+            logits = super().forward(
+                input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
+            )
+            assert isinstance(logits, torch.Tensor)
+            ce_loss, z_loss = weighted_cross_entropy_loss(
+                logits,
+                flat_labels,
+                flat_weights,
+                ignore_index=ignore_index,
+                compute_z_loss=z_loss_multiplier is not None,
+                z_loss_multiplier=z_loss_multiplier or 0.0,
+            )
+        else:
+            # The response hidden states ``(N_response, d_model)`` in the same order, scored a
+            # chunk at a time so the micro-batch's logits never exist at once.
+            with self._lm_head_hidden_states(positions):
+                hidden = super().forward(
+                    input_ids, loss_masks=loss_masks, response_logits_only=True, **kwargs
+                )
+            assert isinstance(hidden, torch.Tensor) and self.lm.lm_head is not None
+            ce_loss, z_loss = chunked_weighted_cross_entropy_loss(
+                self.lm.lm_head.w_out,
+                hidden,
+                flat_labels,
+                flat_weights,
+                ignore_index=ignore_index,
+                compute_z_loss=z_loss_multiplier is not None,
+                z_loss_multiplier=z_loss_multiplier or 0.0,
+                chunk_size=self.cfg.loss_chunk_size,
+                compile=self.cfg.compile_loss,
+            )
         div_factor = (
             loss_weight_div_factor if loss_weight_div_factor is not None else loss_div_factor
         )

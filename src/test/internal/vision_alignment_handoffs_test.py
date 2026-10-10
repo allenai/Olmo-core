@@ -98,6 +98,7 @@ def test_phase_loader_checkpoint_and_evaluation_defaults(
     assert loader.pack and loader.pack_max_crops == 64
     assert loader.pack_buffer_size == 48 and loader.prefetch_workers == 8
     assert loader.prefetch_max_in_flight is loader.defer_packed_image_copy is None
+    assert loader.batch_prefetch_depth == 2
     assert loader.max_consecutive_data_errors == loader.max_total_data_errors == 0
     assert loader.seed == 95818 and config.init_seed == 6198
     assert not module.trim_microbatch_image_padding

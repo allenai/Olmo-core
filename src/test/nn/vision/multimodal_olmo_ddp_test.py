@@ -7,6 +7,7 @@ objective through the language model's ``input_embeddings`` / ``router_loss_div_
 import pytest
 import torch
 
+import olmo_core.nn.vision.chunked_loss as chunked_loss
 from olmo_core.config import DType
 from olmo_core.nn.attention import AttentionBackendName, AttentionConfig, AttentionType
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
@@ -282,3 +283,232 @@ def test_frozen_vision_tower_stays_in_eval_mode_during_training():
         param.requires_grad_(True)
     model.train()
     assert model.vision.training
+
+
+def _model_with_loss_chunk_size(chunk_size: int) -> MultimodalOLMoDDPModel:
+    """Same weights as :func:`_model` (same seed), scoring ``chunk_size`` tokens at a time."""
+    torch.manual_seed(0)
+    config = _config()
+    config.loss_chunk_size = chunk_size
+    model = config.build(init_device="cpu")
+    assert isinstance(model, MultimodalOLMoDDPModel)
+    model.init_weights(max_seq_len=8, device=torch.device("cpu"))
+    return model.train()
+
+
+def _record_projected_rows(model: MultimodalOLMoDDPModel, monkeypatch) -> list:
+    """Row counts of every LM-head projection (the logits materialized at once), through the
+    head itself (one-shot path) or the chunked loss's projection."""
+    rows: list = []
+    w_out = model.lm.lm_head.w_out
+    original = w_out.forward
+
+    def forward(x):
+        rows.append(int(x.shape[0]))
+        return original(x)
+
+    w_out.forward = forward  # type: ignore[method-assign]
+    project = chunked_loss._project
+
+    def recording_project(hidden, weight, bias):
+        rows.append(int(hidden.shape[0]))
+        return project(hidden, weight, bias)
+
+    monkeypatch.setattr(chunked_loss, "_project", recording_project)
+    return rows
+
+
+def _mixed_batch():
+    """Two sequences, one leading pooled image token each, weighted response positions."""
+    input_ids, images, pooled = _image_batch()
+    torch.manual_seed(2)
+    labels = torch.randint(2, _VOCAB, input_ids.shape)
+    loss_masks = torch.zeros_like(labels, dtype=torch.float32)
+    loss_masks[0, 1:5] = 1.0
+    loss_masks[1, 2:4] = 0.5
+    loss_masks[1, 6] = 2.0
+    labels[loss_masks == 0] = -100
+    return input_ids, labels, loss_masks, images, pooled
+
+
+@pytest.mark.parametrize("with_images", [False, True])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_chunked_loss_matches_the_one_shot_loss_and_gradients(
+    with_images: bool, dtype: torch.dtype, monkeypatch
+):
+    kwargs = {}
+    if with_images:
+        input_ids, labels, loss_masks, images, pooled = _mixed_batch()
+        kwargs = dict(images=images, pooled_patches_idx=pooled)
+    else:
+        input_ids, labels, loss_masks = _text_batch()
+    n_response = int((loss_masks > 0).sum())
+    assert n_response == 7
+    # bfloat16 gradients can land on either side of a rounding boundary when the float32
+    # sums differ in order; float32 is the strict check.
+    tolerance = dict(rtol=1e-5, atol=1e-6) if dtype == torch.float32 else dict(rtol=1e-2, atol=1e-3)
+
+    one_shot = _model_with_loss_chunk_size(0).to(dtype)
+    chunked = _model_with_loss_chunk_size(3).to(dtype)  # 7 response tokens -> chunks of 3, 3, 1
+    rows = _record_projected_rows(one_shot, monkeypatch)
+    _record_projected_rows(chunked, monkeypatch)
+    outputs = []
+    projected = []
+    for model in (one_shot, chunked):
+        seen = len(rows)
+        out = model(
+            input_ids,
+            labels=labels,
+            loss_masks=loss_masks,
+            loss_reduction="sum",
+            z_loss_multiplier=1e-4,
+            loss_weight_div_factor=torch.tensor(3.5),
+            **kwargs,
+        )
+        assert isinstance(out, LMOutputWithLoss) and out.logits is None
+        out.loss.backward()
+        outputs.append(out)
+        projected.append(rows[seen:])
+    reference, result = outputs
+    one_shot_rows, chunked_rows = projected
+
+    # The one-shot path projects every response token at once; the chunked path never more
+    # than a chunk, in the forward and again in the backward recomputation.
+    assert one_shot_rows == [n_response]
+    assert max(chunked_rows) == 3 and sum(chunked_rows) == 2 * n_response
+    torch.testing.assert_close(result.ce_loss, reference.ce_loss, rtol=1e-5, atol=1e-6)
+    assert result.z_loss is not None and reference.z_loss is not None
+    torch.testing.assert_close(result.z_loss, reference.z_loss, rtol=1e-5, atol=1e-6)
+    torch.testing.assert_close(result.loss, reference.loss, rtol=1e-5, atol=1e-6)
+    grads = 0
+    for (name, p_ref), (_, p_new) in zip(one_shot.named_parameters(), chunked.named_parameters()):
+        if p_ref.grad is None:
+            assert p_new.grad is None, name
+            continue
+        assert p_new.grad is not None, name
+        torch.testing.assert_close(p_new.grad, p_ref.grad, msg=name, **tolerance)
+        grads += 1
+    assert grads > 0
+    assert one_shot.lm.lm_head.w_out.weight.grad is not None
+    if with_images:
+        assert next(chunked.vision.parameters()).grad is not None
+
+
+def test_chunked_loss_without_z_loss_and_with_the_lm_divisor():
+    input_ids, labels, loss_masks = _text_batch()
+    model = _model_with_loss_chunk_size(2)
+    with torch.no_grad():
+        out = model(
+            input_ids,
+            labels=labels,
+            loss_masks=loss_masks,
+            loss_reduction="sum",
+            loss_div_factor=torch.tensor(7.0),
+        )
+        full_logits = _model_with_loss_chunk_size(0)(input_ids)
+    mask = loss_masks > 0
+    ce, _ = weighted_cross_entropy_loss(full_logits[mask], labels[mask], loss_masks[mask])
+    assert out.z_loss is None and out.logits is None
+    torch.testing.assert_close(out.ce_loss, ce / 7.0, rtol=1e-5, atol=1e-6)
+
+
+def test_requesting_logits_keeps_the_one_shot_path(monkeypatch):
+    input_ids, labels, loss_masks = _text_batch()
+    model = _model_with_loss_chunk_size(2)
+    rows = _record_projected_rows(model, monkeypatch)
+    out = model(
+        input_ids,
+        labels=labels,
+        loss_masks=loss_masks,
+        loss_reduction="sum",
+        return_logits=True,
+    )
+    assert out.logits is not None and out.logits.shape == (7, _VOCAB)
+    assert rows == [7]
+
+
+def test_lm_head_returns_its_own_logits_outside_the_hidden_states_block():
+    model = _model_with_loss_chunk_size(2)
+    input_ids, _, _ = _text_batch()
+    with torch.no_grad():
+        logits = model(input_ids)
+        head_in = torch.randn(2, 8, _D_MODEL).to(model.lm.lm_head.w_out.weight.dtype)
+        head_out = model.lm.lm_head(head_in)
+    assert logits.shape == (2, 8, _VOCAB) and head_out.shape == (2, 8, _VOCAB)
+    assert model._lm_head_hidden_states_only is False
+
+
+def _model_with_compiled_loss(chunk_size: int) -> MultimodalOLMoDDPModel:
+    """Same weights as :func:`_model_with_loss_chunk_size`, the per-chunk math compiled."""
+    model = _model_with_loss_chunk_size(chunk_size)
+    model.cfg.compile_loss = True
+    return model
+
+
+def test_padded_chunks_contribute_nothing():
+    hidden = torch.randn(2, _D_MODEL)
+    labels = torch.tensor([3, 5])
+    weights = torch.tensor([1.0, 0.5])
+    h, y, w = chunked_loss._pad_chunk(hidden, labels, weights, 5, -100)
+    assert h.shape == (5, _D_MODEL) and y.shape == (5,) and w.shape == (5,)
+    torch.testing.assert_close(h[:2], hidden)
+    assert y.tolist() == [3, 5, -100, -100, -100] and w.tolist() == [1.0, 0.5, 0.0, 0.0, 0.0]
+    assert chunked_loss._pad_chunk(hidden, labels, weights, 2, -100) == (hidden, labels, weights)
+
+
+def test_compiled_chunk_functions_are_built_once(monkeypatch):
+    monkeypatch.setattr(chunked_loss, "_COMPILED", {})
+    assert chunked_loss._chunk_fn(chunked_loss._forward_chunk, False) is chunked_loss._forward_chunk
+    first = chunked_loss._chunk_fn(chunked_loss._forward_chunk, True)
+    assert first is not chunked_loss._forward_chunk
+    assert chunked_loss._chunk_fn(chunked_loss._forward_chunk, True) is first
+    assert chunked_loss._chunk_fn(chunked_loss._backward_chunk, True) is not first
+    assert set(chunked_loss._COMPILED) == {"_forward_chunk", "_backward_chunk"}
+
+
+@pytest.mark.parametrize("with_images", [False, True])
+def test_compiled_chunked_loss_matches_the_eager_chunked_loss(with_images: bool):
+    """The compiled per-chunk graphs (the last chunk padded from 1 to 3 rows) reproduce the
+    eager chunked loss and every gradient; the compiled functions are not recompiled per chunk
+    or per call."""
+    kwargs = {}
+    if with_images:
+        input_ids, labels, loss_masks, images, pooled = _mixed_batch()
+        kwargs = dict(images=images, pooled_patches_idx=pooled)
+    else:
+        input_ids, labels, loss_masks = _text_batch()
+    eager = _model_with_loss_chunk_size(3)  # 7 response tokens -> chunks of 3, 3, 1
+    compiled = _model_with_compiled_loss(3)
+    outputs = []
+    torch._dynamo.reset()
+    graphs_before = torch._dynamo.utils.counters["stats"]["unique_graphs"]
+    for model in (eager, compiled):
+        for _ in range(2):  # a second call must hit the compiled graphs, not rebuild them
+            model.zero_grad(set_to_none=True)
+            out = model(
+                input_ids,
+                labels=labels,
+                loss_masks=loss_masks,
+                loss_reduction="sum",
+                z_loss_multiplier=1e-4,
+                loss_weight_div_factor=torch.tensor(3.5),
+                **kwargs,
+            )
+            out.loss.backward()
+        outputs.append(out)
+    reference, result = outputs
+    torch.testing.assert_close(result.ce_loss, reference.ce_loss, rtol=1e-5, atol=1e-6)
+    assert result.z_loss is not None and reference.z_loss is not None
+    torch.testing.assert_close(result.z_loss, reference.z_loss, rtol=1e-5, atol=1e-6)
+    grads = 0
+    for (name, p_ref), (_, p_new) in zip(eager.named_parameters(), compiled.named_parameters()):
+        if p_ref.grad is None:
+            assert p_new.grad is None, name
+            continue
+        assert p_new.grad is not None, name
+        torch.testing.assert_close(p_new.grad, p_ref.grad, msg=name, rtol=1e-4, atol=1e-5)
+        grads += 1
+    assert grads > 0 and compiled.lm.lm_head.w_out.weight.grad is not None
+    # One graph per chunk function: the padded last chunk has the same shape as the others.
+    counters = torch._dynamo.utils.counters
+    assert counters["stats"]["unique_graphs"] - graphs_before == 2, dict(counters["stats"])

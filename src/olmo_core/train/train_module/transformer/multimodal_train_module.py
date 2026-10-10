@@ -25,6 +25,7 @@ from typing import (
     Literal,
     Mapping,
     Optional,
+    Sequence,
     Set,
     Tuple,
     cast,
@@ -78,6 +79,7 @@ from .train_module import TransformerTrainModule
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "CompactImages",
     "MultimodalTransformerTrainModule",
     "MultimodalTransformerTrainModuleConfig",
     "MultimodalOLMoDDPTrainModule",
@@ -190,16 +192,79 @@ def _normalize_loss_groups(
     return normalized_batch, global_mass
 
 
+class CompactImages(list):
+    """
+    The compact ``images`` of a batch in a form the shared
+    :func:`~olmo_core.data.utils.split_batch` cuts per example.
+
+    The collator's compact layout, ``(total_crops, n_patches, patch_dim)``, has no example axis,
+    so slicing it along dimension 0 by sequence (what ``split_batch`` does with tensors) would
+    hand each micro-batch the wrong crops. ``split_batch`` slices list-valued fields by example
+    range instead, and a slice of this list is again a :class:`CompactImages` over those
+    examples, whose :meth:`tensor` is the contiguous view of their crops (no copy).
+
+    :param images: The compact ``(total_crops, n_patches, patch_dim)`` tensor.
+    :param crop_counts: Crops per example, in order; they must sum to ``images.shape[0]``.
+    """
+
+    def __init__(self, images: torch.Tensor, crop_counts: Sequence[int]):
+        counts = [int(n) for n in crop_counts]
+        if images.ndim != 3 or sum(counts) != images.shape[0] or any(n < 0 for n in counts):
+            raise OLMoConfigurationError(
+                f"Compact images of shape {tuple(images.shape)} do not match crop counts {counts}"
+            )
+        offsets = [0]
+        for n in counts:
+            offsets.append(offsets[-1] + n)
+        super().__init__(images[offsets[b] : offsets[b + 1]] for b in range(len(counts)))
+        self._images = images
+        self._counts = counts
+        self._offsets = offsets
+
+    def __getitem__(self, item):  # type: ignore[override]
+        if isinstance(item, slice):
+            start, stop, step = item.indices(len(self))
+            if step != 1:
+                raise ValueError("CompactImages slices must be contiguous")
+            stop = max(stop, start)
+            return CompactImages(
+                self._images[self._offsets[start] : self._offsets[stop]], self._counts[start:stop]
+            )
+        return super().__getitem__(item)
+
+    def tensor(self) -> torch.Tensor:
+        """The crops of the covered examples, ``(total_crops, n_patches, patch_dim)``."""
+        return self._images
+
+    @property
+    def crop_counts(self) -> List[int]:
+        """Crops per covered example."""
+        return list(self._counts)
+
+
 def _trim_microbatch_image_padding(batch: dict[str, Any]) -> dict[str, Any]:
-    """Remove unused trailing crop/pooling slots while retaining one dummy slot."""
+    """Remove unused trailing crop/pooling slots while retaining one dummy slot.
+
+    Compact images (rank 3) carry no padding and pass through; only the pooled rows are trimmed.
+    """
     images = batch.get("images")
     pooled = batch.get("pooled_patches_idx")
-    if not isinstance(images, torch.Tensor) or images.ndim != 4:
-        raise OLMoConfigurationError("Image-padding trimming requires rank-4 images")
+    if not isinstance(images, torch.Tensor) or images.ndim not in (3, 4):
+        raise OLMoConfigurationError("Image-padding trimming requires rank-4 or compact images")
     if not isinstance(pooled, torch.Tensor) or pooled.ndim != 3:
         raise OLMoConfigurationError("Image-padding trimming requires rank-3 pooled_patches_idx")
-    size, crops, patches, _ = images.shape
-    if size == 0 or crops == 0 or patches == 0 or pooled.shape[0] != size or pooled.shape[1] == 0:
+    compact = images.ndim == 3
+    if compact:
+        size, crops, patches = pooled.shape[0], int(images.shape[0]), images.shape[1]
+    else:
+        size, crops, patches, _ = images.shape
+    if (
+        size == 0
+        or (crops == 0 and not compact)
+        or patches == 0
+        or pooled.shape[0] != size
+        or pooled.shape[1] == 0
+    ):
         raise OLMoConfigurationError(
             "Image-padding trimming requires aligned nonempty image tensors"
         )
@@ -219,6 +284,11 @@ def _trim_microbatch_image_padding(batch: dict[str, Any]) -> dict[str, Any]:
             )
         counts.append(value.to(device=pooled.device))
     crop_counts, pooled_counts = counts
+    if compact and int(crop_counts.sum()) != crops:
+        raise OLMoConfigurationError(
+            f"Compact images carry {crops} crops but image_crop_counts sum to "
+            f"{int(crop_counts.sum())}"
+        )
     if pooled.dtype not in (torch.int32, torch.int64) or bool((pooled < -1).any()):
         raise OLMoConfigurationError("pooled_patches_idx must contain integer patch indices or -1")
     if bool((pooled >= crop_counts[:, None, None] * patches).any()):
@@ -231,7 +301,8 @@ def _trim_microbatch_image_padding(batch: dict[str, Any]) -> dict[str, Any]:
     if bool(((pooled >= 0) & trailing[:, :, None]).any()):
         raise OLMoConfigurationError("pooled_token_counts would discard non-padding pooled rows")
     out = dict(batch)
-    out["images"] = images[:, : max(int(crop_counts.max()), 1)]
+    if not compact:
+        out["images"] = images[:, : max(int(crop_counts.max()), 1)]
     out["pooled_patches_idx"] = pooled[:, : max(int(pooled_counts.max()), 1)]
     return out
 
@@ -309,6 +380,9 @@ class MultimodalTransformerTrainModule(TransformerTrainModule):
             log.info(f"Froze {n_frozen} parameter tensors matching {self.freeze_params}")
 
         model.to(self.device)
+        # DDP issues no collective in the forward pass, so each rank encodes its own crops
+        # without padding to the data-parallel maximum (see MultimodalLMConfig.sync_vit_crops).
+        model.sync_vit_crops = False
         if vision_activation_checkpointing and hasattr(
             model.vision, "apply_activation_checkpointing"
         ):
@@ -461,6 +535,12 @@ class MultimodalTransformerTrainModule(TransformerTrainModule):
         )
 
     def train_batch(self, batch: Dict[str, Any], dry_run: bool = False):
+        images = batch.get("images")
+        if isinstance(images, torch.Tensor) and images.ndim == 3:
+            raise OLMoConfigurationError(
+                "Compact images (data_loader.compact_images) are read by the OLMoDDP multimodal "
+                "train module only; collate padded images for this train module"
+            )
         self._set_model_mode("train")
         if self.loss_group_weights:
             batch, _ = _normalize_loss_groups(
@@ -776,6 +856,7 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         source_loss_mass_targets: Optional[Dict[str, float]] = None,
         loss_group_weights: Optional[Dict[str, float]] = None,
         trim_microbatch_image_padding: bool = False,
+        padding_input_token_id: Optional[int] = None,
         **kwargs,
     ):
         from olmo_core.nn.vision import MultimodalOLMoDDPModel
@@ -798,6 +879,7 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             )
         if diagnostics_interval is not None and diagnostics_interval <= 0:
             raise OLMoConfigurationError("diagnostics_interval must be positive or None")
+        self.padding_input_token_id = padding_input_token_id
         self.trim_microbatch_image_padding = trim_microbatch_image_padding
         if trim_microbatch_image_padding:
             if model.cfg.vision.attention_dropout or model.cfg.vision.residual_dropout:
@@ -900,15 +982,29 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
     def _prepare_batch(
         self, batch: Dict[str, Any], labels: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Dict[str, Any]]:
-        if (
-            getattr(self, "trim_microbatch_image_padding", False)
-            and batch.get("images") is not None
-        ):
+        images = batch.get("images")
+        if isinstance(images, CompactImages):
+            # A micro-batch of a compact batch (see :meth:`train_batch`).
+            batch = dict(batch)
+            images = batch["images"] = images.tensor()
+        compact = isinstance(images, torch.Tensor) and images.ndim == 3
+        if compact and batch.get("image_crop_counts") is None:
+            raise OLMoConfigurationError("Compact images require the collator's image_crop_counts")
+        if getattr(self, "trim_microbatch_image_padding", False) and images is not None:
             batch = _trim_microbatch_image_padding(batch)
+        padding_id = getattr(self, "padding_input_token_id", None)
+        if padding_id is not None and (token_mask := batch.get("router_token_mask")) is not None:
+            # Padding slots are never predicted, but the router losses still reach their inputs.
+            # A pad row the LM never trained is near zero, and the embedding norm amplifies its
+            # gradient by about 1/sqrt(eps); feed a trained token there instead.
+            batch = dict(batch)
+            batch["input_ids"] = batch["input_ids"].masked_fill(
+                ~token_mask.to(device=batch["input_ids"].device, dtype=torch.bool), padding_id
+            )
         input_ids, labels, model_kwargs = super()._prepare_batch(batch, labels)
-        # Collator metadata that only the train module reads.
+        # Collator metadata that only the train module reads. The crop counts are part of the
+        # compact image layout and stay.
         for key in (
-            "image_crop_counts",
             "pooled_token_counts",
             "loss_group_names",
             "pack_source_names",
@@ -916,6 +1012,8 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             "instance_mask",
         ):
             model_kwargs.pop(key, None)
+        if not compact:
+            model_kwargs.pop("image_crop_counts", None)
         # The router token mask only feeds the divisor and data metrics; the LM ignores it.
         model_kwargs.pop("router_token_mask", None)
         # Response-only logits are specific to multimodal batches carrying loss weights.
@@ -1001,14 +1099,19 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
                 namespace="data",
             )
             images = batch.get("images")
-            if images is not None:
-                padded_crops = int(images.shape[1])
+            if isinstance(images, torch.Tensor) and images.ndim == 3:
+                # Compact images carry no padded slots: every collated crop is a real one.
+                padded_crops = crop_counts.float().mean()
+                utilization = torch.ones((), device=crop_counts.device)
+            elif images is not None:
+                padded_crops = torch.tensor(float(images.shape[1]), device=crop_counts.device)
                 utilization = crop_counts.float().sum() / max(
-                    int(crop_counts.numel()) * padded_crops, 1
+                    int(crop_counts.numel()) * int(images.shape[1]), 1
                 )
+            if images is not None:
                 self.record_metric(
                     "padded crops per sequence",
-                    torch.tensor(float(padded_crops), device=crop_counts.device),
+                    padded_crops,
                     ReduceType.mean,
                     namespace="data",
                 )
@@ -1152,6 +1255,17 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
                     )
         if not dry_run:
             self._record_data_metrics(original_batch)
+        images = batch.get("images")
+        if isinstance(images, torch.Tensor) and images.ndim == 3:
+            # The shared micro-batching slices every tensor along dimension 0 by sequence;
+            # compact images are cut by example through this per-example list instead.
+            crop_counts = batch.get("image_crop_counts")
+            if crop_counts is None:
+                raise OLMoConfigurationError(
+                    "Compact images require the collator's image_crop_counts"
+                )
+            batch = dict(batch)
+            batch["images"] = CompactImages(images, crop_counts.tolist())
         collect_diagnostics = not dry_run and self._diagnostics_enabled_for_step()
         if collect_diagnostics:
             self.multimodal_model.set_input_diagnostics(True)
@@ -1253,13 +1367,21 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
 
         This estimate does not account for optional microbatch image-padding trimming
         or subsequent cross-rank crop padding; it is not a measurement of optimized work.
+        Compact images count their real crops, since they carry no padded slots.
         """
         images = batch.get("images")
         if images is None:
             return 0
-        batch_size, crops, patches = (int(value) for value in images.shape[:3])
+        if isinstance(images, CompactImages):
+            images = images.tensor()
+        if images.ndim == 3:
+            # Compact images: the collated crops are the real ones.
+            n_crops, patches = int(images.shape[0]), int(images.shape[1])
+        else:
+            batch_size, crops, patches = (int(value) for value in images.shape[:3])
+            n_crops = batch_size * crops
         pooled = int((batch["input_ids"] == self.multimodal_model.cfg.image_patch_token_id).sum())
-        return self.multimodal_model.image_encoder_flops(batch_size * crops, patches, pooled)
+        return self.multimodal_model.image_encoder_flops(n_crops, patches, pooled)
 
     # -- evaluation ---------------------------------------------------------------------------
 
@@ -1779,6 +1901,12 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     metadata and zero vision dropout. Retains at least one dummy crop and pooled row, existing
     vision collectives, and all LM token slots. FLOP estimates retain untrimmed batch shapes.
     """
+
+    padding_input_token_id: Optional[int] = None
+    """Token fed to the LM at padding slots (``router_token_mask`` false) instead of the
+    collator's pad id, e.g. EOS. Padding is never predicted either way; a pad embedding row the
+    LM never trained is near zero, and the embedding norm turns the router losses' gradient at
+    those slots into a huge gradient on that row. Requires the collator's batch metadata."""
 
     def _build_train_module(self, **kwargs) -> MultimodalOLMoDDPTrainModule:
         return MultimodalOLMoDDPTrainModule(**kwargs)

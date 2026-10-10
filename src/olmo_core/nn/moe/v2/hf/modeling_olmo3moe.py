@@ -26,6 +26,7 @@ from transformers.utils.deprecation import deprecate_kwarg
 from transformers.utils.generic import TransformersKwargs, can_return_tuple
 
 from .configuration_olmo3moe import Olmo3MoeConfig
+from .moe_numerics import core_combine, core_swiglu
 
 
 def _create_mask_compat(mask_fn: Callable, **kwargs):
@@ -146,6 +147,16 @@ class Olmo3MoeRotaryEmbedding(nn.Module):
             return cos, sin
 
 
+def _core_shared_expert_forward(expert, x):
+    # Match SharedExperts' packed GEMM and operand layout. Separate up/gate
+    # projections can select a different accumulation order on Ampere.
+    weight = torch.cat((expert.up_proj.weight.t(), expert.gate_proj.weight.t()), dim=1)
+    up, gate = (x.reshape(-1, x.shape[-1]) @ weight).chunk(2, dim=-1)
+    hidden = expert.act_fn(gate) * up
+    down_weight = expert.down_proj.weight.t().contiguous().unsqueeze(0)
+    return torch.bmm(hidden.unsqueeze(0), down_weight).reshape(x.shape)
+
+
 class Olmo3MoeDenseMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -158,6 +169,8 @@ class Olmo3MoeDenseMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
+        if self.config.moe_use_core_numerics:
+            return _core_shared_expert_forward(self, x)
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -175,6 +188,13 @@ class Olmo3MoeExpert(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
+
+
+class Olmo3MoeCoreSharedExpert(Olmo3MoeExpert):
+    """Shared expert preserving core's packed projection and GEMM layouts."""
+
+    def forward(self, x):
+        return _core_shared_expert_forward(self, x)
 
 
 class Olmo3MoeExperts(nn.ModuleList):
@@ -333,6 +353,61 @@ class Olmo3MoeExperts(nn.ModuleList):
         return self._forward_loop(hidden_states, topk_ids, topk_weights)
 
 
+class Olmo3MoeCoreExperts(Olmo3MoeExperts):
+    """Independent HF expert computation with OLMoDDP inference rounding.
+
+    This is part of the exported model, not a conversion-only verifier. Optimized
+    inference engines can replace this ModuleList, with their own numerical
+    qualification, just as they replace the original HF expert implementation.
+    """
+
+    @staticmethod
+    def _expert_forward(expert, x):
+        weight = torch.cat((expert.up_proj.weight, expert.gate_proj.weight), dim=0)
+        hidden = core_swiglu(F.linear(x, weight))
+        return expert.down_proj(hidden)
+
+    def _forward_compile_fallback(self, hidden_states, topk_ids, topk_weights):
+        N, H = hidden_states.shape
+        K = topk_ids.shape[1]
+        values = hidden_states.new_zeros((N, K, H))
+        for expert_id, expert in enumerate(self):
+            output = self._expert_forward(expert, hidden_states)
+            values = torch.where((topk_ids == expert_id)[..., None], output[:, None], values)
+        return core_combine(values, topk_weights)
+
+    def _forward_loop(self, hidden_states, topk_ids, topk_weights):
+        N, H = hidden_states.shape
+        K = topk_ids.shape[1]
+        values = hidden_states.new_zeros((N, K, H))
+        for expert_id, expert in enumerate(self):
+            token_ids, slots = (topk_ids == expert_id).nonzero(as_tuple=True)
+            if token_ids.numel():
+                values[token_ids, slots] = self._expert_forward(expert, hidden_states[token_ids])
+        return core_combine(values, topk_weights)
+
+    def _forward_grouped_mm(self, hidden_states, topk_ids, topk_weights):
+        N, H = hidden_states.shape
+        K = topk_ids.shape[1]
+        expert_ids = topk_ids.reshape(-1)
+        order = torch.argsort(expert_ids, stable=True)
+        token_ids = torch.arange(N, device=hidden_states.device).repeat_interleave(K)[order]
+        counts = torch.bincount(expert_ids, minlength=len(self)).to(torch.int32)
+        offsets = counts.cumsum(0, dtype=torch.int32)
+        # Preserve core's packed storage layout and [up, gate] ordering so the
+        # grouped GEMM chooses the same operand layout as the source model.
+        w_up_gate = torch.stack(
+            [torch.cat((expert.up_proj.weight, expert.gate_proj.weight), dim=0) for expert in self]
+        )
+        w_down = torch.stack([expert.down_proj.weight.t() for expert in self])
+        up_gate = F.grouped_mm(hidden_states[token_ids], w_up_gate.transpose(1, 2), offs=offsets)
+        output = F.grouped_mm(core_swiglu(up_gate), w_down, offs=offsets)
+        inverse = torch.empty_like(order)
+        inverse[order] = torch.arange(order.numel(), device=order.device)
+        values = output[inverse].reshape(N, K, H)
+        return core_combine(values, topk_weights)
+
+
 class Olmo3MoeSparseMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -364,7 +439,7 @@ class Olmo3MoeSparseMLP(nn.Module):
                 config.hidden_size,
                 bias=config.latent_moe_bias,
             )
-        self.experts = Olmo3MoeExperts()
+        self.experts = Olmo3MoeCoreExperts() if config.moe_use_core_numerics else Olmo3MoeExperts()
         for _ in range(config.n_routed_experts):
             expert = Olmo3MoeExpert(
                 hidden_size=self.routed_hidden_size,
@@ -374,7 +449,10 @@ class Olmo3MoeSparseMLP(nn.Module):
             self.experts.append(expert)
         self.shared_expert: Optional[Olmo3MoeExpert]
         if config.shared_expert_intermediate_size is not None:
-            self.shared_expert = Olmo3MoeExpert(
+            shared_expert_cls = (
+                Olmo3MoeCoreSharedExpert if config.moe_use_core_numerics else Olmo3MoeExpert
+            )
+            self.shared_expert = shared_expert_cls(
                 hidden_size=config.hidden_size,
                 moe_intermediate_size=config.shared_expert_intermediate_size,
                 hidden_act=config.hidden_act,
@@ -396,8 +474,8 @@ class Olmo3MoeSparseMLP(nn.Module):
         routed_h = routed_x.shape[-1]
         x_flat = routed_x.reshape(B * S, routed_h)
         idx_flat = expert_indices.reshape(B * S, K)  # (N, K)
-        # Core's unpermute/combine keeps router probabilities and accumulation in FP32,
-        # then rounds the combined expert result to the activation dtype once.
+        # Preserve FP32 router probabilities until the selected expert implementation
+        # applies its combination policy (TE index-map or the original FP32 HF sum).
         w_flat = expert_weights.reshape(B * S, K).float()  # (N, K)
 
         out_flat = self.experts(x_flat, topk_ids=idx_flat, topk_weights=w_flat)

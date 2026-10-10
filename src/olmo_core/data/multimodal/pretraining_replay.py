@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 import numpy as np
 
 from olmo_core.config import Config
+from olmo_core.data.composable import InstanceSource, InstanceSourceConfig
 from olmo_core.data.numpy_dataset import (
     NumpyDatasetBase,
     NumpyFSLDataset,
@@ -24,7 +25,12 @@ from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.io import file_exists, is_url, resource_path
 from olmo_core.nn.vision.molmo2_tokens import N_PATCHES_SQ, PATCH_DIM, POOL_H, POOL_W
 
-__all__ = ["PretrainingReplayConfig", "PretrainingReplayDataset"]
+__all__ = [
+    "ComposableTextReplayConfig",
+    "ComposableTextReplayDataset",
+    "PretrainingReplayConfig",
+    "PretrainingReplayDataset",
+]
 
 
 def _checkpoint_dataset(checkpoint: str) -> tuple[dict[str, Any], str]:
@@ -328,4 +334,152 @@ class PretrainingReplayDataset:
             "images": np.zeros((0, N_PATCHES_SQ, PATCH_DIM), dtype=np.float32),
             "pooled_patches_idx": np.full((0, POOL_H * POOL_W), -1, dtype=np.int64),
             "metadata": {**item.get("metadata", {}), "instance_filter_valid": valid_instance},
+        }
+
+
+@dataclass
+class ComposableTextReplayConfig(Config):
+    """
+    Text replay from a composable instance source of fixed-length text instances, such as the
+    text team's merged mid-training + long-context stream (scaling-ladders
+    ``merged_mt_lc.py``), so a multimodal mixture can train on exactly that text.
+
+    Each instance becomes one text example, the way :class:`PretrainingReplayDataset` turns a
+    NumPy window into one. An instance may carry:
+
+    - ``label_mask``: which tokens are targets (``False`` positions are neither predicted nor
+      counted in the loss denominator);
+    - ``instance_mask``: ``False`` for a fully filtered instance, which contributes no loss but
+      keeps its ``L - 1`` denominator weight (the OLMoDDP and multimodal convention);
+    - an integer under :attr:`denominator_extra_key`: positions the text run counts in the loss
+      denominator although they are not targets (a repetition-filtered chunk of a concatenated
+      instance). The denominator only counts positions, so the first that many non-target
+      positions are counted with zero loss, which gives the same loss as the text run.
+
+    PAD tokens in the input are fed as EOS and never predicted when both ids are set: a model
+    that never saw PAD has a near-zero PAD embedding, and long PAD runs make the first gradient
+    non-finite (as the merged stage's own loader does).
+    """
+
+    source: InstanceSourceConfig
+    """The instance source; it must produce instances of one fixed length."""
+    work_dir: str
+    """Where the source's prepared indexes live (the text run's ``data_loader.work_dir``)."""
+    pad_token_id: int | None = None
+    eos_token_id: int | None = None
+    denominator_extra_key: str = "loss_denominator_extra_tokens"
+
+    def build(self, tokenizer=None) -> "ComposableTextReplayDataset":
+        """Build the replay dataset (``tokenizer`` is accepted for the mixture interface)."""
+        del tokenizer
+        if (self.pad_token_id is None) != (self.eos_token_id is None):
+            raise OLMoConfigurationError("Set both pad_token_id and eos_token_id, or neither")
+        return ComposableTextReplayDataset(
+            self.source.build(self.work_dir),
+            pad_token_id=self.pad_token_id,
+            eos_token_id=self.eos_token_id,
+            denominator_extra_key=self.denominator_extra_key,
+        )
+
+
+class ComposableTextReplayDataset:
+    """Text examples (labels, loss weights, empty image arrays) from composable instances."""
+
+    def __init__(
+        self,
+        source: InstanceSource,
+        *,
+        pad_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        denominator_extra_key: str = "loss_denominator_extra_tokens",
+    ):
+        if source.sequence_length != source.max_sequence_length:
+            raise OLMoConfigurationError("Composable text replay requires fixed-length instances")
+        self.source = source
+        self.sequence_length = source.sequence_length
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.denominator_extra_key = denominator_extra_key
+
+    @property
+    def fingerprint(self) -> str:
+        """Identify the source and the conversion settings for loader resume checks."""
+        settings = [
+            self.source.fingerprint,
+            self.pad_token_id,
+            self.eos_token_id,
+            self.denominator_extra_key,
+        ]
+        return hashlib.sha256(json.dumps(settings).encode()).hexdigest()
+
+    def __len__(self) -> int:
+        return len(self.source)
+
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        return self.get(index)
+
+    def get(self, index: int, epoch: int = 0) -> dict[str, Any]:
+        """
+        Return instance ``index`` as a text example.
+
+        :param index: Index in the instance source.
+        :param epoch: Accepted for the mixture-loader interface; source ordering is external.
+        """
+        del epoch
+        index = int(index)
+        if index < 0:
+            index += len(self)
+        if not 0 <= index < len(self):
+            raise IndexError(f"{index} is out of bounds for replay of size {len(self)}")
+        instance = self.source[index]
+        tokens = np.array(instance["input_ids"], dtype=np.int64).reshape(-1)
+        if len(tokens) != self.sequence_length:
+            raise RuntimeError(
+                f"Instance {index} has {len(tokens):_} tokens; expected {self.sequence_length:_}"
+            )
+        label_mask = instance.get("label_mask")
+        is_target = (
+            np.ones(len(tokens), dtype=np.bool_)
+            if label_mask is None
+            else np.array(label_mask, dtype=np.bool_).reshape(-1)
+        )
+        if len(is_target) != len(tokens):
+            raise RuntimeError(f"Instance {index} has a label mask of the wrong length")
+        # Position t predicts token t + 1.
+        targets = is_target[1:].copy()
+        extra_tokens: Any = instance.get(self.denominator_extra_key)
+        extra = int(extra_tokens or 0)
+        counted_only = np.zeros(len(tokens) - 1, dtype=np.bool_)
+        if extra > 0:
+            candidates = np.flatnonzero(~targets)
+            if len(candidates) < extra:
+                raise RuntimeError(
+                    f"Instance {index} asks for {extra:_} extra denominator positions but has "
+                    f"only {len(candidates):_} non-target positions"
+                )
+            counted_only[candidates[:extra]] = True
+        if self.pad_token_id is not None:
+            is_pad = tokens == self.pad_token_id
+            if is_pad.any():
+                assert self.eos_token_id is not None
+                tokens[is_pad] = self.eos_token_id
+                targets &= ~is_pad[1:]
+        labels = np.full(len(tokens), -100, dtype=np.int64)
+        labels[:-1] = np.where(targets, tokens[1:], -100)
+        loss_masks = np.zeros(len(tokens), dtype=np.float32)
+        loss_masks[:-1] = (targets | counted_only).astype(np.float32)
+        valid_instance = bool(instance.get("instance_mask", True))
+        if not valid_instance:
+            # As PretrainingReplayDataset: no loss, but the L - 1 denominator weight stays.
+            labels.fill(-100)
+            loss_masks[:-1] = 1.0
+        return {
+            "input_ids": tokens,
+            "labels": labels,
+            "loss_masks": loss_masks,
+            "position_ids": np.arange(len(tokens), dtype=np.int64),
+            "token_type_ids": np.zeros(len(tokens), dtype=np.int64),
+            "images": np.zeros((0, N_PATCHES_SQ, PATCH_DIM), dtype=np.float32),
+            "pooled_patches_idx": np.full((0, POOL_H * POOL_W), -1, dtype=np.int64),
+            "metadata": {"instance_filter_valid": valid_instance},
         }

@@ -3,13 +3,14 @@
 import copy
 import json
 import logging
+import os
 import sys
 from dataclasses import dataclass, field, fields, replace
 from math import isfinite
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Protocol, cast
 
-from olmo_core.config import Config, DType, StrEnum
+from olmo_core.config import Config, DType, StrEnum, _clean_opts
 from olmo_core.data import TokenizerConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
@@ -99,6 +100,11 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "model.connector": "vision-to-language connector",
     "model.image_patch_token_id": "image patch token id from the tokenizer",
     "model.vit_layers": "vision features taken from these ViT layers",
+    "model.loss_chunk_size": "the weighted loss scores this many tokens at a time (no full logits)",
+    "model.compile_loss": (
+        "the chunked weighted loss's per-chunk math under torch.compile (mixed mid-training only)"
+    ),
+    "model.sync_vit_crops": "the vision encoder pads its crops to the data-parallel maximum only under FSDP",
     "model.lm.block*.routed_experts_router.lb_loss_weight": (
         "router load balancing off while the LM is frozen (bridge, perception, also when "
         "started from the pretraining checkpoint); joint restores the pretrained coefficients"
@@ -151,6 +157,82 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "data_loader": "multimodal mixture loader (packing, crops); workers inherited",
 }
 """Where an alignment config built from ``recipe.text_config`` differs from the text config."""
+
+HF_DATASETS_CACHE_ENV = "HF_DATASETS_CACHE"
+"""The environment variable the ``datasets`` library reads (at import) for its Arrow cache."""
+
+
+def default_hf_datasets_cache_dir(hf_cache_dir: str | None) -> str | None:
+    """The ``datasets`` cache directory that goes with a Hub cache directory.
+
+    A Hub cache ending in ``/hub`` (the layout of ``HF_HOME``) has the ``datasets`` cache as its
+    sibling, ``<HF_HOME>/datasets``; any other directory gets a ``datasets`` subdirectory.
+
+    :param hf_cache_dir: The Hub cache directory (a recipe's ``hf_cache_dir``), or ``None``.
+
+    :returns: The derived ``datasets`` cache directory, or ``None`` when ``hf_cache_dir`` is.
+    """
+    if hf_cache_dir is None:
+        return None
+    hub = Path(hf_cache_dir)
+    return str(hub.parent / "datasets" if hub.name == "hub" else hub / "datasets")
+
+
+class _HFCacheRecipe(Protocol):
+    hf_cache_dir: str | None
+    hf_datasets_cache_dir: str | None
+
+
+def resolve_hf_datasets_cache_dir(
+    recipe: _HFCacheRecipe, overrides: list[tuple[str, Any]], *, prefix: str = "recipe"
+) -> None:
+    """Fill a recipe's ``hf_datasets_cache_dir`` from its ``hf_cache_dir`` unless set explicitly.
+
+    The recipe's dataclass default is ``None`` because a default derived from ``hf_cache_dir``
+    would be frozen before the command line's ``hf_cache_dir`` override lands (``Config.merge``
+    rebuilds the recipe from its serialized fields); an explicit override of the field, ``null``
+    included, is kept as given, so ``null`` leaves the library default in place.
+
+    :param recipe: The merged recipe (``VisionAlignmentRecipeConfig`` or
+        ``MixedMidtrainingRecipeConfig``), updated in place.
+    :param overrides: The parsed command-line overrides (``_clean_opts``).
+    :param prefix: The recipe's override prefix.
+    """
+    if not any(name == f"{prefix}.hf_datasets_cache_dir" for name, _ in overrides):
+        recipe.hf_datasets_cache_dir = default_hf_datasets_cache_dir(recipe.hf_cache_dir)
+
+
+def set_hf_datasets_cache(launch: BeakerLaunchConfig, cache_dir: str | None) -> None:
+    """Point a launched job's ``HF_DATASETS_CACHE`` at ``cache_dir``.
+
+    An existing entry of that name is replaced; every other entry is kept. ``None`` leaves the
+    launch's environment as it is. The launch's ``env_vars`` list is replaced, not mutated, so a
+    launch config shared with its builder (``BeakerLaunchConfig.replace`` copies shallowly) is
+    unaffected.
+
+    :param launch: The launch config to update in place.
+    :param cache_dir: The job's ``datasets`` cache directory (``recipe.hf_datasets_cache_dir``).
+    """
+    if cache_dir is None:
+        return
+    launch.env_vars = [
+        entry for entry in launch.env_vars if entry.name != HF_DATASETS_CACHE_ENV
+    ] + [BeakerEnvVar(name=HF_DATASETS_CACHE_ENV, value=cache_dir)]
+
+
+def export_hf_datasets_cache(cache_dir: str | None) -> None:
+    """Set ``HF_DATASETS_CACHE`` in this process from the recipe, unless already set.
+
+    The launch environment (:func:`set_hf_datasets_cache`) is the primary mechanism: it reaches
+    every process of the job. This covers a job whose Beaker spec predates the launch variable
+    and a local run, and must run before the ``datasets`` library is imported, which reads the
+    variable at import. An existing value (the launch's, or the operator's) wins.
+
+    :param cache_dir: The job's ``datasets`` cache directory, or ``None`` to leave the
+        environment as it is.
+    """
+    if cache_dir is not None:
+        os.environ.setdefault(HF_DATASETS_CACHE_ENV, cache_dir)
 
 
 class AlignmentPhase(StrEnum):
@@ -221,6 +303,22 @@ class VisionAlignmentRecipeConfig(Config):
     )
     work_dir: str = "/weka/oe-training-default/rustin/dataset-cache/vision-alignment"
     hf_cache_dir: str | None = "/weka/oe-training-default/rustin/hf-cache/hub"
+    """The Hugging Face Hub cache (tokenizer and vision-encoder downloads)."""
+    hf_datasets_cache_dir: str | None = None
+    """The ``HF_DATASETS_CACHE`` of the launched job: where the ``datasets`` library builds the
+    Arrow caches of the parquet sources (olmOCR-mix, FineVision, MM-FineReason), once, shared by
+    every job, instead of on each node's local disk (the library default, ``~/.cache``, which a
+    full node disk turns into ``OSError: Not enough disk space``). Derived from ``hf_cache_dir``
+    when the recipe is built: its sibling ``datasets`` directory for a Hub cache ending in
+    ``/hub``, else a ``datasets`` subdirectory; ``None`` when ``hf_cache_dir`` is. An explicit
+    value wins, and an explicit ``null`` leaves the library default in place. Set in the launch
+    environment, and exported by the training process when the environment lacks it."""
+    batch_prefetch_depth: int = 2
+    """Finished rank batches the loader builds ahead on a background thread, so the trainer's
+    fetch returns as soon as one is queued (the batch order and the checkpointed cursor are the
+    thread-free loader's; see
+    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.batch_prefetch_depth`).
+    ``0`` packs and collates on the trainer's thread."""
     tokenizer_revision: str | None = None
     vision_model_id: str = "google/siglip2-so400m-patch14-384"
     vision_revision: str = "e8e487298228002f3d8a82e0cd5c8ea9c567f57f"
@@ -510,31 +608,16 @@ def _phase_steps(recipe: VisionAlignmentRecipeConfig) -> int:
     return _PHASES[recipe.phase].steps if recipe.steps is None else recipe.steps
 
 
-def _build_train_module(
-    phase: AlignmentPhase,
-    token_ids: Molmo2TokenIds,
-    sequence_length: int,
-    text: dict | None = None,
-    steps: int | None = None,
-    fresh_connector: bool = False,
-) -> MultimodalOLMoDDPTrainModuleConfig:
-    policy = _PHASES[phase]
-    horizon = policy.steps if steps is None else steps
-    connector_horizon = horizon
-    connector_lr, connector_warmup = policy.connector_lr, policy.connector_warmup
-    if policy.connector_decay_steps is not None:
-        # Bridge decays the connector over a fixed fraction of the phase.
-        connector_horizon = round(policy.connector_decay_steps * horizon / policy.steps)
-    elif fresh_connector:
-        # A later phase started from the text LM has a freshly initialized connector and image
-        # rows: give them bridge's connector schedule (peak, warmup, absolute decay length). Its
-        # 10% floor is the later phases' own connector LR, so after the decay they match the
-        # chained design.
-        bridge = _PHASES[AlignmentPhase.bridge]
-        assert bridge.connector_decay_steps is not None
-        connector_lr, connector_warmup = bridge.connector_lr, bridge.connector_warmup
-        connector_horizon = bridge.connector_decay_steps
-    # Text-side settings: inherited from the text config, else the recipe's legacy defaults.
+def text_train_settings(text: dict | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Optimizer and train-module settings inherited from a text config.
+
+    :param text: The text team's resolved config (``recipe.text_config``), or ``None`` for the
+        legacy s002 defaults.
+
+    :returns: Keyword arguments for the multimodal optimizer config and for the train module
+        config. Learning rates, schedules and parameter groups are not included.
+    """
     if text is not None:
         text_module = text["train_module"]
         text_optim = text_module["optim"]
@@ -604,6 +687,34 @@ def _build_train_module(
             ),
             ep_config=TransformerExpertParallelConfig(degree=8),
         )
+    return optim_settings, module_settings
+
+
+def _build_train_module(
+    phase: AlignmentPhase,
+    token_ids: Molmo2TokenIds,
+    sequence_length: int,
+    text: dict | None = None,
+    steps: int | None = None,
+    fresh_connector: bool = False,
+) -> MultimodalOLMoDDPTrainModuleConfig:
+    policy = _PHASES[phase]
+    horizon = policy.steps if steps is None else steps
+    connector_horizon = horizon
+    connector_lr, connector_warmup = policy.connector_lr, policy.connector_warmup
+    if policy.connector_decay_steps is not None:
+        # Bridge decays the connector over a fixed fraction of the phase.
+        connector_horizon = round(policy.connector_decay_steps * horizon / policy.steps)
+    elif fresh_connector:
+        # A later phase started from the text LM has a freshly initialized connector and image
+        # rows: give them bridge's connector schedule (peak, warmup, absolute decay length). Its
+        # 10% floor is the later phases' own connector LR, so after the decay they match the
+        # chained design.
+        bridge = _PHASES[AlignmentPhase.bridge]
+        assert bridge.connector_decay_steps is not None
+        connector_lr, connector_warmup = bridge.connector_lr, bridge.connector_warmup
+        connector_horizon = bridge.connector_decay_steps
+    optim_settings, module_settings = text_train_settings(text)
     return MultimodalOLMoDDPTrainModuleConfig(
         rank_microbatch_size=policy.microbatch_instances * sequence_length,
         max_sequence_length=sequence_length,
@@ -767,6 +878,7 @@ def _build_recipe(cli: CliContext) -> VisionAlignmentRecipeConfig:
         raise OLMoConfigurationError("recipe.router_lb_loss_weight must be finite and nonnegative")
     if recipe.steps is not None and (type(recipe.steps) is not int or recipe.steps < 1):
         raise OLMoConfigurationError("recipe.steps must be a positive integer")
+    resolve_hf_datasets_cache_dir(recipe, _clean_opts(cli.overrides))
     return recipe
 
 
@@ -913,7 +1025,12 @@ def _build_data_loader(
         pack_image_weight=1.0,
         continuous_stream=True,
         batch_metadata=True,
+        # Half the pixel bytes copied to the device; the bf16 tower sees the same values.
+        image_dtype=DType.bfloat16,
+        # Only the real crops are collated and copied (no padding to the batch's crop maximum).
+        compact_images=True,
         prefetch_workers=workers,
+        batch_prefetch_depth=recipe.batch_prefetch_depth,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
         group_sequence_quotas={"text": 16, "vision": 112}
@@ -1060,6 +1177,7 @@ def _build_launch(
     work_dir: str = VisionAlignmentRecipeConfig.work_dir,
     text: dict | None = None,
     data: AlignmentData = AlignmentData.alignment,
+    hf_datasets_cache_dir: str | None = None,
 ) -> BeakerLaunchConfig | None:
     if cli.cluster == "local":
         return None
@@ -1131,6 +1249,9 @@ def _build_launch(
     launch.env_vars = [entry for entry in launch.env_vars if entry.name not in env] + [
         BeakerEnvVar(name=k, value=v) for k, v in env.items()
     ]
+    # The parquet sources' Arrow caches on shared storage (also applied to a launcher-supplied
+    # launch config by mixed midtraining).
+    set_hf_datasets_cache(launch, hf_datasets_cache_dir)
     if data == AlignmentData.stage1_v3:
         launch.post_setup = " && ".join(
             step for step in (launch.post_setup, _STAGE1_V3_POST_SETUP) if step
@@ -1156,7 +1277,13 @@ def build_config(cli: CliContext) -> VisionAlignmentExperimentConfig:
     dataset, validation, token_ids = _build_datasets(recipe, checkpoint, parent, sequence_length)
     config = VisionAlignmentExperimentConfig(
         run_name=cli.run_name,
-        launch=_build_launch(cli, work_dir=recipe.work_dir, text=text, data=recipe.data),
+        launch=_build_launch(
+            cli,
+            work_dir=recipe.work_dir,
+            text=text,
+            data=recipe.data,
+            hf_datasets_cache_dir=recipe.hf_datasets_cache_dir,
+        ),
         model=_build_model(recipe, checkpoint, parent, token_ids, text=text),
         dataset=dataset,
         data_loader=_build_data_loader(cli, recipe, sequence_length, text=text),
@@ -1348,6 +1475,8 @@ def parse_cli_args() -> CliContext:
 
 def train(config: VisionAlignmentExperimentConfig) -> Trainer:
     """Build the model, train module, data loader and trainer, train, and return the trainer."""
+    # Before the data sources import ``datasets``; the launch environment normally has it.
+    export_hf_datasets_cache(config.recipe.hf_datasets_cache_dir)
     seed_all(config.init_seed)
     model = config.model.build(init_device="meta")
     train_module = config.train_module.build(model)
