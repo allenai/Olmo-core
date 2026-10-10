@@ -856,6 +856,7 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         source_loss_mass_targets: Optional[Dict[str, float]] = None,
         loss_group_weights: Optional[Dict[str, float]] = None,
         trim_microbatch_image_padding: bool = False,
+        padding_input_token_id: Optional[int] = None,
         **kwargs,
     ):
         from olmo_core.nn.vision import MultimodalOLMoDDPModel
@@ -878,6 +879,7 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             )
         if diagnostics_interval is not None and diagnostics_interval <= 0:
             raise OLMoConfigurationError("diagnostics_interval must be positive or None")
+        self.padding_input_token_id = padding_input_token_id
         self.trim_microbatch_image_padding = trim_microbatch_image_padding
         if trim_microbatch_image_padding:
             if model.cfg.vision.attention_dropout or model.cfg.vision.residual_dropout:
@@ -990,6 +992,15 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             raise OLMoConfigurationError("Compact images require the collator's image_crop_counts")
         if getattr(self, "trim_microbatch_image_padding", False) and images is not None:
             batch = _trim_microbatch_image_padding(batch)
+        padding_id = getattr(self, "padding_input_token_id", None)
+        if padding_id is not None and (token_mask := batch.get("router_token_mask")) is not None:
+            # Padding slots are never predicted, but the router losses still reach their inputs.
+            # A pad row the LM never trained is near zero, and the embedding norm amplifies its
+            # gradient by about 1/sqrt(eps); feed a trained token there instead.
+            batch = dict(batch)
+            batch["input_ids"] = batch["input_ids"].masked_fill(
+                ~token_mask.to(device=batch["input_ids"].device, dtype=torch.bool), padding_id
+            )
         input_ids, labels, model_kwargs = super()._prepare_batch(batch, labels)
         # Collator metadata that only the train module reads. The crop counts are part of the
         # compact image layout and stay.
@@ -1890,6 +1901,12 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     metadata and zero vision dropout. Retains at least one dummy crop and pooled row, existing
     vision collectives, and all LM token slots. FLOP estimates retain untrimmed batch shapes.
     """
+
+    padding_input_token_id: Optional[int] = None
+    """Token fed to the LM at padding slots (``router_token_mask`` false) instead of the
+    collator's pad id, e.g. EOS. Padding is never predicted either way; a pad embedding row the
+    LM never trained is near zero, and the embedding norm turns the router losses' gradient at
+    those slots into a huge gradient on that row. Requires the collator's batch metadata."""
 
     def _build_train_module(self, **kwargs) -> MultimodalOLMoDDPTrainModule:
         return MultimodalOLMoDDPTrainModule(**kwargs)

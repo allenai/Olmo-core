@@ -554,7 +554,16 @@ def _build_train_module(
     *,
     text_only: bool,
     text: dict | None = None,
+    padding_input_token_id: int | None = None,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
+    """
+    :param padding_input_token_id: With a token id (the merged stage passes EOS), padding slots
+        feed that token instead of the pad id, and the input embeddings get their own gradient
+        clip group (same LR and schedule as the LM). Rows the LM never trained (the pad id, the
+        FIM tokens of the text mix) are near zero, and the embedding norm amplifies their
+        gradients by about ``1/sqrt(eps)``; in the LM's clip group they would set the clipping
+        of every LM parameter.
+    """
     optim_settings, module_settings = text_train_settings(text)
     # Two sequences per micro-batch for the vision tower's memory, or the text run's own
     # micro-batch when that is smaller (one 65K sequence in the merged stage).
@@ -609,6 +618,15 @@ def _build_train_module(
                         "scheduler_name": "vision",
                     },
                 ),
+                *(
+                    [
+                        OptimGroupOverride(
+                            params=["*lm.embeddings.weight"], opts={"scheduler_name": "embeddings"}
+                        )
+                    ]
+                    if padding_input_token_id is not None
+                    else []
+                ),
                 *lm_groups,
             ],
             foreach_chunk_size=50_000_000,
@@ -624,9 +642,14 @@ def _build_train_module(
         response_logits_only=True,
         diagnostics_interval=100,
         scheduler=PerGroupScheduler(
-            schedulers={"connector": scheduler.copy(), "vision": scheduler.copy()},
+            schedulers={
+                "connector": scheduler.copy(),
+                "vision": scheduler.copy(),
+                **({"embeddings": scheduler.copy()} if padding_input_token_id is not None else {}),
+            },
             default=scheduler,
         ),
+        padding_input_token_id=padding_input_token_id,
         **module_settings,
     )
 
@@ -1119,6 +1142,7 @@ def build_config(
             loader.global_batch_size,
             text_only=recipe.text_loss_share == 1.0,
             text=text,
+            padding_input_token_id=tokenizer.eos_token_id if text_source is not None else None,
         ),
         trainer=_build_trainer(cli, recipe, budget, text, token_ids),
         recipe=recipe,

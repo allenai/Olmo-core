@@ -1457,3 +1457,20 @@ def test_merged_stage_runs_on_the_given_nodes(merged_stage):
     )
     assert merged_stage.build(launch=theirs).launch.num_nodes == 8
     assert merged_stage.build(launch=theirs, num_nodes=None).launch.num_nodes == 2
+
+
+def test_merged_stage_isolates_dead_embedding_rows(merged_stage, mixed_recipe):
+    """Padding feeds EOS and the input embeddings clip on their own; the 8K recipe is unchanged."""
+    config = merged_stage.build()
+    eos = TokenizerConfig.dolma2().eos_token_id
+    assert config.train_module.padding_input_token_id == eos
+    groups = {tuple(g.params): g.opts for g in config.train_module.optim.group_overrides}
+    assert groups[("*lm.embeddings.weight",)] == {"scheduler_name": "embeddings"}
+    schedulers = config.train_module.scheduler.schedulers
+    assert schedulers["embeddings"] == config.train_module.scheduler.default
+    eight_k = mixed_recipe.build()
+    assert eight_k.train_module.padding_input_token_id is None
+    assert "embeddings" not in eight_k.train_module.scheduler.schedulers
+    assert all(
+        g.params != ["*lm.embeddings.weight"] for g in eight_k.train_module.optim.group_overrides
+    )
