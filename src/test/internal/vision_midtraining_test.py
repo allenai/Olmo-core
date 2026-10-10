@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -7,6 +8,7 @@ import pytest
 
 from olmo_core.config import Config
 from olmo_core.data import NumpyFSLDatasetConfig, TokenizerConfig
+from olmo_core.data.composable import InstanceSourceConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
 from olmo_core.data.multimodal.pixmo_cap import PixMoCapDatasetConfig
@@ -1263,3 +1265,195 @@ def test_the_chunked_loss_is_compiled_unless_the_recipe_says_otherwise(
     config = _build_from_text_lm(tmp_path, *overrides)
     assert config.model.loss_chunk_size > 0
     assert config.model.compile_loss is (compile_loss is None)
+
+
+@dataclass
+class _MergedStreamConfig(InstanceSourceConfig):
+    """Stands in for the merged MT + LC stream (scaling-ladders ``merged_mt_lc.py``)."""
+
+    label: str = "midtraining-long-context"
+
+    def build(self, work_dir):
+        raise AssertionError("the recipe does not open the text source")
+
+
+MERGED_LENGTH, MERGED_BATCH, MERGED_STEPS = 65536, 256 * 65536, 8897
+
+
+@pytest.fixture
+def merged_stage(mixed_recipe, text_config, tmp_path, monkeypatch):
+    """The merged stage's text config (65K, one sequence per micro-batch, epoch duration, block
+    recompute with shared EP scratch, a 2 h process-group timeout) and an alignment parent whose
+    LM carries the 8K text runtime."""
+    from olmo_core.internal.vision_alignment_data import STAGE1_V3_MEAN_LOSS_WEIGHTS
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: PixMoCapDatasetConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    text = json.loads(json.dumps(text_config.config))
+    text["train_module"]["max_sequence_length"] = MERGED_LENGTH
+    text["train_module"]["rank_microbatch_size"] = MERGED_LENGTH
+    text["data_loader"] = {
+        "global_batch_size": MERGED_BATCH,
+        "work_dir": "/text-team/merged-cache",
+        "num_workers": 16,
+        "tokenizer": TokenizerConfig.dolma2().as_config_dict(),
+    }
+    text["dataset"] = [_MergedStreamConfig().as_config_dict()]
+    text["trainer"]["max_duration"] = {
+        "value": 1,
+        "unit": "epochs",
+        "_CLASS_": "olmo_core.train.common.Duration",
+    }
+    text["process_group_timeout_seconds"] = 7200.0
+    text["model"]["recompute_each_block"] = True
+    text_blocks = [text["model"]["block"], *text["model"]["block_overrides"].values()]
+    for block in text_blocks:
+        if block.get("ep"):
+            block["ep"]["share_dispatch_out"] = block["ep"]["share_combine_out"] = True
+
+    # The parent's LM: the text LM with the 8K runtime (no recompute, per-layer EP buffers).
+    lm = OLMoDDPModelConfig.from_dict(text_config.config["model"])
+    vision = VisionEncoderConfig()
+    model = MultimodalLMConfig(
+        lm=lm,
+        vision=vision,
+        connector=VisionConnectorConfig.from_vision_encoder(vision, output_dim=lm.d_model),
+        image_patch_token_id=100280,
+    )
+    parent = tmp_path / "joint-olmo35" / "step1500"
+    parent.mkdir(parents=True)
+    (parent / "config.json").write_text(
+        json.dumps({**mixed_recipe.metadata, "model": model.as_config_dict()})
+    )
+
+    from gantry.api import GitRepoState
+
+    launch_factory = Mock(
+        return_value=BeakerLaunchConfig(
+            name="mixed-merged-test",
+            cmd=["train"],
+            git=GitRepoState(
+                repo="allenai/OLMo-core",
+                repo_url="https://github.com/allenai/OLMo-core",
+                ref="a" * 40,
+                branch="vision",
+            ),
+        )
+    )
+    monkeypatch.setattr(vision_alignment, "build_launch_config", launch_factory)
+
+    def build(*overrides, num_nodes=8, defaults=True, launch=None):
+        recipe = [
+            f"--recipe.max_tokens={MERGED_STEPS * MERGED_BATCH}",
+            "--recipe.text_mean_loss_weight=65500.0",
+        ]
+        return build_config(
+            CliContext(
+                script="ladders/olmoe3/workloads/mixed_merged_mt_lc.py",
+                cmd=SubCmd.dry_run,
+                run_name="mixed-merged-test",
+                cluster="ai2/holmes",
+                overrides=[
+                    f"--recipe.parent_checkpoint={parent}",
+                    f"--recipe.output_root={tmp_path}/outputs",
+                    f"--recipe.work_dir={tmp_path}/cache",
+                    "--recipe.visual_data=stage1_v3",
+                    *(recipe if defaults else []),
+                    *overrides,
+                ],
+            ),
+            text_config=text,
+            launch=launch,
+            text_source=_MergedStreamConfig(),
+            num_nodes=num_nodes,
+        )
+
+    return SimpleNamespace(build=build, text=text, lm=lm)
+
+
+def test_merged_stage_takes_its_shape_from_the_text_config(merged_stage):
+    from olmo_core.data.multimodal.pretraining_replay import ComposableTextReplayConfig
+    from olmo_core.internal.vision_alignment_data import STAGE1_V3_MEAN_LOSS_WEIGHTS
+
+    config = merged_stage.build()
+    assert config.recipe.sequence_length == MERGED_LENGTH
+    assert config.data_loader.sequence_length == MERGED_LENGTH
+    assert config.train_module.max_sequence_length == MERGED_LENGTH
+    assert config.data_loader.global_batch_size == MERGED_BATCH
+    # One 65K sequence per micro-batch, as the text stage runs.
+    assert config.train_module.rank_microbatch_size == MERGED_LENGTH
+    assert config.trainer.max_duration == Duration.tokens(MERGED_STEPS * MERGED_BATCH)
+    assert config.process_group_timeout_seconds == 7200.0
+    assert config.launch.num_nodes == 8
+
+    # The text stage's own stream, read from its prepared indexes, PAD fed as EOS.
+    replay = config.dataset.sources["text_midtraining"]
+    assert isinstance(replay, ComposableTextReplayConfig)
+    assert replay.source == _MergedStreamConfig()
+    assert replay.work_dir == "/text-team/merged-cache"
+    tokenizer = TokenizerConfig.dolma2()
+    assert (replay.pad_token_id, replay.eos_token_id) == (
+        tokenizer.pad_token_id,
+        tokenizer.eos_token_id,
+    )
+    # Loss allocation: the measured text mean, the v3 means (identical at 65K), text 90%.
+    assert config.dataset.mean_loss_weight["text_midtraining"] == 65500.0
+    assert {
+        k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"
+    } == STAGE1_V3_MEAN_LOSS_WEIGHTS
+    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+    # Packing scales with the sequence: 64 crops and 48 candidates per 8,192 tokens.
+    assert (config.data_loader.pack_max_crops, config.data_loader.pack_buffer_size) == (512, 384)
+
+
+def test_merged_stage_lm_takes_the_text_stage_runtime(merged_stage):
+    """The parent's LM was built with the 8K runtime; the 65K stage recomputes every block and
+    shares the expert-parallel dispatch and combine scratch, as the text stage does."""
+    assert merged_stage.lm.recompute_each_block is False
+    config = merged_stage.build()
+    lm = config.model.lm
+    assert lm.recompute_each_block is True
+    eps = [b.ep for b in [lm.block, *(lm.block_overrides or {}).values()] if b.ep is not None]
+    assert eps, "the OLMo 3.5 fixture has expert-parallel blocks"
+    assert all(ep.share_dispatch_out and ep.share_combine_out for ep in eps)
+
+
+def test_merged_stage_requires_its_budget_and_text_mean(merged_stage):
+    with pytest.raises(OLMoConfigurationError, match="recipe.max_tokens"):
+        merged_stage.build("--recipe.text_mean_loss_weight=65500.0", defaults=False)
+    with pytest.raises(OLMoConfigurationError, match="text_mean_loss_weight"):
+        merged_stage.build(f"--recipe.max_tokens={MERGED_BATCH}", defaults=False)
+    with pytest.raises(OLMoConfigurationError, match="sequence length"):
+        merged_stage.build("--recipe.sequence_length=8192")
+    with pytest.raises(OLMoConfigurationError, match="finite and positive"):
+        merged_stage.build("--recipe.text_mean_loss_weight=0")
+
+
+def test_merged_stage_pack_knobs(merged_stage):
+    config = merged_stage.build("--recipe.pack_max_crops=400", "--recipe.pack_buffer_size=128")
+    assert (config.data_loader.pack_max_crops, config.data_loader.pack_buffer_size) == (400, 128)
+
+
+def test_merged_stage_runs_on_the_given_nodes(merged_stage):
+    from gantry.api import GitRepoState
+
+    theirs = BeakerLaunchConfig(
+        name="ladders-merged",
+        cmd=["train"],
+        git=GitRepoState(
+            repo="allenai/scaling-ladders",
+            repo_url="https://github.com/allenai/scaling-ladders",
+            ref="a" * 40,
+            branch="main",
+        ),
+    )
+    assert merged_stage.build(launch=theirs).launch.num_nodes == 8
+    assert merged_stage.build(launch=theirs, num_nodes=None).launch.num_nodes == 2

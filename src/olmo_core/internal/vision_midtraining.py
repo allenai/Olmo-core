@@ -8,9 +8,13 @@ from typing import Any
 
 from olmo_core.config import Config, DType, _clean_opts
 from olmo_core.data import InstanceFilterConfig, NumpyFSLDatasetConfig, TokenizerConfig
+from olmo_core.data.composable import InstanceSourceConfig
 from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
-from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
+from olmo_core.data.multimodal.pretraining_replay import (
+    ComposableTextReplayConfig,
+    PretrainingReplayConfig,
+)
 from olmo_core.data.source_mixture import SourceMixtureDatasetConfig, SourceMixtureList
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.io import is_url, normalize_path, resource_path
@@ -92,7 +96,10 @@ _VISION_LR_DIVISOR = 10
 no weight decay on either. On OLMo 3.5 this beat half the LM's LR with the text config's weight decay
 on every stage-1 task but olmOCR-Bench (10B microanneals from the 14T alignment endpoint, 2026-10-07)."""
 _NUM_NODES = 2
-"""Mixed midtraining runs on two eight-GPU nodes, as Rustin ran it."""
+"""Mixed midtraining runs on two eight-GPU nodes, as Rustin ran it, unless the caller passes a node
+count (the merged mid-training + long-context stage runs on the text stage's eight)."""
+_STAGE1_V3_MEANS = {8192: STAGE1_V3_MEAN_LOSS_WEIGHTS, 65536: STAGE1_V3_MEAN_LOSS_WEIGHTS}
+"""Stage-1 v3 means by the sequence lengths they were measured at (identical at both)."""
 
 
 @dataclass
@@ -134,10 +141,22 @@ class MixedMidtrainingRecipeConfig(Config):
     )
     """Reserved shares of aggregate visual loss mass, disjoint from example-weighted sources."""
     sequence_length: int = 8192
+    """Training sequence length. With a composable ``text_source`` (see :func:`build_config`) it
+    is the text config's ``train_module.max_sequence_length``."""
     max_tokens: int | None = None
     """Token-position budget, rounded up to a whole number of global batches. ``None`` uses the
-    text config's budget, else 50B tokens."""
+    text config's budget, else 50B tokens. Required when the text config's duration is in epochs
+    (the merged mid-training + long-context stage)."""
     max_crops: int = 8
+    text_mean_loss_weight: float | None = None
+    """Mean loss weight (``sum(loss_masks)``) per example of a masked text source, such as the
+    merged stage's 65K instances with their masked chunk boundaries. Required for masked text
+    unless ``dataset.mean_loss_weight.text_midtraining`` is set."""
+    pack_max_crops: int | None = None
+    """Image crops one packed sequence may hold. ``None``: 64 per 8,192 tokens."""
+    pack_buffer_size: int | None = None
+    """Examples the packer chooses from when filling a sequence. ``None``: 48 per 8,192 tokens,
+    so a 65K sequence fills as fully as an 8K one."""
     source_mix_path: str = _SOURCE_MIX_PATH
     text_dataset: NumpyFSLDatasetConfig | None = None
     """Optional explicit text dataset, required for a non-Dolma2 parent tokenizer."""
@@ -221,6 +240,9 @@ def _build_recipe(
         "recipe.sequence_length",
         "recipe.max_tokens",
         "recipe.max_crops",
+        "recipe.text_mean_loss_weight",
+        "recipe.pack_max_crops",
+        "recipe.pack_buffer_size",
     }
     numeric_maps = {
         "recipe.visual_example_weights",
@@ -254,9 +276,15 @@ def _build_recipe(
             "Set exactly one of recipe.parent_checkpoint (an alignment checkpoint) and "
             "recipe.pretraining_checkpoint (a text LM checkpoint, without alignment)"
         )
-    for name, minimum in (("sequence_length", 2), ("max_tokens", 1), ("max_crops", 1)):
+    for name, minimum in (
+        ("sequence_length", 2),
+        ("max_tokens", 1),
+        ("max_crops", 1),
+        ("pack_max_crops", 1),
+        ("pack_buffer_size", 1),
+    ):
         value = getattr(recipe, name)
-        if name == "max_tokens" and value is None:
+        if name in ("max_tokens", "pack_max_crops", "pack_buffer_size") and value is None:
             continue
         if type(value) is not int or value < minimum:
             raise OLMoConfigurationError(f"recipe.{name} must be an integer of at least {minimum}")
@@ -268,6 +296,10 @@ def _build_recipe(
         or not 0 < recipe.text_loss_share <= 1
     ):
         raise OLMoConfigurationError("recipe.text_loss_share must be finite and in (0, 1]")
+    if recipe.text_mean_loss_weight is not None and (
+        not isfinite(recipe.text_mean_loss_weight) or recipe.text_mean_loss_weight <= 0
+    ):
+        raise OLMoConfigurationError("recipe.text_mean_loss_weight must be finite and positive")
     resolve_hf_datasets_cache_dir(recipe, overrides)
     return recipe
 
@@ -312,7 +344,10 @@ def _pretrained_lm(text: dict | None, ancestry: str | None) -> OLMoDDPModelConfi
 
 
 def _lm_tokenizer(text: dict | None, checkpoint: str) -> TokenizerConfig:
-    raw = ((text or {}).get("dataset") or {}).get("tokenizer")
+    dataset = (text or {}).get("dataset")
+    # A composable text config lists instance sources; its loader names the tokenizer.
+    holder = dataset if isinstance(dataset, dict) else (text or {}).get("data_loader")
+    raw = (holder or {}).get("tokenizer")
     if raw is None:
         raw = (_read_checkpoint_config(checkpoint).get("dataset") or {}).get("tokenizer")
     if raw is None:
@@ -398,9 +433,26 @@ def _build_model(parent: dict[str, Any], text: dict | None = None) -> Multimodal
     if text is None:
         model.lm.recompute_each_block = True
         model.lm.recompute_all_blocks_by_chunk = False
-    # With a text config, the parent's LM already carries the text run's runtime (alignment
-    # built it from the same config). The wrapper feeds embeddings, which two-batch overlap
-    # cannot take.
+    else:
+        # The parent's LM carries the runtime of the text config alignment was built from; the
+        # stage's own text config decides activation recompute (the 65K merged stage needs it)
+        # and, with it, whether expert-parallel dispatch and combine buffers are shared scratch.
+        text_lm = text["model"]
+        for name in ("recompute_each_block", "recompute_all_blocks_by_chunk"):
+            if name in text_lm:
+                setattr(model.lm, name, text_lm[name])
+        # Override keys are layer indices, strings once the config has been through JSON.
+        text_overrides = {str(k): v for k, v in (text_lm.get("block_overrides") or {}).items()}
+        blocks = [(model.lm.block, text_lm.get("block"))] + [
+            (block, text_overrides.get(str(key)))
+            for key, block in (model.lm.block_overrides or {}).items()
+        ]
+        for block, text_block in blocks:
+            ep, text_ep = getattr(block, "ep", None), (text_block or {}).get("ep") or {}
+            for name in ("share_dispatch_out", "share_combine_out"):
+                if ep is not None and name in text_ep:
+                    setattr(ep, name, text_ep[name])
+    # The wrapper feeds embeddings, which two-batch overlap cannot take.
     model.lm.two_batch_overlap = False
     return model
 
@@ -468,8 +520,16 @@ def _build_data_loader(
         work_dir=f"{recipe.work_dir}/{cli.run_name}",
         seed=95818,
         pack=True,
-        pack_buffer_size=48,
-        pack_max_crops=64,
+        pack_buffer_size=(
+            recipe.pack_buffer_size
+            if recipe.pack_buffer_size is not None
+            else max(48, 48 * recipe.sequence_length // 8192)
+        ),
+        pack_max_crops=(
+            recipe.pack_max_crops
+            if recipe.pack_max_crops is not None
+            else max(64, 64 * recipe.sequence_length // 8192)
+        ),
         pack_image_weight=1.0,
         # Exact resume from the checkpointed cursor and the collator metadata the train module
         # reads, as in alignment.
@@ -496,6 +556,11 @@ def _build_train_module(
     text: dict | None = None,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
     optim_settings, module_settings = text_train_settings(text)
+    # Two sequences per micro-batch for the vision tower's memory, or the text run's own
+    # micro-batch when that is smaller (one 65K sequence in the merged stage).
+    microbatch = 2 * sequence_length
+    if text is not None:
+        microbatch = min(microbatch, int(text["train_module"]["rank_microbatch_size"]))
     scheduler: Scheduler
     if text is not None:
         text_optim = text["train_module"]["optim"]
@@ -523,7 +588,7 @@ def _build_train_module(
             )
         ]
     return MultimodalOLMoDDPTrainModuleConfig(
-        rank_microbatch_size=2 * sequence_length,
+        rank_microbatch_size=microbatch,
         max_sequence_length=sequence_length,
         optim=MultimodalOLMoDDPOptimizerConfig(
             lr=lm_lr,
@@ -666,6 +731,7 @@ def _build_launch(
     work_dir: str = MixedMidtrainingRecipeConfig.work_dir,
     text: dict | None = None,
     hf_datasets_cache_dir: str | None = None,
+    num_nodes: int = _NUM_NODES,
 ) -> BeakerLaunchConfig | None:
     # The alignment launcher: workspace, budget, secrets, and (with a text config) the text
     # run's image, install step, resources and environment.
@@ -673,7 +739,7 @@ def _build_launch(
         cli, work_dir=work_dir, text=text, hf_datasets_cache_dir=hf_datasets_cache_dir
     )
     if launch is not None:
-        launch.num_nodes = _NUM_NODES
+        launch.num_nodes = num_nodes
     return launch
 
 
@@ -693,12 +759,12 @@ def _explicit_mean(overrides: list[tuple[str, Any]], name: str) -> bool:
 def _configure_loss(
     config: MixedMidtrainingExperimentConfig,
     overrides: list[tuple[str, Any]],
-    text: NumpyFSLDatasetConfig,
+    masked_text: bool,
     initial_visual_sources: dict[str, Config],
     reusable_visual_calibration: bool,
 ) -> None:
     recipe, dataset = config.recipe, config.dataset
-    if text.label_mask_paths is None:
+    if not masked_text:
         expected_mean = float(recipe.sequence_length - 1)
         if dataset.mean_loss_weight.get(TEXT_SOURCE_NAME, expected_mean) != expected_mean:
             raise OLMoConfigurationError(
@@ -708,9 +774,14 @@ def _configure_loss(
     elif recipe.text_loss_share == 1.0:
         # A singleton source needs no relative calibration, including for masked text.
         dataset.mean_loss_weight[TEXT_SOURCE_NAME] = 1.0
+    elif recipe.text_mean_loss_weight is not None and not _explicit_mean(
+        overrides, TEXT_SOURCE_NAME
+    ):
+        dataset.mean_loss_weight[TEXT_SOURCE_NAME] = recipe.text_mean_loss_weight
     elif not _explicit_mean(overrides, TEXT_SOURCE_NAME):
         raise OLMoConfigurationError(
-            "Masked text requires explicit dataset.mean_loss_weight.text_midtraining"
+            "Masked text requires recipe.text_mean_loss_weight or "
+            "dataset.mean_loss_weight.text_midtraining"
         )
     if recipe.text_loss_share == 1.0:
         if set(dataset.sources) != {TEXT_SOURCE_NAME}:
@@ -793,19 +864,36 @@ def _validate_config(
             "Fixed sequence quotas cannot implement calibrated loss shares"
         )
     replay = dataset.sources.get(TEXT_SOURCE_NAME)
-    if not isinstance(replay, PretrainingReplayConfig) or replay.split != "all":
-        raise OLMoConfigurationError("Mixed midtraining requires the complete explicit text replay")
-    text = replay.resolve_dataset()
-    if text.tokenizer != tokenizer or text.sequence_length != recipe.sequence_length:
-        raise OLMoConfigurationError(
-            "Text source tokenizer and sequence length must match training"
-        )
-    if text.source_mixture_config is not None and (
-        text.source_mixture_config.requested_tokens != budget
-        or text.source_mixture_config.global_batch_size != loader.global_batch_size
-    ):
-        raise OLMoConfigurationError("Text allocation must retain the complete recipe token budget")
-    _configure_loss(config, overrides, text, initial_visual_sources, reusable_visual_calibration)
+    if isinstance(replay, ComposableTextReplayConfig):
+        # The text run's own instance source; its length is checked against the loader's when
+        # it is built, and its instances carry label masks.
+        if (replay.pad_token_id, replay.eos_token_id) != (
+            tokenizer.pad_token_id,
+            tokenizer.eos_token_id,
+        ):
+            raise OLMoConfigurationError("Composable text replay must use the training tokenizer")
+        masked_text = True
+    else:
+        if not isinstance(replay, PretrainingReplayConfig) or replay.split != "all":
+            raise OLMoConfigurationError(
+                "Mixed midtraining requires the complete explicit text replay"
+            )
+        text = replay.resolve_dataset()
+        if text.tokenizer != tokenizer or text.sequence_length != recipe.sequence_length:
+            raise OLMoConfigurationError(
+                "Text source tokenizer and sequence length must match training"
+            )
+        if text.source_mixture_config is not None and (
+            text.source_mixture_config.requested_tokens != budget
+            or text.source_mixture_config.global_batch_size != loader.global_batch_size
+        ):
+            raise OLMoConfigurationError(
+                "Text allocation must retain the complete recipe token budget"
+            )
+        masked_text = text.label_mask_paths is not None
+    _configure_loss(
+        config, overrides, masked_text, initial_visual_sources, reusable_visual_calibration
+    )
     if dataset.model_vocab_size != config.model.lm.vocab_size:
         raise OLMoConfigurationError("Dataset and model vocabulary sizes must agree")
     if config.model.connector.output_dim != config.model.lm.d_model:
@@ -853,6 +941,9 @@ def build_config(
     cli: CliContext,
     text_config: ExperimentConfig | dict[str, Any] | None = None,
     launch: BeakerLaunchConfig | None = None,
+    *,
+    text_source: InstanceSourceConfig | None = None,
+    num_nodes: int | None = None,
 ) -> MixedMidtrainingExperimentConfig:
     """Build mixed midtraining from checkpoint metadata and ordinary component overrides.
 
@@ -864,7 +955,13 @@ def build_config(
         example a scaling-ladders midtraining or microanneal workload), in place of
         ``recipe.text_config``. Either an experiment config or its ``as_config_dict()``.
     :param launch: That launcher's own Beaker launch config (image, secrets, environment), used
-        on two nodes in place of the one this recipe builds.
+        in place of the one this recipe builds.
+    :param text_source: The text run's composable instance source, used as the text source in
+        place of a NumPy dataset from the text config (the merged mid-training + long-context
+        stream of scaling-ladders ``merged_mt_lc.py``). Its indexes are read from the text
+        config's ``data_loader.work_dir``; the sequence length is the text config's, and
+        ``recipe.max_tokens`` and ``recipe.text_mean_loss_weight`` must be set.
+    :param num_nodes: Eight-GPU nodes to launch on (default two).
     """
     overrides = _clean_opts(cli.overrides)
     recipe = _build_recipe(cli, overrides)
@@ -881,6 +978,20 @@ def build_config(
         for section in ("model", "train_module", "trainer", "data_loader"):
             if section not in text:
                 raise OLMoConfigurationError(f"The text config lacks the {section!r} section")
+    if text_source is not None:
+        if text is None:
+            raise OLMoConfigurationError("A composable text source needs its text config")
+        if recipe.text_dataset is not None:
+            raise OLMoConfigurationError("Pass a text source or recipe.text_dataset, not both")
+        text_length = int(text["train_module"]["max_sequence_length"])
+        if (
+            any(name == "recipe.sequence_length" for name, _ in overrides)
+            and recipe.sequence_length != text_length
+        ):
+            raise OLMoConfigurationError(
+                "recipe.sequence_length must equal the text config's sequence length"
+            )
+        recipe.sequence_length = text_length
     phase: str | None = None
     if recipe.parent_checkpoint:
         parent, ancestry, phase = _resolve_parent(recipe)
@@ -915,12 +1026,26 @@ def build_config(
                 max_tokens = int(duration["value"]) * loader.global_batch_size
             else:
                 raise OLMoConfigurationError(
-                    "The text config's duration must be in tokens or steps"
+                    "The text config's duration must be in tokens or steps; set "
+                    "recipe.max_tokens for an epoch-based text stage"
                 )
     budget = (
         (max_tokens + loader.global_batch_size - 1) // loader.global_batch_size
     ) * loader.global_batch_size
-    text_data = _build_text_dataset(recipe, tokenizer, budget, loader.global_batch_size, text)
+    text_replay: Config
+    if text_source is not None:
+        assert text is not None
+        text_replay = ComposableTextReplayConfig(
+            source=text_source.copy(),
+            work_dir=str(text["data_loader"]["work_dir"]),
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+        masked_text = True
+    else:
+        text_data = _build_text_dataset(recipe, tokenizer, budget, loader.global_batch_size, text)
+        text_replay = PretrainingReplayConfig(dataset=text_data.copy(), split="all")
+        masked_text = text_data.label_mask_paths is not None
     token_ids: Molmo2TokenIds | None = None
     if recipe.parent_checkpoint:
         model = _build_model(parent, text)
@@ -940,12 +1065,12 @@ def build_config(
     model.compile_loss = recipe.compile_loss
     stage1_v3 = recipe.visual_data == "stage1_v3" and recipe.text_loss_share < 1.0
     if stage1_v3:
-        means = dict(STAGE1_V3_MEAN_LOSS_WEIGHTS)
+        means = dict(_STAGE1_V3_MEANS.get(recipe.sequence_length, {}))
         recipe.visual_example_weights = {}
         recipe.visual_loss_shares = dict(STAGE1_V3_LOSS_TARGETS)
     else:
         means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if recipe.text_loss_share < 1.0 else {}
-    if text_data.label_mask_paths is None:
+    if not masked_text:
         means[TEXT_SOURCE_NAME] = float(recipe.sequence_length - 1)
     elif recipe.text_loss_share == 1.0:
         means[TEXT_SOURCE_NAME] = 1.0
@@ -965,17 +1090,8 @@ def build_config(
             midtraining_artifact_root=recipe.midtraining_artifact_root,
         )
     dataset = MultimodalMixtureConfig(
-        tokenizer=text_data.tokenizer.copy(),
-        sources=dict(
-            sorted(
-                {
-                    **visual_sources,
-                    TEXT_SOURCE_NAME: PretrainingReplayConfig(
-                        dataset=text_data.copy(), split="all"
-                    ),
-                }.items()
-            )
-        ),
+        tokenizer=tokenizer.copy(),
+        sources=dict(sorted({**visual_sources, TEXT_SOURCE_NAME: text_replay}.items())),
         mean_loss_weight=means,
         tokenizer_revision=revision,
         tokenizer_cache_dir=recipe.hf_cache_dir,
@@ -989,9 +1105,10 @@ def build_config(
                 work_dir=recipe.work_dir,
                 text=text,
                 hf_datasets_cache_dir=recipe.hf_datasets_cache_dir,
+                num_nodes=num_nodes or _NUM_NODES,
             )
             if launch is None
-            else launch.replace(num_nodes=_NUM_NODES)
+            else launch.replace(num_nodes=num_nodes or _NUM_NODES)
         ),
         model=model,
         dataset=dataset,
@@ -1008,6 +1125,14 @@ def build_config(
         pretraining_checkpoint=ancestry,
         alignment_phase=phase,
         init_seed=6198,
+        **{
+            # Process-level settings of the text run, as alignment inherits them.
+            name: text[name]
+            for name in ("backend", "process_group_timeout_seconds")
+            if text is not None
+            and name in text
+            and name in {f.name for f in fields(MixedMidtrainingExperimentConfig)}
+        },
     ).merge(cli.overrides)
     if launch is not None and config.launch is not None:
         # A launcher-supplied launch config (scaling-ladders) skips the alignment launcher's
@@ -1021,7 +1146,7 @@ def build_config(
         )
     reusable_visual_calibration = (
         stage1_v3
-        and recipe.sequence_length == 8192
+        and recipe.sequence_length in _STAGE1_V3_MEANS
         and tokenizer == TokenizerConfig.dolma2()
         and revision == _DOLMA2_REVISION
     ) or (

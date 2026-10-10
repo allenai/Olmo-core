@@ -534,4 +534,6 @@ STAGE1_V3_MEAN_LOSS_WEIGHTS: dict[str, float] = {
 """Calibration of the stage-1 v3 sources as the alignment recipe builds them for a document-mode
 LM (:func:`build_stage1_v3_sources` with ``annotation_sampling="one"``, dolma2 tokenizer at the
 pinned revision, 8,192 tokens): :meth:`MultimodalMixtureConfig.estimate_mean_loss_weights` with
-128 samples per source, seed 0. Perception and joint build the same sources."""
+128 samples per source, seed 0. Perception and joint build the same sources. Measured again at
+65,536 tokens (2026-10-10): every source's mean is identical, since no sampled example reaches
+8,192 tokens, so these means hold for the merged mid-training + long-context stage too."""
