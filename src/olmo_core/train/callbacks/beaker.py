@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Dict, Optional
 
 from olmo_core.distributed.utils import get_rank
+from olmo_core.launch.utils import is_running_in_beaker_batch_job
 
 from .callback import Callback
 from .comet import CometCallback
@@ -46,8 +47,6 @@ class BeakerCallback(Callback):
 
     def post_attach(self):
         if self.enabled is None:
-            from olmo_core.launch.beaker import is_running_in_beaker_batch_job
-
             self.enabled = is_running_in_beaker_batch_job()
 
     def pre_train(self):
