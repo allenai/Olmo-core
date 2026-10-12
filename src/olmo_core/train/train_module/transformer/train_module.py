@@ -425,6 +425,20 @@ class TransformerTrainModule(TrainModule):
             # for the loss so that each rank contributes to the loss calculation fairly.
             batch_num_tokens_for_loss += (~instance_mask).sum() * batch_num_tokens_per_instance
 
+        # Prevent division by zero when all labels on this rank are ignored.
+        # This can happen when data distribution places all-padding sequences on a single rank.
+        # Using batch_num_tokens as fallback means the loss for this rank will be ~0 (sum of
+        # zero losses / total tokens), which is correct behavior.
+        if batch_num_tokens_for_loss == 0:
+            _rank = dist.get_rank() if dist.is_initialized() else 0
+            log.warning(
+                f"rank={_rank}: all labels are ignore_index, "
+                f"setting loss divisor to batch_num_tokens ({batch_num_tokens}) to avoid NaN"
+            )
+            batch_num_tokens_for_loss = move_to_device(
+                torch.tensor(batch_num_tokens, dtype=batch_num_tokens_for_loss.dtype), self.device
+            )
+
         # Batch losses to record.
         ce_batch_loss = move_to_device(torch.tensor(0.0), self.device)
         z_batch_loss: Optional[torch.Tensor] = None
