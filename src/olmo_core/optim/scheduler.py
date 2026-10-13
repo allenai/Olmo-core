@@ -11,13 +11,13 @@ import torch
 from ..config import Config, Registrable, StrEnum
 from ..distributed.utils import get_rank
 from ..exceptions import OLMoConfigurationError
+from ..distributed.utils import get_rank
 from .config import INITIAL_LR_FIELD, LR_FIELD
 
 if TYPE_CHECKING:
     from olmo_core.train import Trainer
 
 log = logging.getLogger(__name__)
-
 
 def _warn_rank0(message: str, category: type[Warning], *, stacklevel: int = 1) -> None:
     if get_rank() == 0:
@@ -100,7 +100,6 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
             group[self.lr_field] = new_lr
 
         return new_lr
-
 
 @Scheduler.register("constant")
 @dataclass

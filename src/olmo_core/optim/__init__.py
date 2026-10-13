@@ -7,7 +7,7 @@ from .config import (
     OptimConfig,
     OptimGroupOverride,
 )
-from .dion import DionConfig
+from .dion import DionConfig, Dion3Config
 from .lion import Lion, LionConfig, SkipStepLion, SkipStepLionConfig
 from .moe_optimizer import OLMoDDPOptimizer, OLMoDDPOptimizerConfig
 from .muon import MuonConfig, NorMuonConfig
@@ -46,6 +46,7 @@ __all__ = [
     "OLMoDDPOptimizer",
     "OLMoDDPOptimizerConfig",
     "DionConfig",
+    "Dion3Config",
     "SkipStepLionConfig",
     "SkipStepLion",
     "NoOpConfig",

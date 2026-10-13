@@ -220,6 +220,7 @@ class MuonConfig(MatrixAwareOptimConfig):
 
 
 @OptimConfig.register("nor_muon")
+@dataclass
 class NorMuonConfig(MuonConfig):
     """
     Configuration class for building a :class:`NorMuon` optimizer.
