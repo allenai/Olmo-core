@@ -304,6 +304,12 @@ class BeakerLaunchConfig(Config):
     min_runtime: str | None = None
     """Minimum guaranteed runtime before the job can be preempted, e.g. ``"15m"``."""
 
+    gh_token_secret: str | None = None
+    """
+    The name of the Beaker secret holding the GitHub token gantry uses to clone the source
+    repo. ``None`` keeps gantry's default (``GITHUB_TOKEN`` in the workspace).
+    """
+
     retries: int | None = None
     """
     The number of times to retry the experiment if it fails.
@@ -647,6 +653,7 @@ class BeakerLaunchConfig(Config):
             google_credentials_secret=self.google_credentials_secret,
             aws_config_secret=self.aws_config_secret,
             aws_credentials_secret=self.aws_credentials_secret,
+            **({"gh_token_secret": self.gh_token_secret} if self.gh_token_secret else {}),
             weka=[(b.bucket, b.mount) for b in self.weka_buckets],
             # Outputs.
             results=self.result_dir,
