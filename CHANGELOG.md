@@ -30,6 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Allocate batch-rounded source mixtures across configured source ratios before path-capacity refill,
+  and reject mixes that lack enough per-source complete sequences for the requested training steps.
+  Honor fractional repetition limits when apportioning and materializing complete sequences,
+  without undercounting exact decimal repetition or source-fraction boundaries,
+  and preserve decimal target-ratio ties when assigning complete sequences.
+  Trim later repetition occurrences before original paths when per-path rounding exceeds a
+  source quota, preserving unique-shard coverage and explicit duplicate path occurrences.
+  Exhaust earlier occurrence capacity before refilling later repetitions when shards cannot
+  contribute complete sequences, preserving available unique sequences downstream.
+  Mixtures whose requested token count rounds up to full batches can have different allocations,
+  fingerprints, and resumed data order.
 - Metadata-backed packed datasets now include sidecar content hashes in packing-cache keys and dataset fingerprints, invalidating stale boundaries even after same-size corrections. Document lengths preserve EOS/BOS padding segmentation. Local array-backed defaults are unchanged (https://github.com/allenai/Olmo-core/pull/843).
 - Apply opt-in Q/K gain expansion to eval-only and model-only DDP checkpoint loads, and reject forced expert assignments and biased KDA convolutions during HF export.
 - Validate normalization throughout MoE HF exports, preserve attention-only gates and resolved EOS/padding IDs, and reject unsupported shared-expert routing before conversion.

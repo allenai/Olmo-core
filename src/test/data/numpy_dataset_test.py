@@ -464,6 +464,12 @@ def test_numpy_fsl_mixture_dataset(tmp_path: Path):
         global_batch_size=sequence_length * bsz,
     )
 
+    mixture = mixture_config.build(npdtype=npdtype, sequence_length=sequence_length)
+    assert [[item.tokens for item in source.path_tokens] for source in mixture.sources] == [
+        [8088],
+        [2024],
+    ]
+
     ds = NumpyFSLDatasetConfig(
         source_mixture_config=mixture_config,
         sequence_length=sequence_length,
@@ -479,7 +485,7 @@ def test_numpy_fsl_mixture_dataset(tmp_path: Path):
     # first_src_sequence = mmap1[0][1][:sequence_length].tolist()
     # Note that changing the seed here could result in the inclusion of the first sequence from the mock data.
     # assert not np.array_equal(first_src_sequence, first_ds_item)
-    expected = "aff421"
+    expected = "d5e1eb"
     assert ds.fingerprint.endswith(
         expected
     ), f"Fingerprint mismatch, expected {expected}, got {ds.fingerprint[-6:]}...Do you need to update expected fingerprint?"
@@ -490,14 +496,18 @@ def test_numpy_fsl_mixture_dataset(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    "mmap1_size, mmap2_size, expected_fingerprint",
+    "mmap1_size, mmap2_size, expected_fingerprint, expected_mmap1_tokens",
     [
-        (10 * 1000 + 7, 20 * 1000 + 1, "feabd0"),
-        (10 * 1000, 20 * 1000, "9dc4c8"),
+        (10 * 1000 + 7, 20 * 1000 + 1, "f0a0d68", [12508, 12508, 3516, 3520]),
+        (10 * 1000, 20 * 1000, "dc3cab", [12500, 12500, 3524, 3528]),
     ],
 )
 def test_numpy_fsl_mixture_dataset_with_repetition(
-    tmp_path: Path, mmap1_size: int, mmap2_size: int, expected_fingerprint: str
+    tmp_path: Path,
+    mmap1_size: int,
+    mmap2_size: int,
+    expected_fingerprint: str,
+    expected_mmap1_tokens: List[int],
 ):
     # NOTE: At small token counts the take_ratio can be finicky so we test at small but real world-ish scale
     npdtype = np.uint16
@@ -555,6 +565,12 @@ def test_numpy_fsl_mixture_dataset_with_repetition(
         seed=seed,
         global_batch_size=sequence_length * bsz,  # 10k sequences of length 4
     )
+
+    mixture = mixture_config.build(npdtype=npdtype, sequence_length=sequence_length)
+    assert [[item.tokens for item in source.path_tokens] for source in mixture.sources] == [
+        expected_mmap1_tokens,
+        [8012],
+    ]
 
     ds = NumpyFSLDatasetConfig(
         source_mixture_config=mixture_config,
