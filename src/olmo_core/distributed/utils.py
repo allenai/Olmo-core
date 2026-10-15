@@ -585,3 +585,21 @@ def unhide_from_torch(x: Union[torch.Tensor, _HiddenTensor]) -> torch.Tensor:
         return x.x
     else:
         return x
+
+
+def reduce_distributed_failure_flag(
+    local_failed: bool,
+    device: torch.device,
+    group: Optional[dist.ProcessGroup] = None,
+) -> bool:
+    """
+    Return ``True`` if any rank in ``group`` reported ``local_failed``.
+
+    Use at synchronized points (e.g. after forward CE) so one rank's failure aborts
+    all ranks quickly instead of leaving them in an NCCL collective watchdog timeout.
+    """
+    if not is_distributed():
+        return local_failed
+    flag = torch.tensor(1.0 if local_failed else 0.0, device=device)
+    dist.all_reduce(flag, op=dist.ReduceOp.MAX, group=group)
+    return bool(flag.item() > 0)
