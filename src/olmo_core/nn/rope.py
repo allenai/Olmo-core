@@ -493,6 +493,7 @@ class RotaryEmbedding(RotaryEmbeddingBase):
         pos_cos: Optional[torch.Tensor] = None,
         freqs_cis: Optional[torch.Tensor] = None,
         cu_doc_lens: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Apply RoPE to query (``q``) and key (``k``) matrices.
@@ -516,6 +517,12 @@ class RotaryEmbedding(RotaryEmbeddingBase):
 
         if cu_doc_lens is not None and start_pos is not None:
             raise RuntimeError("'cu_doc_lens' and 'start_pos' are mutually exclusive")
+
+        if position_ids is not None:
+            if cu_doc_lens is not None:
+                raise RuntimeError("'position_ids' and 'cu_doc_lens' are mutually exclusive")
+            if start_pos is not None:
+                raise RuntimeError("'position_ids' and 'start_pos' are mutually exclusive")
 
         if head_first:
             q_len = q.size(2)
@@ -555,6 +562,24 @@ class RotaryEmbedding(RotaryEmbeddingBase):
                 pos_idx = (flat_idx - cu_doc_lens[doc_id]).view(B, k_len)
                 sin_sel = pos_sin.index_select(0, pos_idx.reshape(-1)).view(B, k_len, -1)
                 cos_sel = pos_cos.index_select(0, pos_idx.reshape(-1)).view(B, k_len, -1)
+                if head_first:
+                    sin_qk = sin_sel.unsqueeze(1)
+                    cos_qk = cos_sel.unsqueeze(1)
+                else:
+                    sin_qk = sin_sel.unsqueeze(2)
+                    cos_qk = cos_sel.unsqueeze(2)
+                q_ = self._apply_rotary_pos_emb(sin_qk, cos_qk, q_)
+                k_ = self._apply_rotary_pos_emb(sin_qk, cos_qk, k_)
+            elif position_ids is not None:
+                # Explicit per-token positions (e.g. subsegment / branch packing where
+                # parallel branches share an overlapping position range). Gather the
+                # precomputed sin/cos for each token's position. ``position_ids`` has
+                # shape ``(B, k_len)`` and every entry must be < ``seq_len_needed``.
+                if q_len != k_len:
+                    raise RuntimeError("'position_ids' requires q_len == k_len")
+                pos_idx = position_ids.to(torch.long)
+                sin_sel = pos_sin.index_select(0, pos_idx.reshape(-1)).view(*pos_idx.shape, -1)
+                cos_sel = pos_cos.index_select(0, pos_idx.reshape(-1)).view(*pos_idx.shape, -1)
                 if head_first:
                     sin_qk = sin_sel.unsqueeze(1)
                     cos_qk = cos_sel.unsqueeze(1)

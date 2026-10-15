@@ -195,6 +195,13 @@ class TransformerBlockConfig(ModuleConfig):
     """
     Dropout probability.
     """
+    masked_dropout: Optional[float] = None
+    """
+    Residual-stream dropout applied only to tokens selected by the ``drop_mask`` passed to
+    the block (mm_olmo's ``response_residual_dropout``: Molmo2 drops 10% of the residual on
+    *response* tokens while leaving prompt and image tokens untouched). Tokens outside the
+    mask keep the :data:`dropout` rate. Requires the ``default`` block type.
+    """
     attention_residual_alpha: Optional[float] = None
     """
     A scaling factor applied to the attention/recurrent output before adding it to the residual stream.
@@ -248,6 +255,12 @@ class TransformerBlockConfig(ModuleConfig):
             init_device=init_device,
             cache=cache,
         )
+
+        if self.masked_dropout and self.name != TransformerBlockType.default:
+            raise OLMoConfigurationError(
+                f"'masked_dropout' is only supported by the '{TransformerBlockType.default}' "
+                f"block type, got '{self.name}'"
+            )
 
         try:
             if self.name == TransformerBlockType.default:
@@ -346,11 +359,26 @@ class TransformerConfig(ModelConfig):
     block_overrides: Optional[Dict[int, TransformerBlockConfig]] = None
     embed_scale: Optional[float] = None
     tie_word_embeddings: bool = False
+    n_extra_vocab: int = 0
+    """
+    Number of extra token rows to append to the embedding table as a *separate* parameter
+    (see :class:`~olmo_core.nn.embedding.SplitVocabEmbedding`). When non-zero,
+    :data:`vocab_size` is the **base** vocab: lookups accept ``vocab_size + n_extra_vocab``
+    IDs while the LM head spans only ``vocab_size``, so the extra tokens are inputs and never
+    prediction targets. Used by Molmo2 for its 128 image-special tokens, and it lets the
+    pretrained base rows be frozen on their own (``embeddings.weight``).
+    """
 
     def __post_init__(self):
         if self.tie_word_embeddings and self.name == TransformerType.normalized:
             raise OLMoConfigurationError(
                 "Tying word embeddings is not supported with the normalized transformer"
+            )
+        if self.n_extra_vocab < 0:
+            raise OLMoConfigurationError("'n_extra_vocab' cannot be negative")
+        if self.n_extra_vocab and self.name == TransformerType.normalized:
+            raise OLMoConfigurationError(
+                "'n_extra_vocab' is not supported with the normalized transformer"
             )
         validate_block_resolution_config(
             n_layers=self.n_layers,
@@ -403,6 +431,7 @@ class TransformerConfig(ModelConfig):
                 block_pattern=self.block_pattern,
                 embed_scale=self.embed_scale,
                 tie_word_embeddings=self.tie_word_embeddings,
+                n_extra_vocab=self.n_extra_vocab,
             )
         elif self.name == TransformerType.normalized:
             assert self.embedding_norm is None

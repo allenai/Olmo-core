@@ -239,3 +239,35 @@ def test_multi_layer_vit():
     input_ids, images, idx = _make_inputs(batch=2, seq_len=16)
     out = model(input_ids, images=images, pooled_patches_idx=idx)
     assert out.shape == (2, 16, _LM_VOCAB)
+
+
+@pytest.mark.parametrize("flex_env", [False, True])
+def test_masks_follow_the_actual_backend_not_the_environment(monkeypatch, flex_env):
+    """A torch-backend LM must get dense masks even if OLMO2_FLEX_ATTN=1 is set."""
+    from olmo_core.nn.attention import AttentionBackendName
+
+    if flex_env:
+        monkeypatch.setenv("OLMO2_FLEX_ATTN", "1")
+    else:
+        monkeypatch.delenv("OLMO2_FLEX_ATTN", raising=False)
+    torch.manual_seed(0)
+    cfg = _tiny_multimodal_cfg()
+    cfg.lm = TransformerConfig.olmo2_1M(
+        vocab_size=_LM_VOCAB, attn_backend=AttentionBackendName.torch
+    )
+    model = cfg.build(init_device="cpu").eval()
+    input_ids, images, idx = _make_inputs(batch=2, seq_len=16)
+    # Two examples packed per row: the second must not see the first.
+    example_ids = torch.tensor([[0] * 8 + [1] * 8] * 2)
+    with torch.no_grad():
+        masked = model(input_ids, images=images, pooled_patches_idx=idx, example_ids=example_ids)
+        unmasked = model(input_ids, images=images, pooled_patches_idx=idx)
+    assert not torch.allclose(masked, unmasked)
+
+
+def test_vision_sdpa_cpu_dropout():
+    from olmo_core.nn.vision.sdpa import vision_scaled_dot_product_attention
+
+    q = torch.randn(1, 2, 4, 8)
+    out = vision_scaled_dot_product_attention(q, q, q, dropout_p=0.1)
+    assert out.shape == q.shape
