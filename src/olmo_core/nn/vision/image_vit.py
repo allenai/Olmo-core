@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
+from olmo_core.kernels.layer_norm import layer_norm
 from olmo_core.nn.vision.config import VisionEncoderConfig
 from olmo_core.nn.vision.sdpa import vision_scaled_dot_product_attention
 
@@ -98,6 +99,21 @@ class ViTAttention(nn.Module):
 
     def forward(self, x: torch.Tensor, kv: Optional[torch.Tensor] = None) -> torch.Tensor:
         B, N, _ = x.shape
+        dropout_p = self.attn_drop.p if self.attn_drop is not None and self.training else 0.0
+        if kv is None and self.num_kv_groups == 1:
+            # Self-attention: one projection for q, k and v (the parameters stay separate, as
+            # checkpoints store them), read by the attention as strided views of its output, so
+            # no head-transposed copies are made.
+            weight = torch.cat([self.wq.weight, self.wk.weight, self.wv.weight])
+            bias = torch.cat([self.wq.bias, self.wk.bias, self.wv.bias])
+            qkv = F.linear(x, weight, bias).view(B, N, 3, self.num_heads, self.head_dim)
+            q, k, v = (t.transpose(1, 2) for t in qkv.unbind(2))
+            out = vision_scaled_dot_product_attention(
+                q, k, v, dropout_p=dropout_p, cudnn_first_on_sm100=True
+            )
+            out = self.wo(out.transpose(1, 2).reshape(B, N, self.embed_dim))
+            return self.resid_drop(out)
+
         src = x if kv is None else kv
 
         q = self.wq(x).reshape(B, N, self.num_heads, self.head_dim)
@@ -113,7 +129,7 @@ class ViTAttention(nn.Module):
             k.transpose(1, 2).contiguous(),
             v.transpose(1, 2).contiguous(),
             is_causal=False,
-            dropout_p=self.attn_drop.p if self.attn_drop is not None and self.training else 0.0,
+            dropout_p=dropout_p,
         ).transpose(1, 2)
 
         out = out.reshape(B, N, self.embed_dim)
@@ -148,16 +164,29 @@ class ViTMLP(nn.Module):
         return self.w2(self.act(self.w1(x)))
 
 
+class _LayerNorm(nn.LayerNorm):
+    """
+    :class:`torch.nn.LayerNorm` computed by :func:`~olmo_core.kernels.layer_norm.layer_norm`
+    (Triton kernels on CUDA, whose weight and bias gradients stay at memory bandwidth for any
+    number of rows).
+    """
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.weight is None or self.bias is None or len(self.normalized_shape) != 1:
+            return super().forward(x)
+        return layer_norm(x, self.weight, self.bias, self.eps)
+
+
 class ViTBlock(nn.Module):
     """Standard pre-LN ViT residual block (attention + MLP)."""
 
     def __init__(self, cfg: VisionEncoderConfig, init_device: str = "cpu"):
         super().__init__()
         dtype = cfg.dtype.as_pt()
-        self.attn_norm = nn.LayerNorm(
+        self.attn_norm = _LayerNorm(
             cfg.image_emb_dim, eps=cfg.image_norm_eps, device=init_device, dtype=dtype
         )
-        self.ffn_norm = nn.LayerNorm(
+        self.ffn_norm = _LayerNorm(
             cfg.image_emb_dim, eps=cfg.image_norm_eps, device=init_device, dtype=dtype
         )
         self.attn = ViTAttention(cfg, init_device=init_device)

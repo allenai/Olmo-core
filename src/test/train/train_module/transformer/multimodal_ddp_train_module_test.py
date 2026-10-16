@@ -1,5 +1,6 @@
 """Multimodal OLMoDDP training, metrics, and native checkpoint contracts."""
 
+import dataclasses
 from types import SimpleNamespace
 from typing import Optional
 
@@ -687,6 +688,22 @@ def _run_balanced_crops_step_matches_unbalanced():
     # Balanced: ceil(4 / 2) + ceil(3 / 2) + ceil(2 / 2); unbalanced: 3 + 2 + 1.
     assert metrics[True]["vision/encoder crops per rank"] == 5.0
     assert metrics[True]["vision/encoder crops per rank unbalanced"] == 6.0
+
+
+@pytest.mark.parametrize("dropout", ["attention_dropout", "residual_dropout"])
+def test_balanced_vit_crops_reject_vision_dropout(dropout):
+    model_config = _tiny_multimodal_model_config()
+    model_config = dataclasses.replace(
+        model_config, vision=dataclasses.replace(model_config.vision, **{dropout: 0.1})
+    )
+    config = MultimodalOLMoDDPTrainModuleConfig(
+        rank_microbatch_size=8,
+        max_sequence_length=8,
+        optim=MultimodalOLMoDDPOptimizerConfig(lr=1e-3),
+        balance_vit_crops=True,
+    )
+    with pytest.raises(OLMoConfigurationError, match="zero vision attention and residual dropout"):
+        config.build(model_config.build(init_device="meta"), device=torch.device("cpu"))
 
 
 @requires_multi_gpu

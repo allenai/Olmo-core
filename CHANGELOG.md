@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `balance_vit_crops` to `MultimodalOLMoDDPTrainModuleConfig` and the mixed mid-training recipe (off by default): the vision encoder's image crops are shared evenly among the ranks (`olmo_core.nn.vision.crop_balance`) instead of every rank waiting for the one holding the most. Features and summed gradients are unchanged up to floating-point rounding; on the v4 merged mid-training mixture at 16 GPUs a step takes 35.7 s instead of 58.7 s.
 - Added Ulysses context parallelism for `KimiDeltaAttention` (`apply_cp`), mirroring the `GatedDeltaNet` all-to-all head/sequence exchange, with the in-kernel gate parameters sliced to each rank's heads.
 - Added a Ulysses context-parallel parity test for the recurrent mixers (`GatedDeltaNet`, `KimiDeltaAttention`) that compares per-stage activations, outputs, and gradients against a single-process reference, including packed documents that straddle the CP split, plus a model-level gradient-parity test for `gdn` and `kda` under Ulysses CP.
+- Added `olmo_core.kernels.layer_norm`: LayerNorm with an affine weight and bias as Triton kernels whose gradients stay at memory bandwidth for any number of rows. The vision encoder's blocks use it.
+
+### Changed
+
+- The vision encoder's self-attention projects q, k and v in one matmul and hands them to the attention as strided views (no head-transposed copies), trying cuDNN's attention first on SM100 GPUs; `VIT_CROP_MICROBATCH` defaults to no chunking. Parameters and checkpoints are unchanged.
+- The vision connector gathers the pooled patches with one `index_select` and computes the pooling attention over each group's few patches as elementwise ops. With compact images and host-side indices, `MultimodalLM.encode_images` pools only the valid rows; the `connector output RMS` diagnostic now covers those rows only.
 
 ## [v3.0.0](https://github.com/allenai/Olmo-core/releases/tag/v3.0.0) - 2026-09-30
 

@@ -564,8 +564,16 @@ class MultimodalLM(nn.Module):
         return int(vit + connector)
 
     def _vit_crop_microbatch(self) -> int:
-        """Max crops per ViT forward (0 = no chunking). Env: ``VIT_CROP_MICROBATCH``."""
-        raw = os.environ.get("VIT_CROP_MICROBATCH", "16")
+        """
+        Max crops per ViT forward per batch row (0, the default: no chunking). Env:
+        ``VIT_CROP_MICROBATCH``.
+
+        Chunks bound the encoder's working memory (under activation checkpointing, one block's
+        recomputed activations for one chunk instead of all crops: about 10 GB at 400 crops), but
+        small ones leave the GPU waiting on kernel launches: with 16-crop chunks it sat idle for
+        about 38% of the encoder's time on B300s.
+        """
+        raw = os.environ.get("VIT_CROP_MICROBATCH", "0")
         return int(raw)
 
     def _vit_forward_features(self, images: torch.Tensor) -> torch.Tensor:
@@ -583,6 +591,7 @@ class MultimodalLM(nn.Module):
         images: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
         counts: Optional[List[int]] = None,
+        compact_pooled_rows: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Encode pre-patchified images into LM-space pooled features.
@@ -605,7 +614,12 @@ class MultimodalLM(nn.Module):
         :param counts: Crops per example as :func:`_crop_counts` derives them; computed here
             from ``pooled_patches_idx`` (one device-to-host sync) when not given. Required with
             compact images, whose crop axis is the sum of the counts.
-        :returns: Shape ``(B, n_pooled, lm_d_model)``.
+        :param compact_pooled_rows: With compact images, the rows to pool as
+            :func:`_compact_pooled_rows` gives them, ``(n_rows, pool_size)`` indices into the
+            encoder's features of all the batch's crops. The connector then pools exactly these
+            rows, without placing the features in the padded per-example layout first.
+        :returns: Shape ``(B, n_pooled, lm_d_model)``, or ``(n_rows, lm_d_model)`` with
+            ``compact_pooled_rows``.
         """
         device = images.device
         microbatch = self._vit_crop_microbatch()
@@ -677,6 +691,9 @@ class MultimodalLM(nn.Module):
                 "patches; pooled_patches_idx assumes one feature per patch"
             )
 
+        if compact_pooled_rows is not None:
+            return self.connector(features.reshape(1, n_real * N, -1), compact_pooled_rows[None])[0]
+
         # Back to one row of ``n_used * N`` features per example, the layout the indices address.
         placed = features.new_zeros((B * n_used, N, features.shape[-1])).index_copy(
             0, torch.tensor(dest, device=device), features
@@ -723,7 +740,36 @@ class MultimodalLM(nn.Module):
                     "pooled_patches_idx refers to crops beyond image_crop_counts: "
                     f"{referenced} referenced, {counts} given"
                 )
-        image_features = self._encode_images(images, pooled_patches_idx, counts)  # (B, n_pooled, d)
+        # Keep only valid pooled rows (a row is padding iff *all* its patch indices are -1,
+        # e.g. added by a batch collator to equalize ``n_pooled`` across examples). Selecting in
+        # row-major order keeps each example's features aligned with its ``<im_patch>``
+        # positions, so batches with a variable number of image tokens per example work. For
+        # unpadded / B=1 inputs every row is valid and this is a no-op.
+        if idx_host is not None and images.ndim == 3:
+            assert counts is not None
+            # The connector pools the valid rows only: the padding rows (most of a packed text
+            # sequence's, whose indices are padded to the batch's longest) would cost a full
+            # pooling forward and backward each.
+            rows = _compact_pooled_rows(idx_host, counts, n_patches)
+            n_rows = rows.shape[0]
+            if n_rows == 0:
+                # One fully padded row keeps the connector, and its parameters, in the step.
+                rows = rows.new_full((1, rows.shape[1]), -1)
+            image_features = self._encode_images(
+                images,
+                pooled_patches_idx,
+                counts,
+                compact_pooled_rows=rows.to(device, non_blocking=True),
+            )[:n_rows]
+        else:
+            image_features = self._encode_images(images, pooled_patches_idx, counts)
+            if idx_host is not None:
+                valid = (idx_host >= 0).any(dim=-1).reshape(-1).nonzero().squeeze(1)
+                image_features = image_features.reshape(-1, image_features.shape[-1]).index_select(
+                    0, valid.to(device)
+                )
+            else:
+                image_features = image_features[(pooled_patches_idx >= 0).any(dim=-1)]
         self._record_input_diagnostic("connector output RMS", image_features)
 
         # ViT may run extra crop microbatches when ``n_crops`` differs across DP ranks;
@@ -731,19 +777,7 @@ class MultimodalLM(nn.Module):
         # needs no barrier: its exchanges already keep the ranks together.
         if self.sync_vit_crops and is_distributed() and self._active_crop_balance_group() is None:
             barrier()
-
-        # Keep only valid pooled rows (a row is padding iff *all* its patch indices are -1,
-        # e.g. added by a batch collator to equalize ``n_pooled`` across examples). Selecting in
-        # row-major order keeps each example's features aligned with its ``<im_patch>``
-        # positions, so batches with a variable number of image tokens per example work. For
-        # unpadded / B=1 inputs every row is valid and this is a no-op.
-        if idx_host is not None:
-            valid = (idx_host >= 0).any(dim=-1).reshape(-1).nonzero().squeeze(1)
-            return image_features.reshape(-1, image_features.shape[-1]).index_select(
-                0, valid.to(device)
-            )
-        valid_rows = (pooled_patches_idx >= 0).any(dim=-1)  # (B, n_pooled)
-        return image_features[valid_rows]  # (total_valid, d)
+        return image_features  # (total_valid, d)
 
     def forward(
         self,
@@ -1018,6 +1052,25 @@ class MultimodalLM(nn.Module):
         ):
             out[..., output_vocab_size:] = torch.finfo(out.dtype).min
         return out
+
+
+def _compact_pooled_rows(
+    pooled_patches_idx: torch.Tensor, counts: List[int], n_patches: int
+) -> torch.Tensor:
+    """
+    The valid pooled rows of ``pooled_patches_idx`` (any index ``>= 0``) in row-major order, with
+    each example's indices offset to address the features of all the batch's crops in example
+    order, as compact images hold them; ``-1`` stays ``-1``.
+
+    :param pooled_patches_idx: ``(B, n_pooled, pool_size)``, indexing each example's own crops.
+    :param counts: Crops per example.
+    :param n_patches: Patches per crop.
+    :returns: ``(n_valid_rows, pool_size)``.
+    """
+    example, row = (pooled_patches_idx >= 0).any(dim=-1).nonzero(as_tuple=True)
+    offsets = torch.tensor([0, *counts[:-1]], dtype=torch.long).cumsum(0) * n_patches
+    rows = pooled_patches_idx[example, row].long()
+    return torch.where(rows >= 0, rows + offsets[example, None], -1)
 
 
 def _crop_counts(pooled_patches_idx: torch.Tensor, n_patches: int) -> List[int]:

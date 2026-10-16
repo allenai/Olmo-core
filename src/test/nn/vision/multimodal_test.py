@@ -635,6 +635,39 @@ class TestCompactImages:
         for a, b in zip(padded, compacted):
             torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-6)
 
+    @pytest.mark.parametrize("counts", [[3, 1, 0], [0, 0]])
+    def test_the_connector_pools_only_the_valid_rows(self, counts, monkeypatch):
+        _, images, idx = _ragged_inputs(counts)
+        compact, crop_counts = _compact(images, counts)
+        seen = []
+        original = self.model.connector.forward
+
+        def record(features, pooled_patches_idx):
+            seen.append((features.shape, pooled_patches_idx))
+            return original(features, pooled_patches_idx)
+
+        monkeypatch.setattr(self.model.connector, "forward", record)
+        out = self.model.encode_images(compact, idx, crop_counts)
+        (features_shape, rows), n_valid = seen[0], int((idx >= 0).any(dim=-1).sum())
+        # One row of every encoded crop's features, and the valid pooled rows only (one fully
+        # padded row for a batch without any).
+        assert features_shape[:2] == (1, max(sum(counts), 1) * 4)
+        assert rows.shape == (1, max(n_valid, 1), 4)
+        assert bool((rows >= 0).any()) == (n_valid > 0)
+        assert out.shape == (n_valid, _LM_D_MODEL)
+
+    def test_compact_pooled_rows_address_the_concatenated_crops(self):
+        from olmo_core.nn.vision.multimodal import _compact_pooled_rows
+
+        idx = torch.tensor(
+            [
+                [[0, 1], [4, -1], [-1, -1]],  # two crops of 4 patches
+                [[2, 3], [-1, -1], [-1, -1]],  # one crop
+            ]
+        )
+        rows = _compact_pooled_rows(idx, [2, 1], n_patches=4)
+        assert rows.tolist() == [[0, 1], [4, -1], [10, 11]]
+
     def test_compact_images_need_matching_crop_counts(self):
         _, images, idx = _ragged_inputs([1, 1])
         compact, crop_counts = _compact(images, [1, 1])

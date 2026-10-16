@@ -892,6 +892,13 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
                 "Image-padding trimming is enabled; vision FLOP estimates still use untrimmed "
                 "collator shapes. Compare measured throughput and profiles, not estimated MFU."
             )
+        if balance_vit_crops and (
+            model.cfg.vision.attention_dropout or model.cfg.vision.residual_dropout
+        ):
+            # A crop encoded on another rank would draw that rank's dropout randomness.
+            raise OLMoConfigurationError(
+                "Crop balancing requires zero vision attention and residual dropout"
+            )
 
         self.freeze_params = freeze_params or []
         frozen = []
@@ -1938,7 +1945,8 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     """Share each micro-batch's image crops evenly among all ranks for the vision encoder (see
     :mod:`olmo_core.nn.vision.crop_balance`). The language model keeps its ranks in step, so
     without this every rank waits for the one holding the most crops. Features and summed
-    gradients are unchanged up to floating-point rounding."""
+    gradients are unchanged up to floating-point rounding. Requires zero vision dropout: a crop
+    encoded on another rank would draw that rank's dropout randomness."""
 
     def _build_train_module(self, **kwargs) -> MultimodalOLMoDDPTrainModule:
         return MultimodalOLMoDDPTrainModule(**kwargs)
