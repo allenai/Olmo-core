@@ -224,3 +224,30 @@ def test_document_mode_rejects_sibling_branch_packing():
             subsegment_ids=torch.tensor([[0, 0, 1, 1, 2, 2]]),
             position_ids=torch.tensor([[0, 1, 2, 3, 2, 3]]),
         )
+
+
+def test_boundaries_off_for_a_recurrent_lm_sends_nothing_to_mask():
+    # An attention model stands in for the LM; the recurrent check is forced, as the config
+    # would do for a KDA LM with ``document_mode=False``.
+    model = _attention_model()
+    model._document_mode = False
+    model._recurrent_mixers = True
+    assert not model.uses_document_boundaries()
+    lm_forward = Mock(wraps=model.lm.forward)
+    model.lm.forward = lm_forward  # type: ignore[method-assign]
+    input_ids = torch.randint(2, _VOCAB, (1, 8))
+    example_ids = torch.tensor([[0, 0, 0, 0, 1, 1, 1, 1]])
+    with torch.no_grad():
+        model(input_ids, example_ids=example_ids, position_ids=torch.arange(8)[None])
+    kwargs = lm_forward.call_args.kwargs
+    assert kwargs["and_mask"] is None and kwargs["or_mask"] is None
+    assert kwargs["position_ids"] is None
+    assert "doc_lens" not in kwargs and "max_doc_lens" not in kwargs
+
+
+def test_config_decides_document_mode():
+    kda = KimiDeltaAttentionConfig(n_heads=2, head_dim=8, dtype=DType.float32)
+    config = _multimodal_config(kda)
+    config.document_mode = False
+    model = MultimodalOLMoDDPModel(config, init_device="meta")
+    assert model.has_recurrent_mixers() and not model.uses_document_boundaries()

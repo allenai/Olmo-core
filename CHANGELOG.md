@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `balance_vit_crops` to `MultimodalOLMoDDPTrainModuleConfig` and the mixed mid-training recipe (off by default): the vision encoder's image crops are shared evenly among the ranks (`olmo_core.nn.vision.crop_balance`) instead of every rank waiting for the one holding the most. Features and summed gradients are unchanged up to floating-point rounding; on the v4 merged mid-training mixture at 16 GPUs a step takes 35.7 s instead of 58.7 s.
 - Added Ulysses context parallelism for `KimiDeltaAttention` (`apply_cp`), mirroring the `GatedDeltaNet` all-to-all head/sequence exchange, with the in-kernel gate parameters sliced to each rank's heads.
 - Added a Ulysses context-parallel parity test for the recurrent mixers (`GatedDeltaNet`, `KimiDeltaAttention`) that compares per-stage activations, outputs, and gradients against a single-process reference, including packed documents that straddle the CP split, plus a model-level gradient-parity test for `gdn` and `kda` under Ulysses CP.
 
@@ -31,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
+- Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
+- Preserve 16-byte parameter alignment in OLMoDDP flat model buffers so compiled kernels remain valid after small BF16 parameters are packed.
+- Keep no-EP and rowwise-NVSHMEM shared-expert CUDA stream switching outside compiled graphs to avoid Torch 2.13 backward failures after a separately compiled loss, while retaining compiled expert math and stream overlap.
 - Metadata-backed packed datasets now include sidecar content hashes in packing-cache keys and dataset fingerprints, invalidating stale boundaries even after same-size corrections. Document lengths preserve EOS/BOS padding segmentation. Local array-backed defaults are unchanged (https://github.com/allenai/Olmo-core/pull/843).
 - Apply opt-in Q/K gain expansion to eval-only and model-only DDP checkpoint loads, and reject forced expert assignments and biased KDA convolutions during HF export.
 - Validate normalization throughout MoE HF exports, preserve attention-only gates and resolved EOS/padding IDs, and reject unsupported shared-expert routing before conversion.

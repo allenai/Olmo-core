@@ -185,9 +185,11 @@ def test_multimodal_olmo_ddp_config_and_native_checkpoint_aliases():
         connector_activation_checkpointing=True,
         response_logits_only=True,
         train_embedding_rows=[120, 121],
+        balance_vit_crops=True,
     )
     restored = MultimodalOLMoDDPTrainModuleConfig.from_dict(config.as_dict())
     assert restored == config
+    assert restored.balance_vit_crops
     assert restored.vision_activation_checkpointing
     assert restored.connector_activation_checkpointing
     assert restored.response_logits_only
@@ -584,6 +586,113 @@ def _run_multimodal_ep_padded_compile_step():
 def test_multimodal_olmo_ddp_ep_padding_compile_and_checkpoint_step():
     run_distributed_test(
         _run_multimodal_ep_padded_compile_step,
+        world_size=2,
+        backend="nccl",
+        start_method="spawn",
+    )
+
+
+# Crops per sequence on each rank: three single-sequence micro-batches per step. A text-only
+# sequence still encodes one dummy crop, so the balanced micro-batches hold [3, 1], [1, 2], [1, 1].
+_UNEVEN_CROPS = {0: [3, 0, 1], 1: [0, 2, 0]}
+
+
+def _uneven_image_batch(rank: int):
+    crops = _UNEVEN_CROPS[rank]
+    n_seq, seq_len, max_crops = len(crops), 8, max(crops)
+    torch.manual_seed(31 + rank)
+    input_ids = torch.randint(2, 100, (n_seq, seq_len), device="cuda")
+    pooled = torch.full((n_seq, max_crops, 4), -1, dtype=torch.long, device="cuda")
+    for seq, n in enumerate(crops):
+        input_ids[seq, :n] = 120  # one pooled image token per crop (4 patches, pool size 4)
+        for crop in range(n):
+            pooled[seq, crop] = torch.arange(4 * crop, 4 * crop + 4, device="cuda")
+    labels = torch.roll(input_ids, -1, dims=1)
+    labels[input_ids == 120] = -100
+    loss_masks = (labels != -100).float()
+    return {
+        "input_ids": input_ids,
+        "labels": labels,
+        "loss_masks": loss_masks,
+        "router_token_mask": torch.ones_like(input_ids, dtype=torch.bool),
+        "images": torch.randn(n_seq, max_crops, 4, 14 * 14 * 3, device="cuda"),
+        "pooled_patches_idx": pooled,
+    }
+
+
+class _LossTrainerStub(_MetricTrainerStub):
+    def record_ce_loss(self, value, reduce_type=None):
+        del reduce_type
+        self.metrics["train/CE loss"] = value
+
+
+def _run_balanced_crops_step_matches_unbalanced():
+    rank = dist.get_rank()
+    grads, metrics = {}, {}
+    for balance in (False, True):
+        # The vision tower and connector initialize from the global RNG: same seed, same weights.
+        torch.manual_seed(0)
+        model = _tiny_multimodal_model_config().build(init_device="meta")
+        config = MultimodalOLMoDDPTrainModuleConfig(
+            rank_microbatch_size=8,
+            max_sequence_length=8,
+            optim=MultimodalOLMoDDPOptimizerConfig(
+                lr=1e-3,
+                weight_decay=0.0,
+                group_overrides=[
+                    OptimGroupOverride(
+                        params=["*connector.*"], opts={"scheduler_name": "connector"}
+                    ),
+                    OptimGroupOverride(params=["*vision.*"], opts={"scheduler_name": "vision"}),
+                ],
+            ),
+            vision_activation_checkpointing=True,
+            response_logits_only=True,
+            # The gradient all-reduces launch during the last micro-batch's backward, around the
+            # crop exchange's own backward all-to-all.
+            dp_config=TransformerDataParallelConfig(
+                name=DataParallelType.ddp, only_allreduce_last_microbatch=True
+            ),
+            balance_vit_crops=balance,
+        )
+        torch.manual_seed(1)
+        train_module = config.build(model, device=torch.device("cuda"))
+        trainer = _LossTrainerStub()
+        train_module._trainer = trainer  # type: ignore[assignment]
+        train_module.zero_grads()
+        train_module.train_batch(_uneven_image_batch(rank))
+        # The reduced gradients sit in ``.grad``, or in the FP32 accumulation buffer when the DDP
+        # config accumulates in FP32 (the default).
+        grads[balance] = {}
+        for name, param in train_module.multimodal_model.named_parameters():
+            grad = param.grad if param.grad is not None else getattr(param, "_main_grad_fp32", None)
+            if grad is not None:
+                grads[balance][name] = grad.detach().clone()
+        metrics[balance] = trainer.metrics
+
+    assert grads[True].keys() == grads[False].keys()
+    assert any(name.startswith("vision.") for name in grads[True])
+    # The tiny model's vision gradients are far below assert_close's absolute tolerance, so compare
+    # each component's whole gradient by its relative error. The train module runs the model in
+    # bf16, and encoding a crop in a different batch shifts its rounding: balanced and unbalanced
+    # differ by about 0.5% here, while returning features to the wrong crops gives about 80%.
+    for component in ("vision.", "connector.", "lm."):
+        names = [name for name in grads[False] if name.startswith(component)]
+        want = torch.cat([grads[False][name].flatten() for name in names])
+        got = torch.cat([grads[True][name].flatten() for name in names])
+        error = (got - want).norm() / want.norm()
+        assert want.norm() > 0 and error < 5e-2, (component, error)
+    torch.testing.assert_close(metrics[True]["train/CE loss"], metrics[False]["train/CE loss"])
+    assert "vision/encoder crops per rank" not in metrics[False]
+    # Balanced: ceil(4 / 2) + ceil(3 / 2) + ceil(2 / 2); unbalanced: 3 + 2 + 1.
+    assert metrics[True]["vision/encoder crops per rank"] == 5.0
+    assert metrics[True]["vision/encoder crops per rank unbalanced"] == 6.0
+
+
+@requires_multi_gpu
+def test_balanced_vit_crops_give_the_unbalanced_gradients():
+    run_distributed_test(
+        _run_balanced_crops_step_matches_unbalanced,
         world_size=2,
         backend="nccl",
         start_method="spawn",

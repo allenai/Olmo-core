@@ -76,6 +76,7 @@ class Olmo3MoeConfig(PretrainedConfig):
         emo_eval_document_expert_pool=None,
         emo_eos_token_id=None,
         global_load_balancing=False,
+        moe_use_core_numerics=False,
         layer_types: Optional[List[str]] = None,
         dense_layers_indices: Optional[List[int]] = None,
         dense_layers_use_shared_expert=False,
@@ -121,6 +122,11 @@ class Olmo3MoeConfig(PretrainedConfig):
         self.gating_function = gating_function
         self.normalize_expert_weights = normalize_expert_weights
         self.restore_weight_scale = restore_weight_scale
+        # New core exports preserve no-EP SwiGLU and TE index-map reduction
+        # rounding. Existing HF configs retain their original FP32 combination.
+        self.moe_use_core_numerics = moe_use_core_numerics
+        if moe_use_core_numerics and hidden_act != "silu":
+            raise ValueError("moe_use_core_numerics requires hidden_act='silu'")
 
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
