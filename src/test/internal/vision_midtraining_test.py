@@ -1164,7 +1164,7 @@ def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
     )
     assert deeper.data_loader.prefetch_max_in_flight == 128
     # Whole-batch prefetching is on by default and a recipe knob; the loader itself defaults off.
-    assert default.data_loader.batch_prefetch_depth == 2
+    assert default.data_loader.batch_prefetch_depth == 8
     assert (
         MixtureDataLoaderConfig(global_batch_size=8, sequence_length=8, work_dir="x")
     ).batch_prefetch_depth == 0
@@ -1172,6 +1172,16 @@ def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
         f"--recipe.text_config={text_config.path}", "--recipe.batch_prefetch_depth=0"
     )
     assert sync.data_loader.batch_prefetch_depth == 0
+    # Processes for batch building and example loading are opt-in.
+    assert not default.data_loader.batch_prefetch_process
+    assert not default.data_loader.prefetch_processes
+    processes = mixed_recipe.build(
+        f"--recipe.text_config={text_config.path}",
+        "--recipe.batch_prefetch_process=true",
+        "--recipe.prefetch_processes=true",
+    )
+    assert processes.data_loader.batch_prefetch_process
+    assert processes.data_loader.prefetch_processes
 
 
 def test_text_config_from_the_text_lm_scales_the_components_alike(

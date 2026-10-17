@@ -84,6 +84,11 @@ class MultimodalCollator:
         crop axis. A batch without any crop emits an empty ``(0, n_patches, patch_dim)`` tensor;
         the model then runs its one dummy crop itself. Off by default (the stage-1 train module
         and the Molmo2 scripts read the padded layout).
+    :param shared_memory_images: Allocate compact images, in ``image_dtype``, in shared memory
+        and cast each example's crops straight into them, so a batch built in another process
+        crosses a ``torch.multiprocessing`` queue without being copied (see
+        :class:`~olmo_core.data.multimodal.batch_prefetch.BatchProcessPrefetcher`). Off by
+        default; the mixture loader turns it on in its prefetch process.
     """
 
     def __init__(
@@ -94,6 +99,7 @@ class MultimodalCollator:
         batch_metadata: bool = False,
         image_dtype: Optional[torch.dtype] = None,
         compact_images: bool = False,
+        shared_memory_images: bool = False,
     ):
         self.pad_token_id = pad_token_id
         self.label_ignore_index = label_ignore_index
@@ -101,6 +107,7 @@ class MultimodalCollator:
         self.batch_metadata = batch_metadata
         self.image_dtype = image_dtype
         self.compact_images = compact_images
+        self.shared_memory_images = shared_memory_images
 
     def _pad_1d(self, arrays: List[np.ndarray], value, max_len: int, dtype) -> torch.Tensor:
         out = np.full((len(arrays), max_len), value, dtype=dtype)
@@ -207,6 +214,8 @@ class MultimodalCollator:
         Each part is cast to ``image_dtype`` before the concatenation so the float32 crops never
         exist as one batch-sized tensor.
         """
+        if self.shared_memory_images and self.image_dtype is not None:
+            return self._shared_compact_images(examples, n_patches, patch_dim)
         parts: List[torch.Tensor] = []
         for ex in examples:
             im = ex["images"]
@@ -221,6 +230,36 @@ class MultimodalCollator:
             (0, n_patches, patch_dim),
             dtype=torch.float32 if self.image_dtype is None else self.image_dtype,
         )
+
+    def _shared_compact_images(
+        self, examples: List[Dict[str, Any]], n_patches: int, patch_dim: int
+    ) -> torch.Tensor:
+        """:meth:`_compact_images` allocated in shared memory, each part cast straight into it."""
+        assert self.image_dtype is not None
+        parts = [
+            part
+            for ex in examples
+            for part in (
+                ex["images"].parts
+                if isinstance(ex["images"], _PackedImageParts)
+                else (ex["images"],)
+            )
+            if part.shape[0]
+        ]
+        n_crops = sum(part.shape[0] for part in parts)
+        if n_crops == 0:
+            return torch.zeros((0, n_patches, patch_dim), dtype=self.image_dtype)
+        storage = torch.UntypedStorage._new_shared(  # type: ignore[attr-defined]
+            n_crops * n_patches * patch_dim * self.image_dtype.itemsize
+        )
+        out = torch.empty(0, dtype=self.image_dtype).set_(
+            storage, 0, (n_crops, n_patches, patch_dim)
+        )
+        offset = 0
+        for part in parts:
+            out[offset : offset + part.shape[0]].copy_(torch.from_numpy(np.ascontiguousarray(part)))
+            offset += part.shape[0]
+        return out
 
     def _finish(
         self, batch: Dict[str, torch.Tensor], examples: List[Dict[str, Any]], max_len: int

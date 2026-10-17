@@ -193,12 +193,28 @@ class MixedMidtrainingRecipeConfig(Config):
     """Examples the loader may hold preprocessed ahead of consumption per rank. ``None`` is the
     loader's default, ``max(2 * prefetch_workers, 4)``, which is less than one rank batch of
     examples; a deeper queue lets the loader work through the GPU step."""
-    batch_prefetch_depth: int = 2
+    prefetch_processes: bool = False
+    """Load examples in forked worker processes instead of threads (see
+    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.prefetch_processes`):
+    the sources are memory-mapped from Weka, and a loading thread that page-faults holds the
+    interpreter lock, so one slow read stalls every loading thread of the rank; same batches and
+    checkpoints. Off by default; turn it on, with :attr:`batch_prefetch_process`."""
+    batch_prefetch_depth: int = 8
     """Finished rank batches the loader builds ahead on a background thread, so the trainer's
     fetch returns as soon as one is queued (the batch order and the checkpointed cursor are the
     thread-free loader's; see
     :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.batch_prefetch_depth`).
-    ``0`` packs and collates on the trainer's thread."""
+    Eight batches are over a minute of steps on 8 nodes, enough to ride out a storage pause
+    that delays one rank's batch, which every rank would wait for. ``0`` packs and collates on
+    the trainer's thread."""
+    batch_prefetch_process: bool = False
+    """Build those batches in a forked child process instead of on a thread of the trainer (see
+    :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.batch_prefetch_process`),
+    whose interpreter lock the batch building otherwise shares with the training step; same
+    batches and checkpoints. Off by default; turn it on, with :attr:`prefetch_processes`. The
+    queued batches take ``/dev/shm``: about ``batch_prefetch_depth + 1`` batches per rank, 6.4 GB
+    each at 8 GPUs on the 90/10 stage and 0.8 GB at 64 (about 460 and 60 GB a node at depth 8),
+    so runs on few nodes need a larger ``--launch.shared_memory`` or a lower depth."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups), ``stage1_v3`` (the Molmo2
     Stage-1 v3 mixture, as alignment's perception and joint use it: one sampled annotation per
@@ -548,9 +564,13 @@ def _build_data_loader(
         image_dtype=DType.bfloat16,
         # Only the real crops are collated and copied (no padding to the batch's crop maximum).
         compact_images=True,
+        # Packed crops go straight into the collated batch, not through a per-pack copy.
+        defer_packed_image_copy=True,
         prefetch_workers=workers,
         prefetch_max_in_flight=recipe.prefetch_max_in_flight,
+        prefetch_processes=recipe.prefetch_processes,
         batch_prefetch_depth=recipe.batch_prefetch_depth,
+        batch_prefetch_process=recipe.batch_prefetch_process,
         max_consecutive_data_errors=0,
         max_total_data_errors=0,
     ).merge(cli.overrides, prefix="data_loader")

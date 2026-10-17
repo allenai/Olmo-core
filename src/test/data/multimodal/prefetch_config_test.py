@@ -129,9 +129,11 @@ def test_prefetch_depth_reaches_both_streams_and_group_children(
     calls = []
     native_prefetch = mixture_data_loader.prefetch_map
 
-    def record(fn, values, *, num_workers, max_in_flight=None):
+    def record(fn, values, *, num_workers, max_in_flight=None, processes=False):
         calls.append((num_workers, max_in_flight))
-        return native_prefetch(fn, values, num_workers=num_workers, max_in_flight=max_in_flight)
+        return native_prefetch(
+            fn, values, num_workers=num_workers, max_in_flight=max_in_flight, processes=processes
+        )
 
     monkeypatch.setattr(mixture_data_loader, "prefetch_map", record)
     loader = _loader(tmp_path, depth=depth, grouped=grouped, buffer_size=buffer_size)

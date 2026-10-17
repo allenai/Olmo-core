@@ -92,3 +92,33 @@ def test_config_default_keeps_the_padded_layout():
     assert MultimodalCollatorConfig(pad_token_id=0).compact_images is False
     batch = MultimodalCollatorConfig(pad_token_id=0).build()([_example(1, 0), _example(0, 1)])
     assert batch["images"].ndim == 4 and "image_crop_counts" not in batch
+
+
+@pytest.mark.parametrize("packed", [False, True])
+def test_shared_memory_images_are_the_compact_images(packed: bool):
+    first, second = _example(2, 0), _example(1, 1)
+    examples = [first, _example(0, 3), second]
+    if packed:
+        examples[0] = dict(first)
+        examples[0]["images"] = _PackedImageParts(
+            parts=(first["images"], _example(1, 4)["images"]), shape=(3, _N_PATCHES, _PATCH_DIM)
+        )
+        examples[0]["pooled_patches_idx"] = np.arange(3 * _N_PATCHES).reshape(3, _N_PATCHES)
+
+    def collate(shared: bool):
+        return MultimodalCollator(
+            pad_token_id=0,
+            compact_images=True,
+            image_dtype=torch.bfloat16,
+            shared_memory_images=shared,
+        )(examples)
+
+    reference, shared = collate(False), collate(True)
+    assert shared["images"].is_shared() and not reference["images"].is_shared()
+    assert shared.keys() == reference.keys()
+    for key in reference:
+        torch.testing.assert_close(shared[key], reference[key], rtol=0, atol=0)
+    text_only = MultimodalCollator(
+        pad_token_id=0, compact_images=True, image_dtype=torch.bfloat16, shared_memory_images=True
+    )([_example(0, 0)])
+    assert text_only["images"].shape == (0, _N_PATCHES, _PATCH_DIM)
