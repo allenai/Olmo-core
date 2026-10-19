@@ -26,6 +26,7 @@ from olmo_core.nn.transformer import Transformer
 from ..config import Config, Registrable
 from ..exceptions import OLMoConfigurationError
 from ..utils import get_default_device, move_to_device
+from .mup import MuPConfig, mup_lr_multipliers, split_groups_by_lr_multiplier
 
 __all__ = [
     "OptimConfig",
@@ -81,9 +82,30 @@ class OptimConfig(Config, Registrable, Generic[Opt], metaclass=ABCMeta):
     loading optimizer state.
     """
 
+    mup: Optional[MuPConfig] = None
+    """
+    Scale each parameter's learning rate following muP. Every parameter group, including the
+    ones from :data:`group_overrides`, is split by learning-rate multiplier.
+    """
+
     @property
     def device(self) -> torch.device:
         return get_default_device()
+
+    def _apply_mup(
+        self, group_overrides: List[OptimGroupOverride], model: nn.Module
+    ) -> List[OptimGroupOverride]:
+        if self.mup is None:
+            return group_overrides
+        if not hasattr(self, LR_FIELD):
+            raise OLMoConfigurationError(f"muP requires {self.__class__.__name__} to have an 'lr'")
+        return split_groups_by_lr_multiplier(
+            group_overrides,
+            mup_lr_multipliers(model, self.mup),
+            self.mup,
+            lr=getattr(self, LR_FIELD),
+            weight_decay=getattr(self, "weight_decay", None),
+        )
 
     def _expand_param_globs(
         self,
@@ -146,6 +168,7 @@ class OptimConfig(Config, Registrable, Generic[Opt], metaclass=ABCMeta):
             [name for name in all_params.keys() if name not in overridden_param_names], {}
         )
         group_overrides.append(default_override)
+        group_overrides = self._apply_mup(group_overrides, model)
 
         return [
             {"params": [all_params[param_name] for param_name in go.params], **go.opts}
@@ -173,6 +196,7 @@ class OptimConfig(Config, Registrable, Generic[Opt], metaclass=ABCMeta):
         kwargs.pop("group_overrides")
         kwargs.pop("compile")
         kwargs.pop("fixed_fields")
+        kwargs.pop("mup")
 
         optim: torch.optim.Optimizer = self.optimizer()(
             self.build_groups(model, strict=strict), **kwargs
@@ -337,8 +361,13 @@ class MatrixAwareOptimConfig(OptimConfig, Generic[Opt]):
         :param strict: If ``True`` an error is raised if a pattern in ``group_overrides`` doesn't
             match any parameter.
         """
+        if self.mup is not None:
+            raise OLMoConfigurationError(
+                f"muP learning rates are not supported for {self.__class__.__name__}"
+            )
 
         kwargs = self.as_dict(exclude_private_fields=True)
+        kwargs.pop("mup")
         group_overrides = kwargs.pop("group_overrides")
         if group_overrides is not None:
             log.warning(f"group_overrides is set but will be ignored for {self.__class__.__name__}")

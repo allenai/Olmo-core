@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extended hybrid MoE HF export for KDA, optional EMO and latent experts, per-head normalization gains, and scalable softmax, with exact tensor round-trip validation and legacy configuration migration.
 - Added an optional, dependency-free checkpoint-ready notification callback for independent upload services. It does not upload or delete checkpoints.
 - Added `InitMethod.nanochat`, the nanochat initialization based on the spectral condition for feature learning: each weight matrix uses `std = 1/√fan_in · min(1, √(fan_out/fan_in))`, embeddings use `std = 1.0`, and depthwise convolutions use `std = 1/√kernel_size`. It covers attention, KDA, Gated DeltaNet, dense feed-forward, MoE, and OLMoDDP MoE-v2 blocks.
+- Added muP learning rates for Adam-type optimizers via `MuPConfig`, set as `mup` on any `OptimConfig` (except Muon/Dion) or on `OLMoDDPOptimizerConfig`. Each weight matrix gets `lr * base_width / fan_in`, embeddings get `lr * embedding_lr_multiplier`, and element-wise parameters get `lr`; parameter groups (including `group_overrides`) are split by multiplier when the optimizer is built. Use it with `InitMethod.nanochat`. `named_param_shapes` in `olmo_core.nn.transformer.mup` classifies parameters, and `src/examples/mup/coord_check.py` runs a width coordinate check.
 
 ### Removed
 
