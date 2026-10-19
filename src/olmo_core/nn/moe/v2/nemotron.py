@@ -296,6 +296,10 @@ class NemotronMoE(SequenceMixer):
         std: float = 0.02,
         generator: Optional[torch.Generator] = None,
     ) -> None:
+        if init_method == InitMethod.nanochat:
+            raise NotImplementedError(
+                f"init method '{init_method}' is not supported for NemotronMoE"
+            )
         del init_method, d_model, block_idx, num_blocks
         nn.init.trunc_normal_(
             self.routed_experts.w_up_gate,

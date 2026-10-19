@@ -248,7 +248,11 @@ class GatedDeltaNet(SequenceMixer):
         std: float = 0.02,
         generator: Optional[torch.Generator] = None,
     ) -> None:
-        from olmo_core.nn.transformer.init import InitMethod, init_linear
+        from olmo_core.nn.transformer.init import (
+            InitMethod,
+            init_linear,
+            init_linear_nanochat,
+        )
 
         if init_method == InitMethod.fan_in:
             raise NotImplementedError(
@@ -258,10 +262,21 @@ class GatedDeltaNet(SequenceMixer):
         if init_method == InitMethod.normalized:
             std = d_model**-0.5
 
-        for w in (self.w_q, self.w_k, self.w_v, self.w_a, self.w_b, self.w_g):
-            init_linear(w, std=std, generator=generator)
-        for w in (self.q_conv1d, self.k_conv1d, self.v_conv1d):
-            init_linear(w, std=std, generator=generator)
+        for w in (
+            self.w_q,
+            self.w_k,
+            self.w_v,
+            self.w_a,
+            self.w_b,
+            self.w_g,
+            self.q_conv1d,
+            self.k_conv1d,
+            self.v_conv1d,
+        ):
+            if init_method == InitMethod.nanochat:
+                init_linear_nanochat(w, generator=generator)
+            else:
+                init_linear(w, std=std, generator=generator)
 
         self.A_log.copy_(nn.init.uniform_(self.A_log, a=0, b=16, generator=generator).log())
         dt_min, dt_max, dt_init_floor = 0.001, 0.1, 1e-4
@@ -274,6 +289,9 @@ class GatedDeltaNet(SequenceMixer):
         inv_dt = dt + torch.log(-torch.expm1(-dt))
         self.dt_bias.copy_(inv_dt)
 
+        if init_method == InitMethod.nanochat:
+            init_linear_nanochat(self.w_out, generator=generator)
+            return
         if init_method == InitMethod.llama:
             std = std / (2 * num_blocks) ** 0.5
         elif init_method == InitMethod.llama_depth:
@@ -826,6 +844,11 @@ class NemotronMamba2Mixer(SequenceMixer):
         generator: Optional[torch.Generator] = None,
     ) -> None:
         from olmo_core.nn.transformer.init import InitMethod, init_linear
+
+        if init_method == InitMethod.nanochat:
+            raise NotImplementedError(
+                f"init method '{init_method}' is not supported for NemotronMamba2Mixer"
+            )
 
         del d_model
         init_linear(self.in_proj, std=std, generator=generator)

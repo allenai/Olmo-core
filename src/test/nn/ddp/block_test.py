@@ -16,7 +16,7 @@ from olmo_core.nn.moe.v2.routed_experts import RoutedExpertsConfig
 from olmo_core.nn.moe.v2.router import MoERouterConfigV2
 from olmo_core.nn.moe.v2.shared_experts import SharedExpertsConfig
 from olmo_core.nn.transformer import TransformerBlockType
-from olmo_core.nn.transformer.init import InitMethod
+from olmo_core.nn.transformer.init import InitMethod, nanochat_std
 
 D_MODEL = 64
 
@@ -191,6 +191,38 @@ def test_latent_block_projection_initialization():
         rtol=0.35,
         atol=0.0,
     )
+
+
+@pytest.mark.parametrize("latent_dim", [None, 16], ids=["no-latent", "latent"])
+def test_block_nanochat_initialization(latent_dim: int | None):
+    config = _block_config(latent_dim=latent_dim)
+    config.shared_experts = SharedExpertsConfig(
+        d_model=D_MODEL, hidden_size=32, num_experts=1, bias=False, dtype=DType.float32
+    )
+    block = _build_block(config)
+    InitMethod.nanochat.init_moe_v2(block, d_model=D_MODEL, block_idx=0, num_blocks=1)
+
+    def assert_std(x: torch.Tensor, fan_in: int, fan_out: int):
+        torch.testing.assert_close(
+            x.std(), torch.tensor(nanochat_std(fan_in, fan_out)), rtol=0.1, atol=0.0
+        )
+
+    router = block.routed_experts_router
+    routed = block.routed_experts
+    shared = block.shared_experts
+    assert router is not None and routed is not None and shared is not None
+    routed_dim = D_MODEL if latent_dim is None else latent_dim
+    assert routed.d_model == routed_dim
+
+    assert_std(router.weight, D_MODEL, router.num_experts)
+    assert_std(routed.w_up_gate, routed_dim, routed.hidden_size)
+    assert_std(routed.w_down, routed.hidden_size, routed_dim)
+    assert_std(shared.w_up_gate, D_MODEL, shared.hidden_size)
+    assert_std(shared.w_down, shared.hidden_size, D_MODEL)
+    for projection in (block.latent_down_proj, block.latent_up_proj):
+        assert (projection is None) == (latent_dim is None)
+        if projection is not None:
+            assert_std(projection.weight, projection.in_features, projection.out_features)
 
 
 def test_latent_block_keeps_shared_experts_in_model_space():

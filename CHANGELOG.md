@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added independent per-head Q/K norm gains and scalable softmax, EMO document-pool routing/global load balancing, and opt-in FP32 gradient-accumulation/reduce-scatter fast paths with explicit hardware/version guards.
 - Extended hybrid MoE HF export for KDA, optional EMO and latent experts, per-head normalization gains, and scalable softmax, with exact tensor round-trip validation and legacy configuration migration.
 - Added an optional, dependency-free checkpoint-ready notification callback for independent upload services. It does not upload or delete checkpoints.
+- Added `InitMethod.nanochat`, the nanochat initialization based on the spectral condition for feature learning: each weight matrix uses `std = 1/√fan_in · min(1, √(fan_out/fan_in))`, embeddings use `std = 1.0`, and depthwise convolutions use `std = 1/√kernel_size`. It covers attention, KDA, Gated DeltaNet, dense feed-forward, MoE, and OLMoDDP MoE-v2 blocks.
 
 ### Removed
 
