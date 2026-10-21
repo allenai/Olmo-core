@@ -144,8 +144,8 @@ def build_model_config(spec: str, *, mup: bool) -> OLMoDDPModelConfig:
         }
     for block in [config.block, *config.block_overrides.values()]:
         mixer = block.sequence_mixer
-        if hasattr(mixer, "use_cute_kernel"):
-            mixer.use_cute_kernel = False
+        if hasattr(mixer, "use_experimental_kernels"):
+            mixer.use_experimental_kernels = False
         if hasattr(mixer, "qk_norm_per_head_gains"):
             mixer.qk_norm_per_head_gains = True
         if spec in EP_SPECS and getattr(block, "ep", None) is not None:

@@ -162,8 +162,8 @@ def build_hero_config(size: str, *, completedp: bool) -> OLMoDDPModelConfig:
     config = hero.build_model_config(size, eos_token_id=TOKENIZER.eos_token_id)
     for block in [config.block, *config.block_overrides.values()]:
         mixer = block.sequence_mixer
-        if hasattr(mixer, "use_cute_kernel"):
-            mixer.use_cute_kernel = False
+        if hasattr(mixer, "use_experimental_kernels"):
+            mixer.use_experimental_kernels = False
         if hasattr(mixer, "qk_norm_per_head_gains"):
             mixer.qk_norm_per_head_gains = True
         if size == "medium" and getattr(block, "ep", None) is not None:
@@ -215,8 +215,8 @@ def build_model_config(spec: str, *, completedp: bool) -> OLMoDDPModelConfig:
     }
     for block in [config.block, *config.block_overrides.values()]:
         mixer = block.sequence_mixer
-        if hasattr(mixer, "use_cute_kernel"):
-            mixer.use_cute_kernel = False
+        if hasattr(mixer, "use_experimental_kernels"):
+            mixer.use_experimental_kernels = False
     if completedp:
         config.completedp = CompletedPConfig(
             base_width=BASE_WIDTH, base_depth=BASE_DEPTH, alpha=ALPHA

@@ -120,7 +120,7 @@ def _kda(g: Geometry) -> KimiDeltaAttentionConfig:
         conv_size=4,
         conv_bias=False,
         norm_eps=1e-5,
-        use_cute_kernel=True,
+        use_experimental_kernels=True,
         dtype=DType.float32,
     )
 
