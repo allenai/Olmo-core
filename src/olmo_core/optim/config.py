@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from typing import (
     Any,
+    ClassVar,
     Dict,
     Generic,
     Iterable,
@@ -25,7 +26,9 @@ from olmo_core.nn.transformer import Transformer
 
 from ..config import Config, Registrable
 from ..exceptions import OLMoConfigurationError
+from ..nn.transformer.completedp import find_completedp_model
 from ..utils import get_default_device, move_to_device
+from .completedp import CompletedPOptimConfig, apply_completedp
 from .mup import MuPConfig, mup_lr_multipliers, split_groups_by_lr_multiplier
 
 __all__ = [
@@ -88,9 +91,34 @@ class OptimConfig(Config, Registrable, Generic[Opt], metaclass=ABCMeta):
     ones from :data:`group_overrides`, is split by learning-rate multiplier.
     """
 
+    completedp: Optional[CompletedPOptimConfig] = None
+    """
+    Set each parameter's learning rate, epsilon, weight decay and betas following CompletedP.
+    Requires a model built with CompletedP, and is only supported by AdamW optimizers. Every
+    parameter group, including the ones from :data:`group_overrides`, is split by multiplier.
+    """
+
+    _supports_completedp: ClassVar[bool] = False
+
     @property
     def device(self) -> torch.device:
         return get_default_device()
+
+    def _apply_completedp(
+        self, group_overrides: List[OptimGroupOverride], model: nn.Module
+    ) -> List[OptimGroupOverride]:
+        return apply_completedp(
+            group_overrides,
+            [model],
+            self.completedp,
+            optimizer_name=self.__class__.__name__,
+            supported=self._supports_completedp,
+            mup_enabled=self.mup is not None,
+            lr=getattr(self, LR_FIELD, None),
+            eps=getattr(self, "eps", None),
+            weight_decay=getattr(self, "weight_decay", None),
+            betas=getattr(self, "betas", None),
+        )
 
     def _apply_mup(
         self, group_overrides: List[OptimGroupOverride], model: nn.Module
@@ -168,6 +196,7 @@ class OptimConfig(Config, Registrable, Generic[Opt], metaclass=ABCMeta):
             [name for name in all_params.keys() if name not in overridden_param_names], {}
         )
         group_overrides.append(default_override)
+        group_overrides = self._apply_completedp(group_overrides, model)
         group_overrides = self._apply_mup(group_overrides, model)
 
         return [
@@ -197,6 +226,7 @@ class OptimConfig(Config, Registrable, Generic[Opt], metaclass=ABCMeta):
         kwargs.pop("compile")
         kwargs.pop("fixed_fields")
         kwargs.pop("mup")
+        kwargs.pop("completedp")
 
         optim: torch.optim.Optimizer = self.optimizer()(
             self.build_groups(model, strict=strict), **kwargs
@@ -365,9 +395,14 @@ class MatrixAwareOptimConfig(OptimConfig, Generic[Opt]):
             raise OLMoConfigurationError(
                 f"muP learning rates are not supported for {self.__class__.__name__}"
             )
+        if self.completedp is not None or find_completedp_model(model) is not None:
+            raise OLMoConfigurationError(
+                f"CompletedP is not supported for {self.__class__.__name__}"
+            )
 
         kwargs = self.as_dict(exclude_private_fields=True)
         kwargs.pop("mup")
+        kwargs.pop("completedp")
         group_overrides = kwargs.pop("group_overrides")
         if group_overrides is not None:
             log.warning(f"group_overrides is set but will be ignored for {self.__class__.__name__}")

@@ -272,3 +272,15 @@ def test_block_parallelism_disabled_by_default():
     assert block.is_moe
     assert not block.ep_enabled
     assert not block.tp_enabled
+
+
+@pytest.mark.parametrize(
+    "attention_alpha, feed_forward_alpha", [(None, None), (0.5, 0.25)], ids=["default", "set"]
+)
+def test_block_residual_alphas(attention_alpha, feed_forward_alpha):
+    config = _block_config(use_peri_norm=True)
+    config.attention_residual_alpha = attention_alpha
+    config.feed_forward_residual_alpha = feed_forward_alpha
+    block = _build_block(config)
+    assert block.attention_residual_alpha == (attention_alpha or 1.0)
+    assert block.feed_forward_residual_alpha == (feed_forward_alpha or 1.0)

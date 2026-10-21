@@ -5,7 +5,7 @@ muP (maximal update parameterization) learning rates for Adam-type optimizers.
 import dataclasses
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import torch.nn as nn
 
@@ -18,7 +18,12 @@ from ..utils import log_once
 if TYPE_CHECKING:
     from .config import OptimGroupOverride
 
-__all__ = ["MuPConfig", "mup_lr_multipliers", "split_groups_by_lr_multiplier"]
+__all__ = [
+    "MuPConfig",
+    "mup_lr_multipliers",
+    "split_groups_by_lr_multiplier",
+    "split_groups_by_multipliers",
+]
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +106,55 @@ def mup_lr_multipliers(model: nn.Module, config: MuPConfig) -> Dict[str, float]:
     return multipliers
 
 
+def split_groups_by_multipliers(
+    groups: List["OptimGroupOverride"],
+    multipliers: Dict[str, Dict[str, float]],
+    base_values: Dict[str, Optional[float]],
+    *,
+    parameterization: str,
+) -> List["OptimGroupOverride"]:
+    """
+    Split parameter groups so that every parameter in a group shares the same multipliers, and
+    set each multiplied option of a group to its base value times the multiplier. The base value is
+    the group's own option if it sets one, otherwise the optimizer's. Each group records each
+    multiplier under ``"<option>_multiplier"`` (e.g. ``"lr_multiplier"``); other group options are
+    kept.
+
+    :param groups: The groups, with parameter names already expanded.
+    :param multipliers: For every parameter, a mapping from option name to multiplier. Every
+        parameter must have the same option names, in the same order.
+    :param base_values: The optimizer's value of each option.
+    :param parameterization: The name of the parameterization, used in error messages.
+
+    :returns: The split groups, in order. Sub-groups of a group are in order of first appearance.
+
+    :raises OLMoConfigurationError: If a parameter has no multipliers, or an option to scale has no
+        base value.
+    """
+    split: List["OptimGroupOverride"] = []
+    for group in groups:
+        names_by_multipliers: Dict[Tuple[Tuple[str, float], ...], List[str]] = {}
+        for name in group.params:
+            if name not in multipliers:
+                raise OLMoConfigurationError(
+                    f"{parameterization} has no multiplier for optimizer parameter '{name}'"
+                )
+            names_by_multipliers.setdefault(tuple(multipliers[name].items()), []).append(name)
+
+        for key, names in names_by_multipliers.items():
+            opts = dict(group.opts)
+            for option, multiplier in key:
+                base_value = group.opts.get(option, base_values.get(option))
+                if base_value is None:
+                    raise OLMoConfigurationError(
+                        f"{parameterization} needs a value for '{option}' to scale"
+                    )
+                opts[option] = base_value * multiplier
+                opts[f"{option}_multiplier"] = multiplier
+            split.append(dataclasses.replace(group, params=names, opts=opts))
+    return split
+
+
 def split_groups_by_lr_multiplier(
     groups: List["OptimGroupOverride"],
     multipliers: Dict[str, float],
@@ -126,25 +180,18 @@ def split_groups_by_lr_multiplier(
     :raises OLMoConfigurationError: If a parameter has no multiplier, or if weight decay must be
         scaled but is unknown.
     """
-    split: List["OptimGroupOverride"] = []
-    for group in groups:
-        names_by_multiplier: Dict[float, List[str]] = {}
-        for name in group.params:
-            if name not in multipliers:
+    split = split_groups_by_multipliers(
+        groups,
+        {name: {"lr": multiplier} for name, multiplier in multipliers.items()},
+        {"lr": lr},
+        parameterization="muP",
+    )
+    if config.scale_weight_decay:
+        for group in split:
+            group_weight_decay = group.opts.get("weight_decay", weight_decay)
+            if group_weight_decay is None:
                 raise OLMoConfigurationError(
-                    f"muP has no learning-rate multiplier for optimizer parameter '{name}'"
+                    "MuPConfig.scale_weight_decay requires a weight decay to scale"
                 )
-            names_by_multiplier.setdefault(multipliers[name], []).append(name)
-
-        group_lr = group.opts.get("lr", lr)
-        group_weight_decay = group.opts.get("weight_decay", weight_decay)
-        for multiplier, names in names_by_multiplier.items():
-            opts = {**group.opts, "lr": group_lr * multiplier, LR_MULTIPLIER_FIELD: multiplier}
-            if config.scale_weight_decay:
-                if group_weight_decay is None:
-                    raise OLMoConfigurationError(
-                        "MuPConfig.scale_weight_decay requires a weight decay to scale"
-                    )
-                opts["weight_decay"] = group_weight_decay / multiplier
-            split.append(dataclasses.replace(group, params=names, opts=opts))
+            group.opts["weight_decay"] = group_weight_decay / group.opts[LR_MULTIPLIER_FIELD]
     return split

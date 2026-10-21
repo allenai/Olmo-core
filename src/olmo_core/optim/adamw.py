@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, Type, Union
+from typing import ClassVar, Optional, Tuple, Type, Union
 
 import torch
 
@@ -244,6 +244,8 @@ class AdamWConfig(OptimConfig[torch.optim.AdamW]):
     foreach: Optional[bool] = None
     fused: Optional[bool] = None
 
+    _supports_completedp: ClassVar[bool] = True
+
     @classmethod
     def optimizer(cls) -> Type[torch.optim.AdamW]:
         return torch.optim.AdamW
@@ -285,6 +287,8 @@ class SkipStepAdamWConfig(OptimConfig[SkipStepAdamW]):
     """
     The number of standard deviations above the mean loss to skip a step.
     """
+
+    _supports_completedp: ClassVar[bool] = True
 
     @classmethod
     def optimizer(cls) -> Type[SkipStepAdamW]:

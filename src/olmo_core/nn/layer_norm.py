@@ -217,6 +217,11 @@ class LayerNorm(nn.Module):
         else:
             self.register_parameter("bias", None)
             self.register_parameter("weight", None)
+        self.output_scale = 1.0
+        """
+        A constant multiplier on the output, folded into the element-wise weight and bias. Only
+        set it if :meth:`supports_output_scale` returns ``True``.
+        """
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -224,6 +229,22 @@ class LayerNorm(nn.Module):
             torch.nn.init.ones_(self.weight)
         if self.bias is not None:
             torch.nn.init.zeros_(self.bias)
+
+    def supports_output_scale(self) -> bool:
+        """
+        Whether :data:`output_scale` can be folded into this norm's element-wise affine.
+        """
+        return self.weight is not None and type(self).forward in (
+            LayerNorm.forward,
+            RMSNorm.forward,
+        )
+
+    def _affine(self, x: torch.Tensor, param: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        if param is None:
+            return None
+        if self.output_scale == 1.0:
+            return param.type_as(x)
+        return param.type_as(x) * self.output_scale
 
     def extra_repr(self):
         if self.weight is not None and self.bias is not None:
@@ -245,21 +266,16 @@ class LayerNorm(nn.Module):
             if self.full_precision:
                 x = x.float()
 
-            if self.weight is not None and self.weight_shape != self.normalized_shape:
+            weight, bias = self._affine(x, self.weight), self._affine(x, self.bias)
+            if weight is not None and self.weight_shape != self.normalized_shape:
                 # 'F.layer_norm' requires the weight/bias to match 'normalized_shape', so apply
                 # the element-wise affine manually (via broadcasting) after normalizing.
                 x = F.layer_norm(x, self.normalized_shape, eps=self.eps)
-                x = self.weight.type_as(x) * x
-                if self.bias is not None:
-                    x = x + self.bias.type_as(x)
+                x = weight * x
+                if bias is not None:
+                    x = x + bias
             else:
-                x = F.layer_norm(
-                    x,
-                    self.normalized_shape,
-                    weight=None if self.weight is None else self.weight.type_as(x),
-                    bias=None if self.bias is None else self.bias.type_as(x),
-                    eps=self.eps,
-                )
+                x = F.layer_norm(x, self.normalized_shape, weight=weight, bias=bias, eps=self.eps)
 
             return x.to(og_dtype)
 
@@ -284,11 +300,12 @@ class RMSNorm(LayerNorm):
             variance = x.pow(2).mean(-1, keepdim=True)
             x = x * torch.rsqrt(variance + self.eps)
 
-            if self.weight is not None:
-                if self.bias is not None:
-                    x = self.weight.type_as(x) * x + self.bias.type_as(x)
+            weight, bias = self._affine(x, self.weight), self._affine(x, self.bias)
+            if weight is not None:
+                if bias is not None:
+                    x = weight * x + bias
                 else:
-                    x = self.weight.type_as(x) * x
+                    x = weight * x
 
             return x.to(og_dtype)
 

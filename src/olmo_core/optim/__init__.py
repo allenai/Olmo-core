@@ -1,5 +1,6 @@
 from .adam import AdamConfig
 from .adamw import AdamWConfig, SkipStepAdamW, SkipStepAdamWConfig
+from .completedp import CompletedPOptimConfig
 from .config import (
     INITIAL_LR_FIELD,
     LR_FIELD,
@@ -46,6 +47,7 @@ __all__ = [
     "MuonConfig",
     "NorMuonConfig",
     "MuPConfig",
+    "CompletedPOptimConfig",
     "OLMoDDPOptimizer",
     "OLMoDDPOptimizerConfig",
     "DionConfig",
