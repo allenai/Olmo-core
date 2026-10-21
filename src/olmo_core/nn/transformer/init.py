@@ -43,9 +43,7 @@ def init_linear(
         nn.init.zeros_(m.bias)
 
 
-def _init_trunc_normal(
-    x: torch.Tensor, *, std: float, generator: Optional[torch.Generator] = None
-):
+def _init_trunc_normal(x: torch.Tensor, *, std: float, generator: Optional[torch.Generator] = None):
     _apply_init(
         nn.init.trunc_normal_,
         x,
@@ -113,7 +111,9 @@ def init_fused_linear_nanochat(
     def init_fun(w: torch.Tensor, *, generator: Optional[torch.Generator] = None):
         for rows in w.split(list(out_features), dim=0):
             std = nanochat_std(m.in_features, rows.shape[0])
-            nn.init.trunc_normal_(rows, mean=0.0, std=std, a=-3 * std, b=3 * std, generator=generator)
+            nn.init.trunc_normal_(
+                rows, mean=0.0, std=std, a=-3 * std, b=3 * std, generator=generator
+            )
 
     _apply_init(init_fun, m.weight, generator=generator)
     if m.bias is not None:

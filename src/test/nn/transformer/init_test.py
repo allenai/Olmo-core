@@ -314,7 +314,9 @@ def test_nanochat_init_dense(d_model, init_device, device):
         attention = block.attention
         assert attention.w_k.out_features == attention.w_q.out_features // 4
         for name in ("w_q", "w_k", "w_v", "w_out"):
-            _assert_linear_nanochat(getattr(attention, name), f"blocks.{block_idx}.attention.{name}")
+            _assert_linear_nanochat(
+                getattr(attention, name), f"blocks.{block_idx}.attention.{name}"
+            )
         for name in ("w1", "w2", "w3"):
             _assert_linear_nanochat(
                 getattr(block.feed_forward, name), f"blocks.{block_idx}.feed_forward.{name}"
@@ -423,7 +425,17 @@ def test_nanochat_init_kda():
     )
     kda.init_weights(init_method=InitMethod.nanochat, d_model=d_model, block_idx=0, num_blocks=2)
 
-    for name in ("w_q", "w_k", "w_v", "f_proj_1", "f_proj_2", "w_b", "g_proj_1", "g_proj_2", "w_out"):
+    for name in (
+        "w_q",
+        "w_k",
+        "w_v",
+        "f_proj_1",
+        "f_proj_2",
+        "w_b",
+        "g_proj_1",
+        "g_proj_2",
+        "w_out",
+    ):
         _assert_linear_nanochat(getattr(kda, name), name)
     for name in ("q_conv1d", "k_conv1d", "v_conv1d"):
         _assert_std(getattr(kda, name).weight, 4**-0.5, name)
