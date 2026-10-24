@@ -794,7 +794,7 @@ parent's checkout unless REPO_OVERRIDE is set (068d3f0ac); LoRA runs use OLMo-co
 | lora64fa275 (reference: LoRA r64 + freeze 75%, 2 seeds) | 267 (0.23) | 0.934 | 0.901 | 0.622 | 0.737 |
 | lora64fa275sk3M7 (+ sk3) | 254 (0.22) | 0.898 | 0.902 | 0.609 | 0.685 |
 | lora64ptM7 (LoRA r64 + per-task routers) | 287 (0.25) | 0.932 | 0.882 | 0.620 | 0.686 |
-| **lora64fa275r20to7** (+ stages 7:0.2,16:0.07; peak 48.9 GiB) | 276 (0.24) | **0.941** | **0.928** | 0.593 | **0.811** |
+| **lora64fa275r20to7** (+ stages 7:0.2,16:0.07; peak 48.9 GiB), seeds 0 / 1 | 276 (0.24) | 0.941 / 0.935 | 0.928 / 0.916 | 0.593 / 0.626 | 0.811 / 0.718 |
 
 sk3 2-seed mean 0.908 / 0.909 / 0.617 / 0.588: -0.03 contra and -0.09 outlier vs the plain router for 4% less compute
 -- past block 7 only the kept 10% run the upper blocks, so skipping three of them saves little. (The parent's
@@ -805,5 +805,8 @@ nq at 31% of dense compute; vs the one-stage router at the same compute +0.019 /
 GiB; on mt11s720 + floor 16 it does not beat the 0.36x arms.) **With the LoRA r64 + freeze-75% early stack (lora64fa275r20to7): 0.941 / 0.928 / 0.593 / 0.811 at 0.24x and
 48.9 GiB** -- vs LoRA + freeze alone +0.007 contra, +0.027 nq, +0.07 outlier, -0.03 oolong, for +0.01x. sk3 on top of
 LoRA costs contra (-0.036) for 0.01x; per-task routers on top of LoRA r64 are neutral (0.932 / 0.882 / 0.620 / 0.686 vs
-0.939 / 0.904 / 0.623 / 0.686 shared, 0.25x). Next: lora64fa275r20to7 seed 1 (Lambda) and lora64fa371r20to7f16 on mt11s720.
+0.939 / 0.904 / 0.623 / 0.686 shared, 0.25x). **Seed 1 (0.935 / 0.916 / 0.626 / 0.718; adapters re-installed in all four evals) gives a 2-seed mean of 0.938 / 0.922
+/ 0.610 / 0.765 at 0.24x and 48.9 GiB: vs LoRA + freeze alone +0.004 contra, +0.021 nq, -0.012 oolong, +0.028 outlier for
++0.01x; vs the one-stage router (0.30x, 60.3 GiB) level on contra / oolong, better nq / outlier, at 80% of its compute and
+81% of its peak memory.** Running: lora64fa371r20to7f16 on mt11s720.
 
