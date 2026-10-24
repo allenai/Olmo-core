@@ -37,6 +37,7 @@ from olmo_core.nn.attention.ring import (
     UlyssesContextParallelStyle,
 )
 from olmo_core.nn.embedding import SplitVocabEmbedding
+from olmo_core.nn.residual_stream import ResidualStream
 from olmo_core.utils import get_default_device, mark_dynamic, move_to_device
 
 from ..attention import Attention, RingAttentionLoadBalancer, SequenceMixer
@@ -982,6 +983,22 @@ class Transformer(nn.Module):
         if self.lm_head is not None:
             self.lm_head.apply_cp(cp_mesh)
 
+    def _dropout_is_active(self) -> bool:
+        """
+        Whether any submodule applies dropout, and therefore whether activation checkpointing has
+        to preserve the RNG state across recomputation.
+
+        Covers both :class:`~olmo_core.nn.residual_stream.ResidualStream` (whose ``masked_dropout``
+        drives Molmo2's ``response_residual_dropout``) and plain :class:`torch.nn.Dropout`.
+        """
+        for module in self.modules():
+            if isinstance(module, ResidualStream):
+                if module.p > 0.0 or module.masked_dropout > 0.0:
+                    return True
+            elif isinstance(module, nn.Dropout) and module.p > 0.0:
+                return True
+        return False
+
     def apply_activation_checkpointing(
         self,
         mode: TransformerActivationCheckpointingMode,
@@ -1027,10 +1044,13 @@ class Transformer(nn.Module):
         if mode == TransformerActivationCheckpointingMode.selected_modules and modules is None:
             raise ValueError("'modules' is required for 'selected_modules' mode")
 
-        # EMO samples a routed-expert pool size for each document. Recompute must replay those
-        # samples so it routes through the same experts as the original checkpointed forward.
-        # TODO: also preserve RNG state if dropout is active.
-        preserve_rng_state = any(
+        # Recomputation must replay the *same* random draws the forward pass used, otherwise the
+        # gradients are taken with respect to a different sample than the loss was. Saving and
+        # restoring the RNG state costs a little per checkpointed block, so only pay it when needed:
+        # - Dropout is active (mirrors mm_olmo's `llm_activation_checkpoint_function`).
+        # - EMO samples a routed-expert pool size for each document, and recompute must route
+        #   through the same experts as the original checkpointed forward.
+        preserve_rng_state = self._dropout_is_active() or any(
             getattr(
                 getattr(block, "routed_experts_router", None),
                 "requires_segment_ids",
