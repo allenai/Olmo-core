@@ -790,7 +790,7 @@ parent's checkout unless REPO_OVERRIDE is set (068d3f0ac); LoRA runs use OLMo-co
 |---|---|---|---|---|---|
 | otr10M7de0 (reference, 2 seeds) | 346 (0.30) | 0.937 | 0.902 | 0.623 | 0.682 |
 | otr10M7de0sk3 (+ --train-skip-layers 20,24,28), seeds 0 / 1 | 333 (0.29) | 0.915 / 0.900 | 0.898 / 0.920 | 0.618 / 0.615 | 0.639 / 0.537 |
-| r20to7M7de0 (--st-otr-stages 7:0.2,16:0.07), seed 1 (seed 0 relaunched) | 355 (0.31) | 0.956 | 0.916 | 0.658 | 0.817 |
+| **r20to7M7de0** (--st-otr-stages 7:0.2,16:0.07), seeds 0 / 1 | 355 (0.31) | 0.956 / 0.956 | 0.902 / 0.916 | 0.630 / 0.658 | 0.765 / 0.817 |
 | lora64fa275 (reference: LoRA r64 + freeze 75%, 2 seeds) | 267 (0.23) | 0.934 | 0.901 | 0.622 | 0.737 |
 | lora64fa275sk3M7 (+ sk3) | 254 (0.22) | 0.898 | 0.902 | 0.609 | 0.685 |
 | **lora64fa275r20to7** (+ stages 7:0.2,16:0.07; peak 48.9 GiB) | 276 (0.24) | **0.941** | **0.928** | 0.593 | **0.811** |
@@ -798,9 +798,10 @@ parent's checkout unless REPO_OVERRIDE is set (068d3f0ac); LoRA runs use OLMo-co
 sk3 2-seed mean 0.908 / 0.909 / 0.617 / 0.588: -0.03 contra and -0.09 outlier vs the plain router for 4% less compute
 -- past block 7 only the kept 10% run the upper blocks, so skipping three of them saves little. (The parent's
 s1952 result compared sk3 with the DENSE curve at matched PF, where it was within noise; against the same router it is
-a small loss here.) **The two-stage drop r20to7 is the strongest router quality so far** (seed 1: 0.956 /
-0.916 / 0.658 / 0.817 at 0.31x, above the one-stage router on all four and above dense on oolong / outlier; seed 0
-pending). **With the LoRA r64 + freeze-75% early stack (lora64fa275r20to7): 0.941 / 0.928 / 0.593 / 0.811 at 0.24x and
+a small loss here.) **The two-stage drop r20to7 is the strongest router quality so far, confirmed on two seeds: mean 0.956 / 0.909 /
+0.644 / 0.791 at 0.31x vs dense-s1464 0.956 / 0.936 / 0.630 / 0.719 -- equal contra, +0.014 oolong, +0.07 outlier, -0.027
+nq at 31% of dense compute; vs the one-stage router at the same compute +0.019 / +0.007 / +0.021 / +0.11.** (Peak 60.8
+GiB; on mt11s720 + floor 16 it does not beat the 0.36x arms.) **With the LoRA r64 + freeze-75% early stack (lora64fa275r20to7): 0.941 / 0.928 / 0.593 / 0.811 at 0.24x and
 48.9 GiB** -- vs LoRA + freeze alone +0.007 contra, +0.027 nq, +0.07 outlier, -0.03 oolong, for +0.01x. sk3 on top of
 LoRA costs contra (-0.036) for 0.01x. Next: lora64fa275r20to7 seed 1 (Lambda) and lora64fa371r20to7f16 on mt11s720.
 
