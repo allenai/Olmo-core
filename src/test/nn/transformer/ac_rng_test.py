@@ -12,6 +12,8 @@ checkpointing off, which should be mathematically neutral.
 """
 
 
+from typing import Any, cast
+
 import pytest
 import torch
 
@@ -30,8 +32,9 @@ def _model(masked_dropout: float = 0.0, dropout: float = 0.0):
         n_heads=2,
         attn_backend=AttentionBackendName.torch,
     )
-    config.block.masked_dropout = masked_dropout
-    config.block.dropout = dropout
+    block = cast(Any, config.block)
+    block.masked_dropout = masked_dropout
+    block.dropout = dropout
     return config.build(init_device="cpu")
 
 
