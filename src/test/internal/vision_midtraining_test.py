@@ -1549,6 +1549,7 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
         STAGE1_V7_NEMOTRON_REASONING,
         STAGE1_V7_NEMOTRON_SOURCE_SIZES,
         STAGE1_V7_PASS_CAP,
+        STAGE1_V7_PASS_CAPS,
         STAGE1_V7_TEXT_LOSS_SHARE,
     )
 
@@ -1583,9 +1584,12 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
         return loss / (sizes[name] * weights[name])
 
     capped = {n for names in STAGE1_V7_CAPPED_SOURCES.values() for n in names}
-    assert all(passes(n) <= STAGE1_V7_PASS_CAP + 1e-9 for n in capped)
+    assert all(passes(n) <= STAGE1_V7_PASS_CAPS[n] + 1e-9 for n in capped)
     assert passes("cosyn_chemical_exp") == pytest.approx(STAGE1_V7_PASS_CAP)
-    assert passes("olmocr_documents") < STAGE1_V7_PASS_CAP  # under the cap already
+    assert passes("synth_receipts_en") == pytest.approx(STAGE1_V7_PASS_CAP)
+    assert passes("textocr") == pytest.approx(STAGE1_V7_PASS_CAPS["textocr"])
+    # olmOCR documents was under the cap; the receipts and TextOCR loss raises it toward it.
+    assert 4.5 < passes("olmocr_documents") < STAGE1_V7_PASS_CAP
     ocr = set(STAGE1_V3_GROUPS["ocr"])
     untouched = set(STAGE1_V6_LOSS_TARGETS) - ocr - capped
     assert {

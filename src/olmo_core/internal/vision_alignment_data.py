@@ -786,25 +786,48 @@ def _share_per_pass(name: str) -> float:
 
 
 STAGE1_V7_PASS_CAP: float = 5.0
-"""Passes over a 20,000-step run beyond which v7 caps the CoSyn and olmOCR sources (v6 drew them
-8.7-30 times; olmOCR documents, at 4.5, is under the cap). 5 is about olmOCR documents' level, so
-both families come out even."""
+"""Passes over a 20,000-step run beyond which v7 caps the CoSyn and olmOCR sources and the synthetic
+receipts (v6 drew them 8.7-30 times; olmOCR documents, at 4.5, is under the cap). 5 is about olmOCR
+documents' level, so both families come out even."""
 
 STAGE1_V7_CAPPED_SOURCES: dict[str, tuple[str, ...]] = {
     "cosyn": tuple(name for name in STAGE1_V6_LOSS_TARGETS if name.startswith("cosyn_")),
     "olmocr": tuple(name for name in STAGE1_V6_LOSS_TARGETS if name.startswith("olmocr_")),
+    "scene_ocr": ("synth_receipts_en", "textocr"),
 }
-"""The sources :data:`STAGE1_V7_PASS_CAP` applies to: the CoSyn sets (the academic QA and CoSyn
-point) and the olmOCR subsets."""
+"""The sources v7 caps: the CoSyn sets (the academic QA and CoSyn point), the olmOCR subsets, and the
+small synthetic-receipt and TextOCR sets."""
+
+STAGE1_V7_PASS_CAPS: dict[str, float] = {
+    **{
+        name: STAGE1_V7_PASS_CAP
+        for family in ("cosyn", "olmocr")
+        for name in STAGE1_V7_CAPPED_SOURCES[family]
+    },
+    "synth_receipts_en": STAGE1_V7_PASS_CAP,
+    "textocr": 10.0,
+}
+"""Pass cap of each capped source. TextOCR keeps 10 (v6 drew it 25 times): its 21,749 real photos
+are the stage's only natural-scene text transcription."""
 
 _V7_CAPPED = {
-    name: min(_V7_OCR_FUNDED[name], STAGE1_V7_PASS_CAP * _share_per_pass(name))
-    for family in STAGE1_V7_CAPPED_SOURCES.values()
-    for name in family
+    name: min(_V7_OCR_FUNDED[name], cap * _share_per_pass(name))
+    for name, cap in STAGE1_V7_PASS_CAPS.items()
 }
 _V7_FREED = {
     family: sum(_V7_OCR_FUNDED[name] - _V7_CAPPED[name] for name in names)
     for family, names in STAGE1_V7_CAPPED_SOURCES.items()
+}
+# The receipts and TextOCR loss goes to the olmOCR sources still under their cap (olmOCR documents),
+# up to the cap; anything left over joins the olmOCR cap's loss on the reasoning sets.
+_V7_OLMOCR_ROOM = {
+    name: STAGE1_V7_PASS_CAPS[name] * _share_per_pass(name) - _V7_CAPPED[name]
+    for name in STAGE1_V7_CAPPED_SOURCES["olmocr"]
+}
+_V7_TO_OLMOCR = min(_V7_FREED["scene_ocr"], sum(_V7_OLMOCR_ROOM.values()))
+_V7_OLMOCR_GROWN = {
+    name: _V7_CAPPED[name] + _V7_TO_OLMOCR * room / sum(_V7_OLMOCR_ROOM.values())
+    for name, room in _V7_OLMOCR_ROOM.items()
 }
 STAGE1_V7_NEMOTRON_CAPTIONS: tuple[str, ...] = (
     "nemotron_openimages_1",
@@ -832,8 +855,12 @@ def _grow(names: tuple[str, ...], freed: float) -> dict[str, float]:
 STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
     **_V7_OCR_FUNDED,
     **_V7_CAPPED,
+    **_V7_OLMOCR_GROWN,
     **_grow(STAGE1_V7_NEMOTRON_CAPTIONS, _V7_FREED["cosyn"]),
-    **_grow(STAGE1_V7_NEMOTRON_REASONING, _V7_FREED["olmocr"]),
+    **_grow(
+        STAGE1_V7_NEMOTRON_REASONING,
+        _V7_FREED["olmocr"] + _V7_FREED["scene_ocr"] - _V7_TO_OLMOCR,
+    ),
 }
 """Target loss mass of each stage-1 v7 source, in two steps.
 
@@ -841,12 +868,13 @@ STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
    :data:`STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS`, all of it from the OCR group, whose sources keep
    v6's ratio: v6 moved the loss of the capped PixMo-Cap and PixMo-Count to OCR (39% to 61% of the
    visual loss) for want of fresh caption data, and the Nemotron captions are that data.
-2. The CoSyn and olmOCR sources are capped at :data:`STAGE1_V7_PASS_CAP` passes. The loss the CoSyn
-   cap frees goes to the Nemotron detailed captions (1 to about 1.7 passes) and the loss the olmOCR
-   cap frees to the Nemotron reasoning sources (2 to about 2.5 passes, near the 7.5% reasoning
-   traces have in the OLMo 3 text mix).
+2. The sources of :data:`STAGE1_V7_PASS_CAPS` are capped. The loss the CoSyn cap frees goes to the
+   Nemotron detailed captions (1 to about 1.7 passes), the loss the olmOCR cap frees to the Nemotron
+   reasoning sources (2 to about 2.5 passes, near the 7.5% reasoning traces have in the OLMo 3 text
+   mix), and the loss the receipts and TextOCR caps free to olmOCR documents (4.5 to about 4.9
+   passes, under its cap).
 
-PixMo-Cap, PixMo-Count, PixMo-Points, the text-rich and synthetic OCR sources, DVQA, FigureQA,
+PixMo-Cap, PixMo-Count, PixMo-Points, the text-rich and NVIDIA synthetic OCR sources, DVQA, FigureQA,
 PlotQA and clocks keep their step-1 shares. v7 trains every annotation as a document, as v5 does."""
 
 
