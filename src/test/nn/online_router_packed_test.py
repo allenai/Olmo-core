@@ -43,7 +43,7 @@ def _model(**cfg):
                                     drop_slots=True, keep_token_rule="online", keep_token_k=0.3,
                                     online_router=router, pad_multiple=16)
     model._flop_pad_id = EOS
-    router.w = torch.zeros(router.n_features)  # past warmup: a routed step
+    router.w = torch.zeros(router.n_features, device="cuda")  # past warmup: a routed step
     router.step = 2
     model.train()
     return model, router
