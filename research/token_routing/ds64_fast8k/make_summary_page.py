@@ -161,6 +161,12 @@ a { color: inherit; }
 <section class="box">
   <h2>Bottom line (2026-10-24)</h2>
   <ul>
+    <li><b>One recipe for both mixes (2 seeds each):</b> rank-64 adapters on blocks 0–6 (never frozen), keep 20% of tokens from block 7, rescore to 7% at block 16, no full-context steps; add a 16-token floor per document on the 11-task mix.
+      <ul>
+        <li>4-task mix, 1,464 rows/task: 0.945 / 0.912 / 0.636 / 0.726 at 0.26× dense FLOPs, ~49 GiB peak.</li>
+        <li>11-task mix, 720 rows/task: mean9 0.751 at 0.38×, +0.045 over dense at matched FLOPs (xabsence holds at 0.68–0.71).</li>
+        <li>Freezing the adapters is free on the 4-task mix but costs xabsence on the 11-task mix, so the recipe has no freeze.</li>
+      </ul></li>
     <li><b>Best combination (2 seeds): rank-64 adapters on blocks 0–6, frozen at 75%, plus two-stage keep (20% of tokens from block 7, rescored to 7% at block 16), no full-context steps.</b> 4-task mix, 1,464 rows/task: 0.938 / 0.922 / 0.610 / 0.765 at 0.24× dense FLOPs and 48.9 GiB peak memory, against 0.937 / 0.902 / 0.623 / 0.682 at 0.30× and 60.3 GiB for the plain no-full-step router. Best quality: two-stage keep alone (2 seeds), 0.956 / 0.909 / 0.644 / 0.791 at 0.31×. Dense on the same data scores 0.956 / 0.936 / 0.630 / 0.719 at 1.0×. Second seed, 11-task and fresh-data (to 7,808 rows/task) runs are training.</li>
     <li><b>New best, compute and memory (2 seeds): router with low-rank adapters on blocks 0–6, no full-context steps.</b> Blocks 0–6 are frozen from step 0 and train through rank-64 adapters; the router keeps 10% of tokens for blocks 7–31. 4-task mix, 1,464 rows/task, LR 5e-6: 0.939 / 0.904 / 0.623 / 0.686, against 0.937 / 0.902 / 0.623 / 0.682 for the same router without adapters. That is the same quality at 0.25× dense FLOPs (vs 0.30×) and 48.4 GiB peak memory (vs 60.3), the first cut that lowers the peak from step 0. Rank 16 is worse (0.924 / 0.882 / 0.605 / 0.579). Fresh-data runs out to 7,808 rows/task and CPT runs are queued.</li>
     <li><b>At its own learning rate (5e-6), the router matches dense trained on the same data at 0.38× the FLOPs.</b> 4-task mix, 1,464 rows/task, 2 seeds: contradiction / nq / oolong / outlier @8k 0.955 / 0.913 / 0.622 / 0.726 vs dense 0.956 / 0.936 / 0.630 / 0.719. Level on 3 of 4; nq −0.023.</li>
