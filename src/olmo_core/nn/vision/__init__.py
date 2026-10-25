@@ -23,6 +23,7 @@ from .image_vit import (
 )
 from .molmo2_image_processor import preprocess_image_molmo2
 from .molmo2_loader import molmo2_hf_state_dict_to_multimodal_lm
+from .molmo2_tokens import Molmo2TokenIds, prepare_molmo2_tokenizer
 from .multimodal import MultimodalLM, MultimodalLMConfig
 
 __all__ = [
@@ -43,4 +44,6 @@ __all__ = [
     "MultimodalLM",
     "molmo2_hf_state_dict_to_multimodal_lm",
     "preprocess_image_molmo2",
+    "Molmo2TokenIds",
+    "prepare_molmo2_tokenizer",
 ]

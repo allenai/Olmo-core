@@ -99,12 +99,14 @@ def _load_vqa2_multi(split: str) -> List[Dict[str, Any]]:
 
 def _load_text_vqa(split: str) -> List[Dict[str, Any]]:
     split = "val" if split == "validation" else split
+    # TextVQA distributes train and validation images together under ``train_images``.
+    image_split = "train" if split == "val" else split
     data = _load_json(join(TEXT_VQA_SOURCE, f"TextVQA_0.5.1_{split}.json"))
     out = []
     for ex in data["data"]:
         out.append(
             {
-                "image": join(TEXT_VQA_SOURCE, f"{split}_images", ex["image_id"] + ".jpg"),
+                "image": join(TEXT_VQA_SOURCE, f"{image_split}_images", ex["image_id"] + ".jpg"),
                 "question": ex["question"],
                 "answers": ex["answers"],
                 "metadata": {
