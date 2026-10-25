@@ -871,3 +871,21 @@ PF: +0.045 / +0.036 / +0.007 / +0.07). FLOPs-to-match: dense reaches the recipe'
 and 1154 PF (~3.5x) and its outlier (0.726) at ~1154 PF (~3.9x). On the same rows the recipe is behind dense on contra
 at s488 / s976 (it sees each row once at 0.26x the per-row cost) and level at s1464.
 
+**Universal recipe compute curve on mt11 (+ floor 16, LR 5e-6, de0, 8k, eval_size 500 per task; mean over the 9 graded
+tasks; recipe seed 0 except s720 = 2 seeds).** Dense = the parent's lrg / tdc runs at 5e-6.
+
+| rows / task | recipe PF | recipe mean9 | dense PF | dense mean9 |
+|---|---|---|---|---|
+| 240 | 90 | 0.653 | 232 | 0.697 |
+| 480 | 185 | 0.727 | 483 | 0.750 |
+| 720 | 273 | 0.751 | 715 | 0.788 |
+| 960 | 367 | 0.774 | 953 | 0.799 |
+
+At matched FLOPs the recipe leads dense along the curve: interpolated to 232 PF it is ~0.740 (+0.043), and at 367 PF
++0.049 (dense ~0.725 there). FLOPs-to-match: dense needs ~1.7-1.8x the recipe's compute on mt11 (vs ~3.5-3.9x on mt4).
+The s240 point gets a direct matched read from the parent's dense s240 at 32 / 64 steps (~45 / ~90 PF, launched).
+
+**Recipe + per-task routers on mt11s720 (2 seeds): 0.736 / 0.769, mean 0.753 vs recipe 0.751 -- neutral.** Grouping is
+up in both seeds (0.331 / 0.324 vs 0.290), but strmatch swings 0.778 / 0.937 across seeds. (Seed 0's nq eval failed on
+Beaker before starting and was resubmitted.)
+
