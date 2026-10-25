@@ -55,6 +55,9 @@
 #   LORAFZ LoRA r64 K16, then adapters + blocks [0,16) frozen at 75% of the steps (router branch >= 5e1202e4b; best
 #        SFT compute + memory point), at 48 / 120 steps
 #   LORAS1 seed-1 (different data order) rerun of LoRA r16 K16 at 48 / 120 steps: is the arm itself stable?
+#   SHORT short-window CPT (lever 1, LR-sweep for Prasann): S4 = 4k windows, 16 rows/step (~0.11x/step) at 12-960 steps;
+#        S4->L = S4 steps at stable LR, then a dense 32k phase (p of the steps) branched optimizer-only that decays;
+#        LMIX = packed dense on mix4k_r25 / r50 (control for the hybrid)
 #   SEED Dlr20-120-s1 (seed noise of the dense reference at LR 2e-5; was 0.009 nats at 2.07e-4)
 #   IRS  IRANDlr20-260 (saves every 58) + branches 65 / 130: I-rand at dense-equivalent 12 / 24 / 48 steps
 #   IFS  IFLlr20-215 (saves every 48) + branches 54 / 108: I-fl 25% at dense-equivalent 12 / 24 / 48 steps
@@ -92,7 +95,8 @@ run() {
   log "END $name rc=$rc"
   # a run without SAVE_INTERVAL is never branched from: drop its final trainer checkpoint (model + optimizer +
   # trainer state, ~110 GB) once the export exists (2026-10-23: 109 of them filled cubbins /data and hung a save)
-  if [ $rc -eq 0 ] && [ -f "$ROOT/runs/$name/model_and_optim/.metadata" ] && ! printf '%s\n' "$@" | grep -q '^SAVE_INTERVAL='; then
+  if [ $rc -eq 0 ] && [ -f "$ROOT/runs/$name/model_and_optim/.metadata" ] && ! printf '%s\n' "$@" | grep -q '^SAVE_INTERVAL=' \
+     && [[ "$name" != *-p1 ]]; then  # a two-phase run's phase 1 is branched from
     for d in "$ROOT/runs/$name"/step[0-9]*; do [ -d "$d" ] && rm -rf -- "$d"; done
   fi
   return $rc
@@ -244,6 +248,24 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
         run "o3cd-DLORA16k16lr20-$b-s1" ARM=OTR OTR_KEEP=1.0 OTR_L=16 OTR_DENSE=0 OTR_EXTRA="--st-otr-early-lora 16 --st-otr-early-lora-scale 32" SEED=1 MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 4 + 10)) \
           || { log "FAIL DLORA16 s1 at $b: continuing"; break; }
       done ;;
+    SHORT)
+      for b in 12 24 48 120 240 480 960; do
+        run "o3cd-S4lr20-$b" ARM=S4 MAX_STEPS_TOTAL=1 MAX_TOKENS=$((b * 65536)) EXPECTED_MIN=$((b / 30 + 8)) || { log "FAIL S4 $b: continuing"; break; }
+      done
+      for spec in "120:12" "120:30" "240:24"; do
+        n=${spec%%:*}; n2=${spec##*:}; n1=$((n - n2)); df=$(python3 -c "print(round(0.1 * $n / $n2, 3))")
+        run "o3cd-S4Llr20-$n-$n2-p1" ARM=S4 MAX_STEPS_TOTAL=1 MAX_TOKENS=$((n * 65536)) HARD_STOP=$n1 EXPECTED_MIN=$((n1 / 30 + 8)) \
+          || { log "FAIL S4L $spec phase 1: continuing"; continue; }
+        # control: dense full-context 32k phase 2
+        run "o3cd-S4Llr20-$n-$n2" ARM=C2 MAX_STEPS_TOTAL=$n2 BRANCH_FROM="$ROOT/runs/o3cd-S4Llr20-$n-$n2-p1/step$n1" BRANCH_OPTIM_ONLY=1 WARMUP=0 DECAY_FRAC=$df EXPECTED_MIN=$((n2 / 4 + 10)) \
+          || log "FAIL S4L $spec phase 2: continuing"
+        # candidate: token-dropped 32k phase 2 (router keep 10% after block 7, no full-context steps), same phase 1
+        run "o3cd-S4Lrtlr20-$n-$n2" ARM=OTR OTR_KEEP=0.1 OTR_L=7 OTR_DENSE=0 DATA_OVERRIDE=train32k_head_ee MAX_STEPS_TOTAL=$n2 BRANCH_FROM="$ROOT/runs/o3cd-S4Llr20-$n-$n2-p1/step$n1" BRANCH_OPTIM_ONLY=1 WARMUP=0 DECAY_FRAC=$df EXPECTED_MIN=$((n2 / 6 + 10)) \
+          || log "FAIL S4Lrt $spec phase 2: continuing"
+      done
+      for m in mix4k_r25 mix4k_r50; do for b in 48 120; do
+        run "o3cd-LMIX${m#mix4k_}lr20-$b" ARM=LMIX MIX=$m MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 4 + 10)) || { log "FAIL LMIX $m $b: continuing"; break; }
+      done; done ;;
     SEED)
       run o3cd-Dlr20-120-s1 ARM=D MAX_STEPS_TOTAL=120 SEED=1 EXPECTED_MIN=30 || exit 14 ;;
     IRS)
@@ -268,7 +290,7 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       done ;;
     EV)
       SPECS=""
-      for r in $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA64k${K}loclr20-$b DLORA64k${K}lr20-$b; done; done) DLORA64k16lr20-240 DLORA64k16lr20-480 DLORA128k16lr20-48 DLORA128k16lr20-120 DLORA64k16lr20-120-s1 DLORA64k24lr20-48 DLORA64k24lr20-120 $(for b in 12 24 48 120; do echo MODc35lr20-$b DLOClr20-$b DLOCfrzk8f25lr20-$b; done) $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA16k${K}lr20-$b; done; done) DPFZlr20-12 DPFZlr20-24 DPFZlr20-48 DPFZlr20-120 $(for c in 50 25; do for b in 12 24 48 120; do echo MODc${c}lr20-$b; done; done) $(for K in 16 8; do for f in 25 50; do for b in 12 24 48 120; do echo DFRZk${K}f${f}lr20-$b; done; done; done) OTR10M7ngf50lr20-46 OTR10M7ngf50lr20-92 OTR10M7ngf50lr20-185 OTR10M7ndnglr20-60 OTR10M7ndnglr20-120 OTR10M7ndnglr20-240 OTR10M7f50x10lr20-31 OTR10M7f50x10lr20-62 OTR10M7f50x10lr20-124 OTR10M7ndx10lr20-40 OTR10M7ndx10lr20-80 OTR10M7ndx10lr20-160 OTR10M7ndx03lr20-40 OTR10M7ndx03lr20-80 OTR10M7ndx03lr20-160 OTR10M7x10lr20-31 OTR10M7x10lr20-62 OTR10M7x10lr20-124 OTR10M7x10lr20-310 OTR10M7x03lr20-31 OTR10M7x03lr20-62 OTR10M7x03lr20-124 OTR10M7x03lr20-310 OTR10M7mglr20-31 OTR10M7mglr20-62 OTR10M7mglr20-124 OTR10M7nglr20-46 OTR10M7nglr20-92 OTR10M7nglr20-185 OTRpyrlr20-40 OTRpyrlr20-80 OTRpyrlr20-160 OTRpyrnglr20-60 OTRpyrnglr20-120 OTRpyrnglr20-240 OTR10M7lr20-31 OTR10M7lr20-62 OTR10M7lr20-124 OTR10M7lr20-310 OTR10M7ndlr20-40 OTR10M7ndlr20-80 OTR10M7ndlr20-160 Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
+      for r in $(for b in 12 24 48 120 240 480 960; do echo S4lr20-$b; done) S4Llr20-120-12 S4Llr20-120-30 S4Llr20-240-24 S4Lrtlr20-120-12 S4Lrtlr20-120-30 S4Lrtlr20-240-24 LMIXr25lr20-48 LMIXr25lr20-120 LMIXr50lr20-48 LMIXr50lr20-120 $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA64k${K}loclr20-$b DLORA64k${K}lr20-$b; done; done) DLORA64k16lr20-240 DLORA64k16lr20-480 DLORA128k16lr20-48 DLORA128k16lr20-120 DLORA64k16lr20-120-s1 DLORA64k24lr20-48 DLORA64k24lr20-120 $(for b in 12 24 48 120; do echo MODc35lr20-$b DLOClr20-$b DLOCfrzk8f25lr20-$b; done) $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA16k${K}lr20-$b; done; done) DPFZlr20-12 DPFZlr20-24 DPFZlr20-48 DPFZlr20-120 $(for c in 50 25; do for b in 12 24 48 120; do echo MODc${c}lr20-$b; done; done) $(for K in 16 8; do for f in 25 50; do for b in 12 24 48 120; do echo DFRZk${K}f${f}lr20-$b; done; done; done) OTR10M7ngf50lr20-46 OTR10M7ngf50lr20-92 OTR10M7ngf50lr20-185 OTR10M7ndnglr20-60 OTR10M7ndnglr20-120 OTR10M7ndnglr20-240 OTR10M7f50x10lr20-31 OTR10M7f50x10lr20-62 OTR10M7f50x10lr20-124 OTR10M7ndx10lr20-40 OTR10M7ndx10lr20-80 OTR10M7ndx10lr20-160 OTR10M7ndx03lr20-40 OTR10M7ndx03lr20-80 OTR10M7ndx03lr20-160 OTR10M7x10lr20-31 OTR10M7x10lr20-62 OTR10M7x10lr20-124 OTR10M7x10lr20-310 OTR10M7x03lr20-31 OTR10M7x03lr20-62 OTR10M7x03lr20-124 OTR10M7x03lr20-310 OTR10M7mglr20-31 OTR10M7mglr20-62 OTR10M7mglr20-124 OTR10M7nglr20-46 OTR10M7nglr20-92 OTR10M7nglr20-185 OTRpyrlr20-40 OTRpyrlr20-80 OTRpyrlr20-160 OTRpyrnglr20-60 OTRpyrnglr20-120 OTRpyrnglr20-240 OTR10M7lr20-31 OTR10M7lr20-62 OTR10M7lr20-124 OTR10M7lr20-310 OTR10M7ndlr20-40 OTR10M7ndlr20-80 OTR10M7ndlr20-160 Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
         [ -f "$ROOT/runs/o3cd-$r/model_and_optim/.metadata" ] && [ ! -f "$ROOT/devce/${r}_dev32k_1024.json" ] && SPECS="$SPECS $r:runs/o3cd-$r:4"
       done
       log "EV specs:$SPECS"

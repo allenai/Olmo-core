@@ -19,6 +19,7 @@
 #   SEED, EXTRA (appended trainer flags), NOWANDB=1, CODE_SHA (staged tree)
 #   CTX=64k        64k rows (train64k), 8 rows/step, YaRN x8      KEEP=<f>  drop-arm keep fraction / prob
 #   ST_EXTRA       extra --st-* flags (e.g. --st-keep-recent 4096 once that lands)
+#   MAX_TOKENS     token budget override (S4: steps x 65,536)
 #   GB_OVERRIDE    rows per step (default 16 at 32k / 8 at 64k); same token budget, more optimizer steps
 #   LR             peak LR (default: the OLMo 3 stage-3 recipe's 2.0712e-4)
 #   SMOKE=1        no model-only export and NO checkpoints at all (--no-final-checkpoint disables the
@@ -51,6 +52,12 @@ STEPS="${MAX_STEPS_TOTAL:?MAX_STEPS_TOTAL=<budget in steps>}"
 case "$ARM" in
   D)     DATA=train32k_ee SEQ=32768 GB=16 VAR="--variant full" ;;
   C1)    DATA=c8k_ee   SEQ=8192  GB=64 MB=4 VAR="--variant full" ;;  # 4 x 8k = 32k tokens per micro-batch, as the 32k arms
+  # S4: short 4k windows only (mix4k_r0 = train32k_ee tail rows 39,160..42,999, disjoint from train32k_head_ee), 16 rows/step = 65,536 tokens/step (~0.11x a dense 32k step); set the token
+  # budget with MAX_TOKENS (MAX_STEPS_TOTAL stays in 524,288-token units otherwise)
+  S4)    DATA=mix4k_r0 SEQ=4096 GB=16 VAR="--variant full" ;;
+  # LMIX: packed dense training on a mixed-length shard (MIX=mix4k_r25 / mix4k_r50): whole 32k docs + 4k windows,
+  # 16 packed 32k instances/step (same tokens/step as dense; only the 4k documents' attention is cheaper)
+  LMIX)  DATA=${MIX:-mix4k_r25} SEQ=32768 GB=16 VAR="--variant full --pack" ;;
   C2)    DATA=train32k_head_ee SEQ=32768 GB=16 VAR="--variant full" ;;  # rows 0..39,159: never the tail rows c8k was cut from
   IRAND) DATA=train32k_ee SEQ=32768 GB=16 VAR="--variant softtoken --st-block-size 512 --st-gold-blind --st-drop-slots --st-keep-prob 0.2 --st-pad-multiple 1" ;;
   # SD20: softdetach's sd20 geometry (records/softdetach-cpt-crossover.md, ~4x on Qwen3.5-4B): random 20% of the
@@ -85,6 +92,7 @@ YARN=4
 if [ "${CTX:-32k}" = "64k" ]; then
   case "$ARM" in D|IRAND|IFL|OTR) DATA=train64k_ee; SEQ=65536; GB=8; YARN=8 ;; *) echo "FATAL: CTX=64k not wired for ARM=$ARM"; exit 2 ;; esac
 fi
+DATA="${DATA_OVERRIDE:-$DATA}"   # e.g. phase 2 of a two-phase arm on the head shard (disjoint from mix4k_r0's tail rows)
 # GB_OVERRIDE: rows per optimizer step (dense small-batch control). MAX_STEPS_TOTAL stays in 524,288-token units,
 # so the token / FLOP budget is unchanged and the run takes (16 / GB) x as many optimizer steps.
 GB="${GB_OVERRIDE:-$GB}"
@@ -109,7 +117,7 @@ ARGS=(--task cpt --model-family olmo3 --model-scale 7b $VAR
   --base-checkpoint "$ROOT/base/stage2-step47684/model_and_optim" --skip-marker-audit --rope-yarn-factor "$YARN"
   --lr "${LR:-2.0712352850360292e-4}" --weight-decay 0.1 --z-loss 1e-5
   --scheduler wsd --warmup-fraction "${WARMUP:-0.017}" --wsd-decay-fraction "${DECAY_FRAC:-0.1}"
-  --max-tokens $(( STEPS * TOK_PER_STEP ))
+  --max-tokens "${MAX_TOKENS:-$(( STEPS * TOK_PER_STEP ))}"
   --activation-checkpointing full --shard-degree "$NGPU" --attn-backend flash_2 --no-compile
   --save-folder "$SAVE" --work-dir "$ROOT/work/$RUN" --run-name "$RUN"
   --wandb-group "${WANDB_GROUP:-o3cd-q3-7b}" --seed "${SEED:-0}")
