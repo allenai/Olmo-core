@@ -1048,6 +1048,17 @@ one segment's h at a time. There is no extra recompute. It is exact: a GPU test 
 
 Per-1k-token slopes: dense 0.28, otr10M7de0 0.17, LoRA-all 0.16 GiB.
 
+**Wall-clock cost of the memory flags** (step-2 time, one sample each, 2 x A100):
+
+| run | without chunking | with chunking |
+|---|---|---|
+| recipe, 128k | 14.0 s | 15.5 s with chunked FFN |
+| recipe, 196k | 28.4 s | 28.0 s with chunked FFN |
+| LoRA-all, 262k | 48.7 s (at the memory edge, allocator retries) | 43.0 s with chunked FFN; 45.0 s with chunked FFN + segmented GDN |
+
+The cost is within ~10% either way. At 8k the flags are close to no-ops, since rows are at most ~10k tokens: the
+LoRA-all run with all four flags took 55:59 against 55:21-55:28 without them.
+
 **What binds now** (LoRA-all at 393k). The peak is spread across several terms:
 - LoRA hook outputs: 13 GiB. Each adapted projection allocates its out-sized `B(Ax)` plus the sum.
 - Saved block outputs (residual stream): 11.2 GiB.
