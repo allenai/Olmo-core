@@ -715,6 +715,52 @@ STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS: float = (
 """Visual loss (response tokens) of a 20,000-step v6 run: PixMo-Cap's caption branch is capped at
 10 passes there, and its loss is this mass times its v6 share (about 16.3B tokens)."""
 
+STAGE1_POSITIONS_PER_LOSS_TOKEN: dict[str, float] = {
+    "pixmo_caption": 5.577,
+    "pixmo_transcript": 5.442,
+    "pixmo_points_v2": 36.499,
+    "pixmo_count_v2": 25.826,
+    "cosyn_point_v2": 54.674,
+    "olmocr_documents": 2.514,
+    "olmocr_books": 3.143,
+    "olmocr_loc_transcripts": 4.757,
+    "olmocr_national_archives": 5.209,
+    "text_rich_chart": 6.297,
+    "text_rich_diagram": 5.795,
+    "text_rich_doc": 4.742,
+    "text_rich_graphic": 5.618,
+    "text_rich_table": 5.394,
+    "textocr": 26.703,
+    "nvidia_synth_en": 6.132,
+    "synth_receipts_en": 7.056,
+    "cosyn_chart_exp": 25.210,
+    "cosyn_chemical_exp": 21.198,
+    "cosyn_diagram_exp": 30.174,
+    "cosyn_document": 185.839,
+    "cosyn_math_exp": 3.528,
+    "cosyn_music_exp": 27.090,
+    "cosyn_table_exp": 23.467,
+    "dv_qa": 336.619,
+    "figure_qa": 286.728,
+    "plot_qa": 184.216,
+    "pixmo_clocks": 93.049,
+    "nemotron_openimages_1": 3.049,
+    "nemotron_openimages_2": 2.969,
+    "nemotron_cc3m": 3.700,
+    "nemotron_textcaps": 32.830,
+    "nemotron_ecd": 1.389,
+    "nemotron_deepvision": 1.449,
+    "nemotron_babyvision": 1.939,
+    "nemotron_fintabnet": 1.468,
+    "nemotron_hopchain": 1.752,
+    "nemotron_raven": 1.977,
+}
+"""Sequence positions (text and image tokens) per response token of each v6 and v7 source as the
+merged stage builds it (dolma2 at the pinned revision, 65,536 tokens, every annotation a document):
+mean ``len(input_ids)`` over 32 draws (seed 0) divided by the source's calibrated mean loss weight,
+measured 2026-10-24/25. The Nemotron sources are text-dense (1.4-3.7, a long response per image),
+the OCR captions 2.5-7, pointing and the multi-question academic sets 25-340."""
+
 _V7_NEMOTRON_TARGETS = {
     name: epochs
     * STAGE1_V7_NEMOTRON_SOURCE_SIZES[name]
@@ -722,17 +768,45 @@ _V7_NEMOTRON_TARGETS = {
     / STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
     for name, epochs in STAGE1_V7_NEMOTRON_EPOCHS.items()
 }
+_V6_OCR_SHARE = sum(STAGE1_V6_LOSS_TARGETS[name] for name in STAGE1_V3_GROUPS["ocr"])
+_V7_OCR_SCALE = (_V6_OCR_SHARE - sum(_V7_NEMOTRON_TARGETS.values())) / _V6_OCR_SHARE
 STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
     **{
-        name: share * (1.0 - sum(_V7_NEMOTRON_TARGETS.values()))
+        name: share * (_V7_OCR_SCALE if name in STAGE1_V3_GROUPS["ocr"] else 1.0)
         for name, share in STAGE1_V6_LOSS_TARGETS.items()
     },
     **_V7_NEMOTRON_TARGETS,
 }
-"""Target loss mass of each stage-1 v7 source: the Nemotron sources take the loss of their
-:data:`STAGE1_V7_NEMOTRON_EPOCHS` within :data:`STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS`, and the v6
-sources share the rest in v6's ratio, so the vision share's loss per step (and with it the text's
-positions and the step time) stays v6's. v7 trains every annotation as a document, as v5 does."""
+"""Target loss mass of each stage-1 v7 source. The Nemotron sources take the loss of their
+:data:`STAGE1_V7_NEMOTRON_EPOCHS` within :data:`STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS`, all of it
+from the OCR group, whose sources keep v6's ratio: v6 moved the loss of the capped PixMo-Cap and
+PixMo-Count to OCR (39% to 61% of the visual loss) for want of fresh caption data, and the Nemotron
+captions are that data. Caption, pointing, academic and clock sources keep their v6 shares (OCR
+lands at 47%). v7 trains every annotation as a document, as v5 does."""
+
+
+def _visual_positions_per_loss_token(targets: dict[str, float]) -> float:
+    return sum(share * STAGE1_POSITIONS_PER_LOSS_TOKEN[name] for name, share in targets.items())
+
+
+_V6_TEXT_LOSS_SHARE = 0.9
+STAGE1_V7_TEXT_LOSS_SHARE: float = (
+    _V6_TEXT_LOSS_SHARE
+    / (1.0 - _V6_TEXT_LOSS_SHARE)
+    * _visual_positions_per_loss_token(STAGE1_V7_LOSS_TARGETS)
+    / (
+        _visual_positions_per_loss_token(STAGE1_V6_LOSS_TARGETS)
+        + _V6_TEXT_LOSS_SHARE
+        / (1.0 - _V6_TEXT_LOSS_SHARE)
+        * _visual_positions_per_loss_token(STAGE1_V7_LOSS_TARGETS)
+    )
+)
+"""Default text loss share of the merged stage with stage-1 v7 visual data (0.897, not 0.9). A v7
+response token takes fewer positions than a v6 one (the Nemotron sources are text-dense), so at
+v6's 0.9 the vision share would fill 3% fewer positions per step and the text more. This share
+splits the positions per step between text (one position per loss token) and vision exactly as v6
+at 0.9 does, so the text seen per step and the step time stay v6's; the vision share trains 3%
+more response tokens in the same positions."""
 
 
 def build_stage1_nemotron_sources(

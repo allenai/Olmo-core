@@ -1530,10 +1530,13 @@ def test_merged_stage_v6_caps_the_repeated_sources(merged_stage, monkeypatch):
 
 
 def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
-    """``stage1_v7``: v6's sources in v6's ratio plus the Nemotron sources at their passes, the
-    loss shares summing to one and the Nemotron means added to the documents means."""
+    """``stage1_v7``: the Nemotron sources at their passes, funded by the OCR group alone (the
+    other v6 sources keep their shares), and a text loss share that keeps v6's split of positions
+    per step between text and vision."""
     from olmo_core.internal.vision_alignment_data import (
+        STAGE1_POSITIONS_PER_LOSS_TOKEN,
         STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_GROUPS,
         STAGE1_V3_MEAN_LOSS_WEIGHTS,
         STAGE1_V6_LOSS_TARGETS,
         STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS,
@@ -1541,6 +1544,7 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
         STAGE1_V7_NEMOTRON_EPOCHS,
         STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
         STAGE1_V7_NEMOTRON_SOURCE_SIZES,
+        STAGE1_V7_TEXT_LOSS_SHARE,
     )
 
     monkeypatch.setattr(
@@ -1565,18 +1569,31 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
         **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
     }
     assert sum(STAGE1_V7_LOSS_TARGETS.values()) == pytest.approx(1.0)
+    ocr = set(STAGE1_V3_GROUPS["ocr"])
     ratio = {
-        name: STAGE1_V7_LOSS_TARGETS[name] / STAGE1_V6_LOSS_TARGETS[name]
-        for name in STAGE1_V6_LOSS_TARGETS
+        n: STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n] for n in STAGE1_V6_LOSS_TARGETS
     }
-    assert max(ratio.values()) == pytest.approx(min(ratio.values()))
+    assert {round(r, 12) for n, r in ratio.items() if n not in ocr} == {1.0}
+    ocr_ratios = [r for n, r in ratio.items() if n in ocr]
+    assert max(ocr_ratios) == pytest.approx(min(ocr_ratios)) and max(ocr_ratios) < 0.8
     for name, epochs in STAGE1_V7_NEMOTRON_EPOCHS.items():
         loss = STAGE1_V7_LOSS_TARGETS[name] * STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
         passes = loss / (
             STAGE1_V7_NEMOTRON_SOURCE_SIZES[name] * STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS[name]
         )
         assert passes == pytest.approx(epochs)
-    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+    def text_position_fraction(text_share, targets):
+        visual = sum(s * STAGE1_POSITIONS_PER_LOSS_TOKEN[n] for n, s in targets.items())
+        return text_share / (text_share + (1 - text_share) * visual)
+
+    assert text_position_fraction(STAGE1_V7_TEXT_LOSS_SHARE, STAGE1_V7_LOSS_TARGETS) == (
+        pytest.approx(text_position_fraction(0.9, STAGE1_V6_LOSS_TARGETS))
+    )
+    assert config.recipe.text_loss_share == STAGE1_V7_TEXT_LOSS_SHARE
+    assert config.dataset.target_loss_mass["text_midtraining"] == STAGE1_V7_TEXT_LOSS_SHARE
+    explicit = merged_stage.build("--recipe.visual_data=stage1_v7", "--recipe.text_loss_share=0.9")
+    assert explicit.dataset.target_loss_mass["text_midtraining"] == 0.9
 
 
 def test_merged_stage_passes_text_document_masking(merged_stage):
