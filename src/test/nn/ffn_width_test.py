@@ -1,0 +1,120 @@
+"""Partial-MLP training (olmo_core.nn.ffn_width): step-seeded neuron subsets, exact gathered forward, unbiased in
+expectation with the 1/f rescale, full width at eval, and the FLOP credit."""
+import pytest
+import torch
+
+from olmo_core.nn.feed_forward import FeedForward
+from olmo_core.nn.ffn_width import FFNWidthHolder, install_ffn_width, parse_layer_range
+
+
+class _M(torch.nn.Module):
+    def __init__(self, n=3, d=16, hid=64):
+        super().__init__()
+        self.blocks = torch.nn.ModuleDict({str(i): torch.nn.Module() for i in range(n)})
+        for b in self.blocks.values():
+            b.feed_forward = FeedForward(d_model=d, hidden_size=hid, init_device="cpu")
+
+
+def test_parse_layer_range():
+    assert parse_layer_range("", 4) == [0, 1, 2, 3]
+    assert parse_layer_range("0-2", 8) == [0, 1, 2]
+    assert parse_layer_range("1,5-6", 8) == [1, 5, 6]
+    with pytest.raises(ValueError):
+        parse_layer_range("9", 8)
+
+
+@pytest.mark.parametrize("mode", ["random", "blocked"])
+def test_indices_deterministic_per_step_and_layer(mode):
+    a = FFNWidthHolder(0.5, [0, 1], mode=mode, block=8, seed=3)
+    b = FFNWidthHolder(0.5, [0, 1], mode=mode, block=8, seed=3)  # another rank
+    for step in (1, 2):
+        a.set_step(step)
+        b.set_step(step)
+        assert torch.equal(a.indices(0, 64, "cpu"), b.indices(0, 64, "cpu"))
+        assert torch.equal(a.indices(0, 64, "cpu"), a.indices(0, 64, "cpu"))  # recompute: same subset
+    a.set_step(1)
+    i1 = a.indices(0, 64, "cpu")
+    a.set_step(2)
+    assert not torch.equal(i1, a.indices(0, 64, "cpu"))
+    assert not torch.equal(a.indices(0, 64, "cpu"), a.indices(1, 64, "cpu"))
+    assert a.indices(0, 64, "cpu").numel() == 32
+    if mode == "blocked":
+        idx = a.indices(0, 64, "cpu")
+        blocks = set((idx // 8).tolist())
+        assert len(blocks) == 4 and all(((idx // 8) == bb).sum() == 8 for bb in blocks)
+
+
+def test_partial_forward_exact_grads_and_eval_full_width():
+    torch.manual_seed(0)
+    m = _M()
+    ff = m.blocks["0"].feed_forward
+    x = torch.randn(2, 5, 16)
+    full = ff(x).detach()
+    h = install_ffn_width(m, 0.25, "0-1", seed=1)
+    h.set_step(7)
+    ff.train()
+    y = ff(x)
+    idx = h.indices(0, 64, "cpu")
+    ref = torch.nn.functional.linear(
+        torch.nn.functional.silu(x @ ff.w1.weight[idx].T) * (x @ ff.w3.weight[idx].T), ff.w2.weight[:, idx]) * 4.0
+    assert torch.allclose(y, ref, atol=1e-6)
+    y.sum().backward()
+    rows = ff.w1.weight.grad.abs().sum(1) > 0
+    assert torch.equal(rows.nonzero().flatten(), idx)
+    assert (ff.w2.weight.grad[:, ~rows] == 0).all()
+    ff.eval()
+    assert torch.allclose(ff(x), full, atol=1e-6)
+    # an unlisted layer is untouched
+    ff2 = m.blocks["2"].feed_forward
+    ff2.train()
+    assert not hasattr(ff2, "_ffnw")
+
+
+def test_rescaled_partial_ffn_is_unbiased_in_expectation():
+    torch.manual_seed(0)
+    m = _M(n=1, hid=32)
+    ff = m.blocks["0"].feed_forward
+    x = torch.randn(1, 3, 16)
+    full = ff(x).detach()
+    h = install_ffn_width(m, 0.5, seed=2)
+    ff.train()
+    acc = torch.zeros_like(full)
+    n = 2000
+    with torch.no_grad():
+        for s in range(n):
+            h.set_step(s)
+            acc += ff(x)
+    err = (acc / n - full).abs().max() / full.abs().max()
+    assert err < 0.05, err
+    h2 = install_ffn_width(_M(n=1, hid=32), 0.5, seed=2, rescale=False)  # ablation: biased low
+    assert h2.rescale is False
+
+
+def test_router_charges_partial_ffn_credit_cpu():
+    """With the mid-stack router, blocks below the drop are credited -(1-f) x FFN on the full row, blocks above on the
+    kept row."""
+    from .online_token_router_test import PH, _mid_model, _row
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0)
+    blocks = list(model.blocks.values())
+    h = install_ffn_width(model, 0.5, "1-3", seed=0)
+    ids, cid, labels = _row(B=1)
+    flops = []
+    orig = router._flop
+    router._flop = lambda m_, v: (flops.append(float(v)), orig(m_, v))
+    router.begin_step(1, model=model)
+    model(ids, labels=labels).loss.backward()
+    router.begin_step(2, model=model)
+    h.set_step(2)
+    flops.clear()
+    router.metrics()
+    model(ids, labels=labels).loss.backward()
+    real = int((ids != PH).sum())
+    kept = int(round(router.metrics()["online_router/mid_row_frac"] * real))
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    cr = h.credits_per_block(4)
+    assert cr[0] == 0 and cr[1] < 0
+    expect = (real * (f(blocks[0], real) + f(blocks[1], real)) + kept * (f(blocks[2], kept) + f(blocks[3], kept) + head)
+              - real * (sum(f(b, real) for b in blocks) + head) + real * (cr[0] + cr[1]) + kept * (cr[2] + cr[3]))
+    assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)

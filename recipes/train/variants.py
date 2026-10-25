@@ -203,6 +203,22 @@ class LayerDropOptions(VariantOptions):
 
 
 @dataclass
+class FFNWidthOptions(VariantOptions):
+    """ffnwidth: partial-MLP training (olmo_core.nn.ffn_width), a step-seeded neuron subset of every listed FFN for all
+    tokens; eval runs the full width. No params."""
+
+    ffn_width_frac: float = 1.0
+    ffn_width_layers: str = ""
+    ffn_width_mode: str = "random"
+    ffn_width_no_rescale: bool = False
+    ffn_width_block: int = 128
+
+    @property
+    def active(self) -> bool:
+        return self.ffn_width_frac < 1.0
+
+
+@dataclass
 class SoftTokenOptions(VariantOptions):
     """softtoken: pooled-document soft tokens (compacted rows) + keep policy."""
 
@@ -834,6 +850,36 @@ class FlexCompute(FFNMoE, KVRoute):
         return out
 
 
+class FFNWidth(Variant):
+    """Partial-MLP training modifier (``--ffn-width-frac`` on any arm, dense or softtoken): each step and listed layer
+    computes a step-seeded subset of FFN neurons for every token (gate / up rows and down columns gathered, output
+    rescaled by 1/f unless ``--ffn-width-no-rescale``); eval runs the full width. FLOPs charged at f for those FFNs."""
+
+    name = "ffnwidth"
+    options_cls = FFNWidthOptions
+
+    def validate(self, o):
+        assert isinstance(o, FFNWidthOptions)
+        if not 0.0 < o.ffn_width_frac < 1.0:
+            raise ValueError("ffnwidth needs 0 < ffn_width_frac < 1")
+        if o.ffn_width_mode not in ("random", "blocked"):
+            raise ValueError(f"ffn_width_mode must be random / blocked, got {o.ffn_width_mode!r}")
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, FFNWidthOptions)
+        from olmo_core.nn.ffn_width import install_ffn_width
+
+        h = install_ffn_width(model, o.ffn_width_frac, o.ffn_width_layers, mode=o.ffn_width_mode,
+                              rescale=not o.ffn_width_no_rescale, block=o.ffn_width_block, seed=ctx.seed)
+        print(f"[variants] ffn-width: frac {o.ffn_width_frac} ({o.ffn_width_mode}, rescale="
+              f"{not o.ffn_width_no_rescale}) on blocks {sorted(h.layers)}", flush=True)
+
+    def extra_callbacks(self, o, ctx):
+        from olmo_core.train.callbacks import FFNWidthCallback
+
+        return {"ffn_width": FFNWidthCallback()}
+
+
 class FFNDrop(Variant):
     """Drop-CPT: random null-FFN token drop (no router). In train_ctc_suite this is a modifier
     (``--ffn-drop-*`` on any non-routed arm); on setA it is ``--variant ffndrop``."""
@@ -1368,6 +1414,7 @@ VARIANTS: Dict[str, Variant] = {
         FlexCompute(),
         FFNDrop(),
         LayerDrop(),
+        FFNWidth(),
     )
 }
 #: setA spells the dense arm ``dense``.

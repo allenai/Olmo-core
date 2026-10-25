@@ -277,6 +277,12 @@ class FlopMeterCallback(Callback):
             if dense_flops > 0:
                 self.trainer.record_metric("flop_meter/step_actual_over_dense", actual / dense_flops)
 
+        fw = getattr(m, "_ffn_width", None)
+        otr = getattr(m, "_online_token_router", None)
+        if fw is not None and not (otr is not None and int(getattr(otr.cfg, "drop_layer", 0)) > 0):
+            # partial-MLP without a mid-stack router: every partial FFN ran at its fraction on every real token (the
+            # mid-stack router charges this credit itself, per document and at each block's length)
+            actual += tokens * sum(fw.credits_per_block(len(m.blocks)))
         if hasattr(m, "_flop_extra_actual"):
             # a method's own overhead outside the model forward/backward (the online token router's
             # prefix pass, scoring and ridge fit), accumulated per rank by the model this step

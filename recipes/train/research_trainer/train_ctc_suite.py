@@ -451,6 +451,11 @@ def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.Vari
     ldrop_opts = ldrop.options_from_namespace(opts)
     if ldrop_opts.active:  # type: ignore[attr-defined]
         out.append((ldrop, ldrop_opts))
+    fwidth = V.VARIANTS["ffnwidth"]
+    fwidth_opts = fwidth.options_from_namespace(opts)
+    if fwidth_opts.active:  # type: ignore[attr-defined]
+        fwidth.validate(fwidth_opts)
+        out.append((fwidth, fwidth_opts))
     return out
 
 
@@ -1448,6 +1453,18 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--ffn-drop-start-layer", type=int, default=1, help="drop-CPT: first droppable layer"
     )
+    # ---- partial-MLP training (olmo_core.nn.ffn_width; any arm, training only) ----
+    ap.add_argument("--ffn-width-frac", type=float, default=1.0,
+                    help="partial MLP: each step and listed layer compute a step-seeded subset of this fraction of FFN "
+                    "neurons for ALL tokens (gate/up rows + down columns gathered: real FLOP and activation savings), "
+                    "output rescaled by 1/f; eval full width; FLOPs charged at f. 1.0 = off")
+    ap.add_argument("--ffn-width-layers", default="",
+                    help="blocks for --ffn-width-frac, e.g. '0-6' or '0,2,4' (default: every block)")
+    ap.add_argument("--ffn-width-mode", choices=["random", "blocked"], default="random",
+                    help="random: f*d_ff neurons uniformly; blocked: random contiguous blocks of --ffn-width-block")
+    ap.add_argument("--ffn-width-no-rescale", action="store_true",
+                    help="ablation: do not rescale the partial FFN output by 1/f")
+    ap.add_argument("--ffn-width-block", type=int, default=128, help="neurons per block in --ffn-width-mode blocked")
     # ---- whole-block skipping (olmo_core.nn.layer_drop; any arm, training only) ----
     ap.add_argument(
         "--train-skip-layers",

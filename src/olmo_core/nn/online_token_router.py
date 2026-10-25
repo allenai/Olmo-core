@@ -1041,7 +1041,7 @@ class OnlineTokenRouter:
         # at or above L0 skipped only their weight gradient (2/3)
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
-        ab = self._lora_block_charges(model) if model.training else [0.0] * len(blocks)
+        ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
         for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
             fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
             fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
@@ -1135,7 +1135,7 @@ class OnlineTokenRouter:
         head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
-        ab = self._lora_block_charges(model) if model.training else [0.0] * len(blocks)
+        ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
         adj = 0.0
         for L, Lk in zip(lens.tolist(), counts.tolist()):
             fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
@@ -1153,6 +1153,8 @@ class OnlineTokenRouter:
     def _mod_begin(self, model, h, block_kwargs, entry, real, counts, order, valid, pos_c):
         """Mixture-of-depths at the first listed block: keep the full row, remember the gather the listed blocks run
         on, read the targets at this block over every sampled token, and charge the listed blocks at the kept length."""
+        if getattr(model, "_ffn_width", None) is not None:
+            raise NotImplementedError("online router mod_layers does not charge --ffn-width-frac yet")
         dense = bool(entry["dense"]) or bool((counts == real.sum(dim=1)).all())
         self._mod = None if dense else {"order": order, "valid": valid, "pos": pos_c}
         rows, pos = entry["rows"], entry["pos"]
@@ -1240,6 +1242,17 @@ class OnlineTokenRouter:
             st["fpb"] = early_lora_flops_per_block(model)
         nu = self._nograd_until
         return [a * (1.0 / 3.0 if i < nu else 1.0) for i, a in enumerate(st["fpb"])]
+
+    def _block_extra(self, model, fac: List[float]) -> List[float]:
+        """Per-block additive FLOPs per token at the block's own length: the LoRA adapters plus the partial-MLP
+        credit (-(1 - f) x the FFN, scaled by the block's factor), so both land at the right length in every stage."""
+        n = len(model.blocks)
+        ab = self._lora_block_charges(model) if getattr(model, "_early_lora", None) else [0.0] * n
+        fw = getattr(model, "_ffn_width", None)
+        if fw is not None:
+            cr = fw.credits_per_block(n)
+            ab = [a + f * c for a, f, c in zip(ab, fac, cr)]
+        return ab
 
     def _block_factors(self, n_blocks: int) -> List[float]:
         """Per-block share of the forward + backward cost this forward pays: 1/3 below ``_nograd_until`` (forward
