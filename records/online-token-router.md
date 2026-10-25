@@ -1086,6 +1086,30 @@ It also has 14.6 GiB less fixed state, which gives ~400k max T against the recip
 outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 (LR 5e-6)
 recovers part of the outlier gap (0.707 vs 0.686) for 7% more compute, but does not beat rank 64 at LR 1e-5. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
 
+### LoRA-all on mt11s720 (2026-10-25): +0.058 over dense at exactly matched FLOPs
+
+Run: lora64K32r20to7f16 at LR 1e-5, mt11s720, one seed, eval_size 500 per task. Mean9 **0.755 at 232 PF (0.32x)**. The
+recipe gets 0.751 at 273 PF (5e-6, 2 seeds) and 0.753 at LR 1e-5 (273 PF), so the higher LR is neutral for the K=7
+recipe on mt11 too. The parent's dense s240 (f8k-mt11s240-dense-lrg-lr5e-06-lam) costs the same 232 PF and scores 0.697,
+so the read is direct, with no interpolation:
+
+| task | LoRA-all | dense s240 | Δ |
+|---|---|---|---|
+| xabsence | 0.716 | 0.487 | +0.229 |
+| outlier | 0.642 | 0.499 | **+0.143** |
+| contradiction | 0.890 | 0.793 | +0.097 |
+| strmatch | 0.944 | 0.905 | +0.039 |
+| hotpotqa | 0.917 | 0.881 | +0.036 |
+| nq | 0.906 | 0.884 | +0.022 |
+| qdmatch_nq | 0.883 | 0.887 | -0.004 |
+| grouping | 0.335 | 0.354 | -0.019 |
+| oolong | 0.561 | 0.584 | **-0.023** |
+| mean9 | 0.755 | 0.697 | +0.058 |
+
+**FLOPs-to-match:** dense reaches 0.755 at ~517 PF (between s480's 0.750 at 483 PF and s720's 0.788 at 715 PF),
+**~2.2x** LoRA-all's compute. The recipe's ratio is ~1.7x. LoRA-all also has the larger max T (~400k vs ~300k). Oolong is
+the one primary task it loses on mt11, -0.023 vs dense and -0.03 vs the recipe at 5e-6 (0.594); single seed.
+
 ## Partial MLP (2026-10-25): loses at matched FLOPs
 
 All runs are mt4s1464, LR 5e-6, de0, 8k, eval_size 500 per task; numbers are contra / nq / oolong / outlier.
