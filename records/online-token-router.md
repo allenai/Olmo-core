@@ -598,7 +598,11 @@ freeze test settles it: freezing the LoRA stack costs xabsence on the 11-task mi
 0.544, freeze 85%: 0.584, mean9 0.738 / 0.740), and without the freeze xabsence comes back (0.683) and LoRA r64 +
 two-stage + floor is the best mt11 point so far: mean9 0.752 at 0.38x, +0.046 vs dense interpolated to 273 PF. Universal
 recipe: LoRA r64 early stack + two-stage drop (7:0.2,16:0.07), NO freeze -- 0.26x on mt4 (= the frozen variant within
-noise), 0.38x on mt11 (+ floor 16); ~0.02x more than freezing, which is free only on mt4.** Global budget: no collapse (leak_auc 0.58 vs 0.49 per-document) but no gain.
+noise), 0.38x on mt11 (+ floor 16); ~0.02x more than freezing, which is free only on mt4.** Recipe on mt4s1464, 2 seeds: 0.945 / 0.912 / 0.636 /
+0.726 at 0.26x, above the one-stage router (0.937 / 0.902 / 0.623 / 0.682 at 0.30x, 60 GiB) on every task at ~49 GiB.
+(Seed 1's contradiction@2k came from the eval log, 0.96 at 3 s.f.: the Lambda watcher recorded once all four multirung
+jsons existed, but a json can land after its first rung, and the checkpoint-dir delete then removed the node-local 2k
+output. The watcher now waits for both rungs in every json.) Global budget: no collapse (leak_auc 0.58 vs 0.49 per-document) but no gain.
 Promoted: otr10M7f8 / f16 to mt4s1464 (Lambda), f16 seed 1 on mt11s720. otr10M7f8 at mt4s1464 (467 PF): 0.931 / 0.892 /
 0.616 / 0.679 vs otr10M7 (2 seeds, ≈ 445 PF) 0.927 / 0.907 / 0.643 / 0.581 -- with more training the floor's mt4 gain
 vanishes (contra level; the rest within seed noise): it matters for tiny documents (strmatch) and early in training.
@@ -808,7 +812,7 @@ parent's checkout unless REPO_OVERRIDE is set (068d3f0ac); LoRA runs use OLMo-co
 | lora64fa275 (reference: LoRA r64 + freeze 75%, 2 seeds) | 267 (0.23) | 0.934 | 0.901 | 0.622 | 0.737 |
 | lora64fa275sk3M7 (+ sk3) | 254 (0.22) | 0.898 | 0.902 | 0.609 | 0.685 |
 | lora64ptM7 (LoRA r64 + per-task routers) | 287 (0.25) | 0.932 | 0.882 | 0.620 | 0.686 |
-| lora64r20to7 (LoRA r64 + two-stage, NO freeze) | 296 (0.26) | 0.944 | 0.916 | 0.615 | 0.713 |
+| **lora64r20to7 (LoRA r64 + two-stage, NO freeze -- the universal recipe)**, seeds 0 / 1 | 296 (0.26) | 0.944 / 0.945 | 0.916 / 0.908 | 0.615 / 0.656 | 0.713 / 0.738 |
 | **lora64fa275r20to7** (+ stages 7:0.2,16:0.07; peak 48.9 GiB), seeds 0 / 1 | 276 (0.24) | 0.941 / 0.935 | 0.928 / 0.916 | 0.593 / 0.626 | 0.811 / 0.718 |
 
 sk3 2-seed mean 0.908 / 0.909 / 0.617 / 0.588: -0.03 contra and -0.09 outlier vs the plain router for 4% less compute
