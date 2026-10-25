@@ -852,3 +852,22 @@ rank 128 and LR 7.5e-6 do not help. **Both winners hold on two seeds:** stage-2 
 dense compute and ~49 GiB peak); 3-stage = 0.947 / 0.916 / 0.622 / 0.760 at 0.23x (>= the base 0.938 / 0.922 / 0.610 /
 0.765 at 0.24x). mt11s720 versions: stage-2-10% + floor in eval; LoRA + two-stage with no freeze / freeze 85% training.
 
+**Universal recipe compute curve on mt4 (LR 5e-6, de0, 8k, eval_size 500; recipe s488 / s976 seed 0, s1464 2 seeds).**
+Dense PF = steps x 3.17 PF (mt4 per-step dense cost); dense at 31 / 61 steps are the partial-epoch s488 runs (lrb).
+
+| run | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| **recipe mt4s488** | 103 | 0.815 | 0.890 | 0.547 | 0.381 |
+| dense 31 steps | 98 | 0.639 | 0.800 | 0.500 | 0.209 |
+| **recipe mt4s976** | 199 | 0.879 | 0.916 | 0.600 | 0.376 |
+| dense 61 steps | 193 | 0.834 | 0.880 | 0.593 | 0.307 |
+| **recipe mt4s1464** | 296 | 0.945 | 0.912 | 0.636 | 0.726 |
+| dense mt4s488 (1 epoch) | 387 | 0.893 | 0.896 | 0.617 | 0.302 |
+| dense mt4s976 | 773 | 0.931 | 0.916 | 0.584 | 0.432 |
+| dense mt4s1464 | 1154 | 0.956 | 0.936 | 0.630 | 0.719 |
+
+At matched FLOPs the recipe leads dense at every point (98-103 PF: +0.18 contra, +0.09 nq, +0.17 outlier; 193-199
+PF: +0.045 / +0.036 / +0.007 / +0.07). FLOPs-to-match: dense reaches the recipe's s1464 contra (0.945) only between 773
+and 1154 PF (~3.5x) and its outlier (0.726) at ~1154 PF (~3.9x). On the same rows the recipe is behind dense on contra
+at s488 / s976 (it sees each row once at 0.26x the per-row cost) and level at s1464.
+
