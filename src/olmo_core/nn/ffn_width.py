@@ -95,6 +95,27 @@ class FFNWidthHolder:
         return [-(1.0 - self.frac_of(i)) * self.ffn_fpt.get(i, 0.0) for i in range(n_blocks)]
 
 
+def _lin(mod: nn.Linear, x: torch.Tensor, rows: Optional[torch.Tensor] = None,
+         cols: Optional[torch.Tensor] = None, add_bias: bool = True) -> torch.Tensor:
+    """``mod(x)`` restricted to output ``rows`` / input ``cols`` -- including an early-LoRA adapter on ``mod``
+    (:mod:`olmo_core.nn.early_lora`), which a plain ``F.linear`` on the gathered weight would silently skip."""
+    w = mod.weight
+    if rows is not None:
+        w = w[rows]
+    if cols is not None:
+        w = w[:, cols]
+    b = None
+    if add_bias and mod.bias is not None:
+        b = mod.bias[rows] if rows is not None else mod.bias
+    y = F.linear(x, w, b)
+    if hasattr(mod, "lora_A"):
+        A = mod.lora_A if cols is None else mod.lora_A[:, cols]  # type: ignore[index]
+        B = mod.lora_B if rows is None else mod.lora_B[rows]  # type: ignore[index]
+        y = y + mod._lora_scale * F.linear(F.linear(x, A), B)  # type: ignore[attr-defined]
+        mod._lora_calls += 1  # type: ignore[attr-defined]
+    return y
+
+
 def _partial_ffn_forward(self: nn.Module, x: torch.Tensor) -> torch.Tensor:
     st = self._ffnw  # type: ignore[attr-defined]
     holder: FFNWidthHolder = st["holder"]
@@ -102,10 +123,10 @@ def _partial_ffn_forward(self: nn.Module, x: torch.Tensor) -> torch.Tensor:
         return st["orig"](x)
     idx = holder.indices(st["layer"], self.hidden_size, x.device)  # type: ignore[attr-defined]
     w1, w3, w2 = self.w1, self.w3, self.w2  # type: ignore[attr-defined]
-    a = F.linear(x, w1.weight[idx], w1.bias[idx] if w1.bias is not None else None)
-    b = F.linear(x, w3.weight[idx], w3.bias[idx] if w3.bias is not None else None)
+    a = _lin(w1, x, rows=idx)
+    b = _lin(w3, x, rows=idx)
     z = self.activation_fn(a) * b  # type: ignore[attr-defined]
-    out = F.linear(z, w2.weight[:, idx])
+    out = _lin(w2, z, cols=idx, add_bias=False)
     if holder.rescale:
         out = out * (self.hidden_size / idx.numel())  # type: ignore[attr-defined]
     if w2.bias is not None:

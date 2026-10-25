@@ -118,3 +118,38 @@ def test_router_charges_partial_ffn_credit_cpu():
     expect = (real * (f(blocks[0], real) + f(blocks[1], real)) + kept * (f(blocks[2], kept) + f(blocks[3], kept) + head)
               - real * (sum(f(b, real) for b in blocks) + head) + real * (cr[0] + cr[1]) + kept * (cr[2] + cr[3]))
     assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+
+
+def test_partial_ffn_applies_early_lora_adapters():
+    """An FFN with LoRA adapters (early_lora) under partial width: the adapters fire (no silent no-op) on the same
+    neuron subset, and only the subset's adapter rows / columns get gradients."""
+    from olmo_core.nn.early_lora import install_early_lora
+
+    torch.manual_seed(0)
+    m = _M(n=2)
+    m.embeddings = torch.nn.Embedding(10, 16)
+    install_early_lora(m, 1, 4, scale=2.0, check_calls=False)
+    ff = m.blocks["0"].feed_forward
+    with torch.no_grad():
+        for lin in (ff.w1, ff.w2, ff.w3):
+            lin.lora_B.normal_()
+    x = torch.randn(1, 4, 16)
+    h = install_ffn_width(m, 0.5, "0", seed=4)
+    h.set_step(3)
+    ff.train()
+    y = ff(x)
+    idx = h.indices(0, 64, "cpu")
+    def lin(mod, inp, rows=None, cols=None):
+        w = mod.weight if rows is None else mod.weight[rows]
+        w = w if cols is None else w[:, cols]
+        A = mod.lora_A if cols is None else mod.lora_A[:, cols]
+        B = mod.lora_B if rows is None else mod.lora_B[rows]
+        return inp @ w.T + 2.0 * (inp @ A.T) @ B.T
+    z = torch.nn.functional.silu(lin(ff.w1, x, rows=idx)) * lin(ff.w3, x, rows=idx)
+    ref = lin(ff.w2, z, cols=idx) * 2.0
+    assert torch.allclose(y, ref, atol=1e-5)
+    assert all(lin_._lora_calls > 0 for lin_ in (ff.w1, ff.w2, ff.w3))
+    y.sum().backward()
+    assert ff.w1.weight.grad is None
+    gB = ff.w1.lora_B.grad.abs().sum(1) > 0
+    assert torch.equal(gB.nonzero().flatten(), idx)
