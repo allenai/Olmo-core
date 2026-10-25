@@ -680,6 +680,22 @@
    "lr": 5e-06,
    "mix": "mt11",
    "seed": 0
+  },
+  "f8k-mt11-lora64K32r20to7f16-s720-tdb-lr1e-05": {
+   "ex": "01M5SBVW5X4Q3M9FSMCAJVR9K7",
+   "arm": "lora64K32r20to7f16",
+   "budget": "s720",
+   "lr": 1e-05,
+   "mix": "mt11",
+   "seed": 0
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr1e-05": {
+   "ex": "01M5SBWPA8NE7X3CWAYQD0VWRF",
+   "arm": "lora64r20to7f16",
+   "budget": "s720",
+   "lr": 1e-05,
+   "mix": "mt11",
+   "seed": 0
   }
  },
  "evals": {
@@ -4625,6 +4641,14 @@
    "slurm": 114721,
    "arm": "lora64K32r20to7",
    "seed": 1,
+   "commit": "a558feb2b",
+   "dir": "OLMo-core-otr19",
+   "lr": "1e-05"
+  },
+  "f8k-mt4s1464-lora64r20to7-lro-lr1e-05-lam": {
+   "slurm": 114727,
+   "arm": "lora64r20to7",
+   "seed": 0,
    "commit": "a558feb2b",
    "dir": "OLMo-core-otr19",
    "lr": "1e-05"

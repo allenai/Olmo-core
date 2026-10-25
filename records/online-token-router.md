@@ -1071,10 +1071,15 @@ task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / 
 | 16 | 5e-6 | 278 | 0.948 | 0.912 | 0.643 | 0.695 |
 | 24 | 5e-6 | 269 | 0.919 | 0.898 | 0.630 | 0.667 |
 | 32 (all) | 5e-6 | 261 | 0.949 | 0.920 | 0.636 | 0.686 |
-| **32 (all)** | **1e-5** | **261** | **0.946** | **0.908** | **0.625** | **0.719** |
+| 32 (all), seed 0 | 1e-5 | 261 | 0.946 | 0.908 | 0.625 | 0.719 |
+| 32 (all), seed 1 | 1e-5 | 261 | 0.933 | 0.918 | 0.620 | 0.686 |
+| **32 (all), 2-seed mean** | **1e-5** | **261** | **0.940** | **0.913** | **0.623** | **0.703** |
 | 32 (all), rank 128 | 5e-6 | 279 | 0.938 | 0.912 | 0.617 | 0.707 |
 
-**LoRA on all 32 blocks at LR 1e-5 is within single-seed noise of the recipe on all four tasks, at 0.88x its compute.**
+**LoRA on all 32 blocks at LR 1e-5 (2 seeds) runs at 0.88x the recipe's compute.** At the same data it is slightly
+below the recipe: contra -0.005, nq +0.001, oolong -0.013, outlier -0.023. At matched FLOPs it is ahead of the recipe's
+compute curve, which interpolates to ~0.921 / 0.913 / 0.623 / 0.600 at 261 PF: contra +0.02, outlier +0.10, nq and
+oolong equal. Those deltas are matched-FLOP Δ on the primary tasks: **outlier +0.10, oolong 0.00.**
 It also has 14.6 GiB less fixed state, which gives ~400k max T against the recipe's ~300k. At LR 5e-6, K=32 loses only
 outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 (LR 5e-6)
 recovers part of the outlier gap (0.707 vs 0.686) for 7% more compute, but does not beat rank 64 at LR 1e-5. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
