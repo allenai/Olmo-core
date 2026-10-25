@@ -2888,6 +2888,18 @@
    "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
    "task": "grouping",
    "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5RAQRMFKEVFXSP8G05KXEGR",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "qdmatch_nq",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evreorder": {
+   "ex": "01M5RAS3Q3EA69DEH3SEPZSR52",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "reorder",
+   "suite_rows": true
   }
  },
  "failed_evals": {
