@@ -2,7 +2,7 @@
 experiment: learned_router
 title: End-to-end learned token-drop router -- now ONLINE at train time (ridge refit every step from the training backward; + mid-stack token exit), plus the earlier frozen-checkpoint routers and gradprobe
 status: active
-updated: 2026-10-22
+updated: 2026-10-25
 branch: claude/online-router-1bc01a (online router, pushed); earlier: prasann/flopdrop_clean (gradprobe), prasann/landmark (frozen routers)
 launcher: research/token_routing/online_router/launch_otr.py (online, Beaker); research/token_routing/learned_router/train_e2e_router.py (frozen, legacy)
 records:
@@ -89,6 +89,13 @@ budget beats dense at matched FLOPs. Design + numbers: `records/online-token-rou
 - Launch bugs fixed 2026-10-22: wandb finish(quiet=) TypeError at shutdown (0b5b21ace; also killed the parent's tdb
   runs before export) and a trainer argparse check that rejected the online rule (c5f8106dc + a variant-wiring
   check, research/token_routing/online_router/check_variant_wiring.py). Arms relaunched on c5f8106dc.
+- **Max train length at fixed 80 GB (A', 2026-10-25; 2 x A100, FSDP-2, full AC; `--mem-probe-steps`, 8b8a79d15).**
+  Steady routed step: dense ~124k tokens; otr10M7de0 ~177k (1.43x); recipe ~205k (1.65x); LoRA-all + two-stage router
+  ~266k (2.15x). Fixed state is 27.3 / 27.8 / 22.9 / 13.2 GiB; the transient is 0.386 vs ~0.25 GiB per 1k tokens.
+  **Today all methods are capped at ~165k (1.33x)** by the dense passes, i.e. the trainer dry run and router warmup
+  step 1; all OOM at step 0 at 196k / 256k. The routed peak is the recompute of full-length blocks 0-6, not the
+  residual stream. Next (B'): route the dry run and warmup, then chunk the block 0-6 recompute. Record section
+  "Memory vs train length"; raw output in research/token_routing/online_router/memprobe/.
 
 ## Current best numbers
 All are teacher-forced answer-CE deltas on frozen dense 4B checkpoints. Nothing here is generation-graded.

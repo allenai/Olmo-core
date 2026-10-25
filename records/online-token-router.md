@@ -910,3 +910,67 @@ two such flat tasks out of four, mt11 four of nine. Per-task routers lift groupi
 targets exactly that loss. More stage-2 budget alone does not (7:0.2,16:0.10: grouping 0.276, mean9 0.740). Running:
 7:0.3,16:0.10 and floor 32 on mt11s720.
 
+
+## Memory vs train length (A', 2026-10-25): max T per method at a fixed 80 GB
+
+**Verdict.** At steady state, on 2 x A100-80GB with FSDP-2, full activation checkpointing and one row per GPU, the
+recipe's routed steps fit **~205k tokens (1.65x dense's ~124k)**. LoRA-all fits **~266k (2.15x)** and otr10M7de0
+**~177k (1.43x)**. **Today every method is capped near 165k (1.33x)** by two full-length dense passes that the router
+cannot shrink: the trainer's mock-batch dry run (step 0) and the router's warmup step 1 (no fitted weights yet, so it
+trains dense). All four methods OOM in step 0 at 196k and at 256k. Dense OOMs at 128k in step 2, once its Adam state
+exists. Removing those two passes is the cheapest max-T lever (B').
+
+**Method.** `--mem-probe-steps 3` (commit 8b8a79d15) reads the allocator totals every step: the memory held at the
+step start ("fixed": params, plus grads/Adam state once they exist), the forward+backward peak and the optimizer peak.
+It also logs whether the router routed that step and the op sites of step 3's forward+backward transient. Rows are real
+mt4s1464 examples concatenated to T (`make_long_rows.py`). Jobs 114613-114632 on Lambda node02, code `OLMo-core-otr14`.
+Raw output: `research/token_routing/online_router/memprobe/`.
+
+The first round (`--mem-snapshot`, 2026-10-24) was wrong in two ways:
+- It stopped after step 1, the router's dense warmup step, so its router-arm activation peaks are dense numbers.
+- It replays only allocations made inside its own trace, so it misses the params loaded before the trace.
+
+Its rows are kept in `memprobe1_snapshot_summary.txt` only for the record.
+
+**Steady routed step (step 3), GiB.** Columns: fixed state; forward+backward transient above the fixed state at
+32k / 64k / 128k; linear fit; max T at 79.25 GiB.
+
+| method | fixed | transient 32k / 64k / 128k | fit (T in k tokens) | max T | x dense |
+|---|---|---|---|---|---|
+| dense | 27.3 | 16.4 / 28.7 / OOM | 4.0 + 0.386 T | ~124k | 1.0 |
+| otr10M7de0 | 27.8 | 14.3 / 22.5 / 38.9 | 6.2 + 0.255 T | ~177k | 1.43 |
+| recipe (LoRA 0-6 + 7:0.2,16:0.07) | 22.9 | 13.5 / 21.5 / 37.3 | 5.6 + 0.248 T | ~205k | 1.65 |
+| LoRA-all + two-stage router | 13.2 | 10.1 / 16.1 / 32.0 | 0.2 + 0.248 T | ~266k | 2.15 |
+| any method, dense pass (dry run / warmup, no Adam yet) | 9.5-10.2 | 14.0-16.4 / 26.3-28.7 / 52.3-54.7 | ~0.4 T | ~162-170k | 1.33 |
+
+- Max T is extrapolated from the two longest points. It ignores allocator fragmentation, so real limits sit a few
+  percent lower.
+- The dense fit is exactly linear (0.386 GiB per 1k tokens on both intervals) and matches its observed OOM at 128k.
+- The dense-pass cap matches the observed OOMs at 196k for all four methods.
+- The optimizer peak (dense 60 GiB, recipe 48.6 GiB, LoRA-all 19 GiB, all independent of T) never binds above ~32k.
+
+**What binds.**
+- **Fixed state.** It is the params plus the grads and Adam state of the trained weights. LoRA on blocks 0-6 saves
+  4.7 GiB (frozen base weights carry no grads or Adam state). LoRA everywhere saves 14.6 GiB, worth ~60k tokens.
+- **Transient, dense.** Saved block inputs for all 32 blocks (residual_stream.py: 9.7 GiB at 64k), plus one block's
+  recompute working set (autograd/FLA buffers, FFN intermediate, RMSNorm).
+- **Transient, routed.** The slope falls only from 0.386 to ~0.25 GiB per 1k tokens, although only 10-20% of tokens
+  go past block 7. At 128k the routed peak is the recompute working set of a **full-length block below the drop layer**:
+  - otr10M7de0: unwind (autograd/FLA C++ buffers) 15.1 GiB, FFN 6.5, RMSNorm 4.8 + 2.4, GDN gate 2.9.
+  - recipe: unwind 14.4 GiB, LoRA hook 7.4, GDN chunk kernel 3.4.
+  
+  The saved residuals are only 1.8-3.6 GiB.
+
+**B' levers, in order of payoff.**
+1. Make the two dense passes routed: skip or route the dry run, and route the warmup step with a random keep at the
+   target fraction (uniform random, not a heuristic score) or warm up on short rows. This lifts the cap from ~165k to
+   the steady numbers above (recipe 1.65x, LoRA-all 2.15x).
+2. Chunk the recompute of blocks 0-6 along T (MLP and norms in chunks; the LoRA hook too). This attacks the dominant
+   routed transient.
+3. Widen the LoRA scope. LoRA-all is the largest fixed-state saving, but its matched-FLOP quality is still open (the
+   adapter-scope runs are in flight).
+4. Logits and CE only on loss positions. This matters only for short T: LoRA-all's 32k peak is the fused CE / LM head
+   at 6 GiB.
+
+With more GPUs (FSDP-8) the fixed state shrinks for every method, so dense's max T grows the most and these multiples
+narrow.
