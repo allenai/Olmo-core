@@ -664,10 +664,14 @@ STAGE1_V7_NEMOTRON_EPOCHS: dict[str, float] = {
     "nemotron_ecd": 2.0,
     "nemotron_deepvision": 2.0,
     "nemotron_babyvision": 2.0,
+    "nemotron_fintabnet": 2.0,
+    "nemotron_hopchain": 2.0,
+    "nemotron_raven": 2.0,
 }
 """Passes over each Nemotron-Image-Training source in a 20,000-step stage-1 v7 run (v6's reference
 horizon): one over the Qwen3-VL detailed captions, which stay a minority of the caption loss next to
-PixMo-Cap, and two over TextCaps' one-line captions and the reasoning traces (chosen 2026-10-24)."""
+PixMo-Cap, and two over TextCaps' one-line captions and the reasoning traces (chosen 2026-10-24;
+FinTabNet, CC-PDF multi-hop QA, RAVEN and BabyVision's web images added 2026-10-25)."""
 
 STAGE1_V7_NEMOTRON_SOURCE_SIZES: dict[str, int] = {
     "nemotron_openimages_1": 1_236_601,
@@ -676,11 +680,14 @@ STAGE1_V7_NEMOTRON_SOURCE_SIZES: dict[str, int] = {
     "nemotron_textcaps": 106_447,
     "nemotron_ecd": 55_341,
     "nemotron_deepvision": 9_818,
-    "nemotron_babyvision": 34_817,
+    "nemotron_babyvision": 125_875,
+    "nemotron_fintabnet": 56_479,
+    "nemotron_hopchain": 7_328,
+    "nemotron_raven": 41_995,
 }
 """Rows of each prepared Nemotron source (``len`` of each built dataset, 2026-10-25). Open Images
 lost 3.3% of openimages_1's images (not on the CVDF mirror), cc3m one image, TextCaps 3,355 exact
-duplicate rows; BabyVision keeps only its rows on the synthetic images bundled with the release."""
+duplicate rows, BabyVision 7% (web images no longer online)."""
 
 STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS: dict[str, float] = {
     "nemotron_openimages_1": 539.703125,
@@ -689,12 +696,15 @@ STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS: dict[str, float] = {
     "nemotron_textcaps": 33.703125,
     "nemotron_ecd": 2111.140625,
     "nemotron_deepvision": 2993.09375,
-    "nemotron_babyvision": 188.78125,
+    "nemotron_babyvision": 1189.1953125,
+    "nemotron_fintabnet": 2540.1875,
+    "nemotron_hopchain": 3271.6328125,
+    "nemotron_raven": 1092.1796875,
 }
 """Calibration of the Nemotron sources as :func:`build_stage1_nemotron_sources` builds them (dolma2
 at the pinned revision, 65,536 tokens, documents mode):
 :meth:`MultimodalMixtureConfig.estimate_mean_loss_weights` with 128 samples per source, seed 0,
-measured 2026-10-25. BabyVision's synthetic-image traces are short (about 770 characters)."""
+measured 2026-10-25."""
 
 STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS: float = (
     10.0

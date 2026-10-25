@@ -241,7 +241,7 @@ class MixedMidtrainingRecipeConfig(Config):
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V5_LOSS_TARGETS`) or ``stage1_v6`` (v5
     with the most repeated sources capped at 10 epochs, their loss moved to the large OCR sources;
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V6_LOSS_TARGETS`) or ``stage1_v7`` (v6
-    plus seven Nemotron-Image-Training caption and reasoning sources, see
+    plus ten Nemotron-Image-Training caption and reasoning sources, see
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V7_LOSS_TARGETS`)."""
     compile_loss: bool = True
     """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs
