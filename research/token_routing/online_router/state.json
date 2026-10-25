@@ -4880,6 +4880,22 @@
    "commit": "a558feb2b",
    "dir": "OLMo-core-otr19",
    "lr": "1e-05"
+  },
+  "f8k-mt4s1464-lora64K32r20to7-s2-lro-lr1e-05-lam": {
+   "slurm": 114772,
+   "arm": "lora64K32r20to7",
+   "seed": 2,
+   "commit": "a558feb2b",
+   "dir": "OLMo-core-otr19",
+   "lr": "1e-05"
+  },
+  "f8k-mt4s1464-dense-s1-lro-lr5e-06-lam": {
+   "slurm": 114773,
+   "arm": "dense",
+   "seed": 1,
+   "commit": "a558feb2b",
+   "dir": "OLMo-core-otr19",
+   "lr": "5e-06"
   }
  }
 }
