@@ -337,6 +337,36 @@ class PretrainingReplayDataset:
         }
 
 
+MAX_DOCUMENT_SEGMENTS = 4096
+"""FLA's KDA forward (``chunk_gated_delta_rule_fwd_h``) launches a grid of (cdiv(V, BV), N * HV),
+with N the attention segments of the micro-batch and HV = 8 heads; CUDA caps that dimension at
+65,535, so more than 8,191 segments fail with "Triton Error [CUDA]: invalid argument" (both mixed
+256K runs at step 8,472). The text stage's cap, ``hero_mt_lc_256k.MAX_DOC_SEGMENTS``: a 2x margin."""
+
+
+def cap_segments(lengths: np.ndarray, max_segments: int) -> np.ndarray:
+    """
+    Merge consecutive segment lengths so there are at most ``max_segments``.
+
+    Degenerate rows (thousands of short EOS-separated segments) have their consecutive segments
+    grouped until each group holds at least ceil(total / max_segments) tokens, the text stage's
+    ``hero_mt_lc_256k._cap_segments``. Rows within the cap are returned unchanged.
+    """
+    if len(lengths) <= max_segments:
+        return lengths
+    min_group = -(-int(lengths.sum()) // max_segments)
+    groups = []
+    current = 0
+    for length in lengths.tolist():
+        current += length
+        if current >= min_group:
+            groups.append(current)
+            current = 0
+    if current:
+        groups.append(current)
+    return np.asarray(groups, dtype=lengths.dtype)
+
+
 @dataclass
 class ComposableTextReplayConfig(Config):
     """
@@ -378,6 +408,10 @@ class ComposableTextReplayConfig(Config):
     chunks (the MT side: 32 unrelated 8K chunks per 256K instance)."""
     chunk_length: int | None = None
     """Length of those chunks."""
+    max_document_segments: int | None = MAX_DOCUMENT_SEGMENTS
+    """With :attr:`document_masking`, the most segments an instance keeps: an instance over it has
+    its consecutive segments merged greedily (see :func:`cap_segments`), as the text stage's
+    ``hero_mt_lc_256k._cap_segments``. ``None`` keeps every segment."""
 
     def build(self, tokenizer=None) -> "ComposableTextReplayDataset":
         """Build the replay dataset (``tokenizer`` is accepted for the mixture interface)."""
@@ -396,6 +430,7 @@ class ComposableTextReplayConfig(Config):
             document_masking=self.document_masking,
             chunked_source=self.chunked_source,
             chunk_length=self.chunk_length,
+            max_document_segments=self.max_document_segments,
         )
 
 
@@ -412,6 +447,7 @@ class ComposableTextReplayDataset:
         document_masking: bool = False,
         chunked_source: int | None = None,
         chunk_length: int | None = None,
+        max_document_segments: int | None = MAX_DOCUMENT_SEGMENTS,
     ):
         if source.sequence_length != source.max_sequence_length:
             raise OLMoConfigurationError("Composable text replay requires fixed-length instances")
@@ -423,6 +459,7 @@ class ComposableTextReplayDataset:
         self.document_masking = document_masking
         self.chunked_source = chunked_source
         self.chunk_length = chunk_length
+        self.max_document_segments = max_document_segments
         if document_masking and chunked_source is not None and not hasattr(source, "locate"):
             raise OLMoConfigurationError(
                 "chunked_source needs an interleaved source that can locate its instances"
@@ -543,5 +580,7 @@ class ComposableTextReplayDataset:
         if chunk is not None:
             inside_pad_run[np.arange(chunk, n, chunk)] = False
         ends &= ~inside_pad_run
-        boundaries = np.flatnonzero(ends)
-        return np.repeat(np.arange(len(boundaries) - 1, dtype=np.int64), np.diff(boundaries))
+        lengths = np.diff(np.flatnonzero(ends))
+        if self.max_document_segments is not None:
+            lengths = cap_segments(lengths, self.max_document_segments)
+        return np.repeat(np.arange(len(lengths), dtype=np.int64), lengths)

@@ -189,6 +189,43 @@ def test_document_masking_matches_the_text_stages_segments(tmp_path, chunked):
     np.testing.assert_array_equal(np.bincount(ids), expected)
 
 
+def _reference_cap_segments(lengths, max_segments):
+    """scaling-ladders ``hero_mt_lc_256k._cap_segments``, verbatim but for numpy."""
+    if len(lengths) <= max_segments:
+        return lengths
+    min_group = -(-int(lengths.sum()) // max_segments)
+    groups, current = [], 0
+    for length in lengths.tolist():
+        current += length
+        if current >= min_group:
+            groups.append(current)
+            current = 0
+    if current:
+        groups.append(current)
+    return np.asarray(groups)
+
+
+@pytest.mark.parametrize("max_segments", [3, 5, 8, None])
+def test_document_masking_caps_segments_as_the_text_stage(tmp_path, max_segments):
+    # Eight 2-token documents (the degenerate shape: many tiny EOS-separated segments).
+    tokens = np.array([5, EOS] * 8)
+    replay = ComposableTextReplayConfig(
+        source=_ListSourceConfig(instances=[{"input_ids": tokens}], sequence_length=16),
+        work_dir=str(tmp_path),
+        pad_token_id=PAD,
+        eos_token_id=EOS,
+        document_masking=True,
+        max_document_segments=max_segments,
+    ).build()
+    ids = replay.get(0)["document_ids"]
+    expected = _reference_document_lengths(tokens, None, EOS, None)
+    if max_segments is not None:
+        expected = _reference_cap_segments(expected, max_segments)
+        assert len(np.bincount(ids)) <= max_segments
+    np.testing.assert_array_equal(np.bincount(ids), expected)
+    assert len(ids) == len(tokens)
+
+
 def test_document_masking_is_off_by_default(tmp_path):
     example = _replay(tmp_path, {"input_ids": np.arange(1, 9)}).get(0)
     assert "document_ids" not in example
