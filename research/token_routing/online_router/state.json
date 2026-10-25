@@ -3776,6 +3776,66 @@
    "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr1e-05",
    "task": "grouping",
    "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evcontra": {
+   "ex": "01M5SKY0VRFCT6RGQRGMXVH4G9",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "contra",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evnq": {
+   "ex": "01M5SKYVB55M2VS5H707BGJCJV",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "nq",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evoutlier": {
+   "ex": "01M5SKZN8GT42XNGVN04RHDE08",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "outlier",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evoolong": {
+   "ex": "01M5SM0H6SFZ13ZWC9DPNNM5Y1",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "oolong",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evhotpotqa": {
+   "ex": "01M5SM1B6R9G4F3CPEW9XWEWAW",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "hotpotqa",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5SM2RQHGHM79QRKSSKTC8NF",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "qdmatch_nq",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evxabsence": {
+   "ex": "01M5SM3KH437J5H76SRK7JFD0S",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "xabsence",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evreorder": {
+   "ex": "01M5SM4KP1Y08ZTHPV8XK59K1H",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "reorder",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evstrmatch": {
+   "ex": "01M5SM5DX8Y82HSJTXAE63B4MJ",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "strmatch",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05-evgrouping": {
+   "ex": "01M5SM67Y2GS7RCNWM46SJ7P4H",
+   "train_run": "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05",
+   "task": "grouping",
+   "suite_rows": true
   }
  },
  "failed_evals": {
@@ -4804,6 +4864,22 @@
    "commit": "a558feb2b",
    "dir": "OLMo-core-otr19",
    "lr": "2e-05"
+  },
+  "f8k-mt4s1464-lora64K32r20to7mx-lro-lr1e-05-lam": {
+   "slurm": 114758,
+   "arm": "lora64K32r20to7mx",
+   "seed": 0,
+   "commit": "a558feb2b",
+   "dir": "OLMo-core-otr19",
+   "lr": "1e-05"
+  },
+  "f8k-mt4s1464-lora64K32r20to10-lro-lr1e-05-lam": {
+   "slurm": 114759,
+   "arm": "lora64K32r20to10",
+   "seed": 0,
+   "commit": "a558feb2b",
+   "dir": "OLMo-core-otr19",
+   "lr": "1e-05"
   }
  }
 }
