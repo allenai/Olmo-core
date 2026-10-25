@@ -109,8 +109,11 @@ budget beats dense at matched FLOPs. Design + numbers: `records/online-token-rou
   (likely noise). Rank 128 at K=32 gives no gain. 2 seeds at 1e-5: 0.940 / 0.913 / 0.623 / 0.703. The recipe at 1e-5
   loses oolong (0.565), so the K=7 recipe stays at 5e-6.
   **mt11s720: LoRA-all at LR 1e-5 scores mean9 0.755 at 232 PF, vs dense s240 at the same 232 PF: 0.697 (+0.058;
-  outlier +0.14, oolong -0.02).** FLOPs-to-match ~2.2x (recipe ~1.7x). Running: seed 1 on mt11 (Beaker
-  01M5SHHW6HX3TBEJSN1GSPPYHK); the mt4 compute curve s488 / s976 and LR 2e-5 (Lambda 114738-40).
+  outlier +0.14, oolong -0.02).** **Seed 1: 0.768. The 2-seed mean is 0.762, +0.065 over dense at the same 232 PF
+  (outlier +0.16, oolong +0.01); FLOPs-to-match ~2.4x. NEW RECIPE: `--st-otr-early-lora 64
+  --st-otr-early-lora-blocks 32 --st-otr-stages 7:0.2,16:0.07 --st-otr-dense-every 0 [--st-otr-min-per-doc 16 on mt11]`,
+  LR 1e-5** (launch_otr arm lora64K32r20to7f16). The mt4 curve gives FLOPs-to-match 4.4x; LR 2e-5 overshoots (outlier
+  0.653). Running: the max-T config at 8k (114758) and stage 2 at 10% (114759).
 
 ## Current best numbers
 All are teacher-forced answer-CE deltas on frozen dense 4B checkpoints. Nothing here is generation-graded.
