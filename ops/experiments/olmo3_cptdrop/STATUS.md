@@ -11,7 +11,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
 wandb_group:
-next_step: running in parallel: cubbins 4021612 freeze grid -> 4021707 LOC (all-local --olmo3-train-window 4096: dense + K8 f25 freeze) | mcfuzz 4021695 MoD c0.5/0.25 + progressive freeze -> 4021708 MoD c0.35 | sneetches 4021696 LoRA r16 K16/8. Evals from a7ad63878 add near/far repeat CE; the three running jobs use older eval code -> rescore their exports with the new eval for near/far bins. Then extend the best cheap arm on fresh rows to FLOPs-to-match-dense.
+next_step: BEST CPT ARM = LoRA r64 early stack (K16: beats dense overall at every budget for 0.85x FLOPs and -12% peak; small far-only deficit; K8: far parity at 0.92x). Cubbins queue: 4063698 r64 K16 + freeze 75% -> 4079261 r64 K16 at 240/480 (FLOPs-to-match-dense at normal budgets) -> 4079355 r128 K16 48/120 + r64 K16 seed 1 @120. mcfuzz 4024789 MoD leftovers (low value).
 ---
 
 # olmo3_cptdrop
@@ -163,6 +163,13 @@ softdetach won on an already-long-trained Qwen3.5-4B before dense overtook it ne
 See `next_step` above.
 
 ## Open issues / traps
+- RESULT 2026-10-24 17:30 LoRA r64 (trained sneetches 4030726, scored cubbins 4063697; paired vs dense at same steps):
+  K16 (0.849x, peak 30.9 GiB): 12/24/48/120 = 305/587/1151/2842 PF -> 1.6942/1.6895/1.6864/1.6834 (m 1.08/2.27/1.97/1.91);
+  overall -0.0030/-0.0017/-0.0015/-0.0019 (+-0.0001); far -0.0026/+0.0013/+0.0015/+0.0012 (+-0.0002); near -0.0019 ..
+  -0.0005; ctx 0.068-0.074. K8 (0.924x, 33.1 GiB): 1.6965/1.6910/1.6874/1.6841 (m 0.90/0.96/1.30/1.50); overall
+  -0.0007/-0.0002/-0.0005/-0.0013; far -0.0011/+0.0004/+0.0001/-0.0000 (parity). r64 + all-local loses (1.702-1.704,
+  ctx 0.043-0.050). Peak saving = frozen params' fp32 grads + Adam state (12 B x 3.6B / 8 GPUs ~5 GiB predicted,
+  4.3 measured for K16; activations unchanged under full AC).
 - RESULT 2026-10-24 12:00 dense near/far rescore (cubbins 4034568, devce_rep/): far-only CE (4-gram last seen > 4k
   back; 1.25M targets) 12/24/48/120/240/480 = 0.503/0.489/0.481/0.474/0.469/0.467 (2x the overall slope); near
   0.208->0.201; stage2 far 0.715, stage3 0.630. LoRA r16 K16 vs dense, paired: far +0.0066 +-0.0004 (12), +0.0067
