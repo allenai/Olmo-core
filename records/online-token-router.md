@@ -889,3 +889,24 @@ The s240 point gets a direct matched read from the parent's dense s240 at 32 / 6
 up in both seeds (0.331 / 0.324 vs 0.290), but strmatch swings 0.778 / 0.937 across seeds. (Seed 0's nq eval failed on
 Beaker before starting and was resubmitted.)
 
+**Why mt11's FLOPs-to-match (~1.7x) is half mt4's (~3.5x): per-task Δ vs dense interpolated to the recipe's PF**
+(recipe s720 2-seed at 273 PF / s960 at 367 PF; 8k, eval_size 500 per task):
+
+| task | s720 Δ | s960 Δ |
+|---|---|---|
+| xabsence | +0.192 | +0.246 |
+| contradiction | +0.096 | +0.099 |
+| outlier | +0.107 | +0.075 |
+| strmatch | +0.030 | +0.025 |
+| hotpotqa | +0.021 | +0.015 |
+| oolong | +0.024 | -0.001 |
+| nq | +0.006 | -0.003 |
+| qdmatch_nq | -0.009 | +0.003 |
+| **grouping** | **-0.059** | **-0.025** |
+
+The gap is not spread out: four retrieval-style tasks (nq, qdmatch_nq, hotpotqa, oolong) are near their dense plateau at
+these FLOPs, so the recipe cannot gain there and they dilute the mean; grouping is the only task the recipe loses. mt4 has
+two such flat tasks out of four, mt11 four of nine. Per-task routers lift grouping (0.290 -> ~0.328, 2 seeds), which
+targets exactly that loss. More stage-2 budget alone does not (7:0.2,16:0.10: grouping 0.276, mean9 0.740). Running:
+7:0.3,16:0.10 and floor 32 on mt11s720.
+
