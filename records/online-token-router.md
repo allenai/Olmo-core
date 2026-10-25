@@ -983,6 +983,44 @@ Its rows are kept in `memprobe1_snapshot_summary.txt` only for the record.
 With more GPUs (FSDP-8) the fixed state shrinks for every method, so dense's max T grows the most and these multiples
 narrow.
 
+### B' round 1 (2026-10-25): routed warmup, no dry run, chunked FFN
+
+**Verdict.** The two dense passes are gone. Sequence-chunked FFN recompute then lifts every method further. Max train
+length at 80 GB:
+
+| method | before | with routed warmup + `--skip-dry-run` | + `--ffn-chunk-tokens 8192` |
+|---|---|---|---|
+| dense | ~124k | (n/a) | **~148k** |
+| recipe | ~165k | ~205k | **~234k** (1.58x dense+chunk; 1.89x plain dense) |
+| LoRA-all + router | ~165k | ~266k | **~300k** (2.0x; 2.4x) |
+| otr10M7de0 | ~165k | ~177k | **~210k** (1.42x; 1.7x) |
+
+**New flags.**
+- `--st-otr-warmup-random` (c5676a12f): the warmup step routes at the normal budget with uniform random scores. It is
+  gold-blind and fit-free, and the targets come from the kept tokens. A quality check is running:
+  f8k-mt4s1464-lora64r20to7wr, Lambda 114656.
+- `--skip-dry-run` (c5676a12f): the mock batch has no document markers, so it always ran dense at full length.
+- `--ffn-chunk-tokens N` (172f12f68): `h + FFN(norm(h))` runs over N-token chunks, each under its own checkpoint. It is
+  exact, verified by a CPU test of outputs and gradients. It adds one FFN forward recompute per chunked block, which is
+  not charged, as with full AC.
+
+**Probes, 3 steps, steady routed step; transient above the fixed state, GiB.**
+
+| method | 128k | 196k | 256k | fit (T in k tokens) |
+|---|---|---|---|---|
+| dense + chunk | 45.1 (fits at 72.7) | OOM at step 2; step 1 transient 66.5 | -- | 2.3 + 0.334 T |
+| recipe, routed warmup, no chunk | 37.3 | 52.6 (75.8, edge) | OOM at step 1 | |
+| recipe + chunk | 33.7 | 47.1 (70.3) | OOM at step 2 | 6.8 + 0.21 T |
+| LoRA-all, routed warmup, no chunk | 32.0 | 47.3 | 63.1 (77.4, edge) | |
+| LoRA-all + chunk | 28.3 | 41.7 | 55.6 (69.8) | ~0.21 T |
+| otr10M7de0 + chunk | -- | 48.0 (76.1, edge) | OOM at step 2 | |
+
+**What binds now.** The C++ autograd allocations with no Python frame ("unwind") are 22-32 GiB at 128k-256k and grow
+with T. They are the next target. The probe has to record C++ op names (`stacks="all"`) to say which backward kernels
+they are: the GDN chunk backward, attention backward, or the scatter back to full length at the drop layer. The chunked
+FFN outputs (5.5-7.4 GiB) are the block outputs, i.e. the residual stream that AC saves. The LoRA hook is down from 11
+to 3 GiB at 196k, because the FFN adapters are now chunked; the attention and GDN projections' adapters are not.
+
 ## Partial MLP (2026-10-25): loses at matched FLOPs
 
 All runs are mt4s1464, LR 5e-6, de0, 8k, eval_size 500 per task; numbers are contra / nq / oolong / outlier.

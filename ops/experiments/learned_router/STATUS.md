@@ -96,6 +96,10 @@ budget beats dense at matched FLOPs. Design + numbers: `records/online-token-rou
   step 1; all OOM at step 0 at 196k / 256k. The routed peak is the recompute of full-length blocks 0-6, not the
   residual stream. Next (B'): route the dry run and warmup, then chunk the block 0-6 recompute. Record section
   "Memory vs train length"; raw output in research/token_routing/online_router/memprobe/.
+  **B' round 1 (same day):** `--st-otr-warmup-random --skip-dry-run` (c5676a12f) remove both dense passes, and
+  `--ffn-chunk-tokens 8192` (172f12f68, exact) chunks the FFN recompute. Max T is now: dense+chunk ~148k; recipe ~234k
+  (1.58x; 196k fits at 70.3 GiB); LoRA-all ~300k (2.0x); otr10M7de0 ~210k. Next binding term: autograd C++ backward
+  buffers, 22-32 GiB; probe them with stacks="all". Routed-warmup quality check: Lambda 114656.
 
 ## Current best numbers
 All are teacher-forced answer-CE deltas on frozen dense 4B checkpoints. Nothing here is generation-graded.
