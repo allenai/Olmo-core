@@ -83,6 +83,7 @@ ARMS = {
     # 2026-10-24 levers on the 11-task mix (no full-context steps): progressive freeze, per-task routers, + floor 16
     "prog4712f16M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-schedule 4:0.25,7:0.5,12:0.75 --st-otr-min-per-doc 16"),
     "otr10M7f16pt": otr(0.1, drop=7, dense_every=0, extra="--st-otr-min-per-doc 16 --st-otr-per-task-key-tokens 11"),
+    "lora64fa371r20to10f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.10 --st-otr-early-lora 64 --st-otr-freeze-after 371 --st-otr-min-per-doc 16"),
     "lora64fa371r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-freeze-after 371 --st-otr-min-per-doc 16"),
     "otr10M7f16sk3": otr(0.1, drop=7, dense_every=0, extra="--st-otr-min-per-doc 16 --train-skip-layers 20,24,28"),
     "r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-min-per-doc 16"),
