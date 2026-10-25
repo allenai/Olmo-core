@@ -1543,6 +1543,7 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
         STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS,
         STAGE1_V7_CAPPED_SOURCES,
         STAGE1_V7_LOSS_TARGETS,
+        STAGE1_V7_NEMOTRON_CAPTION_PASSES,
         STAGE1_V7_NEMOTRON_CAPTIONS,
         STAGE1_V7_NEMOTRON_EPOCHS,
         STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
@@ -1595,11 +1596,20 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
     assert {
         round(STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n], 12) for n in untouched
     } == {1.0}
-    ocr_ratios = [STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n] for n in ocr - capped]
-    assert max(ocr_ratios) == pytest.approx(min(ocr_ratios)) and max(ocr_ratios) < 0.8
-    for group, base in ((STAGE1_V7_NEMOTRON_CAPTIONS, 1.0), (STAGE1_V7_NEMOTRON_REASONING, 2.0)):
-        group_passes = {round(passes(n), 9) for n in group}
-        assert len(group_passes) == 1 and group_passes.pop() > base
+    text_rich = {n for n in ocr if n.startswith("text_rich_")}
+    rich_ratios = [STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n] for n in text_rich]
+    synth_ratio = (
+        STAGE1_V7_LOSS_TARGETS["nvidia_synth_en"] / STAGE1_V6_LOSS_TARGETS["nvidia_synth_en"]
+    )
+    # Both OCR-funded; the text-rich sources also top the captions up, in their ratio.
+    assert max(rich_ratios) == pytest.approx(min(rich_ratios))
+    assert max(rich_ratios) < synth_ratio < 0.8
+    assert all(
+        passes(n) == pytest.approx(STAGE1_V7_NEMOTRON_CAPTION_PASSES)
+        for n in STAGE1_V7_NEMOTRON_CAPTIONS
+    )
+    reasoning_passes = {round(passes(n), 9) for n in STAGE1_V7_NEMOTRON_REASONING}
+    assert len(reasoning_passes) == 1 and reasoning_passes.pop() > 2.0
     assert passes("nemotron_textcaps") == pytest.approx(
         STAGE1_V7_NEMOTRON_EPOCHS["nemotron_textcaps"]
     )

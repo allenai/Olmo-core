@@ -834,7 +834,15 @@ STAGE1_V7_NEMOTRON_CAPTIONS: tuple[str, ...] = (
     "nemotron_openimages_2",
     "nemotron_cc3m",
 )
-"""The Qwen3-VL detailed-caption sources, which take the loss the CoSyn cap frees."""
+"""The Qwen3-VL detailed-caption sources, which take the loss the CoSyn cap frees and, to reach
+:data:`STAGE1_V7_NEMOTRON_CAPTION_PASSES`, some of the text-rich sources' loss."""
+
+STAGE1_V7_NEMOTRON_CAPTION_PASSES: float = 2.0
+"""Passes over the Nemotron detailed captions in a 20,000-step run. The CoSyn cap frees enough for
+1.74; the rest (1.9% of the visual loss) comes from the text-rich OCR sources, which keep their
+ratio (about 5.9 to 5.4 passes on average)."""
+
+_V7_TEXT_RICH = tuple(name for name in STAGE1_V3_GROUPS["ocr"] if name.startswith("text_rich_"))
 STAGE1_V7_NEMOTRON_REASONING: tuple[str, ...] = (
     "nemotron_ecd",
     "nemotron_deepvision",
@@ -852,11 +860,25 @@ def _grow(names: tuple[str, ...], freed: float) -> dict[str, float]:
     return {name: _V7_OCR_FUNDED[name] * (1.0 + freed / total) for name in names}
 
 
+_V7_CAPTIONS = {
+    name: STAGE1_V7_NEMOTRON_CAPTION_PASSES * _share_per_pass(name)
+    for name in STAGE1_V7_NEMOTRON_CAPTIONS
+}
+_V7_FROM_TEXT_RICH = (
+    sum(_V7_CAPTIONS.values())
+    - sum(_V7_OCR_FUNDED[name] for name in STAGE1_V7_NEMOTRON_CAPTIONS)
+    - _V7_FREED["cosyn"]
+)
+_V7_TEXT_RICH_SHARE = sum(_V7_OCR_FUNDED[name] for name in _V7_TEXT_RICH)
 STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
     **_V7_OCR_FUNDED,
     **_V7_CAPPED,
     **_V7_OLMOCR_GROWN,
-    **_grow(STAGE1_V7_NEMOTRON_CAPTIONS, _V7_FREED["cosyn"]),
+    **{
+        name: _V7_OCR_FUNDED[name] * (1.0 - _V7_FROM_TEXT_RICH / _V7_TEXT_RICH_SHARE)
+        for name in _V7_TEXT_RICH
+    },
+    **_V7_CAPTIONS,
     **_grow(
         STAGE1_V7_NEMOTRON_REASONING,
         _V7_FREED["olmocr"] + _V7_FREED["scene_ocr"] - _V7_TO_OLMOCR,
@@ -869,13 +891,14 @@ STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
    v6's ratio: v6 moved the loss of the capped PixMo-Cap and PixMo-Count to OCR (39% to 61% of the
    visual loss) for want of fresh caption data, and the Nemotron captions are that data.
 2. The sources of :data:`STAGE1_V7_PASS_CAPS` are capped. The loss the CoSyn cap frees goes to the
-   Nemotron detailed captions (1 to about 1.7 passes), the loss the olmOCR cap frees to the Nemotron
+   Nemotron detailed captions, which the text-rich sources top up to
+   :data:`STAGE1_V7_NEMOTRON_CAPTION_PASSES` (1 to 2 passes), the loss the olmOCR cap frees to the Nemotron
    reasoning sources (2 to about 2.5 passes, near the 7.5% reasoning traces have in the OLMo 3 text
    mix), and the loss the receipts and TextOCR caps free to olmOCR documents (4.5 to about 4.9
    passes, under its cap).
 
-PixMo-Cap, PixMo-Count, PixMo-Points, the text-rich and NVIDIA synthetic OCR sources, DVQA, FigureQA,
-PlotQA and clocks keep their step-1 shares. v7 trains every annotation as a document, as v5 does."""
+PixMo-Cap, PixMo-Count, PixMo-Points, NVIDIA synthetic OCR, DVQA, FigureQA, PlotQA and clocks keep
+their step-1 shares. v7 trains every annotation as a document, as v5 does."""
 
 
 def _visual_positions_per_loss_token(targets: dict[str, float]) -> float:
