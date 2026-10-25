@@ -1086,6 +1086,8 @@ task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / 
 | 32 (all), seed 1 | 1e-5 | 261 | 0.933 | 0.918 | 0.620 | 0.686 |
 | 32 (all), seed 2 | 1e-5 | 261 | 0.933 | 0.880 | 0.645 | 0.778 |
 | **32 (all), 3-seed mean** | **1e-5** | **261** | **0.937** | **0.902** | **0.630** | **0.728** |
+| dense, seed 1 (seed 0: 0.956 / 0.936 / 0.630 / 0.719) | 5e-6 | 1,154 | 0.959 | 0.928 | 0.651 | 0.685 |
+| dense, 2-seed mean | 5e-6 | 1,154 | 0.958 | 0.932 | 0.641 | 0.702 |
 | 7 (recipe), LR control | 1e-5 | 296 | 0.941 | 0.912 | 0.565 | 0.708 |
 | 32 (all), rank 128 | 5e-6 | 279 | 0.938 | 0.912 | 0.617 | 0.707 |
 | 32 (all) | 2e-5 | 261 | 0.935 | 0.916 | 0.626 | 0.653 |
@@ -1094,7 +1096,8 @@ task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / 
 
 **3 seeds (2026-10-25): 0.937 / 0.902 / 0.630 / 0.728, vs the K=7 recipe's 0.945 / 0.912 / 0.636 / 0.726 at 296 PF:
 -0.008 / -0.010 / -0.006 / +0.002 at 0.88x its compute, i.e. the same quality.** Seed spread: outlier 0.686-0.778, nq
-0.880-0.918. Earlier 2-seed reading: LoRA on all 32 blocks at LR 1e-5 runs at 0.88x the recipe's compute. At the same data it is slightly
+0.880-0.918. **Against dense on the same 1,464 rows (2 seeds, 4.4x the compute): -0.021 / -0.030 / -0.011 / +0.026.**
+Earlier 2-seed reading: LoRA on all 32 blocks at LR 1e-5 runs at 0.88x the recipe's compute. At the same data it is slightly
 below the recipe: contra -0.005, nq +0.001, oolong -0.013, outlier -0.023. At matched FLOPs it is ahead of the recipe's
 compute curve, which interpolates to ~0.921 / 0.913 / 0.623 / 0.600 at 261 PF: contra +0.02, outlier +0.10, nq and
 oolong equal. Those deltas are matched-FLOP Δ on the primary tasks: **outlier +0.10, oolong 0.00.** The LR control shows the higher LR helps only the wide adapter scope. The recipe at LR 1e-5 loses oolong (0.565 vs
