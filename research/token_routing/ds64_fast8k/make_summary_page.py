@@ -86,7 +86,10 @@ SCREEN_LABEL = {
     "otr10M7de0pt": "per-task router", "fa50M7": "freeze blocks 0–6 at 50%", "fa75M7": "freeze blocks 0–6 at 75%",
     "pfz37M7": "progressive freeze (0–2 @25%, 0–6 @50%)", "lora16M7": "rank-16 adapters on blocks 0–6", "lora64M7": "rank-64 adapters on blocks 0–6",
     "mass80c20M7": "keep by predicted gradient mass", "otr10M7de0f16": "16-token floor per doc", "mod25": "mixture-of-depths 25%",
-    "mod25t16": "mixture-of-depths 25%, block-16 target", "lora64fa75M7": "rank-64 adapters, frozen at 75%"}
+    "mod25t16": "mixture-of-depths 25%, block-16 target", "lora64fa75M7": "rank-64 adapters, frozen at 75%",
+    "lora64fa75r20to7": "adapters (frozen 75%) + two-stage 20%→7%", "lora64fa75r20to10": "adapters (frozen 75%) + two-stage 20%→10%",
+    "lora64fa75r3s": "adapters (frozen 75%) + three-stage 20/7/3%", "lora64r20to7": "RECIPE: adapters + two-stage 20%→7%",
+    "lora64r20to10": "adapters + two-stage 20%→10%"}
 
 
 def screen_table(d, tag):
@@ -100,6 +103,27 @@ def screen_table(d, tag):
                    f'<td class="n {cls(r["mean_delta"])}">{r["mean_delta"]:+.3f}</td><td class="n {cls(r["worst_delta"])}">{r["worst_delta"]:+.3f}</td>'
                    f'<td>{w[1].replace("@", " @")}</td></tr>')
     return "\n".join(out) or '<tr><td colspan="5">no complete runs yet</td></tr>'
+
+
+def fresh_table(d):
+    """Fresh mt4f pools: each arm's 8-cell mean, and the dense FLOPs needed to reach it on the fresh dense curve
+    (log-linear between dense-f1952 and dense-f3904; '>' when above the largest dense point)."""
+    rows = [r for r in build(d, "mt4") if r["xkey"] == "pf" and re.search(r"-f\d+-tde-", r["run"]) and r.get("complete")]
+    dense = sorted((r["x"], r["mean"]) for r in rows if r["arm"] == "dense")
+    if len(dense) < 2:
+        return '<tr><td colspan="6">dense fresh curve not complete yet</td></tr>'
+    (x0, y0), (x1, y1) = dense[0], dense[-1]
+    out = []
+    for r in sorted((r for r in rows if r["arm"] != "dense"), key=lambda r: (int(re.search(r"-f(\d+)-", r["run"]).group(1)), r["x"])):
+        rows_n = int(re.search(r"-f(\d+)-", r["run"]).group(1))
+        t = (r["mean"] - y0) / (y1 - y0)
+        need = x0 * (x1 / x0) ** t
+        ftm = (">" if r["mean"] > y1 else "") + f"{(min(need, x1) if r['mean'] > y1 else need) / r['x']:.1f}×"
+        out.append(f'<tr><td>{html.escape(SCREEN_LABEL.get(r["arm"], r["arm"]))}</td><td class="n">{rows_n}</td><td class="n">{r["x"]:.0f}</td>'
+                   f'<td class="n">{r["mean"]:.3f}</td><td class="n">{r["cells"]["outlier@8k"]["v"]:.3f}</td><td class="n"><b>{ftm}</b></td></tr>')
+    head = (f'<tr><td>dense</td><td class="n">1952</td><td class="n">{x0:.0f}</td><td class="n">{y0:.3f}</td><td class="n">–</td><td class="n">1.0×</td></tr>'
+            f'<tr><td>dense</td><td class="n">3904</td><td class="n">{x1:.0f}</td><td class="n">{y1:.3f}</td><td class="n">–</td><td class="n">1.0×</td></tr>')
+    return head + "\n".join(out)
 
 
 def best_table(pts):
@@ -159,8 +183,9 @@ a { color: inherit; }
 </header>
 
 <section class="box">
-  <h2>Bottom line (2026-10-24)</h2>
+  <h2>Bottom line (2026-10-25)</h2>
   <ul>
+    <li><b>Fresh-data FLOPs-to-match (4-task, new 8,200-row/task pools, one seed each; table below):</b> dense needs about <b>3× the FLOPs</b> to match the cheap methods at 3,904 rows/task (the recipe: 0.912 at 777 PF ≈ dense at 2,370 PF), and <b>≈2–2.2×</b> at 7,808 rows/task, where dense is near its plateau (three-stage + frozen adapters: 0.927 at 1,372 PF, above dense's 0.926 at 3,063 PF). Outlier@8k goes 0.96–0.99 for every cheap method at ≥3,904 rows/task.</li>
     <li><b>One recipe for both mixes (2 seeds each):</b> rank-64 adapters on blocks 0–6 (never frozen), keep 20% of tokens from block 7, rescore to 7% at block 16, no full-context steps; add a 16-token floor per document on the 11-task mix.
       <ul>
         <li>4-task mix, 1,464 rows/task: 0.945 / 0.912 / 0.636 / 0.726 at 0.26× dense FLOPs, ~49 GiB peak.</li>
@@ -185,6 +210,15 @@ a { color: inherit; }
     <tr><th>recipe (most data run)</th><th class="n">rows/task</th><th class="n">PF</th><th class="n">mean Δ</th><th class="n">worst Δ</th><th class="n">runs</th></tr>
     __BEST__
   </table></div>
+</section>
+
+<section>
+  <h2>Fresh data: FLOPs dense needs to match each method</h2>
+  <div class="tbl"><table>
+    <tr><th>method (LR 5e-6, no full-context steps, one seed)</th><th class="n">rows/task</th><th class="n">PF</th><th class="n">8-cell mean</th><th class="n">outlier@8k</th><th class="n">dense FLOPs to match</th></tr>
+    __FRESH__
+  </table></div>
+  <p class="note">New fresh 4-task pools (8,200 rows/task, new generator seed; single epoch, no repeated rows). "Dense FLOPs to match" = the training PF dense needs to reach the same 8-cell mean on its fresh curve (1,952 and 3,904 rows/task), divided by the method's PF; "&gt;" = above dense's best point. eval_size 500 per cell, no-cot.</p>
 </section>
 
 <section>
@@ -267,7 +301,7 @@ def main():
     pts = key_points(d)
     charts = (chart(pts, "md", "Mean Δ vs dense (8 cells)", -0.10, 0.10)
               + chart(pts, "wd", "Worst-cell Δ vs dense", -0.15, 0.05))
-    page = (PAGE.replace("__SCREEN1952__", screen_table(d, "s1952-tde")).replace("__CHARTS__", charts).replace("__BEST__", best_table(pts))
+    page = (PAGE.replace("__FRESH__", fresh_table(d)).replace("__SCREEN1952__", screen_table(d, "s1952-tde")).replace("__CHARTS__", charts).replace("__BEST__", best_table(pts))
             .replace("__UPDATED__", a.updated or "today"))
     open(os.path.join(a.out_dir, "index.html"), "w").write(page)
     det = open(a.page).read()
