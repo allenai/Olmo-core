@@ -562,6 +562,8 @@ not better than drop at 10%. (6) the per-document floor gains ≈ +0.035-0.04 co
 | r20to7f16 (stages 7:0.2,16:0.07 + floor 16), LR 5e-6 | 310 (0.43) | 0.943 | 0.292 | 0.618 | 0.922 | 0.748 |
 | lora64fa371r20to7f16 (LoRA r64 + freeze 75% + two-stage + floor 16), LR 5e-6 | 260 (0.36) | 0.935 | 0.307 | 0.544 | 0.907 | 0.738 |
 | lora64fa371r20to10f16 (same, stage 2 at 10%), LR 5e-6 | 262 (0.36) | 0.907 | 0.322 | 0.607 | 0.901 | 0.738 |
+| lora64fa420r20to7f16 (LoRA r64 + two-stage + floor, freeze at 85%), LR 5e-6 | 265 (0.37) | 0.927 | 0.305 | 0.584 | 0.920 | 0.740 |
+| **lora64r20to7f16 (LoRA r64 + two-stage + floor, NO freeze), LR 5e-6** | 273 (0.38) | **0.947** | 0.285 | **0.683** | 0.909 | **0.752** |
 | otr10M7hdr8 (first 8 tokens kept) | 314 (0.44) | 0.744 | 0.306 | 0.648 | 0.835 | 0.711 |
 | otr10M7ds0 / ds50 (global budget) | 293 | 0.770 / 0.769 | | | | 0.696 / 0.697 |
 | rnd10M7 (random) | 295 | 0.793 | 0.353 | 0.466 | 0.803 | 0.691 |
@@ -591,7 +593,12 @@ two-stage) on mt11s720 + floor: 0.738 at 0.36x (+0.035 vs dense interpolated to 
 Both LoRA-then-freeze runs score low on xabsence (0.544 / 0.617 vs 0.738 unfrozen LoRA), so on this mix the FREEZE, not
 the two-stage drop, looks like the cost (single seed each). Stage 2 at 10% on mt11 gives the same 0.738 (xabsence 0.607):
 three LoRA-then-freeze runs on mt11 all sit at xabsence 0.54-0.62 vs 0.738 unfrozen. No-freeze / freeze-85% runs decide it. On mt4s1464 the freeze is free: LoRA r64 + two-stage without it
-(lora64r20to7) = 0.944 / 0.916 / 0.615 / 0.713 at 0.26x vs 0.938 / 0.922 / 0.610 / 0.765 frozen at 75% (0.24x). Global budget: no collapse (leak_auc 0.58 vs 0.49 per-document) but no gain.
+(lora64r20to7) = 0.944 / 0.916 / 0.615 / 0.713 at 0.26x vs 0.938 / 0.922 / 0.610 / 0.765 frozen at 75% (0.24x). **The mt11
+freeze test settles it: freezing the LoRA stack costs xabsence on the 11-task mix whether early or late (freeze 75%:
+0.544, freeze 85%: 0.584, mean9 0.738 / 0.740), and without the freeze xabsence comes back (0.683) and LoRA r64 +
+two-stage + floor is the best mt11 point so far: mean9 0.752 at 0.38x, +0.046 vs dense interpolated to 273 PF. Universal
+recipe: LoRA r64 early stack + two-stage drop (7:0.2,16:0.07), NO freeze -- 0.26x on mt4 (= the frozen variant within
+noise), 0.38x on mt11 (+ floor 16); ~0.02x more than freezing, which is free only on mt4.** Global budget: no collapse (leak_auc 0.58 vs 0.49 per-document) but no gain.
 Promoted: otr10M7f8 / f16 to mt4s1464 (Lambda), f16 seed 1 on mt11s720. otr10M7f8 at mt4s1464 (467 PF): 0.931 / 0.892 /
 0.616 / 0.679 vs otr10M7 (2 seeds, ≈ 445 PF) 0.927 / 0.907 / 0.643 / 0.581 -- with more training the floor's mt4 gain
 vanishes (contra level; the rest within seed noise): it matters for tiny documents (strmatch) and early in training.
