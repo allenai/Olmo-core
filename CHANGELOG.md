@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added OLMo 3.5 vision alignment as a multimodal-only layer over `OLMoDDPModel`: `MultimodalOLMoDDPModel` and `MultimodalOLMoDDPTrainModule` (with inert OLMoDDP hooks), the multimodal optimizer and callbacks, `PretrainingReplay` and perception data sources, the multi-phase alignment pipeline (`olmo_core.internal.vision_alignment*`, `src/scripts/train/Vision-Align.py`), and the OLMoDDP export script.
 - Added Qwen3-0.6B and Qwen3-1.7B variants of the Molmo2 stage-1 recipe (`MultimodalLMConfig.molmo2_0_6B()` / `molmo2_1_7B()`, `--model_size=0.6b|1.7b`).
 - Added the Molmo2 stage-2 (SFT) recipe: `src/scripts/train/Molmo2-Stage2.py`, the `image_only_v9` dataset mixture, multi-image datasets, and the `sft_demo` mode of `PixMoCapDataset`.
 - Reworked the multimodal data pipeline for epoch-aware, resumable mixture loading: per-source epochs (`get(index, epoch)`), a `qwen3` or `document` message layout (`document_layout`, `Molmo2TokenIds`, `prepare_molmo2_tokenizer`), a filesystem cache for decoded documents (`fs_cache`), configurable `MultimodalMixtureConfig` / `MultimodalSourceConfig` mixtures, and weighted truncation that only rescales branches when asked (`truncate_example(..., recompute_root_subsegments=...)`).
