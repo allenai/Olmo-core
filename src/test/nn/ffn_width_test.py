@@ -12,7 +12,7 @@ class _M(torch.nn.Module):
         super().__init__()
         self.blocks = torch.nn.ModuleDict({str(i): torch.nn.Module() for i in range(n)})
         for b in self.blocks.values():
-            b.feed_forward = FeedForward(d_model=d, hidden_size=hid, init_device="cpu")
+            b.feed_forward = FeedForward(d_model=d, hidden_size=hid, bias=False, init_device="cpu")
 
 
 def test_parse_layer_range():
