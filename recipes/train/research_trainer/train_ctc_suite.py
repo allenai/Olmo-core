@@ -1227,10 +1227,67 @@ def build_and_fit(opts: argparse.Namespace) -> None:
                     raise SystemExit(0)
 
         trainer_config = trainer_config.with_callback("mem_snapshot", _MemSnapshot())
+    if opts.mem_probe_steps:
+        # Memory-vs-length probe (2026-10-25). The --mem-snapshot replay counts only allocations made
+        # inside its trace (not the params loaded before it) and stops after step 1, which for the
+        # online router is the dense warmup step. This reads the allocator's own totals per step:
+        # the fixed state at the step start (params + Adam state once it exists), the forward +
+        # backward peak and the optimizer peak, plus whether the router routed; the last step's
+        # forward + backward window is also attributed by site. Then exits.
+        from olmo_core.train.callbacks.callback import Callback as _CB
+
+        n_probe = int(opts.mem_probe_steps)
+
+        class _MemProbe(_CB):
+            def _router(self):
+                return getattr(self.trainer.train_module.model, "_online_token_router", None)
+
+            def pre_step(self, batch):
+                import torch
+
+                torch.cuda.synchronize()
+                self._fixed = torch.cuda.memory_allocated()
+                r = self._router()
+                self._dense = None if r is None else bool(r.dense_now())
+                self._T = int(batch["input_ids"].numel())
+                torch.cuda.reset_peak_memory_stats()
+                if self.step == n_probe:
+                    torch.cuda.memory._record_memory_history(max_entries=400000)
+
+            def pre_optim_step(self):
+                import torch
+
+                torch.cuda.synchronize()
+                self._fb = torch.cuda.max_memory_allocated()
+                if self.step == n_probe:
+                    from olmo_core.nn.mem_attribution import summarize_peak
+
+                    print("[mem-probe] sites of the forward+backward transient (above the step start):",
+                          flush=True)
+                    summarize_peak(torch.cuda.memory._snapshot(), top=12)
+                    torch.cuda.memory._record_memory_history(enabled=None)
+                torch.cuda.reset_peak_memory_stats()
+
+            def post_step(self):
+                import torch
+                import torch.distributed as dist
+
+                torch.cuda.synchronize()
+                g = 2**30
+                if not dist.is_initialized() or dist.get_rank() == 0:
+                    print(f"[mem-probe] step {self.step} tokens/rank {self._T} router_dense {self._dense} "
+                          f"fixed {self._fixed / g:.2f} GB fwdbwd_peak {self._fb / g:.2f} GB "
+                          f"optim_peak {torch.cuda.max_memory_allocated() / g:.2f} GB "
+                          f"after {torch.cuda.memory_allocated() / g:.2f} GB "
+                          f"reserved_max {torch.cuda.max_memory_reserved() / g:.2f} GB", flush=True)
+                if self.step >= n_probe:
+                    raise SystemExit(0)
+
+        trainer_config = trainer_config.with_callback("mem_probe", _MemProbe())
     trainer = trainer_config.build(train_module, data_loader)
     if variant_and_options(opts)[0].new_params and not opts.branch_from:
         _tolerant_base_load(base_checkpoint, train_module.model, save_folder)
-    if opts.mem_snapshot:
+    if opts.mem_snapshot or opts.mem_probe_steps:
         import torch
 
         try:
@@ -1240,7 +1297,9 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             from olmo_core.nn.mem_attribution import summarize_peak
 
             print(
-                "[mem-snapshot] OOM during the step; attribution of the trace so far:", flush=True
+                f"[mem-snapshot] OOM during step {trainer.global_step} (allocated "
+                f"{torch.cuda.memory_allocated() / 2**30:.2f} GB, peak {torch.cuda.max_memory_allocated() / 2**30:.2f}"
+                " GB); attribution of the trace so far:", flush=True
             )
             summarize_peak(torch.cuda.memory._snapshot(), top=16)
             raise
@@ -1555,6 +1614,13 @@ def parse_args() -> argparse.Namespace:
         "--mem-snapshot",
         action="store_true",
         help="debug: print the live allocations at the peak of the first step, then exit",
+    )
+    ap.add_argument(
+        "--mem-probe-steps",
+        type=int,
+        default=0,
+        help="debug: print the true fixed / forward+backward / optimizer memory of each of the first N "
+        "steps (router arms: N >= 2, step 1 is the dense warmup), attribute step N's transient, exit",
     )
     ap.add_argument(
         "--flex-share-seq-len",
