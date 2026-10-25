@@ -212,6 +212,9 @@ class FFNWidthOptions(VariantOptions):
     ffn_width_mode: str = "random"
     ffn_width_no_rescale: bool = False
     ffn_width_block: int = 128
+    ffn_width_explore: float = 0.1
+    ffn_width_refresh_every: int = 50
+    ffn_width_ema: float = 0.5
 
     @property
     def active(self) -> bool:
@@ -877,17 +880,22 @@ class FFNWidth(Variant):
         assert isinstance(o, FFNWidthOptions)
         if not 0.0 < o.ffn_width_frac < 1.0:
             raise ValueError("ffnwidth needs 0 < ffn_width_frac < 1")
-        if o.ffn_width_mode not in ("random", "blocked"):
-            raise ValueError(f"ffn_width_mode must be random / blocked, got {o.ffn_width_mode!r}")
+        if o.ffn_width_mode not in ("random", "blocked", "topk"):
+            raise ValueError(f"ffn_width_mode must be random / blocked / topk, got {o.ffn_width_mode!r}")
 
     def post_build_model(self, model, o, ctx):
         assert isinstance(o, FFNWidthOptions)
         from olmo_core.nn.ffn_width import install_ffn_width
 
+        # topk keeps the most active neurons exactly: no 1/f rescale
+        rescale = not o.ffn_width_no_rescale and o.ffn_width_mode != "topk"
         h = install_ffn_width(model, o.ffn_width_frac, o.ffn_width_layers, mode=o.ffn_width_mode,
-                              rescale=not o.ffn_width_no_rescale, block=o.ffn_width_block, seed=ctx.seed)
-        print(f"[variants] ffn-width: frac {o.ffn_width_frac} ({o.ffn_width_mode}, rescale="
-              f"{not o.ffn_width_no_rescale}) on blocks {sorted(h.layers)}", flush=True)
+                              rescale=rescale, block=o.ffn_width_block, seed=ctx.seed, explore=o.ffn_width_explore,
+                              refresh_every=o.ffn_width_refresh_every, ema=o.ffn_width_ema)
+        extra = (f", explore {o.ffn_width_explore}, refresh every {o.ffn_width_refresh_every}, ema {o.ffn_width_ema}"
+                 if o.ffn_width_mode == "topk" else "")
+        print(f"[variants] ffn-width: frac {o.ffn_width_frac} ({o.ffn_width_mode}, rescale={rescale}{extra}) "
+              f"on blocks {sorted(h.layers)}", flush=True)
 
     def extra_callbacks(self, o, ctx):
         from olmo_core.train.callbacks import FFNWidthCallback

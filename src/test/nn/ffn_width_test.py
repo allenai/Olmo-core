@@ -153,3 +153,47 @@ def test_partial_ffn_applies_early_lora_adapters():
     assert ff.w1.weight.grad is None
     gB = ff.w1.lora_B.grad.abs().sum(1) > 0
     assert torch.equal(gB.nonzero().flatten(), idx)
+
+
+def test_topk_refresh_is_full_width_then_keeps_the_most_active_neurons():
+    torch.manual_seed(0)
+    m = _M(n=1, hid=64)
+    ff = m.blocks["0"].feed_forward
+    with torch.no_grad():  # make neurons 0..15 by far the most active
+        ff.w1.weight[:16] *= 20.0
+        ff.w3.weight[:16] *= 20.0
+    x = torch.randn(2, 5, 16)
+    full = ff(x).detach()
+    h = install_ffn_width(m, 0.5, mode="topk", rescale=False, explore=0.25, refresh_every=10, seed=1)
+    ff.train()
+    h.set_step(1)
+    assert h.is_refresh() and h.frac_of(0) == 1.0
+    assert torch.allclose(ff(x), full, atol=1e-5)  # refresh = exact full width
+    ff(x)  # a second micro-batch / AC recompute does not double-count
+    assert h._pending[0][1] == 10.0
+    h.set_step(2)
+    assert not h.is_refresh() and 0 in h.importance and not h._pending
+    idx = h.indices(0, 64, "cpu")
+    assert idx.numel() == 32
+    assert set(range(16)) <= set(idx.tolist())  # the top neurons are kept
+    k_top = 32 - 8  # explore 0.25 of the kept set
+    imp_order = torch.argsort(h.importance[0], descending=True)[:k_top]
+    assert set(imp_order.tolist()) <= set(idx.tolist())
+    assert h.frac_of(0) == 0.5
+    y = ff(x)  # partial, no rescale: exact on the kept neurons
+    ref = torch.nn.functional.linear(
+        torch.nn.functional.silu(x @ ff.w1.weight[idx].T) * (x @ ff.w3.weight[idx].T), ff.w2.weight[:, idx])
+    assert torch.allclose(y, ref, atol=1e-5)
+    assert (y - full).norm() < 0.2 * full.norm()  # the dropped half carries little of the output
+    h.set_step(10)
+    assert h.is_refresh() and h.frac_of(0) == 1.0  # periodic refresh, charged at full width
+    assert h.credits_per_block(1) == [0.0]
+    h.set_step(11)
+    assert h.credits_per_block(1)[0] == pytest.approx(-0.5 * h.ffn_fpt[0])
+
+
+def test_topk_rejects_bad_args():
+    with pytest.raises(ValueError):
+        FFNWidthHolder(0.5, [0], mode="topk", explore=1.0)
+    with pytest.raises(ValueError):
+        FFNWidthHolder(0.5, [0], mode="bogus")

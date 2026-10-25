@@ -1527,8 +1527,17 @@ def parse_args() -> argparse.Namespace:
                     "output rescaled by 1/f; eval full width; FLOPs charged at f. 1.0 = off")
     ap.add_argument("--ffn-width-layers", default="",
                     help="blocks for --ffn-width-frac, e.g. '0-6' or '0,2,4' (default: every block)")
-    ap.add_argument("--ffn-width-mode", choices=["random", "blocked"], default="random",
-                    help="random: f*d_ff neurons uniformly; blocked: random contiguous blocks of --ffn-width-block")
+    ap.add_argument("--ffn-width-mode", choices=["random", "blocked", "topk"], default="random",
+                    help="random: f*d_ff neurons uniformly; blocked: random contiguous blocks of --ffn-width-block; "
+                    "topk (v2): the most active neurons by a running mean of |gate*up| from full-width refresh steps, "
+                    "+ a random explore share, no 1/f rescale")
+    ap.add_argument("--ffn-width-explore", type=float, default=0.1,
+                    help="topk: random share of the kept neurons (drawn from the rest)")
+    ap.add_argument("--ffn-width-refresh-every", type=int, default=50,
+                    help="topk: a full-width refresh step (all neurons train, charged at full width) every N steps; "
+                    "the first step always refreshes. 0 = only the first")
+    ap.add_argument("--ffn-width-ema", type=float, default=0.5,
+                    help="topk: decay of the importance running mean across refreshes")
     ap.add_argument("--ffn-width-no-rescale", action="store_true",
                     help="ablation: do not rescale the partial FFN output by 1/f")
     ap.add_argument("--ffn-width-block", type=int, default=128, help="neurons per block in --ffn-width-mode blocked")
