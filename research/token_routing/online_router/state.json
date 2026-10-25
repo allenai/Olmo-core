@@ -696,6 +696,14 @@
    "lr": 1e-05,
    "mix": "mt11",
    "seed": 0
+  },
+  "f8k-mt11-lora64K32r20to7f16sd1-s720-tdb-lr1e-05": {
+   "ex": "01M5SHHW6HX3TBEJSN1GSPPYHK",
+   "arm": "lora64K32r20to7f16",
+   "budget": "s720",
+   "lr": 1e-05,
+   "mix": "mt11",
+   "seed": 1
   }
  },
  "evals": {
