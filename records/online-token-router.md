@@ -994,5 +994,10 @@ All runs are mt4s1464, LR 5e-6, de0, 8k, eval_size 500 per task; numbers are con
 | Δ, fw50e minus recipe curve | | -0.08 | -0.02 | -0.03 | -0.17 |
 | recipe + f=0.5 on all blocks (fw50a) | 214 | 0.069 | 0.836 | 0.508 | 0.166 |
 
-fw50a collapses. The dense + f=0.5 control is pending; it separates whether partial MLP itself is the problem or how it
-interacts with the router.
+| dense + f=0.5 on all blocks (densefw50a) | 865 | 0.368 | 0.852 | 0.521 | 0.300 |
+| dense, 1,464 rows/task | 1,154 | 0.956 | 0.936 | 0.630 | 0.719 |
+
+fw50a collapses. **The dense control shows partial MLP is itself the problem, not its interaction with the router:**
+dense loses 0.59 on contra and 0.42 on outlier at 0.75x dense's compute, and is far below dense's own 488-row point
+(387 PF: 0.893 / 0.896 / 0.617 / 0.302). The likely cause is the train/eval mismatch: training sees a random half of
+the neurons scaled by 1/f, and eval runs the full width. The thread is closed.
