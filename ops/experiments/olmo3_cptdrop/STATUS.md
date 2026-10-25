@@ -11,7 +11,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
 wandb_group:
-next_step: cubbins 4079442 (r128 K16, r64 K24, r64 K16 s1) eval -> 4106229 SHORT (S4 4k rows 12-960 steps; S4 -> routed-32k candidate / dense-32k control; LMIX packed controls). Waiting on router session: --st-otr-route-min-len (hybrid, per document in packed instances) and --ffn-width-frac (partial MLP). Data: data/mix4k_r0 (tail rows 39160-42999, 30,720 4k windows), mix4k_r25 / r50 (rows 0-3999) on cubbins.
+next_step: cubbins serial queue: 4079442 eval (r128 K16, r64 K24, r64 K16 s1) -> 4106229 SHORT (S4 4k rows; S4 -> routed / dense 32k phase 2; packed LMIX) -> 4106244 HYB (packed hybrid rows, route-min-len 8192) + LORA32 (whole-model LoRA r64) -> 4106262 FFNW (partial MLP f 0.5 / 0.25, +-LoRA r64 K16). mcfuzz / sneetches held by rhys_gould.
 ---
 
 # olmo3_cptdrop
