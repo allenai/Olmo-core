@@ -49,6 +49,8 @@
 #   REP  rescore the dense reference curve + stage2 / stage3 with the current eval (near / far repeat CE + ctx_gain)
 #        into devce_rep/ (the original dense evals predate the repeat bins)
 #   LORA64X LoRA r64 K16 at 240 / 480 steps on fresh rows (extends the best CPT arm across the measured dense curve)
+#   LORA128 LoRA r128 K16 at 48 / 120 (does rank 128 close the remaining far-only gap?)
+#   LORA64S1 seed-1 rerun of LoRA r64 K16 at 120 steps
 #   LORAFZ LoRA r64 K16, then adapters + blocks [0,16) frozen at 75% of the steps (router branch >= 5e1202e4b; best
 #        SFT compute + memory point), at 48 / 120 steps
 #   LORAS1 seed-1 (different data order) rerun of LoRA r16 K16 at 48 / 120 steps: is the arm itself stable?
@@ -217,6 +219,14 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
         run "o3cd-DLORA64k16lr20-$b" ARM=OTR OTR_KEEP=1.0 OTR_L=16 OTR_DENSE=0 OTR_EXTRA="--st-otr-early-lora 64 --st-otr-early-lora-scale 32" MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 4 + 10)) \
           || { log "FAIL DLORA64 K16 at $b: continuing"; break; }
       done ;;
+    LORA128)
+      for b in 48 120; do
+        run "o3cd-DLORA128k16lr20-$b" ARM=OTR OTR_KEEP=1.0 OTR_L=16 OTR_DENSE=0 OTR_EXTRA="--st-otr-early-lora 128 --st-otr-early-lora-scale 32" MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 4 + 10)) \
+          || { log "FAIL DLORA128 K16 at $b: continuing"; break; }
+      done ;;
+    LORA64S1)
+      run "o3cd-DLORA64k16lr20-120-s1" ARM=OTR OTR_KEEP=1.0 OTR_L=16 OTR_DENSE=0 OTR_EXTRA="--st-otr-early-lora 64 --st-otr-early-lora-scale 32" SEED=1 MAX_STEPS_TOTAL=120 EXPECTED_MIN=40 \
+        || log "FAIL DLORA64 K16 s1" ;;
     LORAFZ)
       for b in 48 120; do
         n=$(( b * 3 / 4 ))
@@ -252,7 +262,7 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       done ;;
     EV)
       SPECS=""
-      for r in $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA64k${K}loclr20-$b DLORA64k${K}lr20-$b; done; done) DLORA64k16lr20-240 DLORA64k16lr20-480 $(for b in 12 24 48 120; do echo MODc35lr20-$b DLOClr20-$b DLOCfrzk8f25lr20-$b; done) $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA16k${K}lr20-$b; done; done) DPFZlr20-12 DPFZlr20-24 DPFZlr20-48 DPFZlr20-120 $(for c in 50 25; do for b in 12 24 48 120; do echo MODc${c}lr20-$b; done; done) $(for K in 16 8; do for f in 25 50; do for b in 12 24 48 120; do echo DFRZk${K}f${f}lr20-$b; done; done; done) OTR10M7ngf50lr20-46 OTR10M7ngf50lr20-92 OTR10M7ngf50lr20-185 OTR10M7ndnglr20-60 OTR10M7ndnglr20-120 OTR10M7ndnglr20-240 OTR10M7f50x10lr20-31 OTR10M7f50x10lr20-62 OTR10M7f50x10lr20-124 OTR10M7ndx10lr20-40 OTR10M7ndx10lr20-80 OTR10M7ndx10lr20-160 OTR10M7ndx03lr20-40 OTR10M7ndx03lr20-80 OTR10M7ndx03lr20-160 OTR10M7x10lr20-31 OTR10M7x10lr20-62 OTR10M7x10lr20-124 OTR10M7x10lr20-310 OTR10M7x03lr20-31 OTR10M7x03lr20-62 OTR10M7x03lr20-124 OTR10M7x03lr20-310 OTR10M7mglr20-31 OTR10M7mglr20-62 OTR10M7mglr20-124 OTR10M7nglr20-46 OTR10M7nglr20-92 OTR10M7nglr20-185 OTRpyrlr20-40 OTRpyrlr20-80 OTRpyrlr20-160 OTRpyrnglr20-60 OTRpyrnglr20-120 OTRpyrnglr20-240 OTR10M7lr20-31 OTR10M7lr20-62 OTR10M7lr20-124 OTR10M7lr20-310 OTR10M7ndlr20-40 OTR10M7ndlr20-80 OTR10M7ndlr20-160 Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
+      for r in $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA64k${K}loclr20-$b DLORA64k${K}lr20-$b; done; done) DLORA64k16lr20-240 DLORA64k16lr20-480 DLORA128k16lr20-48 DLORA128k16lr20-120 DLORA64k16lr20-120-s1 $(for b in 12 24 48 120; do echo MODc35lr20-$b DLOClr20-$b DLOCfrzk8f25lr20-$b; done) $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA16k${K}lr20-$b; done; done) DPFZlr20-12 DPFZlr20-24 DPFZlr20-48 DPFZlr20-120 $(for c in 50 25; do for b in 12 24 48 120; do echo MODc${c}lr20-$b; done; done) $(for K in 16 8; do for f in 25 50; do for b in 12 24 48 120; do echo DFRZk${K}f${f}lr20-$b; done; done; done) OTR10M7ngf50lr20-46 OTR10M7ngf50lr20-92 OTR10M7ngf50lr20-185 OTR10M7ndnglr20-60 OTR10M7ndnglr20-120 OTR10M7ndnglr20-240 OTR10M7f50x10lr20-31 OTR10M7f50x10lr20-62 OTR10M7f50x10lr20-124 OTR10M7ndx10lr20-40 OTR10M7ndx10lr20-80 OTR10M7ndx10lr20-160 OTR10M7ndx03lr20-40 OTR10M7ndx03lr20-80 OTR10M7ndx03lr20-160 OTR10M7x10lr20-31 OTR10M7x10lr20-62 OTR10M7x10lr20-124 OTR10M7x10lr20-310 OTR10M7x03lr20-31 OTR10M7x03lr20-62 OTR10M7x03lr20-124 OTR10M7x03lr20-310 OTR10M7mglr20-31 OTR10M7mglr20-62 OTR10M7mglr20-124 OTR10M7nglr20-46 OTR10M7nglr20-92 OTR10M7nglr20-185 OTRpyrlr20-40 OTRpyrlr20-80 OTRpyrlr20-160 OTRpyrnglr20-60 OTRpyrnglr20-120 OTRpyrnglr20-240 OTR10M7lr20-31 OTR10M7lr20-62 OTR10M7lr20-124 OTR10M7lr20-310 OTR10M7ndlr20-40 OTR10M7ndlr20-80 OTR10M7ndlr20-160 Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
         [ -f "$ROOT/runs/o3cd-$r/model_and_optim/.metadata" ] && [ ! -f "$ROOT/devce/${r}_dev32k_1024.json" ] && SPECS="$SPECS $r:runs/o3cd-$r:4"
       done
       log "EV specs:$SPECS"
