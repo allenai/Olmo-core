@@ -143,8 +143,8 @@ def test_prepare_joins_images_and_drops_unusable_rows(tmp_path, monkeypatch):
     assert stats["duplicate_rows"] == 1
     assert stats["rows"] == 2
     data = load_from_disk_compat(str(root / "nemotron_ecd"))
-    assert data["id"] == ["a", "b"]
-    assert data[1]["responses"] == ["<think>\nt\n</think>\nA"]
+    assert data["id"] == ["b", "a"]  # an image's rows in JSONL order
+    assert data[0]["responses"] == ["<think>\nt\n</think>\nA"]
     assert json.loads((root / "nemotron_ecd" / "prepare_stats.json").read_text())["rows"] == 2
 
 

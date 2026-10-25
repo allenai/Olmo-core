@@ -537,15 +537,23 @@ def prepare_nemotron_subset(
     _ROWS.clear()
     if not images:
         raise OLMoConfigurationError(f"{name}: none of the referenced images could be fetched")
-    data = datasets.Dataset.from_parquet(
-        sorted(glob.glob(os.path.join(tmp, "*.parquet"))), cache_dir=os.path.join(tmp, "cache")
-    )
-    # Shards finish in any order: sort by id so the prepared order does not depend on timing.
-    data = data.sort("id")
-    ids = data["id"]
-    first = [i for i in range(len(ids)) if i == 0 or ids[i] != ids[i - 1]]
-    if len(first) < len(ids):
-        data = data.select(first)
+    # Shards are named by their index and each emits its rows in a fixed order, so reading them
+    # by name gives an order that does not depend on which worker finished first. Sorting the
+    # dataset instead would leave an index mapping that save_to_disk resolves by random reads over
+    # every image.
+    import pyarrow.parquet as pq
+
+    files = sorted(glob.glob(os.path.join(tmp, "*.parquet")))
+    seen_ids: set = set()
+    keep = []
+    for path in files:
+        for row_id in pq.read_table(path, columns=["id"]).column("id").to_pylist():
+            keep.append(row_id not in seen_ids)
+            seen_ids.add(row_id)
+    del seen_ids
+    data = datasets.Dataset.from_parquet(files, cache_dir=os.path.join(tmp, "cache"))
+    if not all(keep):
+        data = data.select(np.flatnonzero(keep))
     shutil.rmtree(out, ignore_errors=True)
     data.save_to_disk(out, max_shard_size="2GB")
     stats["rows"] = len(data)
