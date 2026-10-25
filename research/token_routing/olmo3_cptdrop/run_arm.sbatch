@@ -58,6 +58,10 @@ case "$ARM" in
   # LMIX: packed dense training on a mixed-length shard (MIX=mix4k_r25 / mix4k_r50): whole 32k docs + 4k windows,
   # 16 packed 32k instances/step (same tokens/step as dense; only the 4k documents' attention is cheaper)
   LMIX)  DATA=${MIX:-mix4k_r25} SEQ=32768 GB=16 VAR="--variant full --pack" ;;
+  # HYB: hybrid rows (router branch >= 6d5ac4232): packed mixed shard (MIX); documents >= 8,192 tokens (the whole 32k
+  # docs) are token-dropped by the one-stage online router after block OTR_L (keep OTR_KEEP, no full-context steps);
+  # the 4k windows run dense in the same step (--st-otr-route-min-len)
+  HYB)   DATA=${MIX:-mix4k_r50} SEQ=32768 GB=16 VAR="--variant softtoken --pack --st-block-size 512 --st-gold-blind --st-drop-slots --st-pad-multiple 1 --st-keep-token-rule online --st-otr-keep-frac ${OTR_KEEP:-0.1} --st-otr-drop-layer ${OTR_L:-7} --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-no-query --st-otr-route-min-len 8192 ${OTR_EXTRA:-}" ;;
   C2)    DATA=train32k_head_ee SEQ=32768 GB=16 VAR="--variant full" ;;  # rows 0..39,159: never the tail rows c8k was cut from
   IRAND) DATA=train32k_ee SEQ=32768 GB=16 VAR="--variant softtoken --st-block-size 512 --st-gold-blind --st-drop-slots --st-keep-prob 0.2 --st-pad-multiple 1" ;;
   # SD20: softdetach's sd20 geometry (records/softdetach-cpt-crossover.md, ~4x on Qwen3.5-4B): random 20% of the

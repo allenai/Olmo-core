@@ -58,6 +58,9 @@
 #   SHORT short-window CPT (lever 1, LR-sweep for Prasann): S4 = 4k windows, 16 rows/step (~0.11x/step) at 12-960 steps;
 #        S4->L = S4 steps at stable LR, then a dense 32k phase (p of the steps) branched optimizer-only that decays;
 #        LMIX = packed dense on mix4k_r25 / r50 (control for the hybrid)
+#   HYB  hybrid rows: packed mix4k_r25 / r50, long docs routed (keep 0.1 / 0.25 after block 7), 4k windows dense; 16 and 8
+#        packed instances/step; smoke first
+#   LORA32 LoRA r64 on all 32 blocks (--st-otr-early-lora-blocks 32; keep 1.0), LR 2e-5 and 4e-5, at 48 / 120
 #   SEED Dlr20-120-s1 (seed noise of the dense reference at LR 2e-5; was 0.009 nats at 2.07e-4)
 #   IRS  IRANDlr20-260 (saves every 58) + branches 65 / 130: I-rand at dense-equivalent 12 / 24 / 48 steps
 #   IFS  IFLlr20-215 (saves every 48) + branches 54 / 108: I-fl 25% at dense-equivalent 12 / 24 / 48 steps
@@ -266,6 +269,18 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       for m in mix4k_r25 mix4k_r50; do for b in 48 120; do
         run "o3cd-LMIX${m#mix4k_}lr20-$b" ARM=LMIX MIX=$m MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 4 + 10)) || { log "FAIL LMIX $m $b: continuing"; break; }
       done; done ;;
+    HYB)
+      run o3cd-HYBsmoke ARM=HYB MIX=mix4k_r50 OTR_KEEP=0.1 MAX_STEPS_TOTAL=12 SMOKE=1 NOWANDB=1 EXPECTED_MIN=15 || exit 90
+      for m in mix4k_r50 mix4k_r25; do for k in 10 25; do for g in 16 8; do for b in 24 48 120; do
+        [ $g -eq 16 ] && [ $b -eq 24 ] && continue
+        run "o3cd-HYB${m#mix4k_}k${k}g${g}lr20-$b" ARM=HYB MIX=$m OTR_KEEP=0.$k GB_OVERRIDE=$g MAX_STEPS_TOTAL=$(( b * g / 16 )) EXPECTED_MIN=$((b / 4 + 10)) \
+          || { log "FAIL HYB $m k$k g$g $b: continuing"; break; }
+      done; done; done; done ;;
+    LORA32)
+      for lr in 2e-5 4e-5; do for b in 48 120; do
+        run "o3cd-DLORA64k32lr${lr/e-5/}-$b" ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 LR=$lr OTR_EXTRA="--st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32" MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 4 + 10)) \
+          || { log "FAIL DLORA64 K32 lr $lr $b: continuing"; break; }
+      done; done ;;
     SEED)
       run o3cd-Dlr20-120-s1 ARM=D MAX_STEPS_TOTAL=120 SEED=1 EXPECTED_MIN=30 || exit 14 ;;
     IRS)
@@ -290,7 +305,7 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       done ;;
     EV)
       SPECS=""
-      for r in $(for b in 12 24 48 120 240 480 960; do echo S4lr20-$b; done) S4Llr20-120-12 S4Llr20-120-30 S4Llr20-240-24 S4Lrtlr20-120-12 S4Lrtlr20-120-30 S4Lrtlr20-240-24 LMIXr25lr20-48 LMIXr25lr20-120 LMIXr50lr20-48 LMIXr50lr20-120 $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA64k${K}loclr20-$b DLORA64k${K}lr20-$b; done; done) DLORA64k16lr20-240 DLORA64k16lr20-480 DLORA128k16lr20-48 DLORA128k16lr20-120 DLORA64k16lr20-120-s1 DLORA64k24lr20-48 DLORA64k24lr20-120 $(for b in 12 24 48 120; do echo MODc35lr20-$b DLOClr20-$b DLOCfrzk8f25lr20-$b; done) $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA16k${K}lr20-$b; done; done) DPFZlr20-12 DPFZlr20-24 DPFZlr20-48 DPFZlr20-120 $(for c in 50 25; do for b in 12 24 48 120; do echo MODc${c}lr20-$b; done; done) $(for K in 16 8; do for f in 25 50; do for b in 12 24 48 120; do echo DFRZk${K}f${f}lr20-$b; done; done; done) OTR10M7ngf50lr20-46 OTR10M7ngf50lr20-92 OTR10M7ngf50lr20-185 OTR10M7ndnglr20-60 OTR10M7ndnglr20-120 OTR10M7ndnglr20-240 OTR10M7f50x10lr20-31 OTR10M7f50x10lr20-62 OTR10M7f50x10lr20-124 OTR10M7ndx10lr20-40 OTR10M7ndx10lr20-80 OTR10M7ndx10lr20-160 OTR10M7ndx03lr20-40 OTR10M7ndx03lr20-80 OTR10M7ndx03lr20-160 OTR10M7x10lr20-31 OTR10M7x10lr20-62 OTR10M7x10lr20-124 OTR10M7x10lr20-310 OTR10M7x03lr20-31 OTR10M7x03lr20-62 OTR10M7x03lr20-124 OTR10M7x03lr20-310 OTR10M7mglr20-31 OTR10M7mglr20-62 OTR10M7mglr20-124 OTR10M7nglr20-46 OTR10M7nglr20-92 OTR10M7nglr20-185 OTRpyrlr20-40 OTRpyrlr20-80 OTRpyrlr20-160 OTRpyrnglr20-60 OTRpyrnglr20-120 OTRpyrnglr20-240 OTR10M7lr20-31 OTR10M7lr20-62 OTR10M7lr20-124 OTR10M7lr20-310 OTR10M7ndlr20-40 OTR10M7ndlr20-80 OTR10M7ndlr20-160 Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
+      for r in HYBr50k10g16lr20-48 HYBr50k10g16lr20-120 HYBr50k10g8lr20-24 HYBr50k10g8lr20-48 HYBr50k10g8lr20-120 HYBr50k25g16lr20-48 HYBr50k25g16lr20-120 HYBr50k25g8lr20-24 HYBr50k25g8lr20-48 HYBr50k25g8lr20-120 HYBr25k10g16lr20-48 HYBr25k10g16lr20-120 HYBr25k10g8lr20-24 HYBr25k10g8lr20-48 HYBr25k10g8lr20-120 HYBr25k25g16lr20-48 HYBr25k25g16lr20-120 HYBr25k25g8lr20-24 HYBr25k25g8lr20-48 HYBr25k25g8lr20-120 DLORA64k32lr2-48 DLORA64k32lr2-120 DLORA64k32lr4-48 DLORA64k32lr4-120 $(for b in 12 24 48 120 240 480 960; do echo S4lr20-$b; done) S4Llr20-120-12 S4Llr20-120-30 S4Llr20-240-24 S4Lrtlr20-120-12 S4Lrtlr20-120-30 S4Lrtlr20-240-24 LMIXr25lr20-48 LMIXr25lr20-120 LMIXr50lr20-48 LMIXr50lr20-120 $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA64k${K}loclr20-$b DLORA64k${K}lr20-$b; done; done) DLORA64k16lr20-240 DLORA64k16lr20-480 DLORA128k16lr20-48 DLORA128k16lr20-120 DLORA64k16lr20-120-s1 DLORA64k24lr20-48 DLORA64k24lr20-120 $(for b in 12 24 48 120; do echo MODc35lr20-$b DLOClr20-$b DLOCfrzk8f25lr20-$b; done) $(for K in 16 8; do for b in 12 24 48 120; do echo DLORA16k${K}lr20-$b; done; done) DPFZlr20-12 DPFZlr20-24 DPFZlr20-48 DPFZlr20-120 $(for c in 50 25; do for b in 12 24 48 120; do echo MODc${c}lr20-$b; done; done) $(for K in 16 8; do for f in 25 50; do for b in 12 24 48 120; do echo DFRZk${K}f${f}lr20-$b; done; done; done) OTR10M7ngf50lr20-46 OTR10M7ngf50lr20-92 OTR10M7ngf50lr20-185 OTR10M7ndnglr20-60 OTR10M7ndnglr20-120 OTR10M7ndnglr20-240 OTR10M7f50x10lr20-31 OTR10M7f50x10lr20-62 OTR10M7f50x10lr20-124 OTR10M7ndx10lr20-40 OTR10M7ndx10lr20-80 OTR10M7ndx10lr20-160 OTR10M7ndx03lr20-40 OTR10M7ndx03lr20-80 OTR10M7ndx03lr20-160 OTR10M7x10lr20-31 OTR10M7x10lr20-62 OTR10M7x10lr20-124 OTR10M7x10lr20-310 OTR10M7x03lr20-31 OTR10M7x03lr20-62 OTR10M7x03lr20-124 OTR10M7x03lr20-310 OTR10M7mglr20-31 OTR10M7mglr20-62 OTR10M7mglr20-124 OTR10M7nglr20-46 OTR10M7nglr20-92 OTR10M7nglr20-185 OTRpyrlr20-40 OTRpyrlr20-80 OTRpyrlr20-160 OTRpyrnglr20-60 OTRpyrnglr20-120 OTRpyrnglr20-240 OTR10M7lr20-31 OTR10M7lr20-62 OTR10M7lr20-124 OTR10M7lr20-310 OTR10M7ndlr20-40 OTR10M7ndlr20-80 OTR10M7ndlr20-160 Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
         [ -f "$ROOT/runs/o3cd-$r/model_and_optim/.metadata" ] && [ ! -f "$ROOT/devce/${r}_dev32k_1024.json" ] && SPECS="$SPECS $r:runs/o3cd-$r:4"
       done
       log "EV specs:$SPECS"
