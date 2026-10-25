@@ -1089,6 +1089,7 @@ task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / 
 | 32 (all), rank 128 | 5e-6 | 279 | 0.938 | 0.912 | 0.617 | 0.707 |
 | 32 (all) | 2e-5 | 261 | 0.935 | 0.916 | 0.626 | 0.653 |
 | 32 (all) + all four memory flags | 1e-5 | 257 | 0.948 | 0.914 | 0.597 | 0.813 |
+| 32 (all), stage 2 at 10% | 1e-5 | 275 | 0.944 | 0.910 | 0.619 | 0.593 |
 
 **LoRA on all 32 blocks at LR 1e-5 (2 seeds) runs at 0.88x the recipe's compute.** At the same data it is slightly
 below the recipe: contra -0.005, nq +0.001, oolong -0.013, outlier -0.023. At matched FLOPs it is ahead of the recipe's
@@ -1096,7 +1097,9 @@ compute curve, which interpolates to ~0.921 / 0.913 / 0.623 / 0.600 at 261 PF: c
 oolong equal. Those deltas are matched-FLOP Δ on the primary tasks: **outlier +0.10, oolong 0.00.** The LR control shows the higher LR helps only the wide adapter scope. The recipe at LR 1e-5 loses oolong (0.565 vs
 0.636) and gains nothing elsewhere, so the K=7 recipe stays at 5e-6. **The full max-T config keeps quality.** LoRA-all with routed warmup, no dry run, chunked FFN and GDN segments, at
 8k, one seed: 0.948 / 0.914 / 0.597 / 0.813 at 257 PF. It is within the seed range on contra and nq; outlier is high
-(0.813 vs 0.719 / 0.686) and oolong lower (0.597 vs 0.625 / 0.620), both single-seed. For LoRA-all, LR 2e-5 overshoots (outlier 0.653), so **LR 1e-5 is the pick** (5e-6: 0.686, 1e-5: 0.703 over 2 seeds, 2e-5: 0.653).
+(0.813 vs 0.719 / 0.686) and oolong lower (0.597 vs 0.625 / 0.620), both single-seed. Stage 2 at 10% gives no gain on LoRA-all: outlier 0.593 for 5% more compute. **Outlier is very noisy on mt4s1464:**
+across four LoRA-all runs at almost the same config and FLOPs it spans 0.593-0.813, so a single-seed outlier
+difference under ~0.1 is not a finding. For LoRA-all, LR 2e-5 overshoots (outlier 0.653), so **LR 1e-5 is the pick** (5e-6: 0.686, 1e-5: 0.703 over 2 seeds, 2e-5: 0.653).
 
 **LoRA-all compute curve on mt4** (LR 1e-5, one seed except 1,464 rows/task; eval_size 500 per task):
 
