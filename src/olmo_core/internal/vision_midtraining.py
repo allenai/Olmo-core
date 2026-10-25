@@ -246,7 +246,8 @@ class MixedMidtrainingRecipeConfig(Config):
     with the most repeated sources capped at 10 epochs, their loss moved to the large OCR sources;
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V6_LOSS_TARGETS`) or ``stage1_v7`` (v6
     plus ten Nemotron-Image-Training caption and reasoning sources taking their loss from the OCR
-    group, at a text loss share that keeps v6's positions per step, see
+    group and the CoSyn and olmOCR sets capped at 5 passes, at a text loss share that keeps v6's
+    positions per step, see
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V7_LOSS_TARGETS`)."""
     compile_loss: bool = True
     """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs

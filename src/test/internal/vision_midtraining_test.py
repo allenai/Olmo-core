@@ -1530,20 +1530,25 @@ def test_merged_stage_v6_caps_the_repeated_sources(merged_stage, monkeypatch):
 
 
 def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
-    """``stage1_v7``: the Nemotron sources at their passes, funded by the OCR group alone (the
-    other v6 sources keep their shares), and a text loss share that keeps v6's split of positions
-    per step between text and vision."""
+    """``stage1_v7``: the Nemotron sources funded by the OCR group, the CoSyn and olmOCR sets capped
+    at five passes with their loss moved to the Nemotron captions and reasoning sets, every other
+    v6 source at its v6 share, and a text loss share that keeps v6's split of positions per step."""
     from olmo_core.internal.vision_alignment_data import (
         STAGE1_POSITIONS_PER_LOSS_TOKEN,
         STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
         STAGE1_V3_GROUPS,
         STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_SOURCE_SIZES,
         STAGE1_V6_LOSS_TARGETS,
         STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS,
+        STAGE1_V7_CAPPED_SOURCES,
         STAGE1_V7_LOSS_TARGETS,
+        STAGE1_V7_NEMOTRON_CAPTIONS,
         STAGE1_V7_NEMOTRON_EPOCHS,
         STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+        STAGE1_V7_NEMOTRON_REASONING,
         STAGE1_V7_NEMOTRON_SOURCE_SIZES,
+        STAGE1_V7_PASS_CAP,
         STAGE1_V7_TEXT_LOSS_SHARE,
     )
 
@@ -1569,19 +1574,31 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
         **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
     }
     assert sum(STAGE1_V7_LOSS_TARGETS.values()) == pytest.approx(1.0)
-    ocr = set(STAGE1_V3_GROUPS["ocr"])
-    ratio = {
-        n: STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n] for n in STAGE1_V6_LOSS_TARGETS
-    }
-    assert {round(r, 12) for n, r in ratio.items() if n not in ocr} == {1.0}
-    ocr_ratios = [r for n, r in ratio.items() if n in ocr]
-    assert max(ocr_ratios) == pytest.approx(min(ocr_ratios)) and max(ocr_ratios) < 0.8
-    for name, epochs in STAGE1_V7_NEMOTRON_EPOCHS.items():
+
+    sizes = {**STAGE1_V3_SOURCE_SIZES, **STAGE1_V7_NEMOTRON_SOURCE_SIZES}
+    weights = {**STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS, **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS}
+
+    def passes(name):
         loss = STAGE1_V7_LOSS_TARGETS[name] * STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
-        passes = loss / (
-            STAGE1_V7_NEMOTRON_SOURCE_SIZES[name] * STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS[name]
-        )
-        assert passes == pytest.approx(epochs)
+        return loss / (sizes[name] * weights[name])
+
+    capped = {n for names in STAGE1_V7_CAPPED_SOURCES.values() for n in names}
+    assert all(passes(n) <= STAGE1_V7_PASS_CAP + 1e-9 for n in capped)
+    assert passes("cosyn_chemical_exp") == pytest.approx(STAGE1_V7_PASS_CAP)
+    assert passes("olmocr_documents") < STAGE1_V7_PASS_CAP  # under the cap already
+    ocr = set(STAGE1_V3_GROUPS["ocr"])
+    untouched = set(STAGE1_V6_LOSS_TARGETS) - ocr - capped
+    assert {
+        round(STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n], 12) for n in untouched
+    } == {1.0}
+    ocr_ratios = [STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n] for n in ocr - capped]
+    assert max(ocr_ratios) == pytest.approx(min(ocr_ratios)) and max(ocr_ratios) < 0.8
+    for group, base in ((STAGE1_V7_NEMOTRON_CAPTIONS, 1.0), (STAGE1_V7_NEMOTRON_REASONING, 2.0)):
+        group_passes = {round(passes(n), 9) for n in group}
+        assert len(group_passes) == 1 and group_passes.pop() > base
+    assert passes("nemotron_textcaps") == pytest.approx(
+        STAGE1_V7_NEMOTRON_EPOCHS["nemotron_textcaps"]
+    )
 
     def text_position_fraction(text_share, targets):
         visual = sum(s * STAGE1_POSITIONS_PER_LOSS_TOKEN[n] for n, s in targets.items())
