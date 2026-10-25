@@ -81,12 +81,12 @@
 #SBATCH --time=16:00:00
 #SBATCH --output=/data/prasann/olmo3_cptdrop/logs/%x-%j.out
 set -uo pipefail
-ROOT=/data/prasann/olmo3_cptdrop
+ROOT="${ROOT:-/data/prasann/olmo3_cptdrop}"   # balrog: /tmp/prasann/olmo3_cptdrop (its /data is not writable for us)
 CODE_SHA="${CODE_SHA:?}"
 CODE="$ROOT/code_$CODE_SHA"
 ARM_SH="$CODE/research/token_routing/olmo3_cptdrop/run_arm.sbatch"
-PY=/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python
-export CODE_SHA LR=2e-5
+PY="${PY:-/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python}"
+export CODE_SHA LR=2e-5 ROOT PY
 log() { echo "[driver $(date '+%F %T')] $*"; }
 run() {
   local name=$1; shift
