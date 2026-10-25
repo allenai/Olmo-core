@@ -4092,6 +4092,24 @@
    "commit": "5e1202e4b",
    "dir": "OLMo-core-otr11",
    "lr": "5e-06"
+  },
+  "f8k-mt4s488-lora64r20to7-lro-lr5e-06-lam": {
+   "slurm": 114543,
+   "arm": "lora64r20to7",
+   "seed": 0,
+   "commit": "5e1202e4b",
+   "dir": "OLMo-core-otr11",
+   "lr": "5e-06",
+   "data": "mt4s488"
+  },
+  "f8k-mt4s976-lora64r20to7-lro-lr5e-06-lam": {
+   "slurm": 114544,
+   "arm": "lora64r20to7",
+   "seed": 0,
+   "commit": "5e1202e4b",
+   "dir": "OLMo-core-otr11",
+   "lr": "5e-06",
+   "data": "mt4s976"
   }
  }
 }
