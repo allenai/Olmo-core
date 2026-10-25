@@ -907,8 +907,16 @@ Beaker before starting and was resubmitted.)
 The gap is not spread out: four retrieval-style tasks (nq, qdmatch_nq, hotpotqa, oolong) are near their dense plateau at
 these FLOPs, so the recipe cannot gain there and they dilute the mean; grouping is the only task the recipe loses. mt4 has
 two such flat tasks out of four, mt11 four of nine. Per-task routers lift grouping (0.290 -> ~0.328, 2 seeds), which
-targets exactly that loss. More stage-2 budget alone does not (7:0.2,16:0.10: grouping 0.276, mean9 0.740). Running:
-7:0.3,16:0.10 and floor 32 on mt11s720.
+targets exactly that loss. More budget does not help on mt11s720 (one seed each, eval_size 500 per task):
+
+| variant | PF | mean9 | grouping | strmatch | xabsence | outlier |
+|---|---|---|---|---|---|---|
+| recipe: 7:0.2,16:0.07, 16-token floor (2 seeds) | 273 | 0.751 | 0.290 | | | |
+| stage 2 at 10% | | 0.740 | 0.276 | | | |
+| stage 1 at 30%, stage 2 at 10% | 285 | 0.743 | 0.307 | 0.879 | 0.638 | 0.651 |
+| floor 32 tokens | 364 | 0.747 | 0.291 | 0.968 | 0.597 | 0.621 |
+
+Every one is within the recipe's seed spread, and the floor-32 run costs 1.3x the compute. The recipe stays as is.
 
 
 ## Memory vs train length (A', 2026-10-25): max T per method at a fixed 80 GB
@@ -974,3 +982,17 @@ Its rows are kept in `memprobe1_snapshot_summary.txt` only for the record.
 
 With more GPUs (FSDP-8) the fixed state shrinks for every method, so dense's max T grows the most and these multiples
 narrow.
+
+## Partial MLP (2026-10-25): loses at matched FLOPs
+
+All runs are mt4s1464, LR 5e-6, de0, 8k, eval_size 500 per task; numbers are contra / nq / oolong / outlier.
+
+| run | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| recipe + f=0.5 on blocks 0-6 (fw50e) | 252 | 0.832 | 0.898 | 0.594 | 0.395 |
+| recipe curve interpolated to 252 PF | 252 | ~0.915 | ~0.914 | ~0.620 | ~0.567 |
+| Δ, fw50e minus recipe curve | | -0.08 | -0.02 | -0.03 | -0.17 |
+| recipe + f=0.5 on all blocks (fw50a) | 214 | 0.069 | 0.836 | 0.508 | 0.166 |
+
+fw50a collapses. The dense + f=0.5 control is pending; it separates whether partial MLP itself is the problem or how it
+interacts with the router.
