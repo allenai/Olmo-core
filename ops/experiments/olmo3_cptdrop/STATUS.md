@@ -11,7 +11,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
 wandb_group:
-next_step: BEST CPT ARM = LoRA r64 early stack (K16: beats dense overall at every budget for 0.85x FLOPs and -12% peak; small far-only deficit; K8: far parity at 0.92x). Cubbins queue: 4063698 r64 K16 + freeze 75% -> 4079261 r64 K16 at 240/480 (FLOPs-to-match-dense at normal budgets) -> 4079355 r128 K16 48/120 + r64 K16 seed 1 @120. mcfuzz 4024789 MoD leftovers (low value).
+next_step: BEST CPT ARM = LoRA r64 early stack on blocks 0-15 (no freeze, or freeze at 75%: identical): overall CE below dense at every measured budget 12-480 steps at 0.81-0.86x FLOPs and -12% peak; far-only +0.0008-0.0023. Cubbins 4079442 running: r128 K16, r64 K24, r64 K16 seed 1. Then close out (record + artifact).
 ---
 
 # olmo3_cptdrop
@@ -163,6 +163,12 @@ softdetach won on an already-long-trained Qwen3.5-4B before dense overtook it ne
 See `next_step` above.
 
 ## Open issues / traps
+- RESULT 2026-10-24 21:30 LoRA r64 K16 at normal budgets (cubbins 4079261, fresh rows): 240 = 5660 PF (dense 6606) -> 1.6820
+  vs 1.6827, overall -0.0007 +-0.0001, far +0.0023, ctx 0.075; 480 = 11296 PF (dense 13188) -> 1.6794 vs 1.6800, overall
+  -0.0007 +-0.0001, far +0.0008 +-0.0001, ctx 0.077 (= dense), peak 30.9 GiB; short guard 1.1726 vs 1.1717 (eval_size 256).
+  Overall-CE delta vs dense across 12/24/48/120/240/480: -0.0030/-0.0017/-0.0015/-0.0019/-0.0007/-0.0007.
+  MoD leftovers (mcfuzz 4024789): c0.35 12/24/48/120 -> 1.7361/1.7266/1.7138/1.7067 (m <=0.47), c0.25-120 1.7143
+  (m <0.05), peak 36.4-36.7 GiB (> dense). MoD is out.
 - RESULT 2026-10-24 18:20 LoRA r64 K16 + freeze at 75% (cubbins 4063698): 48/120 = 1095/2703 PF (0.81x) -> 1.6868/1.6836
   (unfrozen 1.6864/1.6834), far 0.4818/0.4755 (unfrozen 0.4822/0.4759), ctx 0.072/0.074, peak 30.9 GiB: identical quality
   for 5% fewer FLOPs. Best CPT point: overall -0.0013..-0.0017 vs dense at 0.81x, peak -12%, far +0.0012-0.0013.
