@@ -670,27 +670,31 @@ horizon): one over the Qwen3-VL detailed captions, which stay a minority of the 
 PixMo-Cap, and two over TextCaps' one-line captions and the reasoning traces (chosen 2026-10-24)."""
 
 STAGE1_V7_NEMOTRON_SOURCE_SIZES: dict[str, int] = {
-    "nemotron_openimages_1": 1_278_200,
-    "nemotron_openimages_2": 504_300,
-    "nemotron_cc3m": 867_100,
-    "nemotron_textcaps": 109_800,
-    "nemotron_ecd": 55_300,
+    "nemotron_openimages_1": 1_236_601,
+    "nemotron_openimages_2": 504_262,
+    "nemotron_cc3m": 867_064,
+    "nemotron_textcaps": 106_447,
+    "nemotron_ecd": 55_341,
     "nemotron_deepvision": 9_818,
     "nemotron_babyvision": 34_817,
 }
-"""Rows of each prepared Nemotron source (``len`` of each built dataset)."""
+"""Rows of each prepared Nemotron source (``len`` of each built dataset, 2026-10-25). Open Images
+lost 3.3% of openimages_1's images (not on the CVDF mirror), cc3m one image, TextCaps 3,355 exact
+duplicate rows; BabyVision keeps only its rows on the synthetic images bundled with the release."""
 
 STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS: dict[str, float] = {
-    "nemotron_openimages_1": 519.2,
-    "nemotron_openimages_2": 526.0,
-    "nemotron_cc3m": 306.0,
-    "nemotron_textcaps": 32.0,
-    "nemotron_ecd": 2006.0,
-    "nemotron_deepvision": 2986.0,
-    "nemotron_babyvision": 1874.0,
+    "nemotron_openimages_1": 539.703125,
+    "nemotron_openimages_2": 537.4453125,
+    "nemotron_cc3m": 314.5546875,
+    "nemotron_textcaps": 33.703125,
+    "nemotron_ecd": 2111.140625,
+    "nemotron_deepvision": 2993.09375,
+    "nemotron_babyvision": 188.78125,
 }
-"""Response tokens per draw of each Nemotron source (dolma2 at the pinned revision, documents
-mode)."""
+"""Calibration of the Nemotron sources as :func:`build_stage1_nemotron_sources` builds them (dolma2
+at the pinned revision, 65,536 tokens, documents mode):
+:meth:`MultimodalMixtureConfig.estimate_mean_loss_weights` with 128 samples per source, seed 0,
+measured 2026-10-25. BabyVision's synthetic-image traces are short (about 770 characters)."""
 
 STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS: float = (
     10.0
