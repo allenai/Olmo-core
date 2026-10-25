@@ -12,7 +12,7 @@ import json
 
 import numpy as np
 
-from eval_devce import summarize, summarize_ctx
+from eval_devce import summarize, summarize_ctx, summarize_repeat
 
 
 def main():
@@ -34,6 +34,11 @@ def main():
     out = dict(ds[0])
     summ = summarize(sums, cnts, bins)
     per_row = {"loss_sum": sums.tolist(), "tokens": cnts.tolist()}
+    if all("repeat_loss_sum" in d["per_row"] for d in ds):
+        rs = np.concatenate([np.asarray(d["per_row"]["repeat_loss_sum"], dtype=np.float64) for d in ds])
+        rc = np.concatenate([np.asarray(d["per_row"]["repeat_tokens"], dtype=np.int64) for d in ds])
+        summ["repeat"] = summarize_repeat(rs, rc)
+        per_row["repeat_loss_sum"], per_row["repeat_tokens"] = rs.tolist(), rc.tolist()
     if ds[0].get("ctx_window"):
         ctx = np.concatenate([np.asarray(d["per_row"]["ctx_full_win_cnt"], dtype=np.float64) for d in ds])
         summ["ctx_gain"] = summarize_ctx(ctx, ds[0]["ctx_window"])
@@ -48,6 +53,7 @@ def main():
     o = out["summary"]["overall"]
     print(f"merged {len(ds)} chunks -> {a.out}: {len(ids)} rows, overall CE {o['ce']:.4f} | "
           + " ".join(f"{k} {v['ce']:.4f}" for k, v in out["summary"]["bins"].items())
+          + (" | " + " ".join(f"{k} {v['ce']:.4f}" for k, v in summ["repeat"].items() if v["ce"] is not None) if "repeat" in summ else "")
           + (f" | ctx_gain {summ['ctx_gain']['gain']:+.4f} ±{summ['ctx_gain']['gain_row_se']:.4f}" if "ctx_gain" in summ else ""))
 
 
