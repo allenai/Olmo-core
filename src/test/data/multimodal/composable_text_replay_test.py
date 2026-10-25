@@ -190,25 +190,39 @@ def test_document_masking_matches_the_text_stages_segments(tmp_path, chunked):
 
 
 def _reference_cap_segments(lengths, max_segments):
-    """scaling-ladders ``hero_mt_lc_256k._cap_segments``, verbatim but for numpy."""
+    """scaling-ladders ``hero_mt_lc_256k._cap_segments`` (#89, 274e8b59), verbatim but for numpy."""
     if len(lengths) <= max_segments:
         return lengths
-    min_group = -(-int(lengths.sum()) // max_segments)
-    groups, current = [], 0
-    for length in lengths.tolist():
-        current += length
-        if current >= min_group:
-            groups.append(current)
-            current = 0
-    if current:
-        groups.append(current)
-    return np.asarray(groups)
+    values = lengths.tolist()
+    while len(values) > max_segments:
+        excess = len(values) - max_segments
+        pair_sums = np.add(values[:-1], values[1:])
+        merge_at = np.zeros(len(values), dtype=bool)
+        taken = np.zeros(len(values), dtype=bool)
+        merged = 0
+        for i in np.argsort(pair_sums, kind="stable"):
+            if merged == excess:
+                break
+            if taken[i] or taken[i + 1]:
+                continue
+            taken[i] = taken[i + 1] = True
+            merge_at[i] = True
+            merged += 1
+        out, carry = [], 0
+        for i, value in enumerate(values):
+            if merge_at[i]:
+                carry += value
+            else:
+                out.append(value + carry)
+                carry = 0
+        values = out
+    return np.asarray(values)
 
 
-@pytest.mark.parametrize("max_segments", [3, 5, 8, None])
+@pytest.mark.parametrize("max_segments", [2, 3, 5, 7, None])
 def test_document_masking_caps_segments_as_the_text_stage(tmp_path, max_segments):
-    # Eight 2-token documents (the degenerate shape: many tiny EOS-separated segments).
-    tokens = np.array([5, EOS] * 8)
+    # Uneven short documents (the shape over the cap: many short EOS-separated segments).
+    tokens = np.array([5, EOS, 6, 7, EOS, EOS, 8, 9, 10, EOS, 11, EOS, EOS, 12, 13, EOS])
     replay = ComposableTextReplayConfig(
         source=_ListSourceConfig(instances=[{"input_ids": tokens}], sequence_length=16),
         work_dir=str(tmp_path),

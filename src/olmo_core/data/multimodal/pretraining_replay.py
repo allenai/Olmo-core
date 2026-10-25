@@ -337,34 +337,50 @@ class PretrainingReplayDataset:
         }
 
 
-MAX_DOCUMENT_SEGMENTS = 4096
+MAX_DOCUMENT_SEGMENTS = 8000
 """FLA's KDA forward (``chunk_gated_delta_rule_fwd_h``) launches a grid of (cdiv(V, BV), N * HV),
 with N the attention segments of the micro-batch and HV = 8 heads; CUDA caps that dimension at
 65,535, so more than 8,191 segments fail with "Triton Error [CUDA]: invalid argument" (both mixed
-256K runs at step 8,472). The text stage's cap, ``hero_mt_lc_256k.MAX_DOC_SEGMENTS``: a 2x margin."""
+256K runs at step 8,472). The text stage's cap, ``hero_mt_lc_256k.MAX_DOC_SEGMENTS``: 3 of its
+621,312 instances exceed it. The cap is per instance, so it holds per micro-batch only at one
+instance per micro-batch (the 256K stage)."""
 
 
 def cap_segments(lengths: np.ndarray, max_segments: int) -> np.ndarray:
     """
-    Merge consecutive segment lengths so there are at most ``max_segments``.
+    Merge as few adjacent segments as possible so there are at most ``max_segments``.
 
-    Degenerate rows (thousands of short EOS-separated segments) have their consecutive segments
-    grouped until each group holds at least ceil(total / max_segments) tokens, the text stage's
-    ``hero_mt_lc_256k._cap_segments``. Rows within the cap are returned unchanged.
+    The text stage's ``hero_mt_lc_256k._cap_segments``: rows within the cap are returned
+    unchanged; a row over it loses exactly ``len(lengths) - max_segments`` boundaries, each pass
+    merging disjoint adjacent pairs in order of their combined length (shortest first).
     """
     if len(lengths) <= max_segments:
         return lengths
-    min_group = -(-int(lengths.sum()) // max_segments)
-    groups = []
-    current = 0
-    for length in lengths.tolist():
-        current += length
-        if current >= min_group:
-            groups.append(current)
-            current = 0
-    if current:
-        groups.append(current)
-    return np.asarray(groups, dtype=lengths.dtype)
+    values = lengths.tolist()
+    while len(values) > max_segments:
+        excess = len(values) - max_segments
+        pair_sums = np.add(values[:-1], values[1:])
+        merge_at = np.zeros(len(values), dtype=np.bool_)  # merge values[i] into values[i + 1]
+        taken = np.zeros(len(values), dtype=np.bool_)
+        merged = 0
+        for i in np.argsort(pair_sums, kind="stable"):
+            if merged == excess:
+                break
+            if taken[i] or taken[i + 1]:
+                continue
+            taken[i] = taken[i + 1] = True
+            merge_at[i] = True
+            merged += 1
+        out = []
+        carry = 0
+        for i, value in enumerate(values):
+            if merge_at[i]:
+                carry += value
+            else:
+                out.append(value + carry)
+                carry = 0
+        values = out
+    return np.asarray(values, dtype=lengths.dtype)
 
 
 @dataclass
