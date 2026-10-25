@@ -592,6 +592,14 @@
    "lr": 5e-06,
    "mix": "mt11",
    "seed": 0
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06": {
+   "ex": "01M5RAJG9V9BBK7F1ZM89MNYG3",
+   "arm": "lora64r20to7f16",
+   "budget": "s720",
+   "lr": 5e-06,
+   "mix": "mt11",
+   "seed": 0
   }
  },
  "evals": {
@@ -2824,6 +2832,36 @@
    "train_run": "f8k-mt11-lora64fa371r20to7f16-s720-tdb-lr5e-06",
    "task": "grouping",
    "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evcontra": {
+   "ex": "01M5RAD6B4F8K62AY8MAGT4JJY",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "contra",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evnq": {
+   "ex": "01M5RAE2VSNM8N9G824SNSCHQF",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "nq",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evoutlier": {
+   "ex": "01M5RAF21EXM7A1F1K8AR34WSV",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "outlier",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evoolong": {
+   "ex": "01M5RAFY7TNJXQVN7SZ6HRBNR1",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "oolong",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evhotpotqa": {
+   "ex": "01M5RAGXEC8X42135D6493FPK2",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "hotpotqa",
+   "suite_rows": true
   }
  },
  "failed_evals": {
@@ -3701,6 +3739,14 @@
    "slurm": 114513,
    "arm": "lora64fa275r20to7to3",
    "seed": 1,
+   "commit": "5e1202e4b",
+   "dir": "OLMo-core-otr11",
+   "lr": "5e-06"
+  },
+  "f8k-mt4s1464-lora64r20to7-lro-lr5e-06-lam": {
+   "slurm": 114514,
+   "arm": "lora64r20to7",
+   "seed": 0,
    "commit": "5e1202e4b",
    "dir": "OLMo-core-otr11",
    "lr": "5e-06"
