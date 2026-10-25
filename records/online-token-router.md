@@ -818,10 +818,10 @@ LoRA costs contra (-0.036) for 0.01x; per-task routers on top of LoRA r64 are ne
 
 | variant | PF (x dense) | contra | nq | oolong | outlier |
 |---|---|---|---|---|---|
-| **stage-2 keep 10% (7:0.2,16:0.10)** | 293 (0.25) | **0.956** | 0.916 | 0.620 | 0.759 |
+| **stage-2 keep 10% (7:0.2,16:0.10)**, seeds 0 / 1 | 293 (0.25) | **0.956 / 0.943** | 0.916 / 0.920 | 0.620 / 0.647 | 0.759 / 0.781 |
 | freeze at 85% (step 311) | 284 (0.25) | 0.953 | 0.916 | 0.618 | 0.730 |
 | stage-1 keep 30% (7:0.3,16:0.07) | 303 (0.26) | 0.955 | 0.912 | 0.616 | 0.716 |
-| **third stage (7:0.2,16:0.07,24:0.03)** | 262 (0.23) | 0.943 | 0.914 | 0.622 | 0.759 |
+| **third stage (7:0.2,16:0.07,24:0.03)**, seeds 0 / 1 | 262 (0.23) | 0.943 / 0.951 | 0.914 / 0.918 | 0.622 / 0.622 | 0.759 / 0.761 |
 | LoRA rank 128 | 286 (0.25) | 0.943 | 0.916 | 0.597 | 0.745 |
 | LR 7.5e-6 | 276 (0.24) | 0.946 | 0.910 | 0.596 | 0.593 |
 | stage-1 keep 15% (7:0.15,16:0.07) | 264 (0.23) | 0.943 | 0.912 | 0.594 | 0.665 |
@@ -829,6 +829,8 @@ LoRA costs contra (-0.036) for 0.01x; per-task routers on top of LoRA r64 are ne
 
 More budget anywhere (stage 2 to 10%, stage 1 to 30%, or a later freeze) lifts contra to dense level (0.953-0.956) for
 +0.01-0.02x; cutting either stage loses outlier; a third stage to 3% at block 24 is level with the base at 0.01x less;
-rank 128 and LR 7.5e-6 do not help. Seed 1 of stage-2-10% and of the 3-stage variant running; stage-2-10% + floor 16 on
-mt11s720.
+rank 128 and LR 7.5e-6 do not help. **Both winners hold on two seeds:** stage-2 10% = 0.950 / 0.918 / 0.634 / 0.770 at
+0.25x (vs dense-s1464 0.956 / 0.936 / 0.630 / 0.719: within 0.02 on contra / nq, above on oolong / outlier, at a quarter of
+dense compute and ~49 GiB peak); 3-stage = 0.947 / 0.916 / 0.622 / 0.760 at 0.23x (>= the base 0.938 / 0.922 / 0.610 /
+0.765 at 0.24x). mt11s720 versions: stage-2-10% + floor in eval; LoRA + two-stage with no freeze / freeze 85% training.
 
