@@ -79,9 +79,8 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
   </header>
 
   <div class="status">
-    <div><span class="pill done">screen answered</span> &nbsp;<strong>No token-dropping arm beats dense at any budget. The best multiplier is 0.6× (random-block drop at the 8-step budget), against a 10–20× target and a ~4× bar from softdetach.</strong></div>
-    <p>Dense CPT from OLMo 3 stage 2 at LR 2e-5 saturates within about 12 steps (6M tokens): 4 → 12 steps moves dev CE 0.012 nats, 12 → 240 steps only 0.015. Every drop arm lands above the dense curve at matched FLOPs, from 4-step budgets up to 48: random 20% of blocks (m 0.2–0.6), sd20-style slots instead of removal (identical to removal within 0.0005), first+last 25% (≤0.3), first+last 10% (worse with more training). Context gain, which isolates long-context learning, ranks the arms the same way. The curriculum arm ties dense or slightly trails it (~1.05× at 120, ~0.8× at 480). At 64k the picture is the same: first+last 25% scores 1.751 against dense 1.721 at 120 steps. The levers that did move the dense curve were the learning rate (1e-5 ≈ 2× the compute efficiency of 2e-5 at 120 steps) and, at the lowest budget, a smaller batch.</p>
-    <p>Why this differs from softdetach's ~4×: that dense curve kept falling 0.046 nats per decade of compute (Qwen3.5-4B, already long-trained); here it falls about 0.011, so there is no room below dense for a cheaper arm to sit in. A stronger test needs a target where dense keeps improving for longer: longer context (64k / 128k eval) or a base further from the data.</p>
+    <div><span class="pill run">in progress</span> &nbsp;<strong>A LoRA early stack beats dense: at rank 64 on blocks 0–15 it has lower dev CE than dense at every budget, with 15% fewer FLOPs and 12% less peak GPU memory; on blocks 0–7 it matches dense even on long-range targets.</strong></div>
+    <p>Everything that drops tokens loses in this CPT: random-block and first+last input drops, sd20-style slots, the CTC suite's mid-stack online router and its cuts (forward-only early stack, pyramid, merged summary tokens, early-exit loss, 50%-keep periodic steps), and mixture-of-depths at 50% and 25% capacity. Dense saturates within about 12 steps, and its gain is mostly local copying (grad-composition: 56–66% of the gain beyond 4k comes from 4-grams repeated within the last 4k). Every label must go through the full depth. The arms that keep labels intact do better. Freezing the embeddings and blocks 0–15 from step 0 and training rank-16 adapters there instead (scale 32) reaches CE 1.6841 at 2.8k PF against dense's 1.6853 at 3.3k PF (paired −0.0013 ± 0.0001, 1,024 rows), and 1.6879 vs 1.6880 at 48 steps. Peak memory is 30.8 GiB per GPU for the whole run, against 35.2 GiB. The multiplier reads 1.2–1.65× because the dense curve is flat there; the CE gain itself is about 0.001 nats. On targets that repeat text seen only more than 4k tokens back (1.25M targets, the long-range part of the gain), LoRA is worse than dense at every budget: +0.0066 / +0.0067 / +0.0040 nats at 12 / 48 / 120 steps (paired SE ±0.0002–0.0004), about 0.6× on that metric. Its overall edge comes from local and novel tokens. Training every layer with a 4096 window (all-local) loses badly: context gain falls to 0.044 and keeps falling. Warmup-then-freeze ties dense only at 120 steps and keeps the 35.9 GiB pre-freeze peak. Rank 64 fixes most of that. On blocks 0–15 (0.85× dense FLOPs, peak 30.9 GiB) it beats dense on overall CE by 0.0015–0.0030 nats at 12 / 24 / 48 / 120 steps, and its long-range deficit shrinks to +0.0012–0.0015 (from rank 16's +0.004–0.007). On blocks 0–7 (0.92×, 33.1 GiB) it is level with dense on long-range targets and slightly better overall. The peak saving is the frozen parameters' gradients and optimizer state; activations are unchanged. Running now: rank 64 at 240 / 480 steps (to read FLOPs-to-match-dense at normal budgets), rank 128, a second seed, and rank 64 frozen at 75% of the steps.</p>
   </div>
 
   <section>
@@ -90,11 +89,10 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
       <div class="legend" aria-hidden="true">
         <span><i class="sw" style="border-color:var(--dense)"></i>dense</span>
         <span><i class="sw" style="border-color:var(--dense);border-top-style:dashed"></i>dense, 8 rows/step</span>
-        <span><i class="sw" style="border-color:var(--muted)"></i>curriculum C</span>
         <span><i class="sw" style="border-color:var(--c);border-top-style:dotted"></i>SD20 (slot per dropped block)</span>
         <span><i class="sw" style="border-color:var(--accent)"></i>I-rand 20%</span>
         <span><i class="sw" style="border-color:var(--warn)"></i>I-fl 25%</span>
-        <span><i class="sw" style="border-color:var(--warn);border-top-style:dotted"></i>I-fl 10%</span>
+        <span><i class="sw" style="border-color:var(--ok)"></i>mid-stack router (keep 10% at block 7)</span>
       </div>
 <svg viewBox="0 0 660 300" role="img" aria-label="Dev cross-entropy versus training petaFLOPs at LR 2e-5: both dense curves sit lowest; every input-drop arm is above dense at matched compute, and first+last 10% gets worse with more training.">
 <g stroke="var(--rule)" stroke-width="1" fill="none">
@@ -110,29 +108,27 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 <text x="56" y="102.7">1.74</text>
 <text x="56" y="54.3">1.76</text>
 </g><g fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="middle">
-<text x="87.2" y="274">150</text>
-<text x="223.2" y="274">500</text>
-<text x="347.4" y="274">1.5k</text>
-<text x="483.4" y="274">5k</text>
-<text x="607.5" y="274">15k</text>
-<text x="351.0" y="294">training compute (PF, log)</text></g>
+<text x="62.0" y="274">100</text>
+<text x="187.1" y="274">300</text>
+<text x="324.2" y="274">1k</text>
+<text x="449.4" y="274">3k</text>
+<text x="586.5" y="274">10k</text>
+<text x="351.0" y="294">training compute (measured PF, log)</text></g>
 <text x="14" y="135.0" fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" transform="rotate(-90 14 135.0)" text-anchor="middle">dev CE (nats)</text>
-<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" points="84.3,172.3 162.6,193.6 208.5,202.3 286.8,216.8 365.1,224.5 468.6,231.1 546.9,237.4"/>
-<g fill="var(--dense)"><circle cx="84.3" cy="172.3" r="3.5"/><circle cx="162.6" cy="193.6" r="3.5"/><circle cx="208.5" cy="202.3" r="3.5"/><circle cx="286.8" cy="216.8" r="3.5"/><circle cx="365.1" cy="224.5" r="3.5"/><circle cx="468.6" cy="231.1" r="3.5"/><circle cx="546.9" cy="237.4" r="3.5"/></g>
-<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" stroke-dasharray="5 4" points="208.5,211.7 286.8,218.2 365.1,219.5"/>
-<g fill="var(--dense)"><circle cx="208.5" cy="211.7" r="3.5"/><circle cx="286.8" cy="218.2" r="3.5"/><circle cx="365.1" cy="219.5" r="3.5"/></g>
-<polyline fill="none" stroke="var(--muted)" stroke-width="2.5" points="462.2,229.6 540.5,234.0 618.8,241.5"/>
-<g fill="var(--muted)"><circle cx="462.2" cy="229.6" r="3.5"/><circle cx="540.5" cy="234.0" r="3.5"/><circle cx="618.8" cy="241.5" r="3.5"/></g>
-<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="85.7,161.6 161.4,179.3 208.1,183.4 286.4,191.9 364.7,194.8"/>
-<g fill="var(--accent)"><circle cx="85.7" cy="161.6" r="3.5"/><circle cx="161.4" cy="179.3" r="3.5"/><circle cx="208.1" cy="183.4" r="3.5"/><circle cx="286.4" cy="191.9" r="3.5"/><circle cx="364.7" cy="194.8" r="3.5"/></g>
-<polyline fill="none" stroke="var(--c)" stroke-width="2.5" stroke-dasharray="2 3" points="208.1,184.6 286.4,192.8 364.7,196.0"/>
-<g fill="var(--c)"><circle cx="208.1" cy="184.6" r="3.5"/><circle cx="286.4" cy="192.8" r="3.5"/><circle cx="364.7" cy="196.0" r="3.5"/></g>
-<polyline fill="none" stroke="var(--warn)" stroke-width="2.5" points="208.6,149.8 286.9,156.8 364.7,156.1"/>
-<g fill="var(--warn)"><circle cx="208.6" cy="149.8" r="3.5"/><circle cx="286.9" cy="156.8" r="3.5"/><circle cx="364.7" cy="156.1" r="3.5"/></g>
-<polyline fill="none" stroke="var(--warn)" stroke-width="2.5" stroke-dasharray="2 3" points="208.2,67.0 365.0,25.9"/>
-<g fill="var(--warn)"><circle cx="208.2" cy="67.0" r="3.5"/><circle cx="365.0" cy="25.9" r="3.5"/></g>
+<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" points="97.9,172.3 165.0,193.6 206.6,202.3 281.1,216.8 357.9,224.5 460.8,231.1 539.3,237.4 618.0,243.9"/>
+<g fill="var(--dense)"><circle cx="97.9" cy="172.3" r="3.5"/><circle cx="165.0" cy="193.6" r="3.5"/><circle cx="206.6" cy="202.3" r="3.5"/><circle cx="281.1" cy="216.8" r="3.5"/><circle cx="357.9" cy="224.5" r="3.5"/><circle cx="460.8" cy="231.1" r="3.5"/><circle cx="539.3" cy="237.4" r="3.5"/><circle cx="618.0" cy="243.9" r="3.5"/></g>
+<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" stroke-dasharray="5 4" points="202.4,211.7 279.0,218.2 356.7,219.5"/>
+<g fill="var(--dense)"><circle cx="202.4" cy="211.7" r="3.5"/><circle cx="279.0" cy="218.2" r="3.5"/><circle cx="356.7" cy="219.5" r="3.5"/></g>
+<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="71.8,161.6 147.6,179.3 193.0,183.4 272.0,191.9 350.9,194.8"/>
+<g fill="var(--accent)"><circle cx="71.8" cy="161.6" r="3.5"/><circle cx="147.6" cy="179.3" r="3.5"/><circle cx="193.0" cy="183.4" r="3.5"/><circle cx="272.0" cy="191.9" r="3.5"/><circle cx="350.9" cy="194.8" r="3.5"/></g>
+<polyline fill="none" stroke="var(--c)" stroke-width="2.5" stroke-dasharray="2 3" points="194.1,184.6 272.9,192.8 351.8,196.0"/>
+<g fill="var(--c)"><circle cx="194.1" cy="184.6" r="3.5"/><circle cx="272.9" cy="192.8" r="3.5"/><circle cx="351.8" cy="196.0" r="3.5"/></g>
+<polyline fill="none" stroke="var(--warn)" stroke-width="2.5" points="198.3,149.8 277.3,156.8 355.7,156.1"/>
+<g fill="var(--warn)"><circle cx="198.3" cy="149.8" r="3.5"/><circle cx="277.3" cy="156.8" r="3.5"/><circle cx="355.7" cy="156.1" r="3.5"/></g>
+<polyline fill="none" stroke="var(--ok)" stroke-width="2.5" points="199.7,121.0 273.9,162.1 350.4,176.4 452.5,182.2"/>
+<g fill="var(--ok)"><circle cx="199.7" cy="121.0" r="3.5"/><circle cx="273.9" cy="162.1" r="3.5"/><circle cx="350.4" cy="176.4" r="3.5"/><circle cx="452.5" cy="182.2" r="3.5"/></g>
 </svg>
-      <figcaption>Full-context dev CE on 1,024 rows × 32k; lower is better; x = measured training PF (I-fl 10% from an estimated FLOP ratio of 0.09). The start (stage 2) is at 1.848, off the top of the chart. Seed noise at 120 steps: 0.0000 (seed 1 = 1.6853, same as seed 0); paired SEs between checkpoints are ±0.0002–0.002.</figcaption>
+      <figcaption>Full-context dev CE on 1,024 rows × 32k; lower is better; x = training PF from the FLOP meter, measured on every run, dense included (dense: 27.5 PF/step plus a ~27 PF constant). C and I-fl 10% / 5% ran on Beaker and are in the table only. The start (stage 2) is at 1.848, off the top of the chart. Seed noise at 120 steps: 0.0000 (seed 1 = 1.6853, same as seed 0); paired SEs between checkpoints are ±0.0002–0.002.</figcaption>
     </figure>
     <h2>Context gain vs compute</h2>
     <figure>
@@ -150,23 +146,25 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 <text x="56" y="98.7">0.070</text>
 <text x="56" y="48.3">0.075</text>
 </g><g fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="middle">
-<text x="87.2" y="274">150</text>
-<text x="223.2" y="274">500</text>
-<text x="347.4" y="274">1.5k</text>
-<text x="483.4" y="274">5k</text>
-<text x="607.5" y="274">15k</text>
-<text x="351.0" y="294">training compute (PF, log)</text></g>
+<text x="62.0" y="274">100</text>
+<text x="187.1" y="274">300</text>
+<text x="324.2" y="274">1k</text>
+<text x="449.4" y="274">3k</text>
+<text x="586.5" y="274">10k</text>
+<text x="351.0" y="294">training compute (measured PF, log)</text></g>
 <text x="14" y="135.0" fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" transform="rotate(-90 14 135.0)" text-anchor="middle">ctx gain (nats)</text>
-<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" points="84.3,200.5 162.6,147.1 208.5,123.9 286.8,94.7 365.1,68.5 468.6,51.3 546.9,32.1"/>
-<g fill="var(--dense)"><circle cx="84.3" cy="200.5" r="3.5"/><circle cx="162.6" cy="147.1" r="3.5"/><circle cx="208.5" cy="123.9" r="3.5"/><circle cx="286.8" cy="94.7" r="3.5"/><circle cx="365.1" cy="68.5" r="3.5"/><circle cx="468.6" cy="51.3" r="3.5"/><circle cx="546.9" cy="32.1" r="3.5"/></g>
-<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" stroke-dasharray="5 4" points="208.5,93.7 286.8,77.5 365.1,55.3"/>
-<g fill="var(--dense)"><circle cx="208.5" cy="93.7" r="3.5"/><circle cx="286.8" cy="77.5" r="3.5"/><circle cx="365.1" cy="55.3" r="3.5"/></g>
-<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="85.7,218.7 161.4,194.5 208.1,178.4 286.4,161.2 364.7,147.1"/>
-<g fill="var(--accent)"><circle cx="85.7" cy="218.7" r="3.5"/><circle cx="161.4" cy="194.5" r="3.5"/><circle cx="208.1" cy="178.4" r="3.5"/><circle cx="286.4" cy="161.2" r="3.5"/><circle cx="364.7" cy="147.1" r="3.5"/></g>
-<polyline fill="none" stroke="var(--c)" stroke-width="2.5" stroke-dasharray="2 3" points="208.1,183.4 286.4,156.2 364.7,136.0"/>
-<g fill="var(--c)"><circle cx="208.1" cy="183.4" r="3.5"/><circle cx="286.4" cy="156.2" r="3.5"/><circle cx="364.7" cy="136.0" r="3.5"/></g>
-<polyline fill="none" stroke="var(--warn)" stroke-width="2.5" points="208.6,230.8 286.9,216.7 364.7,209.6"/>
-<g fill="var(--warn)"><circle cx="208.6" cy="230.8" r="3.5"/><circle cx="286.9" cy="216.7" r="3.5"/><circle cx="364.7" cy="209.6" r="3.5"/></g>
+<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" points="97.9,200.5 165.0,147.1 206.6,123.9 281.1,94.7 357.9,68.5 460.8,44.3 539.3,32.1 618.0,20.1"/>
+<g fill="var(--dense)"><circle cx="97.9" cy="200.5" r="3.5"/><circle cx="165.0" cy="147.1" r="3.5"/><circle cx="206.6" cy="123.9" r="3.5"/><circle cx="281.1" cy="94.7" r="3.5"/><circle cx="357.9" cy="68.5" r="3.5"/><circle cx="460.8" cy="44.3" r="3.5"/><circle cx="539.3" cy="32.1" r="3.5"/><circle cx="618.0" cy="20.1" r="3.5"/></g>
+<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" stroke-dasharray="5 4" points="202.4,93.7 279.0,77.5 356.7,55.3"/>
+<g fill="var(--dense)"><circle cx="202.4" cy="93.7" r="3.5"/><circle cx="279.0" cy="77.5" r="3.5"/><circle cx="356.7" cy="55.3" r="3.5"/></g>
+<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="71.8,218.7 147.6,194.5 193.0,178.4 272.0,161.2 350.9,147.1"/>
+<g fill="var(--accent)"><circle cx="71.8" cy="218.7" r="3.5"/><circle cx="147.6" cy="194.5" r="3.5"/><circle cx="193.0" cy="178.4" r="3.5"/><circle cx="272.0" cy="161.2" r="3.5"/><circle cx="350.9" cy="147.1" r="3.5"/></g>
+<polyline fill="none" stroke="var(--c)" stroke-width="2.5" stroke-dasharray="2 3" points="194.1,183.4 272.9,156.2 351.8,136.0"/>
+<g fill="var(--c)"><circle cx="194.1" cy="183.4" r="3.5"/><circle cx="272.9" cy="156.2" r="3.5"/><circle cx="351.8" cy="136.0" r="3.5"/></g>
+<polyline fill="none" stroke="var(--warn)" stroke-width="2.5" points="198.3,230.8 277.3,216.7 355.7,209.6"/>
+<g fill="var(--warn)"><circle cx="198.3" cy="230.8" r="3.5"/><circle cx="277.3" cy="216.7" r="3.5"/><circle cx="355.7" cy="209.6" r="3.5"/></g>
+<polyline fill="none" stroke="var(--ok)" stroke-width="2.5" points="199.7,210.6 273.9,122.9 350.4,82.6 452.5,57.4"/>
+<g fill="var(--ok)"><circle cx="199.7" cy="210.6" r="3.5"/><circle cx="273.9" cy="122.9" r="3.5"/><circle cx="350.4" cy="82.6" r="3.5"/><circle cx="452.5" cy="57.4" r="3.5"/></g>
 </svg>
       <figcaption>Context gain = CE on each row's last 4k tokens with only an 8k window minus CE with the full 32k context, so higher means the model uses distant context more. Stage 2: 0.017; OLMo's stage 3 (50B long-context tokens): 0.046. Paired SE on differences ±0.0002. C runs on Beaker and was scored without this metric.</figcaption>
     </figure>
@@ -183,6 +181,26 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
       <tr><td>I-rand 22 / 43 steps</td><td class="num">4 / 8</td><td class="num">1.714 / 1.707</td><td class="num">1.716 / 1.709</td><td class="num">0.058 / 0.060</td><td class="num">1.168 / 1.169</td></tr>
       <tr><td>SD20 (slots) 65 / 130 / 260 steps</td><td class="num">12 / 24 / 48</td><td class="num">1.705 / 1.701 / 1.700</td><td class="num">1.706 / 1.702 / 1.700</td><td class="num">0.061 / 0.064 / 0.066</td><td class="num">1.170 / 1.171 / 1.174</td></tr>
       <tr><td>I-rand 65 / 130 / 260 steps</td><td class="num">12 / 24 / 48</td><td class="num">1.705 / 1.702 / 1.700</td><td class="num">1.706 / 1.702 / 1.701</td><td class="num">0.062 / 0.063 / 0.065</td><td class="num">1.171 / 1.172 / 1.176</td></tr>
+      <tr><td><strong>LoRA early stack r64, blocks 0–15, 12 / 24 / 48 / 120 steps</strong></td><td class="num">measured PF 305 / 587 / 1151 / 2842</td><td class="num"><strong>1.694 / 1.690 / 1.686 / 1.683</strong></td><td class="num">1.693 / 1.688 / 1.684 / 1.681</td><td class="num">0.068 / 0.070 / 0.072 / 0.074</td><td class="num">1.158 / 1.158 / 1.160 / 1.161</td></tr>
+      <tr><td>LoRA early stack r64, blocks 0–7</td><td class="num">331 / 636 / 1247 / 3080</td><td class="num">1.697 / 1.691 / 1.687 / 1.684</td><td class="num">1.696 / 1.690 / 1.685 / 1.681</td><td class="num">0.067 / 0.070 / 0.073 / 0.074</td><td class="num">1.158 / 1.158 / 1.160 / 1.162</td></tr>
+      <tr><td>LoRA early stack r16, blocks 0–15, 12 / 24 / 48 / 120 steps</td><td class="num">measured PF 301 / 579 / 1135 / 2804</td><td class="num"><strong>1.699 / 1.692 / 1.688 / 1.684</strong></td><td class="num">1.699 / 1.691 / 1.686 / 1.682</td><td class="num">0.064 / 0.068 / 0.071 / 0.073</td><td class="num">1.157 / 1.157 / 1.158 / 1.159</td></tr>
+      <tr><td>LoRA early stack r16, blocks 0–7</td><td class="num">329 / 632 / 1239 / 3061</td><td class="num">1.701 / 1.693 / 1.688 / 1.684</td><td class="num">1.700 / 1.691 / 1.686 / 1.682</td><td class="num">0.066 / 0.070 / 0.072 / 0.074</td><td class="num">1.157 / 1.158 / 1.159 / 1.159</td></tr>
+      <tr><td>mixture-of-depths, alternate blocks 8–30 at 50% capacity, 12 / 24 / 48 / 120 steps</td><td class="num">307 / 583 / 1134 / 2788</td><td class="num">1.731 / 1.717 / 1.705 / 1.699</td><td class="num">1.732 / 1.717 / 1.704 / 1.697</td><td class="num">0.062 / 0.067 / 0.070 / 0.073</td><td class="num">1.164 / 1.165 / 1.165 / —</td></tr>
+      <tr><td>mixture-of-depths at 25% capacity, 12 / 24 / 48 steps</td><td class="num">283 / 532 / 1030</td><td class="num">1.738 / 1.734 / 1.721</td><td class="num">1.740 / 1.735 / 1.721</td><td class="num">0.059 / 0.063 / 0.068</td><td></td></tr>
+      <tr><td>freeze embeddings + blocks 0–15 after 50% (best freeze cell), 12 / 24 / 48 / 120 steps</td><td class="num">304 / 581 / 1135 / 2795</td><td class="num">1.709 / 1.701 / 1.692 / 1.686</td><td class="num">1.708 / 1.699 / 1.690 / 1.683</td><td class="num">0.063 / 0.068 / 0.071 / 0.074</td><td class="num">1.158 / 1.159 / 1.159 / 1.161</td></tr>
+      <tr><td>all-local training (every layer windowed at 4096), 12 / 24 / 48 / 120 steps</td><td class="num">323 / 621 / 1217 / 3005</td><td class="num">1.706 / 1.704 / 1.703 / 1.702</td><td class="num">1.711 / 1.710 / 1.709 / 1.709</td><td class="num">0.049 / 0.047 / 0.047 / 0.044</td><td class="num">1.156 / 1.157 / 1.160 / 1.160</td></tr>
+      <tr><td>router (keep 10% at block 7, dense every 8), 31 / 62 / 124 / 310 steps</td><td class="num">measured PF 335 / 643 / 1258 / 3083 (≈ 12 / 23 / 46 / 112)</td><td class="num">1.731 / 1.714 / 1.708 / 1.706</td><td class="num">1.733 / 1.713 / 1.706 / 1.703</td><td class="num">0.059 / 0.067 / 0.071 / 0.074</td><td class="num">1.170 / 1.170 / 1.172 / 1.177</td></tr>
+      <tr><td>router, early stack forward-only on routed steps, 46 / 92 / 185 steps</td><td class="num">measured PF 339 / 651 / 1278</td><td class="num">1.711 / 1.701 / 1.698</td><td class="num">1.710 / 1.700 / 1.696</td><td class="num">0.066 / 0.069 / 0.071</td><td class="num">1.163 / 1.164 / 1.165</td></tr>
+      <tr><td>router, pyramid 3:0.5, 7:0.1, 16:0.03, 40 / 80 / 160 steps</td><td class="num">measured PF 352 / 654 / 1259</td><td class="num">1.743 / 1.710 / 1.704</td><td class="num">1.745 / 1.709 / 1.702</td><td class="num">0.053 / 0.069 / 0.071</td><td class="num">1.169 / 1.167 / 1.168</td></tr>
+      <tr><td>router, pyramid + forward-only early stack, 60 / 120 / 240 steps</td><td class="num">measured PF 415 / 803 / 1555</td><td class="num">1.712 / 1.705 / 1.699</td><td class="num">1.711 / 1.704 / 1.696</td><td class="num">0.065 / 0.068 / 0.072</td><td class="num">1.166 / 1.167 / 1.168</td></tr>
+      <tr><td>router, dropped tokens merged into one summary token, 31 / 62 / 124 steps</td><td class="num">measured PF 336 / 645 / 1262</td><td class="num">1.732 / 1.713 / 1.708</td><td class="num">1.734 / 1.713 / 1.707</td><td class="num">0.058 / 0.067 / 0.071</td><td class="num">1.170 / 1.170 / 1.173</td></tr>
+      <tr><td>router + early-exit LM loss on dropped tokens, weight 1.0, 31 / 62 / 124 / 310 steps</td><td class="num">measured PF 366 / 705 / 1383 / 3398</td><td class="num">1.737 / 1.752 / 1.760 / 1.771</td><td class="num">1.739 / 1.755 / 1.761 / 1.771</td><td></td><td class="num">1.171 / 1.187 / 1.208 / 1.236</td></tr>
+      <tr><td>same, weight 0.3</td><td class="num">366 / 705 / 1383 / 3398</td><td class="num">1.731 / 1.735 / 1.741 / 1.745</td><td class="num">1.732 / 1.737 / 1.742 / 1.744</td><td></td><td class="num">1.171 / 1.181 / 1.193 / 1.213</td></tr>
+      <tr><td>early-exit loss, no full-context steps, weight 1.0 / 0.3, 40 / 80 / 160 steps</td><td class="num">386 / 726 / 1405</td><td class="num">1.848 / 1.890 / 1.918 · 1.824 / 1.860 / 1.882</td><td></td><td></td><td></td></tr>
+      <tr><td>periodic steps at 50% keep + exit loss 1.0, 31 / 62 / 124 steps</td><td class="num">333 / 627 / 1216</td><td class="num">1.778 / 1.806 / 1.802</td><td></td><td></td><td></td></tr>
+      <tr><td>forward-only early stack + periodic steps at 50% keep, 46 / 92 / 185 steps</td><td class="num">280 / 522 / 1008</td><td class="num">1.743 / 1.734 / 1.726</td><td class="num">1.747 / 1.734 / 1.726</td><td></td><td class="num">1.172 / 1.174 / 1.178</td></tr>
+      <tr><td>forward-only early stack, no full-context steps (early stack frozen), 60 / 120 / 240 steps</td><td class="num">272 / 493 / 935</td><td class="num">1.780 / 1.776 / 1.778</td><td class="num">1.796 / 1.790 / 1.789</td><td></td><td class="num">1.179 / 1.182 / 1.187</td></tr>
+      <tr><td>router, no full-context steps, 40 / 80 / 160 steps</td><td class="num">measured PF 341 / 634 / 1220</td><td class="num">1.809 / 1.801 / 1.796</td><td class="num">1.824 / 1.810 / 1.802</td><td class="num">0.023 / 0.040 / 0.052</td><td class="num">1.191 / 1.201 / 1.212</td></tr>
       <tr><td>I-fl 25%, 54 / 108 / 215 steps</td><td class="num">12 / 24 / 48</td><td class="num">1.719 / 1.716 / 1.716</td><td class="num">1.722 / 1.719 / 1.719</td><td class="num">0.057 / 0.058 / 0.059</td><td class="num">1.177 / 1.177 / 1.180</td></tr>
       <tr><td>I-fl 10%, 133 / 533 steps</td><td class="num">~12 / ~48</td><td class="num">1.753 / 1.770</td><td class="num">1.764 / 1.784</td><td></td><td class="num">1.194 / 1.214</td></tr>
       <tr><td>dense 480</td><td class="num">480</td><td class="num">1.680</td><td class="num">1.677</td><td class="num">0.077</td><td></td></tr>
