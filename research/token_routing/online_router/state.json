@@ -624,6 +624,46 @@
    "lr": 5e-06,
    "mix": "mt11",
    "seed": 0
+  },
+  "f8k-mt11-lora64r20to7f16-s960-tdb-lr5e-06": {
+   "ex": "01M5RN0195QNRYVG4FMWWP2V18",
+   "arm": "lora64r20to7f16",
+   "budget": "s960",
+   "lr": 5e-06,
+   "mix": "mt11",
+   "seed": 0
+  },
+  "f8k-mt11-lora64r20to7f16-s240-tdb-lr5e-06": {
+   "ex": "01M5RN119RRW3NA67RCA5MMSG1",
+   "arm": "lora64r20to7f16",
+   "budget": "s240",
+   "lr": 5e-06,
+   "mix": "mt11",
+   "seed": 0
+  },
+  "f8k-mt11-lora64r20to7f16-s480-tdb-lr5e-06": {
+   "ex": "01M5RN211320PX95TVKWH2487G",
+   "arm": "lora64r20to7f16",
+   "budget": "s480",
+   "lr": 5e-06,
+   "mix": "mt11",
+   "seed": 0
+  },
+  "f8k-mt11-lora64r20to7f16pt-s720-tdb-lr5e-06": {
+   "ex": "01M5RN354A9GB2CDVMEGWBZVBR",
+   "arm": "lora64r20to7f16pt",
+   "budget": "s720",
+   "lr": 5e-06,
+   "mix": "mt11",
+   "seed": 0
+  },
+  "f8k-mt11-lora64r20to7f16ptsd1-s720-tdb-lr5e-06": {
+   "ex": "01M5RN45XNHBZ57NKR0YBBBD19",
+   "arm": "lora64r20to7f16pt",
+   "budget": "s720",
+   "lr": 5e-06,
+   "mix": "mt11",
+   "seed": 1
   }
  },
  "evals": {
