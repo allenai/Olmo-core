@@ -291,3 +291,57 @@ def test_combined_source_routes_references_by_predicate():
         for ref_data in source.fetch(shard, needed)
     )
     assert fetched == {"https://example.com/a.png": b"web", "media/b.png": b"tar"}
+
+
+def test_batch_index_reads_the_rows_the_hf_loader_reads(tmp_path, monkeypatch):
+    import pickle
+
+    from olmo_core.data.multimodal.dataset_compat import load_from_disk_compat
+
+    rows = [
+        _row(f"r{k:02d}", f"{k % 3}.png", [(f"Q{k}?", f"<think>t{k}</think>A{k}")])
+        for k in range(25)
+    ]
+    root, stats = _prepare(tmp_path, monkeypatch, rows, {f"{k}.png": _png() for k in range(3)})
+    prepared = str(root / "nemotron_ecd")
+    assert (root / "nemotron_ecd" / nv.BATCH_INDEX).exists()  # written by prepare
+    reference = load_from_disk_compat(prepared)
+    indexed = nv._IndexedArrow(prepared)
+    assert len(indexed) == len(reference) == stats["rows"]
+    for i in (0, 7, len(reference) - 1):
+        assert indexed[i] == reference[i]
+    clone = pickle.loads(pickle.dumps(indexed))
+    assert clone[3] == reference[3]
+    with pytest.raises(IndexError):
+        indexed[len(reference)]
+    ds = NemotronImageDatasetConfig(
+        subset="nemotron_ecd", dataset_path=str(root), max_crops=1
+    ).build(_PromptTok())
+    assert isinstance(ds._data, nv._IndexedArrow)
+
+
+def test_batch_index_spans_shards_and_batches(tmp_path):
+    """Several ``data-*.arrow`` stream files of several record batches each, as ``save_to_disk``
+    writes them."""
+    import pyarrow as pa
+
+    out = tmp_path / "subset"
+    out.mkdir()
+    schema = pa.schema([("id", pa.string()), ("image", pa.binary())])
+    k = 0
+    for shard in range(3):
+        with pa.ipc.new_stream(str(out / f"data-{shard:05d}-of-00003.arrow"), schema) as writer:
+            for _ in range(4):
+                ids = [f"{k + j:04d}" for j in range(250)]
+                writer.write_batch(pa.record_batch([ids, [b"x"] * 250], schema=schema))
+                k += 250
+    assert nv.write_batch_index(str(out)) == 3000
+    indexed = nv._IndexedArrow(str(out))
+    assert [indexed[i]["id"] for i in (0, 249, 250, 999, 1000, 2999)] == [
+        "0000",
+        "0249",
+        "0250",
+        "0999",
+        "1000",
+        "2999",
+    ]

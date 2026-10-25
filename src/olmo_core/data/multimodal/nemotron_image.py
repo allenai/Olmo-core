@@ -66,6 +66,8 @@ __all__ = [
     "clean_reasoning",
     "parse_conversation",
     "prepare_nemotron_subset",
+    "write_batch_index",
+    "BATCH_INDEX",
 ]
 
 log = logging.getLogger(__name__)
@@ -826,11 +828,124 @@ def prepare_nemotron_subset(
     data.save_to_disk(out, max_shard_size="2GB")
     stats["rows"] = len(data)
     del data
+    write_batch_index(out)
     shutil.rmtree(tmp, ignore_errors=True)
     with open(os.path.join(out, "prepare_stats.json"), "w") as f:
         json.dump(stats, f, indent=1)
     log.info("%s: %s", name, stats)
     return stats
+
+
+# ---------------------------------------------------------------------------
+# Batch index (open without scanning)
+# ---------------------------------------------------------------------------
+
+BATCH_INDEX = "batch_index.json"
+"""Sidecar of a prepared subset: the byte offset and row count of every record batch of its
+``data-*.arrow`` files. ``save_to_disk`` writes Arrow *stream* files, which have no footer, so
+opening one walks every message, and on Weka that pages in the whole file (about 1.5 s per 2 GB
+shard): opening Open Images took 21 minutes on a node. With the index a subset opens at once, and a
+row reads only its own record batch."""
+
+
+def write_batch_index(prepared: str) -> int:
+    """Write :data:`BATCH_INDEX` for the prepared subset at ``prepared`` (one sequential read).
+
+    :returns: The number of rows indexed.
+    """
+    import pyarrow as pa
+
+    files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(prepared, "data-*.arrow")))
+    if not files:
+        raise OLMoConfigurationError(f"no data-*.arrow files in {prepared!r}")
+    entries = []
+    rows = 0
+    for name in files:
+        batches = []
+        with pa.OSFile(os.path.join(prepared, name)) as stream:
+            schema = pa.ipc.read_schema(pa.ipc.read_message(stream))
+            while True:
+                offset = stream.tell()
+                try:
+                    message = pa.ipc.read_message(stream)
+                except (EOFError, pa.ArrowInvalid):
+                    break
+                if message is None or message.type != "record batch":
+                    break
+                n = pa.ipc.read_record_batch(message, schema).num_rows
+                batches.append([offset, n])
+                rows += n
+        entries.append({"file": name, "batches": batches})
+    with open(os.path.join(prepared, BATCH_INDEX), "w") as f:
+        json.dump({"rows": rows, "files": entries}, f)
+    return rows
+
+
+class _IndexedArrow:
+    """Rows of a prepared subset read through its :data:`BATCH_INDEX`: the files are memory-mapped
+    when first touched (per process; nothing is mapped when pickled), and a row decodes only its
+    record batch, without copying."""
+
+    def __init__(self, prepared: str):
+        import bisect
+
+        with open(os.path.join(prepared, BATCH_INDEX)) as f:
+            index = json.load(f)
+        self._bisect = bisect.bisect_right
+        self._paths = [os.path.join(prepared, entry["file"]) for entry in index["files"]]
+        self._batches = []  # (file number, byte offset)
+        self._starts = []  # first row of each batch
+        start = 0
+        for k, entry in enumerate(index["files"]):
+            for offset, n in entry["batches"]:
+                self._batches.append((k, offset))
+                self._starts.append(start)
+                start += n
+        self._rows = start
+        if self._rows != index["rows"]:
+            raise OLMoConfigurationError(f"{prepared!r}: {BATCH_INDEX} rows do not add up")
+        self._buffers: Dict[int, Any] = {}
+        self._schema = None
+
+    def __len__(self) -> int:
+        return self._rows
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["_buffers"] = {}
+        state["_schema"] = None
+        state.pop("_bisect")
+        return state
+
+    def __setstate__(self, state):
+        import bisect
+
+        self.__dict__.update(state)
+        self._bisect = bisect.bisect_right
+
+    def _buffer(self, k: int):
+        import pyarrow as pa
+
+        buffer = self._buffers.get(k)
+        if buffer is None:
+            buffer = pa.memory_map(self._paths[k]).read_buffer()
+            self._buffers[k] = buffer
+            if self._schema is None:
+                self._schema = pa.ipc.read_schema(pa.ipc.read_message(pa.BufferReader(buffer)))
+        return buffer
+
+    def __getitem__(self, i: int) -> Dict[str, Any]:
+        import pyarrow as pa
+
+        if not 0 <= i < self._rows:
+            raise IndexError(i)
+        b = self._bisect(self._starts, i) - 1
+        k, offset = self._batches[b]
+        buffer = self._buffer(k)
+        message = pa.ipc.read_message(pa.BufferReader(buffer.slice(offset)))
+        batch = pa.ipc.read_record_batch(message, self._schema)
+        j = i - self._starts[b]
+        return {name: batch.column(name)[j].as_py() for name in batch.schema.names}
 
 
 # ---------------------------------------------------------------------------
@@ -892,7 +1007,12 @@ class NemotronImageDataset(EpochSeededExamples):
                 f"olmo_core.data.multimodal.nemotron_image {config.subset} "
                 f"--dataset-path {config.dataset_path}`"
             )
-        self._data = load_from_disk_compat(prepared)
+        # Subsets prepared before the index existed fall back to the (scanning) HF loader; add the
+        # index with ``python -m olmo_core.data.multimodal.nemotron_image --index-only``.
+        if os.path.isfile(os.path.join(prepared, BATCH_INDEX)):
+            self._data: Any = _IndexedArrow(prepared)
+        else:
+            self._data = load_from_disk_compat(prepared)
         log.info("%s: %d rows", config.subset, len(self._data))
 
     def __len__(self) -> int:
@@ -934,11 +1054,20 @@ if __name__ == "__main__":
     parser.add_argument("--jsonl-path", default=None, help="Only with a single subset.")
     parser.add_argument("--num-workers", type=int, default=32)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--index-only",
+        action="store_true",
+        help=f"Only write {BATCH_INDEX} for already-prepared subsets.",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     if args.jsonl_path and len(args.subsets) != 1:
         parser.error("--jsonl-path needs exactly one subset")
     for subset_name in args.subsets:
+        if args.index_only:
+            n = write_batch_index(os.path.join(args.dataset_path, subset_name))
+            log.info("%s: indexed %d rows", subset_name, n)
+            continue
         prepare_nemotron_subset(
             subset_name,
             args.dataset_path,
