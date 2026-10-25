@@ -66,9 +66,17 @@ EXPERIMENT = "mt11_64k"
 #: resume points: urgent jobs are preemptible after minRuntime 1h, and the first router f4 attempt lost ~1h to a
 #: preemption with no checkpoint yet (2026-10-23); keep 1 (~55 GB at 4B)
 SAVE_INTERVAL = 50
+sys.path.insert(0, os.path.join(REPO, "research", "token_routing", "online_router"))
+from launch_otr import ARMS as OTR_ARMS  # noqa: E402
+
 ARMS = {
     "dense": ARM_EXTRA["densepf"],
     **{a: ARM_EXTRA[a] + " --st-otr-samples-per-row 512" for a in ("otr10M7", "otr10M8", "otr30M7", "otr30M8")},
+    # the adopted universal recipe (LR-sweep session, 2026-10-25): LoRA r64 on the early stack + two-stage router
+    # (keep 20% after block 7, 7% after block 16), per-document floor 16, no full-context steps, no freeze --
+    # launch_otr.py's lora64r20to7f16 verbatim. Its checkpoints carry adapter keys: score them from a commit
+    # >= 984825862 (eval guard rebuilds the adapters; older evals silently score the plain base).
+    "lora64r20to7f16": OTR_ARMS["lora64r20to7f16"] + " --st-otr-samples-per-row 512",
 }
 #: eval: the CTC-suite rows at every rung the subset has (r64k for 6 tasks), 500 rows, query position both,
 #: ctc-spec grading (run_q4b_beaker_multirung_eval.py --suite-rows --suite-rungs); rerank has no ladder grader
