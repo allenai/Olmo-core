@@ -1331,3 +1331,45 @@ def test_early_lora_then_freeze_after_cpu():
               + kept * (f(blocks[2], kept) + f(blocks[3], kept) + head)
               - real * (sum(f(b, real) for b in blocks) + head))
     assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+
+
+def test_early_lora_blocks_beyond_drop_layer_cpu():
+    """early_lora_blocks 3 with the drop at 2 on a 4-block model: base weights of blocks 0-2 get no gradient (adapters
+    do), block 3 trains fully; FLOPs charge blocks 0-1 at 2/3 on the full row, block 2 at 2/3 on the kept row, block 3 at
+    1, and the adapters per block at that block's length."""
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, install_early_lora
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, early_lora=4, early_lora_blocks=3)
+    assert router.lora_blocks() == 3
+    mods = install_early_lora(model, 3, 4, scale=8.0)
+    blocks = list(model.blocks.values())
+    ids, cid, labels = _row(B=1)
+    flops = []
+    orig = router._flop
+    router._flop = lambda m, v: (flops.append(float(v)), orig(m, v))
+    router.begin_step(1, model=model)
+    model(ids, labels=labels).loss.backward()
+    model.zero_grad(set_to_none=True)
+    router.begin_step(2, model=model)
+    flops.clear()
+    router.metrics()
+    model(ids, labels=labels).loss.backward()
+    assert all(m.weight.grad is None and m.lora_A.grad is not None for m in mods)
+    assert all(p.grad is not None for p in blocks[3].parameters())
+    real = int((ids != PH).sum())
+    kept = int(round(router.metrics()["online_router/mid_row_frac"] * real))
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    ab = early_lora_flops_per_block(model)
+    expect = (real * (2 / 3) * (f(blocks[0], real) + f(blocks[1], real))
+              + kept * ((2 / 3) * f(blocks[2], kept) + f(blocks[3], kept) + head)
+              + real * (ab[0] + ab[1]) + kept * ab[2]
+              - real * (sum(f(b, real) for b in blocks) + head))
+    assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+
+
+def test_early_lora_blocks_validate():
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, early_lora_blocks=4)  # needs early_lora
+    assert _router(drop_layer=2, early_lora=4, early_lora_blocks=6).lora_blocks() == 6
+    assert _router(drop_layer=2, early_lora=4).lora_blocks() == 2

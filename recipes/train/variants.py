@@ -286,6 +286,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_target_layer: int = 0
     st_otr_early_lora: int = 0
     st_otr_early_lora_scale: float = 32.0
+    st_otr_early_lora_blocks: int = 0
     st_otr_mass_target: float = 0.0
     st_otr_max_keep_frac: float = 1.0
     st_otr_mod_layers: str = ""
@@ -1056,6 +1057,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         freeze_schedule=o.st_otr_freeze_schedule,
         target_layer=o.st_otr_target_layer,
         early_lora=o.st_otr_early_lora,
+        early_lora_blocks=o.st_otr_early_lora_blocks,
         mass_target=o.st_otr_mass_target,
         max_keep_frac=o.st_otr_max_keep_frac,
         mod_layers=o.st_otr_mod_layers,
@@ -1223,8 +1225,9 @@ class SoftToken(Variant):
             from olmo_core.nn.early_lora import install_early_lora
 
             r = model._online_token_router
-            mods = install_early_lora(model, r.cfg.drop_layer, o.st_otr_early_lora, o.st_otr_early_lora_scale)
-            print(f"[variants] online router early LoRA: blocks [0, {r.cfg.drop_layer}) + embeddings frozen, "
+            K = o.st_otr_early_lora_blocks or r.cfg.drop_layer
+            mods = install_early_lora(model, K, o.st_otr_early_lora, o.st_otr_early_lora_scale)
+            print(f"[variants] online router early LoRA: blocks [0, {K}) + embeddings frozen, "
                   f"{len(mods)} linears get rank-{o.st_otr_early_lora} adapters (scale {o.st_otr_early_lora_scale})",
                   flush=True)
         if online and o.st_otr_freeze_early:
@@ -1322,6 +1325,11 @@ class SoftToken(Variant):
             from olmo_core.nn.online_token_router import parse_mod_layers
 
             L = parse_mod_layers(o.st_otr_mod_layers)[0] if o.st_otr_mod_layers else o.st_otr_drop_layer
+            if o.st_otr_stages:
+                from olmo_core.nn.online_token_router import parse_stages
+
+                L = parse_stages(o.st_otr_stages)[0][0]
+            L = o.st_otr_early_lora_blocks or L
             out["early_lora"] = {"n_blocks": L, "rank": o.st_otr_early_lora, "scale": o.st_otr_early_lora_scale}
         return {
             **out,

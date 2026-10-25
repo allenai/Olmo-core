@@ -120,6 +120,10 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    early_lora_blocks: int = 0
+    """With ``early_lora``: adapt blocks [0, K) instead of [0, drop_layer) -- e.g. the whole model (K = n_layers), which
+    removes nearly all gradients and optimizer state. Blocks at or above the drop layer then run at the kept length,
+    still frozen-with-adapters: charged 2/3 there plus their adapters at that length. 0 = drop_layer."""
     early_lora: int = 0
     """Low-rank early stack (:mod:`olmo_core.nn.early_lora`, installed by the recipe): blocks [0, drop_layer) train
     only rank-``early_lora`` adapters from step 0. Charged: those blocks at 2/3 (the activation gradient still runs
@@ -264,6 +268,10 @@ class OnlineRouterConfig:
             raise ValueError("online router mass_target must be in [0, 1] and max_keep_frac in (0, 1]")
         if self.mass_target > 0 and self.score != "router":
             raise ValueError("online router mass_target needs the learned scorer (score='router')")
+        if self.early_lora_blocks < 0 or (self.early_lora_blocks and not self.early_lora):
+            raise ValueError("online router early_lora_blocks needs early_lora > 0 and must be >= 0")
+        if self.early_lora_blocks and self.mod_layers:
+            raise ValueError("online router early_lora_blocks is not supported with mod_layers")
         if self.early_lora:
             if self.early_lora < 0 or self.drop_layer <= 0:
                 raise ValueError("online router early_lora needs rank > 0 and the mid-stack drop (drop_layer > 0)")
@@ -498,10 +506,13 @@ class OnlineTokenRouter:
                 nxt = OnlineTokenRouter(c, doc_start_id=doc_start_id, doc_end_id=doc_end_id, eos_id=eos_id,
                                         d_model=d_model, gold_table=None, rank=rank)
                 nxt.stage_idx = i
+                nxt._root_drop_layer = l0
                 prev._next, prev, prev_k = nxt, nxt, k
         if cfg.use_gold and gold_table is None:
             raise ValueError("online router use_gold needs the gold-fingerprint table")
         self.cfg = cfg
+        if not hasattr(self, "_root_drop_layer"):
+            self._root_drop_layer = cfg.drop_layer
         self.doc_start_id, self.doc_end_id, self.eos_id = int(doc_start_id), int(doc_end_id), int(eos_id)
         self.d_model = int(d_model)
         self.rank = int(rank)
@@ -1019,8 +1030,7 @@ class OnlineTokenRouter:
         # at or above L0 skipped only their weight gradient (2/3)
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
-        if self.stage_idx == 0 and model.training:
-            adj += self._lora_charge(model) * float(real.sum())
+        ab = self._lora_block_charges(model) if model.training else [0.0] * len(blocks)
         for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
             fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
             fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
@@ -1028,9 +1038,13 @@ class OnlineTokenRouter:
                 actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
                           + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + head))
                 adj += actual - L * (sum(fb) + head)
+                # adapters: blocks below the drop at the full length, the rest at the kept length
+                adj += L * sum(ab[:L0]) + Lk * sum(ab[L0:])
             else:
                 # a later pyramid stage: the earlier stages already charged blocks >= L0 at THIS stage's entry length L
-                adj += Lk * (sum(fk) + head) - L * (sum(fb[L0:]) + head)
+                adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + head)
+                        - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + head))
+                adj += (Lk - L) * sum(ab[L0:])
         self._flop(model, adj)
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         if self._next is not None:
@@ -1119,13 +1133,30 @@ class OnlineTokenRouter:
         """Adapter FLOPs per token for this forward: forward + backward, or forward only (1/3) once frozen."""
         return self.lora_flops_per_token(model) * (1.0 / 3.0 if self._nograd_fwd else 1.0)
 
+    def _lora_block_charges(self, model) -> List[float]:
+        """Per-block adapter FLOPs per token for this forward (blocks below _nograd_until forward-only)."""
+        st = getattr(model, "_early_lora", None)
+        if not st:
+            return [0.0] * len(model.blocks)
+        if "fpb" not in st:
+            from .early_lora import early_lora_flops_per_block
+
+            st["fpb"] = early_lora_flops_per_block(model)
+        nu = self._nograd_until
+        return [a * (1.0 / 3.0 if i < nu else 1.0) for i, a in enumerate(st["fpb"])]
+
     def _block_factors(self, n_blocks: int) -> List[float]:
         """Per-block share of the forward + backward cost this forward pays: 1/3 below ``_nograd_until`` (forward
         only), 2/3 for frozen blocks at or above the drop layer (no weight gradient), else 1."""
         nu, L0, P = self._nograd_until, self.cfg.drop_layer, self.frozen_blocks
-        lora = self.cfg.early_lora > 0 and self.stage_idx == 0
-        return [1.0 / 3.0 if i < nu else (2.0 / 3.0 if (L0 <= i < P or (lora and i < L0)) else 1.0)
-                for i in range(n_blocks)]
+        K = self.lora_blocks()
+        return [1.0 / 3.0 if i < nu else (2.0 / 3.0 if (L0 <= i < P or i < K) else 1.0) for i in range(n_blocks)]
+
+    def lora_blocks(self) -> int:
+        """Blocks [0, K) carry LoRA adapters with a frozen base (0 without early_lora)."""
+        if self.cfg.early_lora <= 0:
+            return 0
+        return int(self.cfg.early_lora_blocks or (self._root_drop_layer if self.stage_idx else self.cfg.drop_layer))
 
     def tap_target(self, model, h: torch.Tensor, block_idx: int) -> torch.Tensor:
         """At the input of block ``target_layer``: register this forward's pending target hook there."""

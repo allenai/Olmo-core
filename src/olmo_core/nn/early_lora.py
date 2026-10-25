@@ -35,7 +35,7 @@ import torch.nn.functional as F
 
 log = logging.getLogger(__name__)
 
-__all__ = ["install_early_lora", "early_lora_flops_per_token", "enable_from_config_block", "lora_block_from_checkpoint"]
+__all__ = ["install_early_lora", "early_lora_flops_per_token", "early_lora_flops_per_block", "enable_from_config_block", "lora_block_from_checkpoint"]
 
 
 def _lora_hook(mod: nn.Linear, inp, out):
@@ -78,6 +78,7 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
             m.lora_B = nn.Parameter(torch.empty(m.out_features, rank, device=w.device, dtype=w.dtype))
             m._lora_scale = float(scale)
             m._lora_calls = 0
+            m._lora_block = i
             m._lora_orig_reset = m.reset_parameters
             m.reset_parameters = MethodType(_lora_reset_parameters, m)
             if w.device.type != "meta":
@@ -114,6 +115,19 @@ def early_lora_flops_per_token(model: Any) -> float:
         return 0.0
     r = st["rank"]
     return float(sum(6 * r * (m.in_features + m.out_features) for m in st["modules"]))
+
+
+def early_lora_flops_per_block(model: Any) -> List[float]:
+    """Per-block forward + backward adapter FLOPs per token (6 r (in + out) per adapted linear), one entry per block."""
+    st = getattr(model, "_early_lora", None)
+    n = len(model.blocks)
+    out = [0.0] * n
+    if not st:
+        return out
+    r = st["rank"]
+    for m in st["modules"]:
+        out[int(m._lora_block)] += 6.0 * r * (m.in_features + m.out_features)
+    return out
 
 
 def lora_block_from_checkpoint(model_path: str) -> Optional[Dict[str, Any]]:
