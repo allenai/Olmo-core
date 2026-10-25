@@ -656,6 +656,98 @@ showed training loss on the capped sources collapsing while their held-out loss 
 the OCR sources had headroom (1.2-7.5 epochs) and kept improving. v6 trains every annotation as a
 document, as v5 does."""
 
+STAGE1_V7_NEMOTRON_EPOCHS: dict[str, float] = {
+    "nemotron_openimages_1": 1.0,
+    "nemotron_openimages_2": 1.0,
+    "nemotron_cc3m": 1.0,
+    "nemotron_textcaps": 2.0,
+    "nemotron_ecd": 2.0,
+    "nemotron_deepvision": 2.0,
+    "nemotron_babyvision": 2.0,
+}
+"""Passes over each Nemotron-Image-Training source in a 20,000-step stage-1 v7 run (v6's reference
+horizon): one over the Qwen3-VL detailed captions, which stay a minority of the caption loss next to
+PixMo-Cap, and two over TextCaps' one-line captions and the reasoning traces (chosen 2026-10-24)."""
+
+STAGE1_V7_NEMOTRON_SOURCE_SIZES: dict[str, int] = {
+    "nemotron_openimages_1": 1_278_200,
+    "nemotron_openimages_2": 504_300,
+    "nemotron_cc3m": 867_100,
+    "nemotron_textcaps": 109_800,
+    "nemotron_ecd": 55_300,
+    "nemotron_deepvision": 9_818,
+    "nemotron_babyvision": 34_817,
+}
+"""Rows of each prepared Nemotron source (``len`` of each built dataset)."""
+
+STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS: dict[str, float] = {
+    "nemotron_openimages_1": 519.2,
+    "nemotron_openimages_2": 526.0,
+    "nemotron_cc3m": 306.0,
+    "nemotron_textcaps": 32.0,
+    "nemotron_ecd": 2006.0,
+    "nemotron_deepvision": 2986.0,
+    "nemotron_babyvision": 1874.0,
+}
+"""Response tokens per draw of each Nemotron source (dolma2 at the pinned revision, documents
+mode)."""
+
+STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS: float = (
+    10.0
+    * STAGE1_V3_SOURCE_SIZES["pixmo_caption"]
+    * STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS["pixmo_caption"]
+    / STAGE1_V6_LOSS_TARGETS["pixmo_caption"]
+)
+"""Visual loss (response tokens) of a 20,000-step v6 run: PixMo-Cap's caption branch is capped at
+10 passes there, and its loss is this mass times its v6 share (about 16.3B tokens)."""
+
+_V7_NEMOTRON_TARGETS = {
+    name: epochs
+    * STAGE1_V7_NEMOTRON_SOURCE_SIZES[name]
+    * STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS[name]
+    / STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
+    for name, epochs in STAGE1_V7_NEMOTRON_EPOCHS.items()
+}
+STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
+    **{
+        name: share * (1.0 - sum(_V7_NEMOTRON_TARGETS.values()))
+        for name, share in STAGE1_V6_LOSS_TARGETS.items()
+    },
+    **_V7_NEMOTRON_TARGETS,
+}
+"""Target loss mass of each stage-1 v7 source: the Nemotron sources take the loss of their
+:data:`STAGE1_V7_NEMOTRON_EPOCHS` within :data:`STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS`, and the v6
+sources share the rest in v6's ratio, so the vision share's loss per step (and with it the text's
+positions and the step time) stays v6's. v7 trains every annotation as a document, as v5 does."""
+
+
+def build_stage1_nemotron_sources(
+    sequence_length: int, dataset_path: str | None = None
+) -> dict[str, Config]:
+    """Configure the prepared Nemotron-Image-Training sources of stage-1 v7 (see
+    :mod:`olmo_core.data.multimodal.nemotron_image`), in :data:`STAGE1_V7_NEMOTRON_EPOCHS` order.
+
+    :param sequence_length: Maximum serialized example length.
+    :param dataset_path: Root of the prepared subsets; the module default when ``None``.
+    """
+    from olmo_core.data.multimodal.nemotron_image import NemotronImageDatasetConfig
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    extra = {} if dataset_path is None else {"dataset_path": dataset_path}
+    return {
+        name: NemotronImageDatasetConfig(
+            subset=name,
+            max_crops=8,
+            max_sequence_length=sequence_length,
+            loss_token_weighting="none",
+            message_format="document",
+            **extra,
+        )
+        for name in STAGE1_V7_NEMOTRON_EPOCHS
+    }
+
+
 STAGE1_V4_EPOCHS: dict[str, float] = {
     "pixmo_caption": 3.7,
     "pixmo_transcript": 3.6,

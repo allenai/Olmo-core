@@ -1529,6 +1529,56 @@ def test_merged_stage_v6_caps_the_repeated_sources(merged_stage, monkeypatch):
     assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
 
 
+def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
+    """``stage1_v7``: v6's sources in v6's ratio plus the Nemotron sources at their passes, the
+    loss shares summing to one and the Nemotron means added to the documents means."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V6_LOSS_TARGETS,
+        STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS,
+        STAGE1_V7_LOSS_TARGETS,
+        STAGE1_V7_NEMOTRON_EPOCHS,
+        STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+        STAGE1_V7_NEMOTRON_SOURCE_SIZES,
+    )
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _MultiAnnotationConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    config = merged_stage.build("--recipe.visual_data=stage1_v7")
+    visual = {k: v for k, v in config.dataset.sources.items() if k != "text_midtraining"}
+    assert set(visual) == set(STAGE1_V3_MEAN_LOSS_WEIGHTS) | set(STAGE1_V7_NEMOTRON_EPOCHS)
+    for name in STAGE1_V7_NEMOTRON_EPOCHS:
+        assert visual[name].subset == name
+        assert visual[name].message_format == "document"
+    means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"}
+    assert means == {
+        **STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+    }
+    assert sum(STAGE1_V7_LOSS_TARGETS.values()) == pytest.approx(1.0)
+    ratio = {
+        name: STAGE1_V7_LOSS_TARGETS[name] / STAGE1_V6_LOSS_TARGETS[name]
+        for name in STAGE1_V6_LOSS_TARGETS
+    }
+    assert max(ratio.values()) == pytest.approx(min(ratio.values()))
+    for name, epochs in STAGE1_V7_NEMOTRON_EPOCHS.items():
+        loss = STAGE1_V7_LOSS_TARGETS[name] * STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
+        passes = loss / (
+            STAGE1_V7_NEMOTRON_SOURCE_SIZES[name] * STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS[name]
+        )
+        assert passes == pytest.approx(epochs)
+    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+
 def test_merged_stage_passes_text_document_masking(merged_stage):
     """The 256K text stage's document masking reaches the text replay; off by default."""
     default = merged_stage.build().dataset.sources["text_midtraining"]
