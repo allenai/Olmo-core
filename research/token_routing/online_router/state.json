@@ -2900,6 +2900,66 @@
    "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
    "task": "reorder",
    "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evcontra": {
+   "ex": "01M5RCWDW1P0BEBBP15GFD3V2V",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "contra",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evnq": {
+   "ex": "01M5RCXBHY1HJZTZRA94BJEKSE",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "nq",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evoutlier": {
+   "ex": "01M5RCYEPK75VMVMBEC6600ART",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "outlier",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evoolong": {
+   "ex": "01M5RCZG3Q78S9CZYZYY966H26",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "oolong",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evhotpotqa": {
+   "ex": "01M5RD0N40TVPVAGY76X2SA9BP",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "hotpotqa",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5RD1N3S8TVY8YHTZ9G0G49P",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "qdmatch_nq",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evxabsence": {
+   "ex": "01M5RD2NV2SR5B6NZPEB0SDS11",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "xabsence",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evreorder": {
+   "ex": "01M5RD3KVTTJ3Q8G8K5E6P4BPW",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "reorder",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evstrmatch": {
+   "ex": "01M5RD4M2K17AVACDVR2D72HGP",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "strmatch",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06-evgrouping": {
+   "ex": "01M5RD5NC4QFXDMC070SPJWJ3Z",
+   "train_run": "f8k-mt11-lora64r20to7f16-s720-tdb-lr5e-06",
+   "task": "grouping",
+   "suite_rows": true
   }
  },
  "failed_evals": {
