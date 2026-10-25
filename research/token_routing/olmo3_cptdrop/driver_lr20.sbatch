@@ -11,6 +11,9 @@
 #   LOW  the steep end, where dense still moves (12 steps already give 0.150 of 0.165 nats): dense 4 / 8 steps
 #        (4: decay 1 step), I-rand 22 / 43 (= 4 / 8 dense steps), SD20 260 (+65, +130 branches), LR checks
 #        Dlr10-12 and Dlr05-120 (1e-5 beat 2e-5 at 120 steps)
+#   OTRS mid-stack online router (CTC suite's otr10M7; records/online-token-router.md): 20-step smoke, then fresh
+#        runs at ~12 / 24 / 48 / 120 dense-step FLOPs (est. 0.39x dense/step with a dense step every 8: 31 / 62 / 124
+#        / 310 steps) + the no-full-context-step variant (est. 0.30x: 40 / 80 / 160)
 #   SEED Dlr20-120-s1 (seed noise of the dense reference at LR 2e-5; was 0.009 nats at 2.07e-4)
 #   IRS  IRANDlr20-260 (saves every 58) + branches 65 / 130: I-rand at dense-equivalent 12 / 24 / 48 steps
 #   IFS  IFLlr20-215 (saves every 48) + branches 54 / 108: I-fl 25% at dense-equivalent 12 / 24 / 48 steps
@@ -61,6 +64,10 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       run o3cd-SD20lr20-130 ARM=SD20 MAX_STEPS_TOTAL=130 BRANCH_FROM="$ROOT/runs/o3cd-SD20lr20-260/step116" EXPECTED_MIN=8 || exit 47
       run o3cd-Dlr10-12 ARM=D LR=1e-5 MAX_STEPS_TOTAL=12 EXPECTED_MIN=10 || exit 48
       run o3cd-Dlr05-120 ARM=D LR=5e-6 MAX_STEPS_TOTAL=120 EXPECTED_MIN=30 || exit 49 ;;
+    OTRS)
+      run o3cd-OTRsmoke ARM=OTR MAX_STEPS_TOTAL=20 SMOKE=1 NOWANDB=1 EXPECTED_MIN=15 || exit 50
+      for b in 31 62 124 310; do run "o3cd-OTR10M7lr20-$b" ARM=OTR MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 6 + 10)) || exit 51; done
+      for b in 40 80 160; do run "o3cd-OTR10M7ndlr20-$b" ARM=OTR OTR_DENSE=0 MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 8 + 10)) || exit 52; done ;;
     SEED)
       run o3cd-Dlr20-120-s1 ARM=D MAX_STEPS_TOTAL=120 SEED=1 EXPECTED_MIN=30 || exit 14 ;;
     IRS)
@@ -85,7 +92,7 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       done ;;
     EV)
       SPECS=""
-      for r in Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
+      for r in OTR10M7lr20-31 OTR10M7lr20-62 OTR10M7lr20-124 OTR10M7lr20-310 OTR10M7ndlr20-40 OTR10M7ndlr20-80 OTR10M7ndlr20-160 Dlr20-4 Dlr20-8 IRANDlr20-22 IRANDlr20-43 SD20lr20-65 SD20lr20-130 SD20lr20-260 Dlr10-12 Dlr05-120 Dlr20-12 Dlr20-24 Dlr20-48 DB8lr20-12 DB8lr20-24 DB8lr20-48 Dlr20-120-s1 IRANDlr20-65 IRANDlr20-130 IRANDlr20-260 IFLlr20-54 IFLlr20-108 IFLlr20-215 Dlr10-120 Dlr20-480 IRANDlr20-650 IRANDlr20-1300 IRANDlr20-2600 HOlr20-120 HOlr20-240 HOlr20-480; do
         [ -f "$ROOT/runs/o3cd-$r/model_and_optim/.metadata" ] && [ ! -f "$ROOT/devce/${r}_dev32k_1024.json" ] && SPECS="$SPECS $r:runs/o3cd-$r:4"
       done
       log "EV specs:$SPECS"

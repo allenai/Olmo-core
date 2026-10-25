@@ -29,7 +29,7 @@
 # Results: $ROOT/ckpts/<run>/eval/<key>_multirung.json (+ predictions), copied to $LROOT/eval_results/.
 set -o pipefail   # no -u: it kills the conda-pack activate
 LROOT=/accounts/projects/sewonm/prasann/ctc_suite
-REPO=$LROOT/OLMo-core
+REPO=${REPO_OVERRIDE:-$LROOT/OLMo-core}  # REPO_OVERRIDE: evaluate with another checkout (e.g. newer eval hooks)
 ROOT="${ROOT:-/tmp/prasann/tdlr}"
 RUN="${RUN:?set RUN}"; TASK="${TASK:?set TASK}"
 NGPU="${NGPU:-${SLURM_GPUS_ON_NODE:-2}}"

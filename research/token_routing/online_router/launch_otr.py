@@ -62,6 +62,54 @@ ARMS = {
     # router + whole-block skip: every token also skips GDN blocks 20 / 24 / 28 (full attention at 3, 7, 11, ...)
     "otr10M8sk3": otr(0.1, drop=8, extra="--train-skip-layers 20,24,28"),
     "otr10M7": otr(0.1, drop=7),    # right before the block-7 full attention (direct test of the full-attention hypothesis)
+    "rnd10M7": otr(0.1, drop=7, extra="--st-otr-score random"),   # strmatch test (parent, 2026-10-23): does random fail mt11 strmatch too?
+    # allocation ablation (Prasann, 2026-10-23: "do you ever ablate the budget not being kept per document? Also not
+    # having headers?"): global budget (doc share 0 / 0.5), and each document's first 8 body tokens always kept
+    # aggressive cuts (Prasann, 2026-10-23: "much more aggressive cuts to computation"): the floors dominate
+    # (blocks [0, 7) on every token ~22% of dense, the full-context step every 8 ~12%)
+    "otr10M7ng": otr(0.1, drop=7, extra="--st-otr-early-nograd"),          # early blocks forward-only on routed steps
+    "otr10M7tail": otr(0.1, drop=7, dense_every=0, extra="--st-otr-dense-tail-frac 0.1"),  # routed, then a dense tail
+    "otr10M7de0": otr(0.1, drop=7, dense_every=0),                         # no full-context steps
+    "otr10M7ngtail": otr(0.1, drop=7, dense_every=0, extra="--st-otr-dense-tail-frac 0.1 --st-otr-early-nograd"),
+    # pyramid drop: keep 0.5 from block 3, 0.1 from 7, 0.03 from 16 (each stage its own router at its own layer)
+    "mrg05M7": otr(0.05, drop=7, extra="--st-otr-merge-dropped"),   # merge instead of drop, keep 5%
+    "mrg10M7": otr(0.1, drop=7, extra="--st-otr-merge-dropped"),
+    # memory + FLOPs (Prasann, 2026-10-23: "ideas which can save both on FLOPs and memory"): NO full-context steps
+    # per-document token floor (grad-composition: strmatch's ~25-token documents keep ~3 tokens at 10%, mostly header)
+    "otr10M7f8": otr(0.1, drop=7, extra="--st-otr-min-per-doc 8"),
+    "otr10M7f16": otr(0.1, drop=7, extra="--st-otr-min-per-doc 16"),
+    # combined: warmup-then-freeze at half the steps + per-document floor 16, no full-context steps
+    "fa247f16M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-after 247 --st-otr-min-per-doc 16"),  # mt11s720: 495 steps
+    # 2026-10-24 levers on the 11-task mix (no full-context steps): progressive freeze, per-task routers, + floor 16
+    "prog4712f16M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-schedule 4:0.25,7:0.5,12:0.75 --st-otr-min-per-doc 16"),
+    "otr10M7f16pt": otr(0.1, drop=7, dense_every=0, extra="--st-otr-min-per-doc 16 --st-otr-per-task-key-tokens 11"),
+    "lora64fa420r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-freeze-after 420 --st-otr-min-per-doc 16"),  # 85% of 495
+    "lora64r20to10f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.10 --st-otr-early-lora 64 --st-otr-min-per-doc 16"),
+    "lora64r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-min-per-doc 16"),
+    "lora64fa371r20to10f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.10 --st-otr-early-lora 64 --st-otr-freeze-after 371 --st-otr-min-per-doc 16"),
+    "lora64fa371r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-freeze-after 371 --st-otr-min-per-doc 16"),
+    "otr10M7f16sk3": otr(0.1, drop=7, dense_every=0, extra="--st-otr-min-per-doc 16 --train-skip-layers 20,24,28"),
+    "r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-min-per-doc 16"),
+    "lora64fa371f16M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-early-lora 64 --st-otr-freeze-after 371 --st-otr-min-per-doc 16"),  # mt11s720: 75% of 495
+    "lora64f16M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-early-lora 64 --st-otr-min-per-doc 16"),
+    "lora16f16M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-early-lora 16 --st-otr-min-per-doc 16"),
+    "prog4712f16M7pt": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-schedule 4:0.25,7:0.5,12:0.75 --st-otr-min-per-doc 16 --st-otr-per-task-key-tokens 11"),
+    # freeze-point sweep at mt4s1464 (366 steps): 25% / 50% / 75%
+    "fa92M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-after 92"),
+    "fa183M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-after 183"),
+    "fa275M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-after 275"),
+    "fa30M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-after 30"),   # warmup-then-freeze (s488: 30 of 122)
+    "ng0M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-early-nograd"),       # early blocks forward-only always
+    "frz0M7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-freeze-early"),      # + frozen (no grads, no Adam state)
+    "pyr3de0": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 3:0.5,7:0.1,16:0.03"),
+    "pyr3frz0": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 3:0.5,7:0.1,16:0.03 --st-otr-freeze-early"),
+    "mrg05M7de0": otr(0.05, drop=7, dense_every=0, extra="--st-otr-merge-dropped"),
+    "pyr3": otr(0.1, drop=7, extra="--st-otr-stages 3:0.5,7:0.1,16:0.03"),
+    "pyr3ng": otr(0.1, drop=7, extra="--st-otr-stages 3:0.5,7:0.1,16:0.03 --st-otr-early-nograd"),
+    "pyr2": otr(0.1, drop=7, extra="--st-otr-stages 7:0.1,16:0.03"),
+    "otr10M7ds0": otr(0.1, drop=7, share=0.0),
+    "otr10M7ds50": otr(0.1, drop=7, share=0.5),
+    "otr10M7hdr8": otr(0.1, drop=7, extra="--st-otr-keep-first 8"),
     "otr10M5": otr(0.1, drop=5),
     "otr10M6": otr(0.1, drop=6),    # split-point bracket around 8 (parent, 2026-10-22): before the block-7 full attention
     "otr10M12": otr(0.1, drop=12),  # later split: floor 12/32 of the dense cost

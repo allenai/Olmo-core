@@ -1797,6 +1797,64 @@ def parse_args() -> argparse.Namespace:
                     help="online router: body tokens kept per row (fraction of the row's body tokens)")
     ap.add_argument("--st-otr-explore-frac", type=float, default=0.1,
                     help="online router: share of the kept budget drawn uniformly at random (exploration)")
+    ap.add_argument("--st-otr-early-nograd", action="store_true",
+                    help="online router, mid-stack: on routed steps run blocks [0, drop_layer) forward-only (they learn "
+                    "only on the dense steps; charged forward-only)")
+    ap.add_argument("--st-otr-dense-tail-frac", type=float, default=0.0,
+                    help="online router: train the last FRAC of the steps uncompressed (e.g. 0.1, with "
+                    "--st-otr-dense-every 0 for routed-then-dense-tail)")
+    ap.add_argument("--st-otr-dense-keep-frac", type=float, default=1.0,
+                    help="online router: keep share on the periodic --st-otr-dense-every steps (1.0 = full context; e.g. "
+                    "0.5 routes them at 50%%, bounding the peak memory)")
+    ap.add_argument("--st-otr-exit-loss-weight", type=float, default=0.0,
+                    help="online router, mid-stack: add W x the LM loss of the DROPPED tokens read out at the split layer "
+                    "(early exit; 1.0 = every label counts once; CPT rows -- answer-only SFT has no dropped labels)")
+    ap.add_argument("--st-otr-freeze-after", type=int, default=0,
+                    help="online router: train normally for N steps, then freeze the embeddings + blocks [0, drop_layer) "
+                    "and free their optimizer state (warmup-then-freeze)")
+    ap.add_argument("--st-otr-min-per-doc", type=int, default=0,
+                    help="online router: per-document token floor -- every document keeps max(its share, K) body tokens "
+                    "(its top ones by score), counted against the budget")
+    ap.add_argument("--st-otr-freeze-early", action="store_true",
+                    help="online router, mid-stack: freeze the embeddings and blocks [0, drop_layer) (no grads, no "
+                    "optimizer state; forward-only on every step)")
+    ap.add_argument("--st-otr-merge-dropped", action="store_true",
+                    help="online router, mid-stack: average each document's dropped tokens into one summary token "
+                    "(no label) carried with the kept row past the split, instead of discarding them")
+    ap.add_argument("--st-otr-stages", default="",
+                    help="online router pyramid drop, e.g. '3:0.5,7:0.1,16:0.03' (layer:keep of the body, absolute and "
+                    "non-increasing; each stage scored from its own layer by its own router); overrides "
+                    "--st-otr-drop-layer / --st-otr-keep-frac")
+    ap.add_argument("--st-otr-early-lora", type=int, default=0,
+                    help="online router: LOW-RANK early stack -- blocks [0, drop_layer) + embeddings frozen from step 0, "
+                    "every linear in those blocks gets a rank-R LoRA adapter (no base grads / Adam state). 0 = off")
+    ap.add_argument("--st-otr-early-lora-scale", type=float, default=32.0,
+                    help="early LoRA output scale (acts as the adapters' LR multiplier under Adam; default 32)")
+    ap.add_argument("--st-otr-target-layer", type=int, default=0,
+                    help="online router: read the gradient targets at this deeper block (e.g. 16) instead of the drop "
+                    "layer; with the drop only the full-context (--st-otr-dense-every) steps fit, with "
+                    "--st-otr-mod-layers every step does. 0 = the drop layer")
+    ap.add_argument("--st-otr-mass-target", type=float, default=0.0,
+                    help="online router ADAPTIVE keep: per document, keep the fewest top-scored tokens whose predicted "
+                    "||dL/dh||^2 covers this share (e.g. 0.8); then --st-otr-min-per-doc, then the per-row "
+                    "--st-otr-max-keep-frac cap. --st-otr-keep-frac then only sizes exploration. 0 = fixed keep")
+    ap.add_argument("--st-otr-max-keep-frac", type=float, default=1.0,
+                    help="online router, with --st-otr-mass-target: cap on each row's kept body share (peak memory)")
+    ap.add_argument("--st-otr-freeze-schedule", default="",
+                    help="online router PROGRESSIVE freeze, e.g. '4:0.25,7:0.5,12:0.75': freeze embeddings + blocks "
+                    "[0, 4) after 25%% of the steps, [0, 7) after 50%%, [0, 12) after 75%% (gradients and optimizer state "
+                    "released at each stage); exclusive with --st-otr-freeze-after / --st-otr-freeze-early")
+    ap.add_argument("--st-otr-mod-layers", default="",
+                    help="online router MIXTURE-OF-DEPTHS, e.g. '8-31:2' (blocks 8, 10, ..., 30): at the first listed "
+                    "block the router picks --st-otr-keep-frac of each document's tokens; the listed blocks run on "
+                    "those (+ every non-document token) only and the rest pass the residual through; every token "
+                    "reaches the head (no label dropped). Sets --st-otr-drop-layer to the first listed block")
+    ap.add_argument("--st-otr-per-task-key-tokens", type=int, default=0,
+                    help="online router: a separate ridge router per task in a mixed batch, keyed on each row's first "
+                    "N tokens (its prompt template; 11 identifies every CTC mix task). 0 = one shared router")
+    ap.add_argument("--st-otr-keep-first", type=int, default=0,
+                    help="online router: always keep each document's first K body tokens (its header / id span); "
+                    "they count against the budget and the router picks the rest")
     ap.add_argument("--st-otr-doc-share", type=float, default=1.0,
                     help="online router: share of the budget spread over documents in proportion to length "
                     "(each keeps its own top tokens by score); the rest goes to the row-level top scores. "

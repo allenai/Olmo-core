@@ -1750,13 +1750,31 @@ class Transformer(nn.Module):
         captured: Dict[int, torch.Tensor] = {}
         otr = getattr(self, "_online_token_router", None) if self.training else None
         otr_layer = otr.cfg.drop_layer if otr is not None else 0
+        # pyramid: every stage's drop layer -> its router (one entry without stages)
+        otr_stages = {r.cfg.drop_layer: r for r in otr.chain()} if otr_layer > 0 else {}
+        # online router mixture-of-depths: the listed blocks run on the router's kept tokens only
+        otr_mod = frozenset(otr.mod_layers) if otr_layer > 0 and getattr(otr, "mod_layers", None) else frozenset()
+        otr_tap = int(getattr(otr.cfg, "target_layer", 0) or 0) if otr_layer > 0 else 0
         ld = self._layer_drop if self.training else None
         ld_skip = ld.skipped() if ld is not None else frozenset()
+        # online router early_nograd: on routed forwards blocks [0, otr_layer) run forward-only
+        otr_nograd = otr_layer > 0 and bool(getattr(otr, "_nograd_fwd", False))
+        # the no-grad prefix ends at the drop layer, or earlier when a progressive freeze has frozen fewer blocks
+        otr_nograd_end = int(getattr(otr, "_nograd_until", 0) or otr_layer) if otr_nograd else -1
+        grad_was = torch.is_grad_enabled()
+        if otr_nograd:
+            torch.set_grad_enabled(False)
         for block_key, block in self.blocks.items():
             block_idx = int(block_key)
-            if otr_layer > 0 and block_idx == otr_layer:
+            if otr_nograd and block_idx == otr_nograd_end:
+                torch.set_grad_enabled(grad_was)
+                # a fresh leaf: the router's target hook at the split reads dL/dh at or above here
+                h = h.detach().requires_grad_(grad_was)
+            if block_idx in otr_stages:
                 # online router, mid-stack drop: dropped tokens skip blocks [otr_layer, n_layers)
-                h, all_block_kwargs = otr.mid_compact(self, h, all_block_kwargs)
+                h, all_block_kwargs = otr_stages[block_idx].mid_compact(self, h, all_block_kwargs)
+            if otr_tap and block_idx == otr_tap:
+                h = otr.tap_target(self, h, block_idx)  # type: ignore[union-attr]
             if block_idx in ld_skip:
                 # whole-block skip (olmo_core.nn.layer_drop): identity, forward never called
                 if capture_layers is not None and block_idx in capture_layers:
@@ -1802,6 +1820,8 @@ class Transformer(nn.Module):
                 h = block_skip_forward(
                     block, h, {**all_block_kwargs, **block_kwargs, **extra}, p_skip, keep_skip
                 )
+            elif block_idx in otr_mod:
+                h = otr.mod_block(block, h, {**all_block_kwargs, **block_kwargs, **extra})  # type: ignore[union-attr]
             else:
                 h = block(h, **all_block_kwargs, **block_kwargs, **extra)
             if ld is not None and ld.rescale:
@@ -1812,6 +1832,7 @@ class Transformer(nn.Module):
                 h = self._attach_block_budget(h, block_idx)
             if capture_layers is not None and block_idx in capture_layers:
                 captured[block_idx] = h
+        torch.set_grad_enabled(grad_was)  # (no-op unless early_nograd never reached its split layer)
         return h, captured
 
     def enable_summary_token_attention(
@@ -3021,6 +3042,14 @@ class Transformer(nn.Module):
             out = self.lm_head(h, **lm_head_kwargs)
             if isinstance(out, LMOutputWithLoss) and out.loss is not None:
                 loss = out.loss
+                otr_x = getattr(self, "_online_token_router", None) if self.training else None
+                x_pack = otr_x.pop_exit() if otr_x is not None else None
+                if x_pack is not None and bool((x_pack[1] != lm_head_kwargs.get("ignore_index", -100)).any()):
+                    # online router early-exit loss: the dropped tokens' split-layer states through the LM head
+                    x_kw = {k: v for k, v in lm_head_kwargs.items() if k not in ("labels", "logits_to_keep")}
+                    x_kw["return_logits"] = False
+                    x_out = self.lm_head(x_pack[0][None], labels=x_pack[1][None], **x_kw)
+                    loss = loss + otr_x.cfg.exit_loss_weight * x_out.loss.to(loss.dtype)
                 if aux_loss is not None:
                     w = self._pooled_soft_tokens["aux_match_weight"]  # type: ignore[index]
                     loss = loss + w * aux_loss.to(loss.dtype)

@@ -8,6 +8,7 @@
 #
 # Knobs (env):
 #   ARM            D | C1 (8k phase) | C2 (32k phase) | IRAND | IFL | SD20 (IRAND blocks -> detached mean slots)
+#                  | OTR (mid-stack online router; OTR_KEEP 0.1, OTR_L 7, OTR_DENSE 8, OTR_EXTRA)
 #                  follow-ups: IFL_R4K | IFL_RAMP | IFL_X4 | IFL_X8 | IRAND_X4 | IRAND_X8
 #   RUN            run name = save folder basename (must be NEW unless RESUME=1)
 #   MAX_STEPS_TOTAL  budget in optimizer steps at 524,288 tokens/step (sets --max-tokens)
@@ -55,6 +56,11 @@ case "$ARM" in
   # SD20: softdetach's sd20 geometry (records/softdetach-cpt-crossover.md, ~4x on Qwen3.5-4B): random 20% of the
   # 512-token blocks whole, every other block -> ONE detached mean slot token (not removed, as in IRAND)
   SD20)  DATA=train32k_ee SEQ=32768 GB=16 VAR="--variant softtoken --st-block-size 512 --st-gold-blind --st-keep-prob 0.2 --st-pad-multiple 1" ;;
+  # OTR: the CTC suite's mid-stack ONLINE router (records/online-token-router.md, otr10M7): every token runs blocks
+  # [0, OTR_L) on the full row; a ridge router refit every step on per-token gradient norms (10% exploration) keeps
+  # OTR_KEEP of each 512-block for blocks [OTR_L, 32); dropped tokens get no LM loss; a full-context step every
+  # OTR_DENSE steps (charged). No query in CPT rows -> --st-otr-no-query. OTR_EXTRA appends more --st-otr-* flags.
+  OTR)   DATA=train32k_ee SEQ=32768 GB=16 VAR="--variant softtoken --st-block-size 512 --st-gold-blind --st-drop-slots --st-pad-multiple 1 --st-keep-token-rule online --st-otr-keep-frac ${OTR_KEEP:-0.1} --st-otr-drop-layer ${OTR_L:-7} --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every ${OTR_DENSE:-8} --st-otr-no-query ${OTR_EXTRA:-}" ;;
   IFL)   DATA=train32k_ee SEQ=32768 GB=16 VAR="--variant softtoken --st-block-size 512 --st-gold-blind --st-drop-slots --st-keep-prob 0.0 --st-keep-token-rule first_last --st-keep-token-k 0.25 --st-pad-multiple 1" ;;
   # follow-up arms (2026-10-22, not in the round-1 plan): position-aware keep rules and token exit.
   # L=4 / L=8 = dropped tokens leave after the first / second full-attention layer (3, 7).
@@ -77,7 +83,7 @@ fi
 # CTX=64k: one 64k window per row, 8 rows/step (same 524,288 tokens/step), YaRN x8 (8192 -> 65536, as OLMo stage 3)
 YARN=4
 if [ "${CTX:-32k}" = "64k" ]; then
-  case "$ARM" in D|IRAND|IFL) DATA=train64k_ee; SEQ=65536; GB=8; YARN=8 ;; *) echo "FATAL: CTX=64k not wired for ARM=$ARM"; exit 2 ;; esac
+  case "$ARM" in D|IRAND|IFL|OTR) DATA=train64k_ee; SEQ=65536; GB=8; YARN=8 ;; *) echo "FATAL: CTX=64k not wired for ARM=$ARM"; exit 2 ;; esac
 fi
 # GB_OVERRIDE: rows per optimizer step (dense small-batch control). MAX_STEPS_TOTAL stays in 524,288-token units,
 # so the token / FLOP budget is unchanged and the run takes (16 / GB) x as many optimizer steps.

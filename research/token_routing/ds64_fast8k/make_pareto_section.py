@@ -215,13 +215,17 @@ INTRO4 = ("Each point is one training run, scored on contradiction, nq, outlier 
           "fresh rows (976 or 1,464 per task), ringed markers on repeated epochs. Rules hit by the 10-21 flag-drop bug are left out.")
 INTRO11 = ("The 11-task fast8k mix (setA tasks, query before AND after the documents), scored on 10 tasks at 8k and 2k with the "
            "CTC-suite eval rows (500 each, no-cot, ctc-spec grading; rerank has no suite rows). Dense is LR 5e-6 only here. "
-           "<b>Reorder (kendall_tau) is near 0 at 8k for every run, dense included: treat that column as broken, not as signal.</b>")
+           "<b>Reorder@8k is left out:</b> the ctc grader scores 0 unless the output is an exact permutation of all 57 ids, and at 8k "
+           "every run, dense included, repeats or invents a few (a lenient Kendall tau over common items would be about 0.20). "
+           "Reorder@2k is kept.")
 
 
 def section(d, mix, sfx, title, intro, updated, cells=None):
     if cells is None:
         tasks = sorted({p["task"] for p in d["points"] if d["runs"].get(p["run"], {}).get("mix") == mix})
-        cells = [(t, r) for r in ("8k", "2k") for t in tasks]
+        # reorder@8k is excluded: the ctc reorder grader scores 0 unless the output is an exact permutation of all
+        # ids, and at 8k every run (dense included) repeats or invents a few, so the cell is a constant 0
+        cells = [(t, r) for r in ("8k", "2k") for t in tasks if (t, r) != ("reorder", "8k")]
     rows = build(d, mix, cells)
     frag = (FRAGMENT.replace("__DATA__", json.dumps(rows, separators=(",", ":")))
             .replace("__CELLS__", json.dumps([f"{t}@{r}" for t, r in cells])).replace("__UPDATED__", updated)
