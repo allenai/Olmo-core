@@ -11,7 +11,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
 wandb_group:
-next_step: BEST CPT ARM = LoRA r64 early stack on blocks 0-15 (no freeze, or freeze at 75%: identical): overall CE below dense at every measured budget 12-480 steps at 0.81-0.86x FLOPs and -12% peak; far-only +0.0008-0.0023. Cubbins 4079442 running: r128 K16, r64 K24, r64 K16 seed 1. Then close out (record + artifact).
+next_step: cubbins 4079442 (r128 K16, r64 K24, r64 K16 s1) eval -> 4106229 SHORT (S4 4k rows 12-960 steps; S4 -> routed-32k candidate / dense-32k control; LMIX packed controls). Waiting on router session: --st-otr-route-min-len (hybrid, per document in packed instances) and --ffn-width-frac (partial MLP). Data: data/mix4k_r0 (tail rows 39160-42999, 30,720 4k windows), mix4k_r25 / r50 (rows 0-3999) on cubbins.
 ---
 
 # olmo3_cptdrop
@@ -22,6 +22,12 @@ dropping during long-context CPT beat dense at every matched FLOP budget — not
 softdetach won on an already-long-trained Qwen3.5-4B before dense overtook it near 2k PF?
 
 ## Decisions
+- 2026-10-24 late (Prasann, via the LR-sweep session): 0.81-0.85x is not enough -- he wants BIG FLOP wins on CPT, and
+  "something that looks like token dropping to learn the long range dependencies"; memory metric = max trainable
+  context length at a fixed memory budget (not peak). Levers queued: short-window CPT (4k rows, 1/8 tokens/step) with a
+  routed 32k phase (candidate) or dense 32k phase (control); packed length-mix control; hybrid (short dense + routed
+  long rows in one step) once the router session adds route-min-len; partial-MLP (--ffn-width-frac) once it lands.
+  Dense full-context steps mixed into a method = control only, never the candidate.
 - 2026-10-24 (Prasann, via the LR-sweep session): (1) keep 32k CPT, no 64k move; try cuts that keep every token's
   label through the full depth (freeze bottom of stack after warmup, progressive freeze, mixture-of-depths).
   (2) NO dense / full-context steps mixed in at all (--st-otr-dense-every 0; no dense-keep-frac arms). (3) Cheap arms
