@@ -99,7 +99,14 @@ budget beats dense at matched FLOPs. Design + numbers: `records/online-token-rou
   **B' round 1 (same day):** `--st-otr-warmup-random --skip-dry-run` (c5676a12f) remove both dense passes, and
   `--ffn-chunk-tokens 8192` (172f12f68, exact) chunks the FFN recompute. Max T is now: dense+chunk ~148k; recipe ~234k
   (1.58x; 196k fits at 70.3 GiB); LoRA-all ~300k (2.0x); otr10M7de0 ~210k. Next binding term: autograd C++ backward
-  buffers, 22-32 GiB; probe them with stacks="all". Routed-warmup quality check: Lambda 114656.
+  buffers, 22-32 GiB; probe them with stacks="all". Routed-warmup quality check: free (0.947 / 0.924 / 0.614 / 0.699
+  at 291 PF vs the recipe's 0.945 / 0.912 / 0.636 / 0.726).
+  **B' round 2:** those buffers were FLA's GDN backward rebuilding every chunk state at once.
+  `--gdn-segment-tokens 16384` (a558feb2b; exact, GPU-tested) segments the GDN, carrying state between segments.
+  **Max T with all four flags: dense ~165k; otr10M7de0 ~250k; recipe ~300k (1.8x); LoRA-all ~400k (2.4x).**
+- **Adapter scope (B):** LoRA r64 on all 32 blocks at LR 1e-5 scores 0.946 / 0.908 / 0.625 / 0.719 at 261 PF, matching
+  the recipe (296 PF) at 0.88x its compute (one seed). At 5e-6 it loses outlier (0.686). K=16 ≈ recipe; K=24 dips
+  (likely noise). Rank 128 at K=32 is running. Next: a second seed of K=32 at 1e-5, then mt11s720.
 
 ## Current best numbers
 All are teacher-forced answer-CE deltas on frozen dense 4B checkpoints. Nothing here is generation-graded.

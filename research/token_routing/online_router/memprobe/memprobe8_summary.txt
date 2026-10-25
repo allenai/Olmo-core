@@ -1,0 +1,131 @@
+queue empty after 3 checks
+== f8k-memprobe8-dense-T196608-lam
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+RuntimeError: Triton Error [CUDA]: out of memory
+RuntimeError: Triton Error [CUDA]: out of memory
+== f8k-memprobe8-dense-T262144-lam
+[mem-snapshot] OOM during step 1 (allocated 73.60 GB, peak 74.85 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 1 (allocated 73.60 GB, peak 74.85 GB); attribution of the trace so far:
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-dense-T262144-lam_114700.log:[mem-snapshot] peak live 0.00 GB in 0 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-dense-T262144-lam_114700.log-[mem-snapshot] OOM during step 1 (allocated 73.60 GB, peak 74.85 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 4.00 GiB. GPU 0 has a total capacity of 79.25 GiB of which 2.87 GiB is free. Including non-PyTorch memory, this process has 76.36 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 4.00 GiB. GPU 0 has a total capacity of 79.25 GiB of which 2.87 GiB is free. Including non-PyTorch memory, this process has 76.36 GiB memory in 
+OutOfMemoryError: CUDA out of memory. Tried to allocate 4.00 GiB. GPU 1 has a total capacity of 79.25 GiB of which 2.87 GiB is free. Including non-PyTorch memory, this process has 76.36 GiB memory in 
+== f8k-memprobe8-otr10M7de0-T262144-lam
+[mem-probe] step 1 tokens/rank 262144 router_dense True fixed 10.24 GB fwdbwd_peak 60.08 GB optim_peak 65.28 GB after 32.66 GB reserved_max 74.06 GB
+[mem-snapshot] OOM during step 2 (allocated 69.46 GB, peak 75.03 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 2 (allocated 68.49 GB, peak 74.06 GB); attribution of the trace so far:
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-otr10M7de0-T262144-lam_114701.log:[mem-snapshot] peak live 0.00 GB in 0 blocks; top sites:
+CUDA out of memory. Tried to allocate 1.94 GiB. GPU 1 has a total capacity of 79.25 GiB of which 634.25 MiB is free. Including non-PyTorch memory, this process has 78.61 GiB memo
+OutOfMemoryError: CUDA out of memory. Tried to allocate 1.94 GiB. GPU 1 has a total capacity of 79.25 GiB of which 634.25 MiB is free. Including non-PyTorch memory, this process has 78.61 GiB memory i
+OutOfMemoryError: CUDA out of memory. Tried to allocate 1.99 GiB. GPU 0 has a total capacity of 79.25 GiB of which 1.60 GiB is free. Including non-PyTorch memory, this process has 77.63 GiB memory in 
+== f8k-memprobe8-otr10M7de0-T393216-lam
+[mem-probe] step 1 tokens/rank 393216 router_dense True fixed 10.74 GB fwdbwd_peak 77.39 GB optim_peak 61.50 GB after 28.88 GB reserved_max 61.54 GB
+[mem-snapshot] OOM during step 2 (allocated 75.73 GB, peak 77.64 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 2 (allocated 75.73 GB, peak 77.59 GB); attribution of the trace so far:
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-otr10M7de0-T393216-lam_114702.log:[mem-snapshot] peak live 0.00 GB in 0 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-otr10M7de0-T393216-lam_114702.log-[mem-snapshot] OOM during step 2 (allocated 75.73 GB, peak 77.59 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 256.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 100.31 MiB is free. Including non-PyTorch memory, this process has 79.13 GiB me
+OutOfMemoryError: CUDA out of memory. Tried to allocate 256.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 100.31 MiB is free. Including non-PyTorch memory, this process has 79.13 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 128.00 MiB. GPU 1 has a total capacity of 79.25 GiB of which 60.31 MiB is free. Including non-PyTorch memory, this process has 79.17 GiB memory 
+== f8k-memprobe8-recipe-T262144-lam
+[mem-probe] step 1 tokens/rank 262144 router_dense True fixed 10.50 GB fwdbwd_peak 57.54 GB optim_peak 49.32 GB after 23.50 GB reserved_max 61.27 GB
+[mem-probe] step 2 tokens/rank 262144 router_dense False fixed 23.42 GB fwdbwd_peak 71.61 GB optim_peak 49.32 GB after 23.50 GB reserved_max 77.63 GB
+[mem-probe] step 3 tokens/rank 262144 router_dense False fixed 23.42 GB fwdbwd_peak 71.15 GB optim_peak 49.32 GB after 23.50 GB reserved_max 67.96 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log:[mem-snapshot] peak live 47.73 GB in 253 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     8.60 GB  early_lora.py:44 _lora_hook
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     7.40 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     7.23 GB  C++ torch::cuda::(anonymous namespace)::gather_with_cpp()
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     7.03 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     3.24 GB  recurrent.py:579 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     2.47 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     1.97 GB  flash_linear_attn_api.py:201 dispatch_causal_conv1d
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     1.97 GB  recurrent.py:506 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     1.97 GB  recurrent.py:507 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     1.97 GB  recurrent.py:553 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T262144-lam_114703.log-[mem-snapshot]     1.23 GB  model.py:2987 forward
+== f8k-memprobe8-loraall-T262144-lam
+[mem-probe] step 1 tokens/rank 262144 router_dense True fixed 10.70 GB fwdbwd_peak 52.37 GB optim_peak 19.60 GB after 13.73 GB reserved_max 56.81 GB
+[mem-probe] step 2 tokens/rank 262144 router_dense False fixed 13.65 GB fwdbwd_peak 56.46 GB optim_peak 19.60 GB after 13.73 GB reserved_max 61.40 GB
+[mem-probe] step 3 tokens/rank 262144 router_dense False fixed 13.65 GB fwdbwd_peak 56.01 GB optim_peak 19.60 GB after 13.73 GB reserved_max 62.94 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log:[mem-snapshot] peak live 42.36 GB in 253 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     8.60 GB  early_lora.py:44 _lora_hook
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     7.40 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     7.03 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     3.24 GB  recurrent.py:579 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     2.47 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     1.97 GB  flash_linear_attn_api.py:201 dispatch_causal_conv1d
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     1.97 GB  recurrent.py:506 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     1.97 GB  recurrent.py:507 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     1.97 GB  recurrent.py:553 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     1.86 GB  C++ torch::cuda::(anonymous namespace)::gather_with_cpp()
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T262144-lam_114704.log-[mem-snapshot]     1.23 GB  model.py:2987 forward
+== f8k-memprobe8-recipe-T393216-lam
+[mem-snapshot] OOM during step 1 (allocated 74.03 GB, peak 76.96 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 1 (allocated 73.88 GB, peak 77.64 GB); attribution of the trace so far:
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T393216-lam_114705.log:[mem-snapshot] peak live 0.00 GB in 0 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T393216-lam_114705.log-[mem-snapshot] OOM during step 1 (allocated 73.88 GB, peak 77.64 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 1.87 GiB. GPU 0 has a total capacity of 79.25 GiB of which 1.83 GiB is free. Including non-PyTorch memory, this process has 77.40 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 1.87 GiB. GPU 0 has a total capacity of 79.25 GiB of which 1.83 GiB is free. Including non-PyTorch memory, this process has 77.40 GiB memory in 
+OutOfMemoryError: CUDA out of memory. Tried to allocate 1.87 GiB. GPU 1 has a total capacity of 79.25 GiB of which 134.25 MiB is free. Including non-PyTorch memory, this process has 79.10 GiB memory i
+== f8k-memprobe8-loraall-T393216-lam
+[mem-probe] step 1 tokens/rank 393216 router_dense True fixed 11.20 GB fwdbwd_peak 74.51 GB optim_peak 20.10 GB after 14.23 GB reserved_max 73.82 GB
+[mem-probe] step 2 tokens/rank 393216 router_dense False fixed 14.15 GB fwdbwd_peak 77.03 GB optim_peak 20.10 GB after 14.23 GB reserved_max 73.04 GB2026-10-25 10:20:07.512	lambda-hyperplane02:1	olmo_core.train.callbacks.gpu_memory_monitor:64	WARNING	7 CUDA memory allocation retries.
+[mem-probe] step 3 tokens/rank 393216 router_dense False fixed 14.15 GB fwdbwd_peak 77.44 GB optim_peak 20.10 GB after 14.23 GB reserved_max 73.12 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log:[mem-snapshot] peak live 63.29 GB in 317 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]    13.05 GB  early_lora.py:44 _lora_hook
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]    11.23 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]    10.66 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     4.91 GB  recurrent.py:579 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     3.74 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     2.99 GB  flash_linear_attn_api.py:201 dispatch_causal_conv1d
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     2.99 GB  recurrent.py:506 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     2.99 GB  recurrent.py:507 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     2.99 GB  recurrent.py:553 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     1.87 GB  model.py:2987 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T393216-lam_114706.log-[mem-snapshot]     1.87 GB  C++ torch::autograd::generated::GatherBackward0_apply_functional(std::vector<at::Tensor, std::allocator<at::Tensor
+== f8k-memprobe8-recipe-T524288-lam
+[mem-snapshot] OOM during step 1 (allocated 75.05 GB, peak 77.59 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 1 (allocated 75.11 GB, peak 77.71 GB); attribution of the trace so far:
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T524288-lam_114707.log:[mem-snapshot] peak live 0.00 GB in 0 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-recipe-T524288-lam_114707.log-[mem-snapshot] OOM during step 1 (allocated 75.11 GB, peak 77.71 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 256.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 254.31 MiB is free. Including non-PyTorch memory, this process has 78.98 GiB me
+OutOfMemoryError: CUDA out of memory. Tried to allocate 256.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 254.31 MiB is free. Including non-PyTorch memory, this process has 78.98 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 256.00 MiB. GPU 1 has a total capacity of 79.25 GiB of which 154.31 MiB is free. Including non-PyTorch memory, this process has 79.08 GiB memory
+== f8k-memprobe8-loraall-T524288-lam
+[mem-snapshot] OOM during step 1 (allocated 72.71 GB, peak 75.59 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 1 (allocated 73.38 GB, peak 76.55 GB); attribution of the trace so far:
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T524288-lam_114708.log:[mem-snapshot] peak live 0.00 GB in 0 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe8-loraall-T524288-lam_114708.log-[mem-snapshot] OOM during step 1 (allocated 73.38 GB, peak 76.55 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 3.96 GiB. GPU 0 has a total capacity of 79.25 GiB of which 2.61 GiB is free. Including non-PyTorch memory, this process has 76.62 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 3.96 GiB. GPU 0 has a total capacity of 79.25 GiB of which 2.61 GiB is free. Including non-PyTorch memory, this process has 76.62 GiB memory in 
+OutOfMemoryError: CUDA out of memory. Tried to allocate 4.00 GiB. GPU 1 has a total capacity of 79.25 GiB of which 1.87 GiB is free. Including non-PyTorch memory, this process has 77.36 GiB memory in 

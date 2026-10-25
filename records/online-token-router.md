@@ -1023,6 +1023,61 @@ they are: the GDN chunk backward, attention backward, or the scatter back to ful
 FFN outputs (5.5-7.4 GiB) are the block outputs, i.e. the residual stream that AC saves. The LoRA hook is down from 11
 to 3 GiB at 196k, because the FFN adapters are now chunked; the attention and GDN projections' adapters are not.
 
+### B' round 2 (2026-10-25): sequence-segmented GDN
+
+**Verdict.** With all four memory flags, the recipe trains on ~300k-token rows at 80 GB, against ~165k for dense with the
+same flags: **1.8x** (2.4x plain dense's ~124k). LoRA-all + router reaches **~400k (2.4x; 3.2x)**.
+
+**Diagnosis.** The 22-32 GiB "unwind" group was FLA's GDN backward: `chunk_gated_delta_rule_bwd` calls
+`chunk_gated_delta_rule_fwd_h`, which rebuilds the per-64-token chunk states h (T/64 x H x K x V) for the whole row at
+once. 28.7 GiB at 196k on the recipe.
+
+**Fix: `--gdn-segment-tokens 16384` (a558feb2b).** The GDN training forward runs over 16k-token segments that carry
+the recurrent state (`initial_state` / `output_final_state`). The kernel saves only its inputs, so backward rebuilds
+one segment's h at a time. There is no extra recompute. It is exact: a GPU test of outputs and gradients
+(`src/test/nn/gdn_segment_test.py`) passes. It is limited to unpacked rows without a cache; packed varlen falls back.
+
+**Max T with routed warmup + no dry run + chunked FFN (8192) + GDN segments (16384), 80 GB, steady routed step.**
+
+| method | fits (peak GiB) | OOM | max T | x dense (same flags) | x plain dense |
+|---|---|---|---|---|---|
+| dense | 128k (68.3), 160k (77.5, edge) | 196k | ~165k | 1.0 | 1.33 |
+| otr10M7de0 | 192k (64.3), 224k (69.9) | 256k (step 2) | ~250k | ~1.5 | ~2.0 |
+| recipe | 262k (71.6) | 320k (step 2) | ~300k | **~1.8** | **~2.4** |
+| LoRA-all + router | 262k (56.5), 393k (77.4) | 524k | ~400k | ~2.4 | ~3.2 |
+
+Per-1k-token slopes: dense 0.28, otr10M7de0 0.17, LoRA-all 0.16 GiB.
+
+**What binds now** (LoRA-all at 393k). The peak is spread across several terms:
+- LoRA hook outputs: 13 GiB. Each adapted projection allocates its out-sized `B(Ax)` plus the sum.
+- Saved block outputs (residual stream): 11.2 GiB.
+- The GDN kernel's saved inputs: 10.7 GiB.
+- GDN conv / q / k / v outputs: 3-5 GiB each.
+- RMSNorm: 3.7 GiB.
+
+Next candidates:
+- fuse the LoRA add (one `addmm` into the base output, no out-sized intermediate);
+- chunk the attention-side projections and norms like the FFN;
+- for dense and the router alike, offload the saved residual stream to CPU.
+
+## Adapter scope (B, 2026-10-25): LoRA on every block matches the recipe at LR 1e-5
+
+Setup: rank-64 LoRA on blocks [0, K) plus the two-stage router (7:0.2, 16:0.07), de0, mt4s1464, 8k, eval_size 500 per
+task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / oolong / outlier.
+
+| K | LR | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|---|
+| 7 (recipe, 2 seeds) | 5e-6 | 296 | 0.945 | 0.912 | 0.636 | 0.726 |
+| 16 | 5e-6 | 278 | 0.948 | 0.912 | 0.643 | 0.695 |
+| 24 | 5e-6 | 269 | 0.919 | 0.898 | 0.630 | 0.667 |
+| 32 (all) | 5e-6 | 261 | 0.949 | 0.920 | 0.636 | 0.686 |
+| **32 (all)** | **1e-5** | **261** | **0.946** | **0.908** | **0.625** | **0.719** |
+
+**LoRA on all 32 blocks at LR 1e-5 is within single-seed noise of the recipe on all four tasks, at 0.88x its compute.**
+It also has 14.6 GiB less fixed state, which gives ~400k max T against the recipe's ~300k. At LR 5e-6, K=32 loses only
+outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 is still
+running. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
+
 ## Partial MLP (2026-10-25): loses at matched FLOPs
 
 All runs are mt4s1464, LR 5e-6, de0, 8k, eval_size 500 per task; numbers are contra / nq / oolong / outlier.
