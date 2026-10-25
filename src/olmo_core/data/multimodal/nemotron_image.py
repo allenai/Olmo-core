@@ -16,8 +16,9 @@ The subsets are English and single-image. Two kinds are used:
   text, behind ``text_caption``). Filler openings ("Of course.", "This is a detailed description
   of ...") are dropped (:func:`clean_caption`).
 * reasoning (``ecd`` charts, ``deepvision_reasoning`` visual logic puzzles,
-  ``babyvision_reasoning`` early-vision perception puzzles), each behind a ``*_reasoning`` tag of
-  its own. The ``<think>`` trace is trained, as the text mid-training mix trains its reasoning
+  ``babyvision_reasoning`` early-vision perception puzzles, ``hopchain_fintabnet`` and
+  ``hopchain_qa`` multi-hop questions over financial-report and web-PDF pages, ``raven``
+  matrices), each behind a ``*_reasoning`` tag of its own. The ``<think>`` trace is trained, as the text mid-training mix trains its reasoning
   traces: the response is ``<think>\\n{trace}\\n</think>\\n{answer}`` in plain text
   (:func:`clean_reasoning`), and rows whose trace never closes or whose answer is empty are
   dropped.
@@ -115,12 +116,19 @@ NEMOTRON_SUBSETS: Dict[str, NemotronSubset] = {
     "nemotron_babyvision": NemotronSubset(
         "v3.5", "babyvision_reasoning", "visual_perception_reasoning", "babyvision", True
     ),
+    "nemotron_fintabnet": NemotronSubset(
+        "v3.5", "hopchain_fintabnet", "table_multihop_reasoning", "fintabnet", True
+    ),
+    "nemotron_hopchain": NemotronSubset(
+        "v3.5", "hopchain_qa", "doc_multihop_reasoning", "hopchain", True
+    ),
+    "nemotron_raven": NemotronSubset("v3", "raven", "matrix_puzzle_reasoning", "raven", True),
 }
 """The stage-1 sources, keyed by their mixture source names. Left out on purpose:
 ``visualpuzzles_reasoning`` and ``vision_language_reasoning`` (their images are the
 VisualPuzzles and SpatialEval benchmarks), ``slake_med`` (more rows than Slake's English train
-split) and the subsets whose images need PDF rendering or web scraping (``hopchain_*``,
-``sa_finance_*``, ``raven``, ``turing``, ``pmc_vqa``)."""
+split), ``sa_finance_*`` (the JSONL names its images by file name only, with no URL), ``turing``
+(no image source given) and ``pmc_vqa`` (2,000 rows)."""
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +227,7 @@ class _UrlSource:
 
     url: Callable[[str], str]
     threads: int = 32
+    headers: Tuple[Tuple[str, str], ...] = ()
 
     def shards(self, needed: Sequence[str]) -> List[Any]:
         return _chunks(sorted(needed), _SHARD_IMAGES)
@@ -229,6 +238,7 @@ class _UrlSource:
         import requests
 
         session = requests.Session()
+        session.headers.update(dict(self.headers))
 
         def get(ref: str) -> Tuple[str, Optional[bytes]]:
             for _ in range(3):
@@ -320,6 +330,159 @@ class _Sha256ParquetSource:
                         yield ref, data
 
 
+@dataclass(frozen=True)
+class _CombinedSource:
+    """Several sources, each serving the references its predicate accepts."""
+
+    parts: Tuple[Tuple[Callable[[str], bool], Any], ...]
+
+    def shards(self, needed: Sequence[str]) -> List[Any]:
+        return [
+            (k, shard)
+            for k, (accepts, source) in enumerate(self.parts)
+            for shard in source.shards([ref for ref in needed if accepts(ref)])
+        ]
+
+    def fetch(self, shard: Tuple[int, Any], needed: set) -> Iterator[Tuple[str, bytes]]:
+        k, inner = shard
+        return self.parts[k][1].fetch(inner, needed)
+
+
+@dataclass(frozen=True)
+class _PdfPage:
+    """Where a referenced image is rendered from: page ``page`` of ``member`` in the zip at
+    ``url``, at ``dpi`` (capped so the long side is at most :data:`MAX_IMAGE_SIDE`)."""
+
+    url: str
+    member: str
+    page: int
+    dpi: int
+
+
+@dataclass(frozen=True)
+class _RemoteZipPdfSource:
+    """PDF pages rendered from members of remote zip files, read with HTTP range requests so only
+    the referenced PDFs are downloaded."""
+
+    pages: Dict[str, _PdfPage]
+
+    def shards(self, needed: Sequence[str]) -> List[Any]:
+        by_zip: Dict[str, List[str]] = {}
+        for ref in sorted(needed):
+            if ref in self.pages:
+                by_zip.setdefault(self.pages[ref].url, []).append(ref)
+        return [chunk for refs in by_zip.values() for chunk in _chunks(refs, _SHARD_IMAGES)]
+
+    def fetch(self, shard: List[str], needed: set) -> Iterator[Tuple[str, bytes]]:
+        import zipfile
+
+        import fsspec
+        import pypdfium2
+
+        url = self.pages[shard[0]].url
+        headers = {}
+        if url.startswith("https://huggingface.co/"):
+            from huggingface_hub import get_token
+
+            token = get_token()
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        with fsspec.open(url, headers=headers, block_size=1 << 20).open() as remote:
+            archive = zipfile.ZipFile(remote)
+            members = set(archive.namelist())
+            for ref in shard:
+                page = self.pages[ref]
+                if page.member not in members:
+                    continue
+                pdf = pypdfium2.PdfDocument(archive.read(page.member))
+                try:
+                    if page.page >= len(pdf):
+                        continue
+                    pdf_page = pdf[page.page]
+                    scale = min(page.dpi / 72, MAX_IMAGE_SIDE / max(pdf_page.get_size()))
+                    image = pdf_page.render(scale=scale).to_pil().convert("RGB")
+                finally:
+                    pdf.close()
+                out = io.BytesIO()
+                image.save(out, format="JPEG", quality=92)
+                yield ref, out.getvalue()
+
+
+@dataclass(frozen=True)
+class _RavenSource:
+    """RAVEN puzzles composed from HuggingFaceM4/RAVEN's panels in the layout NVIDIA's prompt
+    describes: the 3x3 matrix on top (its last cell a question mark) and the eight answer options
+    below, labelled A-H in the dataset's choice order. ``<config>_RAVEN_<id>_train.png`` is row
+    ``id`` of ``<config>/train``, and NVIDIA's answer letter is that row's ``target`` (checked on
+    all 12,000 rows of two configurations)."""
+
+    files: Tuple[Tuple[str, str], ...]
+    """``(configuration, local train parquet)`` pairs."""
+
+    def shards(self, needed: Sequence[str]) -> List[Any]:
+        import pyarrow.parquet as pq
+
+        return [
+            (config, path, group)
+            for config, path in self.files
+            for group in range(pq.ParquetFile(path).num_row_groups)
+        ]
+
+    def fetch(self, shard: Tuple[str, str, int], needed: set) -> Iterator[Tuple[str, bytes]]:
+        import pyarrow.parquet as pq
+
+        config, path, group = shard
+        table = pq.ParquetFile(path).read_row_group(group, columns=["id", "panels", "choices"])
+        for row_id, panels, choices in zip(
+            table.column("id").to_pylist(),
+            table.column("panels").to_pylist(),
+            table.column("choices").to_pylist(),
+        ):
+            ref = f"{config}_RAVEN_{row_id}_train.png"
+            if ref in needed:
+                yield ref, compose_raven(
+                    [p["bytes"] for p in panels], [c["bytes"] for c in choices]
+                )
+
+
+def compose_raven(panels: Sequence[bytes], choices: Sequence[bytes]) -> bytes:
+    """One RAVEN puzzle as a PNG: eight context panels in a 3x3 grid whose last cell holds a
+    question mark, and below it the eight choices in two rows of four, labelled A-H."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    if len(panels) != 8 or len(choices) != 8:
+        raise ValueError("a RAVEN puzzle has 8 context panels and 8 choices")
+    tiles = [Image.open(io.BytesIO(b)).convert("L") for b in (*panels, *choices)]
+    size = tiles[0].size[0]
+    pad, label = 8, 28
+    grid_w = 3 * size + 4 * pad
+    choice_w = 4 * size + 5 * pad
+    width = max(grid_w, choice_w)
+    height = (3 * size + 4 * pad) + 2 * pad + 2 * (size + label + pad)
+    canvas = Image.new("L", (width, height), 255)
+    draw = ImageDraw.Draw(canvas)
+    font = ImageFont.load_default(size=22)
+    x0 = (width - grid_w) // 2
+    for k in range(9):
+        x, y = x0 + pad + (k % 3) * (size + pad), pad + (k // 3) * (size + pad)
+        draw.rectangle([x - 1, y - 1, x + size, y + size], outline=0)
+        if k < 8:
+            canvas.paste(tiles[k], (x, y))
+        else:
+            draw.text((x + size // 2, y + size // 2), "?", fill=0, font=font, anchor="mm")
+    top = 3 * size + 6 * pad
+    x0 = (width - choice_w) // 2
+    for k in range(8):
+        x = x0 + pad + (k % 4) * (size + pad)
+        y = top + (k // 4) * (size + label + pad)
+        draw.text((x + size // 2, y + label // 2), "ABCDEFGH"[k], fill=0, font=font, anchor="mm")
+        draw.rectangle([x - 1, y + label - 1, x + size, y + label + size], outline=0)
+        canvas.paste(tiles[8 + k], (x, y + label))
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    return out.getvalue()
+
+
 def _sources_dir(dataset_path: str) -> str:
     return os.path.join(dataset_path, "_sources")
 
@@ -373,12 +536,114 @@ def _deepvision(root: str) -> _Sha256ParquetSource:
     )
 
 
-def _babyvision(root: str) -> _TarSource:
-    # The synthetic images bundled with the v3.5 release. Its web images (URLs in the JSONL) are
-    # not fetched, so those rows are dropped.
-    return _TarSource(
-        os.path.join(_sources_dir(root), "nemotron", "babyvision_reasoning", "media", "*.tar"),
-        _babyvision_ref,
+def _is_url(ref: str) -> bool:
+    return ref.startswith(("http://", "https://"))
+
+
+def _is_not_url(ref: str) -> bool:
+    return not _is_url(ref)
+
+
+def _same_url(ref: str) -> str:
+    return ref
+
+
+def _babyvision(root: str) -> _CombinedSource:
+    # The synthetic images bundled with the v3.5 release, and the web images the JSONL names by
+    # URL (about 5% of them are gone).
+    return _CombinedSource(
+        (
+            (
+                _is_not_url,
+                _TarSource(
+                    os.path.join(
+                        _sources_dir(root), "nemotron", "babyvision_reasoning", "media", "*.tar"
+                    ),
+                    _babyvision_ref,
+                ),
+            ),
+            (
+                _is_url,
+                _UrlSource(_same_url, headers=(("User-Agent", "Mozilla/5.0 (X11; Linux x86_64)"),)),
+            ),
+        )
+    )
+
+
+def _subset_rows(root: str, subset: str) -> Iterator[Dict[str, Any]]:
+    path = os.path.join(_sources_dir(root), "nemotron", subset, f"{subset}.jsonl")
+    if not os.path.isfile(path):
+        raise OLMoConfigurationError(f"{path!r} does not exist; download the subset's JSONL first")
+    with open(path) as f:
+        for line in f:
+            yield json.loads(line)
+
+
+_FINTABNET_ZIP = (
+    "https://huggingface.co/datasets/Leon1207/FinTabNet/resolve/"
+    "e30b3df79e3c3d253af3fa5764e8ad7d702e5891/archive.zip"
+)
+"""A mirror of the FinTabNet release (``fintabnet/pdf/<company>/<year>/page_<n>.pdf``, one page
+per PDF), the corpus NVIDIA's renderer reads."""
+
+
+def _fintabnet(root: str) -> _RemoteZipPdfSource:
+    # The JSONL holds ``<company>_<year>_page_<n>.png``.
+    pages = {}
+    for row in _subset_rows(root, "hopchain_fintabnet"):
+        for message in row["messages"]:
+            for ref in _content_images(message["content"]):
+                stem, _, page = ref[: -len(".png")].rpartition("_page_")
+                company, _, year = stem.rpartition("_")
+                pages[ref] = _PdfPage(
+                    _FINTABNET_ZIP, f"fintabnet/pdf/{company}/{year}/page_{page}.pdf", 0, 200
+                )
+    return _RemoteZipPdfSource(pages)
+
+
+def _hopchain(root: str) -> _RemoteZipPdfSource:
+    # Each row's ``image_sources`` names the Digital Corpora CC-MAIN-2021-31 zip, the PDF in it,
+    # the page and the DPI NVIDIA rendered it at.
+    pages = {}
+    for row in _subset_rows(root, "hopchain_qa"):
+        for src in row.get("image_sources", []):
+            pages[src["image"]] = _PdfPage(
+                src["source_url"],
+                src["source_path"],
+                int(src["page_index"]),
+                int(src["render_dpi"]),
+            )
+    return _RemoteZipPdfSource(pages)
+
+
+_RAVEN_CONFIGS = (
+    "center_single",
+    "distribute_four",
+    "distribute_nine",
+    "in_center_single_out_center_single",
+    "in_distribute_four_out_center_single",
+    "left_center_single_right_center_single",
+    "up_center_single_down_center_single",
+)
+
+
+def _raven(root: str) -> _RavenSource:
+    from huggingface_hub import hf_hub_download
+
+    return _RavenSource(
+        tuple(
+            (
+                config,
+                hf_hub_download(
+                    "HuggingFaceM4/RAVEN",
+                    f"{config}/train-00000-of-00001.parquet",
+                    repo_type="dataset",
+                    revision="6241dc4d84572609bd6e132cf93ca8d4cb66369d",
+                    local_dir=os.path.join(_sources_dir(root), "raven"),
+                ),
+            )
+            for config in _RAVEN_CONFIGS
+        )
     )
 
 
@@ -389,6 +654,9 @@ NEMOTRON_IMAGE_SOURCES: Dict[str, Callable[[str], Any]] = {
     "ecd": _ecd,
     "deepvision": _deepvision,
     "babyvision": _babyvision,
+    "fintabnet": _fintabnet,
+    "hopchain": _hopchain,
+    "raven": _raven,
 }
 """Image source of each subset, built from the prepared dataset root (where the downloaded
 upstream files live under ``_sources/``)."""

@@ -257,3 +257,37 @@ def test_prepare_skips_shards_with_no_referenced_image(tmp_path, monkeypatch):
     )
     assert stats["rows"] == 1
     assert load_from_disk_compat(str(root / "nemotron_ecd"))["id"] == ["a"]
+
+
+def test_compose_raven_lays_out_matrix_and_labelled_choices():
+    from PIL import Image
+
+    panel = _png((160, 160))
+    image = Image.open(io.BytesIO(nv.compose_raven([panel] * 8, [panel] * 8)))
+    assert image.format == "PNG"
+    assert image.size[0] >= 4 * 160  # four choices a row
+    assert image.size[1] >= 5 * 160  # three matrix rows and two choice rows
+    with pytest.raises(ValueError, match="8 context panels"):
+        nv.compose_raven([panel] * 7, [panel] * 8)
+
+
+def test_combined_source_routes_references_by_predicate():
+    class _Fixed:
+        def __init__(self, tag):
+            self.tag = tag
+
+        def shards(self, needed):
+            return [list(needed)] if needed else []
+
+        def fetch(self, shard, needed):
+            for ref in shard:
+                yield ref, self.tag
+
+    source = nv._CombinedSource(((nv._is_url, _Fixed(b"web")), (nv._is_not_url, _Fixed(b"tar"))))
+    needed = {"https://example.com/a.png", "media/b.png"}
+    fetched = dict(
+        ref_data
+        for shard in source.shards(sorted(needed))
+        for ref_data in source.fetch(shard, needed)
+    )
+    assert fetched == {"https://example.com/a.png": b"web", "media/b.png": b"tar"}
