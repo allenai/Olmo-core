@@ -89,6 +89,8 @@ ARMS = {
     "lora64r20to7f16pt": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-min-per-doc 16 --st-otr-per-task-key-tokens 11"),
     "lora64r20to10f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.10 --st-otr-early-lora 64 --st-otr-min-per-doc 16"),
     "lora64r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-min-per-doc 16"),
+    # LoRA on every block (adapter scope K=32; matched the recipe on mt4s1464 at LR 1e-5, 2026-10-25)
+    "lora64K32r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-min-per-doc 16"),
     "lora64fa371r20to10f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.10 --st-otr-early-lora 64 --st-otr-freeze-after 371 --st-otr-min-per-doc 16"),
     "lora64fa371r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-freeze-after 371 --st-otr-min-per-doc 16"),
     "otr10M7f16sk3": otr(0.1, drop=7, dense_every=0, extra="--st-otr-min-per-doc 16 --train-skip-layers 20,24,28"),
