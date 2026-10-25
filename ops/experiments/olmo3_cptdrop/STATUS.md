@@ -163,6 +163,9 @@ softdetach won on an already-long-trained Qwen3.5-4B before dense overtook it ne
 See `next_step` above.
 
 ## Open issues / traps
+- RESULT 2026-10-24 18:20 LoRA r64 K16 + freeze at 75% (cubbins 4063698): 48/120 = 1095/2703 PF (0.81x) -> 1.6868/1.6836
+  (unfrozen 1.6864/1.6834), far 0.4818/0.4755 (unfrozen 0.4822/0.4759), ctx 0.072/0.074, peak 30.9 GiB: identical quality
+  for 5% fewer FLOPs. Best CPT point: overall -0.0013..-0.0017 vs dense at 0.81x, peak -12%, far +0.0012-0.0013.
 - RESULT 2026-10-24 17:30 LoRA r64 (trained sneetches 4030726, scored cubbins 4063697; paired vs dense at same steps):
   K16 (0.849x, peak 30.9 GiB): 12/24/48/120 = 305/587/1151/2842 PF -> 1.6942/1.6895/1.6864/1.6834 (m 1.08/2.27/1.97/1.91);
   overall -0.0030/-0.0017/-0.0015/-0.0019 (+-0.0001); far -0.0026/+0.0013/+0.0015/+0.0012 (+-0.0002); near -0.0019 ..
