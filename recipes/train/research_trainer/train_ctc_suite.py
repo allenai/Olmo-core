@@ -1285,6 +1285,9 @@ def build_and_fit(opts: argparse.Namespace) -> None:
 
         trainer_config = trainer_config.with_callback("mem_probe", _MemProbe())
     trainer = trainer_config.build(train_module, data_loader)
+    if getattr(opts, "skip_dry_run", False):
+        # the mock batch has no document markers, so even a routed method runs it at full length and dense
+        trainer._dry_run_batch = lambda: None
     if variant_and_options(opts)[0].new_params and not opts.branch_from:
         _tolerant_base_load(base_checkpoint, train_module.model, save_folder)
     if opts.mem_snapshot or opts.mem_probe_steps:
@@ -1911,6 +1914,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora", type=int, default=0,
                     help="online router: LOW-RANK early stack -- blocks [0, drop_layer) + embeddings frozen from step 0, "
                     "every linear in those blocks gets a rank-R LoRA adapter (no base grads / Adam state). 0 = off")
+    ap.add_argument("--st-otr-warmup-random", action="store_true",
+                    help="online router: warmup steps route at the normal budget with uniform random scores instead "
+                    "of training the full context (no full-length pass; bounds peak memory / max train length)")
+    ap.add_argument("--skip-dry-run", action="store_true",
+                    help="skip the trainer's mock-batch dry run: a full-length dense forward + backward that sets the "
+                    "peak memory of routed methods (2026-10-25 max-length probes: every method OOMs there at 196k)")
     ap.add_argument("--st-otr-route-min-len", type=int, default=0,
                     help="online router: route only rows (packed: documents) with >= this many tokens; shorter ones "
                     "run dense in the same step (hybrid short-window + routed long-row batches). 0 = route all")

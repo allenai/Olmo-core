@@ -120,6 +120,11 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    warmup_random: bool = False
+    """Warmup steps (no fitted router yet) ROUTE at the normal budget with uniform random scores instead of training the
+    full context: no full-length pass ever runs past the drop layer, so the warmup does not set the peak memory (max
+    train length). Gold-blind and fit-free (not a heuristic warm start); the targets are still sampled from the kept
+    tokens, so the first fit happens as usual."""
     route_min_len: int = 0
     """Route only rows (in packed segment mode: only DOCUMENTS) with at least this many real tokens; shorter ones keep
     every token through every block in the same step (dense). For hybrid batches: short windows dense, long rows
@@ -814,6 +819,11 @@ class OnlineTokenRouter:
             # the periodic "dense" step routes at dense_keep_frac instead of the full context (bounded peak memory)
             dense, kf = False, c.dense_keep_frac
             self._stat("dense_routed", 1.0)
+        warm_rand = False
+        if dense and c.warmup_random and (self.w is None or self.step <= c.warmup_steps):
+            # warmup without a full-length pass: the normal budget at uniform scores
+            dense, warm_rand = False, True
+            self._stat("warmup_random", 1.0)
         explore = torch.zeros_like(body)
         score = None
         if self.w is not None:
@@ -822,8 +832,8 @@ class OnlineTokenRouter:
         if dense:
             keep = body.clone()
         else:
-            assert score is not None
-            if c.score == "random" or c.explore_frac >= 1.0:
+            assert score is not None or warm_rand
+            if warm_rand or c.score == "random" or c.explore_frac >= 1.0:
                 # random CONTROL: the same budget and allocation, uniform scores (the router is fit and
                 # logged but never chooses a token)
                 score, c_explore = u.clone(), 0.0

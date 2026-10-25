@@ -92,6 +92,30 @@ def test_warmup_keeps_everything_then_learns_lexical_match():
     assert m._flop_extra_actual > 0  # scoring + fit were charged
 
 
+def test_warmup_random_routes_the_warmup_step_at_the_budget():
+    """warmup_random: step 1 (no fit yet) keeps ceil(keep_frac * |body|) random body tokens instead of the full row,
+    samples targets from them, and step 2 routes by the fitted router as usual."""
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=2)
+    r = _router(use_hidden=False, doc_share=0.0, warmup_random=True)
+    r.begin_step(1, model=m)
+    assert r.dense_now()
+    keep = r.select(m, ids, cid, labels)
+    body = (cid >= 0) & (ids != DS) & (ids != DE)
+    assert not (keep & ~body).any()
+    for b in range(2):
+        assert int(keep[b].sum()) == math.ceil(0.2 * int(body[b].sum()))
+    e = r._current
+    assert not e["dense"] and keep[e["rows"], e["pos"]].all()  # targets come from kept tokens
+    e["ok"] = torch.ones_like(e["rows"], dtype=torch.bool)
+    e["target"] = torch.log1p(9.0 * (ids[e["rows"], e["pos"]] == QTOK).float())
+    r._pending.append(e)
+    r._current = None
+    r.begin_step(2, model=m)
+    assert r.w is not None and not r.dense_now()
+
+
 def test_exploration_share_and_dense_every():
     torch.manual_seed(0)
     m = _Emb()
