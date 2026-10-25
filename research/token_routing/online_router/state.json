@@ -2876,6 +2876,18 @@
    "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
    "task": "xabsence",
    "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evstrmatch": {
+   "ex": "01M5RAMEE5FTA5HT3SX0XP4SXJ",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "strmatch",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evgrouping": {
+   "ex": "01M5RAND7MBK6AG9GCXG8YXA0Z",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "grouping",
+   "suite_rows": true
   }
  },
  "failed_evals": {
