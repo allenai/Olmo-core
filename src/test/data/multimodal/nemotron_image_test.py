@@ -195,3 +195,39 @@ def test_every_subset_has_a_distinct_task_tag_per_kind():
         assert subset.style.endswith("_reasoning") == subset.reasoning
         assert subset.images in nv.NEMOTRON_IMAGE_SOURCES
         assert subset.release in nv.NEMOTRON_RELEASES
+
+
+def test_prepare_keeps_one_copy_of_a_repeated_image(tmp_path, monkeypatch):
+    """A parquet source holding the same image bytes twice emits its rows once."""
+    import hashlib
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from olmo_core.data.multimodal.dataset_compat import load_from_disk_compat
+
+    data = _png()
+    ref = f"deepvision_reasoning/images/{hashlib.sha256(data).hexdigest()}.png"
+    parquet = tmp_path / "source.parquet"
+    pq.write_table(
+        pa.table({"images": [[{"bytes": data, "path": None}]] * 4}), parquet, row_group_size=1
+    )
+    monkeypatch.setitem(
+        nv.NEMOTRON_IMAGE_SOURCES,
+        "deepvision",
+        lambda root: nv._Sha256ParquetSource(
+            str(parquet), "images", "deepvision_reasoning/images/"
+        ),
+    )
+    jsonl = tmp_path / "in.jsonl"
+    rows = [
+        _row("a", ref, [("Q?", "<think>t</think>A")]),
+        _row("b", ref, [("R?", "<think>t</think>B")]),
+    ]
+    jsonl.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    root = tmp_path / "prepared"
+    stats = nv.prepare_nemotron_subset(
+        "nemotron_deepvision", str(root), jsonl_path=str(jsonl), num_workers=2
+    )
+    assert stats["images"] == 1
+    assert load_from_disk_compat(str(root / "nemotron_deepvision"))["id"] == ["a", "b"]

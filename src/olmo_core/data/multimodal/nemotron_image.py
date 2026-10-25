@@ -417,19 +417,22 @@ def _normalize_image(data: bytes, max_side: int) -> Optional[bytes]:
 _ROWS: Dict[str, List[Tuple[str, List[str], List[str]]]] = {}
 
 
-def _prepare_shard(args: Tuple[Any, Any, str, int]) -> Tuple[int, int]:
+def _prepare_shard(args: Tuple[Any, Any, str, int]) -> Tuple[List[str], int]:
     import pyarrow as pa
     import pyarrow.parquet as pq
 
     source, shard, out_path, max_side = args
     columns: Dict[str, list] = {"id": [], "image": [], "prompts": [], "responses": []}
-    images = bad = 0
+    images: set = set()
+    bad = 0
     for ref, data in source.fetch(shard, _ROWS.keys()):
+        if ref in images:
+            continue
         image = _normalize_image(data, max_side)
         if image is None:
             bad += 1
             continue
-        images += 1
+        images.add(ref)
         for row_id, prompts, responses in _ROWS[ref]:
             columns["id"].append(row_id)
             columns["image"].append(image)
@@ -449,7 +452,7 @@ def _prepare_shard(args: Tuple[Any, Any, str, int]) -> Tuple[int, int]:
         ),
         out_path,
     )
-    return images, bad
+    return sorted(images), bad
 
 
 def prepare_nemotron_subset(
@@ -516,22 +519,29 @@ def prepare_nemotron_subset(
     jobs = [
         (source, s, os.path.join(tmp, f"{i:05d}.parquet"), max_side) for i, s in enumerate(shards)
     ]
-    images = bad = 0
+    # A source can hold the same image more than once (identical bytes in several parquet rows),
+    # so the shards may emit an image's rows twice; the copies are dropped after sorting.
+    images: set = set()
+    bad = 0
     with multiprocessing.get_context("fork").Pool(num_workers) as pool:
-        for i, (n_images, n_bad) in enumerate(pool.imap_unordered(_prepare_shard, jobs)):
-            images += n_images
+        for i, (found, n_bad) in enumerate(pool.imap_unordered(_prepare_shard, jobs)):
+            images.update(found)
             bad += n_bad
             if (i + 1) % max(1, len(jobs) // 20) == 0:
-                log.info("%s: %d/%d shards, %d images", name, i + 1, len(jobs), images)
-    stats.update(referenced_images=len(_ROWS), images=images, undecodable_images=bad)
+                log.info("%s: %d/%d shards, %d images", name, i + 1, len(jobs), len(images))
+    stats.update(referenced_images=len(_ROWS), images=len(images), undecodable_images=bad)
     _ROWS.clear()
-    if images == 0:
+    if not images:
         raise OLMoConfigurationError(f"{name}: none of the referenced images could be fetched")
     data = datasets.Dataset.from_parquet(
         sorted(glob.glob(os.path.join(tmp, "*.parquet"))), cache_dir=os.path.join(tmp, "cache")
     )
     # Shards finish in any order: sort by id so the prepared order does not depend on timing.
     data = data.sort("id")
+    ids = data["id"]
+    first = [i for i in range(len(ids)) if i == 0 or ids[i] != ids[i - 1]]
+    if len(first) < len(ids):
+        data = data.select(first)
     shutil.rmtree(out, ignore_errors=True)
     data.save_to_disk(out, max_shard_size="2GB")
     stats["rows"] = len(data)
