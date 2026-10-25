@@ -4612,6 +4612,14 @@
    "commit": "0fa6f8f8e",
    "dir": "OLMo-core-otr13",
    "lr": "5e-06"
+  },
+  "f8k-mt4s1464-lora64r20to7wr-lro-lr5e-06-lam": {
+   "slurm": 114656,
+   "arm": "lora64r20to7wr",
+   "seed": 0,
+   "commit": "c5676a12f",
+   "dir": "OLMo-core-otr15",
+   "lr": "5e-06"
   }
  }
 }

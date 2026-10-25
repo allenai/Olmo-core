@@ -997,8 +997,10 @@ length at 80 GB:
 
 **New flags.**
 - `--st-otr-warmup-random` (c5676a12f): the warmup step routes at the normal budget with uniform random scores. It is
-  gold-blind and fit-free, and the targets come from the kept tokens. A quality check is running:
-  f8k-mt4s1464-lora64r20to7wr, Lambda 114656.
+  gold-blind and fit-free, and the targets come from the kept tokens. **Quality check (recipe + routed warmup + no
+  dry run, mt4s1464, one seed, eval_size 500): 0.947 / 0.924 / 0.614 / 0.699 at 291 PF, vs the recipe's 2-seed
+  0.945 / 0.912 / 0.636 / 0.726 at 296 PF.** The differences (oolong -0.02, outlier -0.03, nq +0.01) are within
+  single-seed noise, so the routed warmup is free.
 - `--skip-dry-run` (c5676a12f): the mock batch has no document markers, so it always ran dense at full length.
 - `--ffn-chunk-tokens N` (172f12f68): `h + FFN(norm(h))` runs over N-token chunks, each under its own checkpoint. It is
   exact, verified by a CPU test of outputs and gradients. It adds one FFN forward recompute per chunked block, which is
