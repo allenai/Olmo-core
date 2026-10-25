@@ -44,6 +44,9 @@ CODE="${CODE:-$ROOT/code_${CODE_SHA:?set CODE_SHA to a staged tree under $ROOT (
 ARM="${ARM:?ARM=D|C1|C2|IRAND|IFL}"
 RUN="${RUN:?RUN=<run name>}"
 NGPU="${NGPU:-$(nvidia-smi -L | wc -l)}"
+# Beaker GEN jobs pass env as space-separated KEY=VAL pairs, so multi-flag values come comma-separated
+[ -n "${OTR_EXTRA_CSV:-}" ] && OTR_EXTRA="${OTR_EXTRA_CSV//,/ }"
+[ -n "${EXTRA_CSV:-}" ] && EXTRA="${EXTRA_CSV//,/ }"
 TOK_PER_STEP=524288
 STEPS="${MAX_STEPS_TOTAL:?MAX_STEPS_TOTAL=<budget in steps>}"
 [ -d "$CODE/src/olmo_core" ] || { echo "FATAL: no staged code at $CODE"; exit 2; }
