@@ -1535,6 +1535,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--ffn-chunk-tokens", type=int, default=0,
                     help="sequence-chunked FFN sublayer in training: h + FFN(norm(h)) over chunks of this many tokens, "
                     "each under its own activation checkpoint (exact; cuts the long-row recompute peak). 0 = off")
+    ap.add_argument("--gdn-segment-tokens", type=int, default=0,
+                    help="GatedDeltaNet training forward over segments of this many tokens (multiple of 64) carrying "
+                    "the recurrent state: backward rebuilds one segment's chunk states at a time (exact). 0 = off")
     ap.add_argument("--ffn-chunk-layers", default="",
                     help="blocks for --ffn-chunk-tokens, e.g. '0-6' (default: every block; short rows are untouched)")
     # ---- whole-block skipping (olmo_core.nn.layer_drop; any arm, training only) ----

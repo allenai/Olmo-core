@@ -29,7 +29,7 @@ from .ffn_width import parse_layer_range
 
 log = logging.getLogger(__name__)
 
-__all__ = ["install_ffn_chunk"]
+__all__ = ["install_ffn_chunk", "install_gdn_segments"]
 
 
 def _ffn_sublayer(block: nn.Module, h: torch.Tensor) -> torch.Tensor:
@@ -70,3 +70,22 @@ def install_ffn_chunk(model: Any, tokens: int, layers: str = "") -> List[int]:
     model._ffn_chunk = {"tokens": int(tokens), "layers": ids}
     log.info("[ffn-chunk] %d-token FFN sublayer chunks on %d blocks", tokens, len(ids))
     return ids
+
+
+def install_gdn_segments(model: Any, tokens: int) -> int:
+    """``--gdn-segment-tokens N``: every GatedDeltaNet runs its training forward over N-token segments that carry the
+    recurrent state, so backward rebuilds the chunk states of one segment at a time (``recurrent.py``). Exact; N must
+    be a multiple of the kernel's 64-token chunk. Returns the number of GDN modules patched."""
+    if tokens <= 0 or tokens % 64:
+        raise ValueError(f"gdn segment tokens must be a positive multiple of 64, got {tokens}")
+    from .attention.recurrent import GatedDeltaNet
+
+    n = 0
+    for m in model.modules():
+        if isinstance(m, GatedDeltaNet):
+            m._gdn_segment_tokens = int(tokens)
+            n += 1
+    if n == 0:
+        raise RuntimeError("gdn segments: the model has no GatedDeltaNet layers")
+    log.info("[gdn-segment] %d-token segments on %d GatedDeltaNet layers", tokens, n)
+    return n

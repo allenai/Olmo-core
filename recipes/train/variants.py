@@ -225,10 +225,11 @@ class FFNChunkOptions(VariantOptions):
 
     ffn_chunk_tokens: int = 0
     ffn_chunk_layers: str = ""
+    gdn_segment_tokens: int = 0
 
     @property
     def active(self) -> bool:
-        return self.ffn_chunk_tokens > 0
+        return self.ffn_chunk_tokens > 0 or self.gdn_segment_tokens > 0
 
 
 @dataclass
@@ -903,15 +904,21 @@ class FFNChunk(Variant):
 
     def validate(self, o):
         assert isinstance(o, FFNChunkOptions)
-        if o.ffn_chunk_tokens <= 0:
-            raise ValueError("ffnchunk needs ffn_chunk_tokens > 0")
+        if o.ffn_chunk_tokens <= 0 and o.gdn_segment_tokens <= 0:
+            raise ValueError("ffnchunk needs ffn_chunk_tokens > 0 or gdn_segment_tokens > 0")
 
     def post_build_model(self, model, o, ctx):
         assert isinstance(o, FFNChunkOptions)
         from olmo_core.nn.ffn_chunk import install_ffn_chunk
 
-        ids = install_ffn_chunk(model, o.ffn_chunk_tokens, o.ffn_chunk_layers)
-        print(f"[variants] ffn-chunk: {o.ffn_chunk_tokens}-token FFN chunks on blocks {ids}", flush=True)
+        if o.ffn_chunk_tokens > 0:
+            ids = install_ffn_chunk(model, o.ffn_chunk_tokens, o.ffn_chunk_layers)
+            print(f"[variants] ffn-chunk: {o.ffn_chunk_tokens}-token FFN chunks on blocks {ids}", flush=True)
+        if o.gdn_segment_tokens > 0:
+            from olmo_core.nn.ffn_chunk import install_gdn_segments
+
+            n = install_gdn_segments(model, o.gdn_segment_tokens)
+            print(f"[variants] gdn-segment: {o.gdn_segment_tokens}-token segments on {n} GDN layers", flush=True)
 
 
 class FFNDrop(Variant):
