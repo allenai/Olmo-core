@@ -4428,20 +4428,22 @@
    "data": "mt4s976"
   },
   "f8k-mt4s1464-lora64r20to7fw50e-lro-lr5e-06-lam": {
-   "slurm": 114578,
+   "slurm": 114603,
    "arm": "lora64r20to7fw50e",
    "seed": 0,
-   "commit": "e3b5aeb5b",
-   "dir": "OLMo-core-otr12",
-   "lr": "5e-06"
+   "commit": "0fa6f8f8e",
+   "dir": "OLMo-core-otr13",
+   "lr": "5e-06",
+   "relaunch": "partial FFN skipped early-LoRA adapters (guard)"
   },
   "f8k-mt4s1464-lora64r20to7fw50a-lro-lr5e-06-lam": {
-   "slurm": 114579,
+   "slurm": 114604,
    "arm": "lora64r20to7fw50a",
    "seed": 0,
-   "commit": "e3b5aeb5b",
-   "dir": "OLMo-core-otr12",
-   "lr": "5e-06"
+   "commit": "0fa6f8f8e",
+   "dir": "OLMo-core-otr13",
+   "lr": "5e-06",
+   "relaunch": "partial FFN skipped early-LoRA adapters (guard)"
   },
   "f8k-mt4s1464-densefw50a-lro-lr5e-06-lam": {
    "slurm": 114580,
