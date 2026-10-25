@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from olmo_core.config import Config
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .academic.registry import (
     ACADEMIC_REGISTRY,
@@ -17,9 +18,14 @@ from .academic.registry import (
     format_academic_example,
 )
 from .message_sequence import encode_sft_example
+from .pixmo_points import (
+    AnnotationSampling,
+    _validate_annotation_sampling,
+    select_annotation,
+)
 from .pixmo_points_v2 import STAGE1_PROMPT_FAMILY
 from .sequence_builder import example_rng
-from .sft_common import EpochSeededExamples
+from .sft_common import EpochSeededExamples, SftMessageFormat, truncate_for_format
 from .sft_formatter import SftFormatter
 
 __all__ = [
@@ -110,6 +116,18 @@ class Stage1AcademicDatasetConfig(Config):
     drawn moves with the epoch, so over several epochs the rest are reached too."""
     loss_token_weighting: str = "none"
     """Every response token weighted equally, as for the other stage-1 sources."""
+    max_sequence_length: Optional[int] = None
+    """Tail-truncate the built sequence to this many tokens; ``None`` leaves it whole."""
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents, for a language model trained without a chat template)."""
+    annotation_sampling: AnnotationSampling = "all"
+    """``"all"`` trains every question of an image (up to ``max_questions``) as a sibling branch
+    of one example; ``"one"`` keeps a single question per example, chosen per
+    ``(seed, index, epoch)`` (for language models that isolate packed examples only by document
+    boundaries, e.g. Kimi Delta Attention)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "Stage1AcademicDataset":
@@ -136,6 +154,7 @@ class Stage1AcademicDataset(EpochSeededExamples):
             )
         if config.max_questions is not None and config.max_questions < 1:
             raise OLMoConfigurationError(f"max_questions={config.max_questions} must be >= 1")
+        _validate_annotation_sampling(config.annotation_sampling)
         self.config = config
         self.tokenizer = tokenizer
         self._max_questions = (
@@ -166,14 +185,24 @@ class Stage1AcademicDataset(EpochSeededExamples):
         return formatted["image"], branches, formatted.get("weight")
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
-        rng = self.epoch_rng(index)
+        return self._build(index)
+
+    def _build(self, index: int, epoch: Optional[int] = None) -> Dict[str, Any]:
+        cfg = self.config
+        rng = self.epoch_rng(index, epoch)
         image, branches, weight = self.format_row(index, rng)
-        return encode_sft_example(
+        if cfg.annotation_sampling == "one" and len(branches) > 1:
+            k = select_annotation(cfg.seed, index, self.resolve_epoch(epoch), len(branches))
+            branches = [branches[k]]
+        seq = encode_sft_example(
             self.tokenizer,
             image,
             branches,
-            max_crops=self.config.max_crops,
-            loss_token_weighting=self.config.loss_token_weighting,
+            max_crops=cfg.max_crops,
+            loss_token_weighting=cfg.loss_token_weighting,
             message_weight=weight,
+            token_ids=cfg.token_ids,
+            message_format=cfg.message_format,
             shuffle_rng=rng,
         )
+        return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)
