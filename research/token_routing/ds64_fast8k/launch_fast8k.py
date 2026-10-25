@@ -293,6 +293,16 @@ ARM_EXTRA.update({
                       "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
                       f"--st-otr-stages {st} --st-otr-early-lora 64 --st-otr-early-lora-scale 32")
        for n, st in (("r20to7", "7:0.2,16:0.07"), ("r20to10", "7:0.2,16:0.10"))},
+    # partial MLP (router 2cfcd92d1+) on top of the universal recipe; whole-model LoRA + router (--st-otr-early-lora-blocks)
+    **{f"lora64r20to7ffn{f}{tag}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                                    "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                                    "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                                    f"--ffn-width-frac {f / 100}" + (f" --ffn-width-layers {lay}" if lay else ""))
+       for f in (50, 25) for tag, lay in (("e", "0-6"), ("a", ""))},
+    "lora64all32r20to7": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                          "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                          "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                          "--st-otr-early-lora-blocks 32"),
     "otr10M7de4": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.1 "
                    "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 4 --st-otr-drop-layer 7"),
     # no full-context steps (peak memory = routed steps), optionally + early-exit LM loss on dropped tokens
@@ -317,7 +327,9 @@ _SK3 = "--train-skip-layers 20,24,28"
 _SK8 = "--train-skip-layers 16,17,18,20,21,22,24,25"
 _LDL = "--layer-drop-p 0.2 --layer-drop-schedule linear --layer-drop-exclude-first 4 --layer-drop-exclude-last 2"
 #: dense + a train-time modifier (variant full with extra flags)
-DENSE_EXTRA = {"dense-sk3": _SK3, "dense-sk8": _SK8, "dense-ldl20": _LDL}
+DENSE_EXTRA = {
+    "denseffn50": "--ffn-width-frac 0.5",
+    "denseffn25": "--ffn-width-frac 0.25","dense-sk3": _SK3, "dense-sk8": _SK8, "dense-ldl20": _LDL}
 for _r in ("tier67a50m32", "tier67flm16", "gbflk64p8"):
     ARM_EXTRA[f"{_r}-sk3"] = f"{ARM_EXTRA[_r]} {_SK3}"
     ARM_EXTRA[f"{_r}-sk8"] = f"{ARM_EXTRA[_r]} {_SK8}"
