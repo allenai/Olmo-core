@@ -10,11 +10,30 @@ import collections
 from typing import Any, Dict
 
 
+_CPP_SKIP = ("unwind", "c10::", "Allocator", "at::detail::empty", "at::empty", "at::_ops::empty", "at::native::empty",
+             "torch::empty", "at::TensorBase", "at::Tensor::", "std::", "_start", "__libc", "PyObject", "_Py", "Py_")
+
+
+def _cpp_site(frames) -> str:
+    """A backward allocation has no Python frame: name the autograd node (``...Backward``) or the first op frame."""
+    first = None
+    for f in frames or []:
+        n = f.get("name", "") or ""
+        if "Backward" in n or "autograd::generated" in n:
+            return "C++ " + n[:110]
+        if first is None and n and not any(k in n for k in _CPP_SKIP):
+            first = n
+    return "C++ " + (first or "?")[:110]
+
+
 def _site(frames) -> str:
     for f in frames or []:
         fn = f.get("filename", "")
         if "olmo_core" in fn or "memexpress" in fn:
             return f"{fn.split('/')[-1]}:{f.get('line')} {f.get('name')}"
+    if frames and all(f.get("filename", "??") in ("??", "") or f.get("filename", "").endswith((".cpp", ".h", ".cu"))
+                      or ".so" in f.get("filename", "") for f in frames[:3]):
+        return _cpp_site(frames)
     if frames:
         f = frames[0]
         return f"{f.get('filename', '?').split('/')[-1]}:{f.get('line')} {f.get('name')}"
