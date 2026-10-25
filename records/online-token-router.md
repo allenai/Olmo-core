@@ -1074,12 +1074,14 @@ task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / 
 | 32 (all), seed 0 | 1e-5 | 261 | 0.946 | 0.908 | 0.625 | 0.719 |
 | 32 (all), seed 1 | 1e-5 | 261 | 0.933 | 0.918 | 0.620 | 0.686 |
 | **32 (all), 2-seed mean** | **1e-5** | **261** | **0.940** | **0.913** | **0.623** | **0.703** |
+| 7 (recipe), LR control | 1e-5 | 296 | 0.941 | 0.912 | 0.565 | 0.708 |
 | 32 (all), rank 128 | 5e-6 | 279 | 0.938 | 0.912 | 0.617 | 0.707 |
 
 **LoRA on all 32 blocks at LR 1e-5 (2 seeds) runs at 0.88x the recipe's compute.** At the same data it is slightly
 below the recipe: contra -0.005, nq +0.001, oolong -0.013, outlier -0.023. At matched FLOPs it is ahead of the recipe's
 compute curve, which interpolates to ~0.921 / 0.913 / 0.623 / 0.600 at 261 PF: contra +0.02, outlier +0.10, nq and
-oolong equal. Those deltas are matched-FLOP Δ on the primary tasks: **outlier +0.10, oolong 0.00.**
+oolong equal. Those deltas are matched-FLOP Δ on the primary tasks: **outlier +0.10, oolong 0.00.** The LR control shows the higher LR helps only the wide adapter scope. The recipe at LR 1e-5 loses oolong (0.565 vs
+0.636) and gains nothing elsewhere, so the K=7 recipe stays at 5e-6.
 It also has 14.6 GiB less fixed state, which gives ~400k max T against the recipe's ~300k. At LR 5e-6, K=32 loses only
 outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 (LR 5e-6)
 recovers part of the outlier gap (0.707 vs 0.686) for 7% more compute, but does not beat rank 64 at LR 1e-5. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
