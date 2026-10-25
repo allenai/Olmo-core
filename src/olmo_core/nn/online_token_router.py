@@ -120,6 +120,10 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    route_min_len: int = 0
+    """Route only rows (in packed segment mode: only DOCUMENTS) with at least this many real tokens; shorter ones keep
+    every token through every block in the same step (dense). For hybrid batches: short windows dense, long rows
+    routed. 0 = route every row."""
     early_lora_blocks: int = 0
     """With ``early_lora``: adapt blocks [0, K) instead of [0, drop_layer) -- e.g. the whole model (K = n_layers), which
     removes nearly all gradients and optimizer state. Blocks at or above the drop layer then run at the kept length,
@@ -887,6 +891,11 @@ class OnlineTokenRouter:
                 sc = torch.where(body & ~keep, score, torch.full_like(score, -float("inf")))
                 rank_s = (-sc).argsort(dim=1).argsort(dim=1)
                 keep = keep | (body & ~keep & (rank_s < left[:, None]))
+        if c.route_min_len > 0 and not dense:
+            # hybrid rows: rows / documents shorter than route_min_len stay dense in this step
+            short = (cid != -2).sum(dim=1) < c.route_min_len
+            keep = keep | (body & short[:, None])
+            self._stat("routed_row_frac", float((~short).float().mean()))
         # sample kept tokens for targets: every exploration token first, then random kept ones
         # (mixture-of-depths: every body token keeps a gradient at this layer, so the targets sample all of them)
         pool = body if self.mod_layers else keep
@@ -924,6 +933,8 @@ class OnlineTokenRouter:
         if st is None:
             return h, block_kwargs
         fp, ids, cid, Tr = st["fp"], st["ids"], st["cid"], st["Tr"]
+        if block_kwargs.get("cu_doc_lens") is not None:
+            return self._mid_compact_packed(model, h, block_kwargs, fp, ids, cid, Tr)
         if h.shape[1] < Tr:
             raise RuntimeError(f"mid_compact: hidden width {h.shape[1]} < real width {Tr}")
         B, Tw, D = h.shape
@@ -1053,6 +1064,91 @@ class OnlineTokenRouter:
             self._next._nograd_until = 0
             self._next._ignore_index = getattr(self, "_ignore_index", -100)
         return h_new, kw
+
+    def _mid_compact_packed(self, model, h, block_kwargs, fp, ids, cid, Tr):
+        """Mid-stack drop on a PACKED row (segment mode, ``cu_doc_lens``): the router chose on the unpacked documents
+        (one per row of ``ids``); gather each document's kept tokens inside the single varlen row, re-derive
+        ``cu_doc_lens`` and keep each token's within-document ``position_ids``. Single stage only."""
+        if self.stages_on() or self.mod_layers or self.cfg.merge_dropped or self.cfg.exit_loss_weight > 0:
+            raise NotImplementedError("online router on packed rows supports a single-stage drop only "
+                                      "(no stages / mod_layers / merge_dropped / exit_loss_weight)")
+        if h.shape[0] != 1:
+            raise RuntimeError(f"packed mid_compact expects one packed row, got hidden {tuple(h.shape)}")
+        dev = h.device
+        B = ids.shape[0]
+        real = cid != -2
+        lens = real.sum(dim=1)
+        Ptot = int(lens.sum())
+        if h.shape[1] < Ptot:
+            raise RuntimeError(f"packed mid_compact: packed width {h.shape[1]} < {Ptot} real tokens")
+        offs = torch.cumsum(lens, 0) - lens
+        P = offs[:, None] + torch.arange(Tr, device=dev)[None, :]
+        Pc = torch.where(real, P, torch.zeros_like(P))
+        h_unp = h[0][Pc] * real[..., None].to(h.dtype)  # (B, Tr, D) the documents' hidden states, unpacked
+        if self.cfg.use_hidden:
+            self.add_hidden(fp, h_unp)
+        if self.cfg.score == "dh" or self.cfg.target in ("dh", "mix"):
+            with torch.no_grad():
+                e0 = model.embeddings(ids)
+                if model.embed_scale is not None:
+                    e0 = e0 * model.embed_scale
+                fp["_dh"] = torch.log((h_unp.float() - e0.float()).norm(dim=-1) + 1e-12)
+            self._flop(model, 3.0 * self.d_model * float(real.sum()))
+        keep_body, entry = self._choose(model, fp, ids, cid)
+        body = fp["body"]
+        keep_all = real & (~body | keep_body)
+        counts = keep_all.sum(dim=1)
+        kidx = P[keep_all]  # row-major: documents in packed order, tokens in document order
+        W = int(kidx.numel())
+        pm = int((getattr(model, "_pooled_soft_tokens", None) or {}).get("pad_multiple", 1) or 1)
+        tail = (-W) % pm if pm > 1 else 0
+        h_new = h[:, kidx]
+        kw = dict(block_kwargs)
+        pid = block_kwargs.get("position_ids")
+        if pid is None:
+            pid = (torch.arange(h.shape[1], device=dev)[None, :])
+        pos_new = pid[:, kidx]
+        cu = block_kwargs["cu_doc_lens"]
+        dl = counts.to(cu.dtype)
+        if tail:
+            h_new = torch.cat([h_new, h_new.new_zeros(1, tail, h.shape[-1])], dim=1)
+            pos_new = torch.cat([pos_new, pos_new.new_zeros(1, tail)], dim=1)
+            dl = torch.cat([dl, dl.new_tensor([tail])])
+        kw["position_ids"] = pos_new
+        kw["cu_doc_lens"] = torch.cat([dl.new_zeros(1), torch.cumsum(dl, 0)]).to(cu.dtype)
+        self._mid_gather = ("packed", kidx, tail)
+        newcol = torch.zeros(h.shape[1], dtype=torch.long, device=dev)
+        newcol[kidx] = torch.arange(W, device=dev)
+        rows, pos = entry["rows"], entry["pos"]
+        entry["ok"] = keep_all[rows, pos]
+        entry["cols"] = newcol[P[rows, pos]]
+        entry["hrows"] = torch.zeros_like(rows)
+        self._register_target(model, entry, h_new)
+        self._exit = None
+        # FLOP adjustment per DOCUMENT (each attends within itself), same rule as the padded path
+        ld = getattr(model, "_layer_drop", None)
+        skip = ld.skipped() if (ld is not None and model.training) else frozenset()
+        if self.cfg.drop_layer in skip:
+            raise RuntimeError(f"online router drop_layer {self.cfg.drop_layer} is skipped by layer drop")
+        blocks = [b if i not in skip else None for i, b in enumerate(model.blocks.values())]
+        L0 = self.cfg.drop_layer
+        head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
+        fac = self._block_factors(len(blocks))
+        self._stat("early_nograd", float(self._nograd_fwd))
+        ab = self._lora_block_charges(model) if model.training else [0.0] * len(blocks)
+        adj = 0.0
+        for L, Lk in zip(lens.tolist(), counts.tolist()):
+            fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
+            fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
+            actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
+                      + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + head))
+            adj += actual - L * (sum(fb) + head) + L * sum(ab[:L0]) + Lk * sum(ab[L0:])
+        self._flop(model, adj)
+        self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
+        return h_new, kw
+
+    def stages_on(self) -> bool:
+        return self._next is not None or self.stage_idx > 0
 
     def _mod_begin(self, model, h, block_kwargs, entry, real, counts, order, valid, pos_c):
         """Mixture-of-depths at the first listed block: keep the full row, remember the gather the listed blocks run
@@ -1233,6 +1329,12 @@ class OnlineTokenRouter:
         g, self._mid_gather = getattr(self, "_mid_gather", None), None
         if g is None or labels is None:
             return labels
+        if g[0] == "packed":
+            kidx, tail = g[1], g[2]
+            lab = labels[:, kidx.to(labels.device)]
+            if tail:
+                lab = torch.cat([lab, lab.new_full((lab.shape[0], tail), int(getattr(self, "_ignore_index", -100)))], 1)
+            return lab
         order, valid, n_extra = g
         ign = int(getattr(self, "_ignore_index", -100))
         if n_extra:  # merge_dropped summary slots carry no label
@@ -1283,14 +1385,15 @@ class OnlineTokenRouter:
 
     def _register_target(self, model, entry: Dict[str, Any], h: torch.Tensor) -> None:
         rows, cols = entry["rows"], entry["cols"]
+        hrows = entry.get("hrows", rows)  # packed rows: every sample lives in row 0 of the packed hidden state
         if self.cfg.target == "gxh":
-            entry["hsel"] = h.detach()[rows, cols].float()
+            entry["hsel"] = h.detach()[hrows, cols].float()
         self._pending.append(entry)
         n_sel = int(rows.numel())
         self._flop(model, 2.0 * self.d_model * n_sel * (2 if self.cfg.target == "gxh" else 1))
 
         def hook(g: torch.Tensor) -> None:
-            gs = g.detach()[rows, cols].float()
+            gs = g.detach()[hrows, cols].float()
             gn = torch.log(gs.norm(dim=-1) + 1e-12)
             entry["gn"] = gn
             tgt = self.cfg.target

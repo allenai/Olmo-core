@@ -1828,6 +1828,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora", type=int, default=0,
                     help="online router: LOW-RANK early stack -- blocks [0, drop_layer) + embeddings frozen from step 0, "
                     "every linear in those blocks gets a rank-R LoRA adapter (no base grads / Adam state). 0 = off")
+    ap.add_argument("--st-otr-route-min-len", type=int, default=0,
+                    help="online router: route only rows (packed: documents) with >= this many tokens; shorter ones "
+                    "run dense in the same step (hybrid short-window + routed long-row batches). 0 = route all")
     ap.add_argument("--st-otr-early-lora-blocks", type=int, default=0,
                     help="early LoRA on blocks [0, K) instead of [0, drop_layer), e.g. the whole model; blocks at or "
                     "above the drop layer then run at the kept length with frozen base + adapters. 0 = drop_layer")
