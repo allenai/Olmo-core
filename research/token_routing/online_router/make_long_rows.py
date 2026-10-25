@@ -13,10 +13,11 @@ import os
 import numpy as np
 
 
-def examples(src, eos):
+def examples(src, eos, dtype, mdtype):
+    # the shards are RAW memmaps (OLMo-core numpy format: no .npy header), dtypes from metadata.json
     for f in sorted(glob.glob(os.path.join(src, "token_ids_part_*.npy"))):
-        ids = np.load(f, mmap_mode="r")
-        lab = np.load(f.replace("token_ids_part_", "labels_mask_"), mmap_mode="r")
+        ids = np.memmap(f, dtype=dtype, mode="r")
+        lab = np.memmap(f.replace("token_ids_part_", "labels_mask_"), dtype=mdtype, mode="r")
         ends = np.nonzero(ids == eos)[0]
         start = 0
         for e in ends:
@@ -34,8 +35,9 @@ def main():
     a = ap.parse_args()
     meta = json.load(open(os.path.join(a.src, "metadata.json")))
     eos = int(meta["eos_token_id"])
+    dtype, mdtype = np.dtype(meta.get("dtype", "uint32")), np.dtype(meta.get("mask_dtype", "bool"))
     rows, cur_i, cur_l = [], [], []
-    for ids, lab in examples(a.src, eos):
+    for ids, lab in examples(a.src, eos, dtype, mdtype):
         n = sum(len(x) for x in cur_i)
         if cur_i and n + len(ids) > a.target - 64:
             rows.append((cur_i, cur_l))
@@ -48,16 +50,16 @@ def main():
         raise SystemExit(f"only {len(rows)} rows of <= {a.target} tokens could be built")
     out_ids, out_lab, lens = [], [], []
     for ci, cl in rows:
-        ids = np.concatenate(ci).astype(np.uint32)
-        lab = np.concatenate(cl).astype(bool)
+        ids = np.concatenate(ci).astype(dtype)
+        lab = np.concatenate(cl).astype(mdtype)
         inner = np.nonzero(ids[:-1] == eos)[0]
         ids[inner] = a.sep
         out_ids.append(ids)
         out_lab.append(lab)
         lens.append(len(ids))
     os.makedirs(a.out, exist_ok=True)
-    np.save(os.path.join(a.out, "token_ids_part_t0_000.npy"), np.concatenate(out_ids))
-    np.save(os.path.join(a.out, "labels_mask_t0_000.npy"), np.concatenate(out_lab))
+    np.concatenate(out_ids).tofile(os.path.join(a.out, "token_ids_part_t0_000.npy"))
+    np.concatenate(out_lab).tofile(os.path.join(a.out, "labels_mask_t0_000.npy"))
     m = {k: v for k, v in meta.items() if k not in ("merged_from",)}
     m.update(num_instances=len(rows), num_tokens=int(sum(lens)), max_example_len=int(max(lens)),
              min_example_len=int(min(lens)), num_loss_tokens=int(sum(int(x.sum()) for x in out_lab)),
