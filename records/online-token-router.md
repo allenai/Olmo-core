@@ -1114,7 +1114,24 @@ It also has 14.6 GiB less fixed state, which gives ~400k max T against the recip
 outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 (LR 5e-6)
 recovers part of the outlier gap (0.707 vs 0.686) for 7% more compute, but does not beat rank 64 at LR 1e-5. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
 
-### LoRA-all on mt11s720 (2026-10-25): +0.058 over dense at exactly matched FLOPs
+### LoRA-all on mt11s720 (2026-10-25): +0.065 over dense at exactly matched FLOPs (2 seeds)
+
+**2 seeds: mean9 0.755 / 0.768, mean 0.762 at 232 PF, vs dense s240 0.697 at the same PF: +0.065.**
+
+Per-task Δ (2-seed mean minus dense):
+- xabsence +0.253
+- **outlier +0.156**
+- contradiction +0.106
+- strmatch +0.034
+- hotpotqa +0.028
+- nq +0.020
+- **oolong +0.007**
+- qdmatch_nq -0.006
+- grouping -0.018
+
+FLOPs-to-match: dense reaches 0.762 at ~556 PF, **~2.4x**. The recipe gets 0.751 (2 seeds) at 273 PF, 18% more compute.
+**LoRA-all is the new recipe:** better quality on mt11, more compute saved, and the longest max T (~400k). The seed-0
+table follows.
 
 Run: lora64K32r20to7f16 at LR 1e-5, mt11s720, one seed, eval_size 500 per task. Mean9 **0.755 at 232 PF (0.32x)**. The
 recipe gets 0.751 at 273 PF (5e-6, 2 seeds) and 0.753 at LR 1e-5 (273 PF), so the higher LR is neutral for the K=7
