@@ -1072,11 +1072,12 @@ task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / 
 | 24 | 5e-6 | 269 | 0.919 | 0.898 | 0.630 | 0.667 |
 | 32 (all) | 5e-6 | 261 | 0.949 | 0.920 | 0.636 | 0.686 |
 | **32 (all)** | **1e-5** | **261** | **0.946** | **0.908** | **0.625** | **0.719** |
+| 32 (all), rank 128 | 5e-6 | 279 | 0.938 | 0.912 | 0.617 | 0.707 |
 
 **LoRA on all 32 blocks at LR 1e-5 is within single-seed noise of the recipe on all four tasks, at 0.88x its compute.**
 It also has 14.6 GiB less fixed state, which gives ~400k max T against the recipe's ~300k. At LR 5e-6, K=32 loses only
-outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 is still
-running. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
+outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 (LR 5e-6)
+recovers part of the outlier gap (0.707 vs 0.686) for 7% more compute, but does not beat rank 64 at LR 1e-5. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
 
 ## Partial MLP (2026-10-25): loses at matched FLOPs
 
