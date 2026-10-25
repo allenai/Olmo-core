@@ -456,6 +456,11 @@ def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.Vari
     if fwidth_opts.active:  # type: ignore[attr-defined]
         fwidth.validate(fwidth_opts)
         out.append((fwidth, fwidth_opts))
+    fchunk = V.VARIANTS["ffnchunk"]
+    fchunk_opts = fchunk.options_from_namespace(opts)
+    if fchunk_opts.active:  # type: ignore[attr-defined]
+        fchunk.validate(fchunk_opts)
+        out.append((fchunk, fchunk_opts))
     return out
 
 
@@ -1527,6 +1532,11 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--ffn-width-no-rescale", action="store_true",
                     help="ablation: do not rescale the partial FFN output by 1/f")
     ap.add_argument("--ffn-width-block", type=int, default=128, help="neurons per block in --ffn-width-mode blocked")
+    ap.add_argument("--ffn-chunk-tokens", type=int, default=0,
+                    help="sequence-chunked FFN sublayer in training: h + FFN(norm(h)) over chunks of this many tokens, "
+                    "each under its own activation checkpoint (exact; cuts the long-row recompute peak). 0 = off")
+    ap.add_argument("--ffn-chunk-layers", default="",
+                    help="blocks for --ffn-chunk-tokens, e.g. '0-6' (default: every block; short rows are untouched)")
     # ---- whole-block skipping (olmo_core.nn.layer_drop; any arm, training only) ----
     ap.add_argument(
         "--train-skip-layers",

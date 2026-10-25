@@ -219,6 +219,19 @@ class FFNWidthOptions(VariantOptions):
 
 
 @dataclass
+class FFNChunkOptions(VariantOptions):
+    """ffnchunk: sequence-chunked FFN sublayer (olmo_core.nn.ffn_chunk) in training -- exact, cuts the long-row
+    recompute working set (peak memory / max train length). No params, no FLOP change."""
+
+    ffn_chunk_tokens: int = 0
+    ffn_chunk_layers: str = ""
+
+    @property
+    def active(self) -> bool:
+        return self.ffn_chunk_tokens > 0
+
+
+@dataclass
 class SoftTokenOptions(VariantOptions):
     """softtoken: pooled-document soft tokens (compacted rows) + keep policy."""
 
@@ -881,6 +894,26 @@ class FFNWidth(Variant):
         return {"ffn_width": FFNWidthCallback()}
 
 
+class FFNChunk(Variant):
+    """Sequence-chunked FFN sublayer modifier (``--ffn-chunk-tokens N`` on any arm): the listed blocks run
+    ``h + FFN(norm(h))`` over N-token chunks, each under its own activation checkpoint. Exact; memory only."""
+
+    name = "ffnchunk"
+    options_cls = FFNChunkOptions
+
+    def validate(self, o):
+        assert isinstance(o, FFNChunkOptions)
+        if o.ffn_chunk_tokens <= 0:
+            raise ValueError("ffnchunk needs ffn_chunk_tokens > 0")
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, FFNChunkOptions)
+        from olmo_core.nn.ffn_chunk import install_ffn_chunk
+
+        ids = install_ffn_chunk(model, o.ffn_chunk_tokens, o.ffn_chunk_layers)
+        print(f"[variants] ffn-chunk: {o.ffn_chunk_tokens}-token FFN chunks on blocks {ids}", flush=True)
+
+
 class FFNDrop(Variant):
     """Drop-CPT: random null-FFN token drop (no router). In train_ctc_suite this is a modifier
     (``--ffn-drop-*`` on any non-routed arm); on setA it is ``--variant ffndrop``."""
@@ -1417,6 +1450,7 @@ VARIANTS: Dict[str, Variant] = {
         FFNDrop(),
         LayerDrop(),
         FFNWidth(),
+        FFNChunk(),
     )
 }
 #: setA spells the dense arm ``dense``.
