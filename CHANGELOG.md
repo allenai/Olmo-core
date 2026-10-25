@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added Qwen3-0.6B and Qwen3-1.7B variants of the Molmo2 stage-1 recipe (`MultimodalLMConfig.molmo2_0_6B()` / `molmo2_1_7B()`, `--model_size=0.6b|1.7b`).
+- Added the Molmo2 stage-2 (SFT) recipe: `src/scripts/train/Molmo2-Stage2.py`, the `image_only_v9` dataset mixture, multi-image datasets, and the `sft_demo` mode of `PixMoCapDataset`.
+- Reworked the multimodal data pipeline for epoch-aware, resumable mixture loading: per-source epochs (`get(index, epoch)`), a `qwen3` or `document` message layout (`document_layout`, `Molmo2TokenIds`, `prepare_molmo2_tokenizer`), a filesystem cache for decoded documents (`fs_cache`), configurable `MultimodalMixtureConfig` / `MultimodalSourceConfig` mixtures, and weighted truncation that only rescales branches when asked (`truncate_example(..., recompute_root_subsegments=...)`).
 - Added `UnshardedModelExportCallback` and `load_unsharded_model_state()`, which write an unsharded `model.safetensors` (plus the config) into every permanent checkpoint so evaluation can read one file instead of the sharded state.
 - Added the Molmo2 stage-1 pretraining recipe: the stage-1 datasets (PixMo-Cap, PixMo-Points/Count v1 and v2, CoSyn-Point, MolmoPoint-GUISyn, OCR caption tars / OlmOCR / synthetic OCR / text-rich captions, academic QA, PixMo-Clocks, Tulu 4 text) with their mixtures, and `src/scripts/train/Molmo2-Stage1.py` (`dry_run` / `launch` / `train`; v1/v2/v3 recipes, 4B and 8B).
 - Added `olmo_core.nn.maxtext` for converting model weights between OLMo Core and MaxText checkpoints in both directions, built on `StateConverter` like the Hugging Face converter. It picks the MaxText decoder from the OLMo Core config (dense `olmo3`, and the hybrid KDA/MoE `olmoe3`), handles MaxText's scanned and unscanned layouts, and checks that converting back is bit-exact. Example CLIs are in `src/examples/maxtext/`.

@@ -70,15 +70,24 @@ def load_from_disk_compat(path: Union[str, os.PathLike], **kwargs: Any):
 
         meta = json.loads(dict_json.read_text())
         splits = meta.get("splits", [])
+        legacy_splits = {split for split in splits if _has_list_feature(path / split)}
+        if not legacy_splits:
+            from datasets import load_from_disk
+
+            return load_from_disk(str(path), **kwargs)
+
+        # A DatasetDict may mix old List-authored and ordinary splits. Loading the root
+        # eagerly parses every split, including the incompatible one, so load each split
+        # independently whenever any split needs the Arrow fallback.
         out = {}
         for split in splits:
             split_dir = path / split
-            if _has_list_feature(split_dir):
+            if split in legacy_splits:
                 out[split] = _load_arrow_split(split_dir)
             else:
                 from datasets import load_from_disk
 
-                return load_from_disk(str(path), **kwargs)
+                out[split] = load_from_disk(str(split_dir), **kwargs)
         return DatasetDict(out)
 
     if _has_list_feature(path):
