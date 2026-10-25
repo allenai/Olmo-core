@@ -563,7 +563,8 @@ not better than drop at 10%. (6) the per-document floor gains ≈ +0.035-0.04 co
 | lora64fa371r20to7f16 (LoRA r64 + freeze 75% + two-stage + floor 16), LR 5e-6 | 260 (0.36) | 0.935 | 0.307 | 0.544 | 0.907 | 0.738 |
 | lora64fa371r20to10f16 (same, stage 2 at 10%), LR 5e-6 | 262 (0.36) | 0.907 | 0.322 | 0.607 | 0.901 | 0.738 |
 | lora64fa420r20to7f16 (LoRA r64 + two-stage + floor, freeze at 85%), LR 5e-6 | 265 (0.37) | 0.927 | 0.305 | 0.584 | 0.920 | 0.740 |
-| **lora64r20to7f16 (LoRA r64 + two-stage + floor, NO freeze), LR 5e-6** | 273 (0.38) | **0.947** | 0.285 | **0.683** | 0.909 | **0.752** |
+| **lora64r20to7f16 (LoRA r64 + two-stage + floor, NO freeze), LR 5e-6**, seeds 0 / 1 | 273 (0.38) | **0.947 / 0.942** | 0.285 / 0.295 | **0.683 / 0.708** | 0.909 / 0.892 | **0.752 / 0.750** |
+| lora64r20to10f16 (same, stage 2 at 10%), LR 5e-6 | 274 (0.38) | 0.929 | 0.276 | 0.645 | 0.909 | 0.740 |
 | otr10M7hdr8 (first 8 tokens kept) | 314 (0.44) | 0.744 | 0.306 | 0.648 | 0.835 | 0.711 |
 | otr10M7ds0 / ds50 (global budget) | 293 | 0.770 / 0.769 | | | | 0.696 / 0.697 |
 | rnd10M7 (random) | 295 | 0.793 | 0.353 | 0.466 | 0.803 | 0.691 |
@@ -602,7 +603,9 @@ noise), 0.38x on mt11 (+ floor 16); ~0.02x more than freezing, which is free onl
 0.726 at 0.26x, above the one-stage router (0.937 / 0.902 / 0.623 / 0.682 at 0.30x, 60 GiB) on every task at ~49 GiB.
 (Seed 1's contradiction@2k came from the eval log, 0.96 at 3 s.f.: the Lambda watcher recorded once all four multirung
 jsons existed, but a json can land after its first rung, and the checkpoint-dir delete then removed the node-local 2k
-output. The watcher now waits for both rungs in every json.) Global budget: no collapse (leak_auc 0.58 vs 0.49 per-document) but no gain.
+output. The watcher now waits for both rungs in every json.) **mt11 recipe, seed 1: mean9 0.750 (xabsence 0.708) -> 2-seed 0.751 at
+0.38x, +0.045 vs dense interpolated to 273 PF: level with the best mt11 arm (fa247f16M7, 0.750 at 0.36x, 60 GiB peak) at
+the LoRA memory peak. Stage 2 at 10% does not carry to mt11 (0.740).** Global budget: no collapse (leak_auc 0.58 vs 0.49 per-document) but no gain.
 Promoted: otr10M7f8 / f16 to mt4s1464 (Lambda), f16 seed 1 on mt11s720. otr10M7f8 at mt4s1464 (467 PF): 0.931 / 0.892 /
 0.616 / 0.679 vs otr10M7 (2 seeds, ≈ 445 PF) 0.927 / 0.907 / 0.643 / 0.581 -- with more training the floor's mt4 gain
 vanishes (contra level; the rest within seed noise): it matters for tiny documents (strmatch) and early in training.
