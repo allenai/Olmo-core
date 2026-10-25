@@ -231,3 +231,29 @@ def test_prepare_keeps_one_copy_of_a_repeated_image(tmp_path, monkeypatch):
     )
     assert stats["images"] == 1
     assert load_from_disk_compat(str(root / "nemotron_deepvision"))["id"] == ["a", "b"]
+
+
+def test_prepare_skips_shards_with_no_referenced_image(tmp_path, monkeypatch):
+    """A tar holding none of the referenced images (most cc3m tars hold some) writes no shard."""
+    from olmo_core.data.multimodal.dataset_compat import load_from_disk_compat
+
+    for tar_name, refs in (("a.tar", ["1.png"]), ("b.tar", ["unused.png"])):
+        with tarfile.open(tmp_path / tar_name, "w") as tar:
+            for ref in refs:
+                data = _png()
+                info = tarfile.TarInfo(ref)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+    monkeypatch.setitem(
+        nv.NEMOTRON_IMAGE_SOURCES,
+        "ecd",
+        lambda root: nv._TarSource(str(tmp_path / "*.tar"), nv._image_ref),
+    )
+    jsonl = tmp_path / "in.jsonl"
+    jsonl.write_text(json.dumps(_row("a", "1.png", [("Q?", "<think>t</think>A")])) + "\n")
+    root = tmp_path / "prepared"
+    stats = nv.prepare_nemotron_subset(
+        "nemotron_ecd", str(root), jsonl_path=str(jsonl), num_workers=2
+    )
+    assert stats["rows"] == 1
+    assert load_from_disk_compat(str(root / "nemotron_ecd"))["id"] == ["a"]

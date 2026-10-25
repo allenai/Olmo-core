@@ -438,6 +438,10 @@ def _prepare_shard(args: Tuple[Any, Any, str, int]) -> Tuple[List[str], int]:
             columns["image"].append(image)
             columns["prompts"].append(prompts)
             columns["responses"].append(responses)
+    if not columns["id"]:
+        # Nothing this shard holds is referenced (most cc3m tars hold some, not all); an empty
+        # parquet file would fail the final ``from_parquet``.
+        return sorted(images), bad
     pq.write_table(
         pa.table(
             columns,
