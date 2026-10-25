@@ -600,6 +600,14 @@
    "lr": 5e-06,
    "mix": "mt11",
    "seed": 0
+  },
+  "f8k-mt11-lora64fa420r20to7f16-s720-tdb-lr5e-06": {
+   "ex": "01M5RAM3TT9BAF0G9T240J42FZ",
+   "arm": "lora64fa420r20to7f16",
+   "budget": "s720",
+   "lr": 5e-06,
+   "mix": "mt11",
+   "seed": 0
   }
  },
  "evals": {
@@ -2861,6 +2869,12 @@
    "ex": "01M5RAGXEC8X42135D6493FPK2",
    "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
    "task": "hotpotqa",
+   "suite_rows": true
+  },
+  "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06-evxabsence": {
+   "ex": "01M5RAJQR9PE5VBMKY9RNKW26Q",
+   "train_run": "f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+   "task": "xabsence",
    "suite_rows": true
   }
  },
