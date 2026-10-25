@@ -4452,6 +4452,46 @@
    "commit": "e3b5aeb5b",
    "dir": "OLMo-core-otr12",
    "lr": "5e-06"
+  },
+  "f8k-mt4s1464-lora64K16r20to7-lro-lr5e-06-lam": {
+   "slurm": 114605,
+   "arm": "lora64K16r20to7",
+   "seed": 0,
+   "commit": "0fa6f8f8e",
+   "dir": "OLMo-core-otr13",
+   "lr": "5e-06"
+  },
+  "f8k-mt4s1464-lora64K24r20to7-lro-lr5e-06-lam": {
+   "slurm": 114606,
+   "arm": "lora64K24r20to7",
+   "seed": 0,
+   "commit": "0fa6f8f8e",
+   "dir": "OLMo-core-otr13",
+   "lr": "5e-06"
+  },
+  "f8k-mt4s1464-lora64K32r20to7-lro-lr5e-06-lam": {
+   "slurm": 114607,
+   "arm": "lora64K32r20to7",
+   "seed": 0,
+   "commit": "0fa6f8f8e",
+   "dir": "OLMo-core-otr13",
+   "lr": "5e-06"
+  },
+  "f8k-mt4s1464-lora64K32r20to7-lro-lr1e-05-lam": {
+   "slurm": 114608,
+   "arm": "lora64K32r20to7",
+   "seed": 0,
+   "commit": "0fa6f8f8e",
+   "dir": "OLMo-core-otr13",
+   "lr": "1e-05"
+  },
+  "f8k-mt4s1464-lora128K32r20to7-lro-lr5e-06-lam": {
+   "slurm": 114609,
+   "arm": "lora128K32r20to7",
+   "seed": 0,
+   "commit": "0fa6f8f8e",
+   "dir": "OLMo-core-otr13",
+   "lr": "5e-06"
   }
  }
 }
