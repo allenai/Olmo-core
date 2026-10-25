@@ -17,6 +17,7 @@ def test_failed_save_restores_live_optimizer(tmp_path, monkeypatch, failure_phas
         spec=ddp_train_module.OLMoDDPTrainModule,
         _require_optimizer=lambda: optimizer,
         _persistent_model_buffer_state_dict=mock.Mock(return_value={}),
+        _frozen_model_param_state_dict=mock.Mock(return_value={}),
     )
     error = RuntimeError("injected save failure")
     monkeypatch.setattr(ddp_train_module, "_prepare_env_for_save", lambda path, **kwargs: path)
@@ -43,6 +44,7 @@ def test_direct_save_profiles_only_when_enabled(tmp_path, monkeypatch, profile, 
         device=torch.device(device),
         _require_optimizer=lambda: optimizer,
         _persistent_model_buffer_state_dict=mock.Mock(return_value={}),
+        _frozen_model_param_state_dict=mock.Mock(return_value={}),
     )
     clock = mock.Mock(
         side_effect=time.perf_counter if profile else AssertionError("profiling is off")
@@ -96,6 +98,7 @@ def test_direct_load_profiles_only_when_enabled(tmp_path, monkeypatch, profile, 
         eval_only=True,
         _load_model_state_dict_direct=load_model,
         _persistent_model_buffer_state_dict=mock.Mock(return_value={}),
+        _frozen_model_param_state_dict=mock.Mock(return_value={}),
     )
     clock = mock.Mock(
         side_effect=time.perf_counter if profile else AssertionError("profiling is off")
@@ -138,6 +141,7 @@ def test_profiled_cpu_checkpoint_roundtrip(tmp_path, monkeypatch):
         eval_only=True,
         _require_optimizer=lambda: optimizer,
         _persistent_model_buffer_state_dict=mock.Mock(return_value={}),
+        _frozen_model_param_state_dict=mock.Mock(return_value={}),
         _load_model_state_dict_direct=load_model,
     )
     sync = mock.Mock(side_effect=AssertionError("CPU profiling must not synchronize CUDA"))
