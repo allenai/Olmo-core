@@ -283,6 +283,11 @@ ARM_EXTRA.update({
                          "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
                          "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
                          "--st-otr-freeze-after {FA_STEPS}"),
+    **{f"lora64fa75{n}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                          "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                          f"--st-otr-stages {st} --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                          "--st-otr-freeze-after {FA_STEPS}")
+       for n, st in (("r20to10", "7:0.2,16:0.10"), ("r3s", "7:0.2,16:0.07,24:0.03"))},
     "otr10M7de4": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.1 "
                    "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 4 --st-otr-drop-layer 7"),
     # no full-context steps (peak memory = routed steps), optionally + early-exit LM loss on dropped tokens
