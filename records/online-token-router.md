@@ -1082,6 +1082,22 @@ below the recipe: contra -0.005, nq +0.001, oolong -0.013, outlier -0.023. At ma
 compute curve, which interpolates to ~0.921 / 0.913 / 0.623 / 0.600 at 261 PF: contra +0.02, outlier +0.10, nq and
 oolong equal. Those deltas are matched-FLOP Δ on the primary tasks: **outlier +0.10, oolong 0.00.** The LR control shows the higher LR helps only the wide adapter scope. The recipe at LR 1e-5 loses oolong (0.565 vs
 0.636) and gains nothing elsewhere, so the K=7 recipe stays at 5e-6.
+
+**LoRA-all compute curve on mt4** (LR 1e-5, one seed except 1,464 rows/task; eval_size 500 per task):
+
+| rows/task | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| 488 | 90 | 0.803 | 0.886 | 0.539 | 0.444 |
+| 976 | 176 | 0.886 | 0.920 | 0.600 | 0.351 |
+| 1,464 (2 seeds) | 261 | 0.940 | 0.913 | 0.623 | 0.703 |
+
+**Against dense at about the same compute:**
+- 90 vs 98 PF (dense 0.639 / 0.800 / 0.500 / 0.209): +0.16 / +0.09 / +0.04 / +0.24.
+- 176 vs 193 PF (dense 0.834 / 0.880 / 0.593 / 0.307): +0.05 / +0.04 / +0.01 / +0.04.
+
+**FLOPs-to-match at 1,464 rows:** dense needs its full 1,154 PF to reach this quality, **~4.4x**. The recipe's ratio
+is ~3.5-3.9x. The outlier dip at 976 rows (0.351) is also in the recipe (0.376) and in dense (0.432 at 976 vs 0.302
+at 488 and 0.719 at 1,464): outlier is non-monotone in data.
 It also has 14.6 GiB less fixed state, which gives ~400k max T against the recipe's ~300k. At LR 5e-6, K=32 loses only
 outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 (LR 5e-6)
 recovers part of the outlier gap (0.707 vs 0.686) for 7% more compute, but does not beat rank 64 at LR 1e-5. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
