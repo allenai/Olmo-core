@@ -3324,7 +3324,7 @@
    "suite_rows": true
   },
   "f8k-mt11-lora64r20to7f16pt-s720-tdb-lr5e-06-evnq": {
-   "ex": "01M5RQHJH14KMWA7N2QB8NBPJZ",
+   "ex": "01M5RSDQ4798Q7C6R73K7AD9QY",
    "train_run": "f8k-mt11-lora64r20to7f16pt-s720-tdb-lr5e-06",
    "task": "nq",
    "suite_rows": true
