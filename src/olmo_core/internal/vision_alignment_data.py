@@ -754,12 +754,15 @@ STAGE1_POSITIONS_PER_LOSS_TOKEN: dict[str, float] = {
     "nemotron_fintabnet": 1.468,
     "nemotron_hopchain": 1.752,
     "nemotron_raven": 1.977,
+    "gui_syn": 53.249,
 }
 """Sequence positions (text and image tokens) per response token of each v6 and v7 source as the
 merged stage builds it (dolma2 at the pinned revision, 65,536 tokens, every annotation a document):
 mean ``len(input_ids)`` over 32 draws (seed 0) divided by the source's calibrated mean loss weight,
 measured 2026-10-24/25. The Nemotron sources are text-dense (1.4-3.7, a long response per image),
-the OCR captions 2.5-7, pointing and the multi-question academic sets 25-340."""
+the OCR captions 2.5-7, pointing and the multi-question academic sets 25-340. GUISyn was measured
+the same way on 2026-10-26: 14.9 element documents per draw, each with its own copy of the
+screenshot's ~1,100 image tokens."""
 
 _V7_NEMOTRON_TARGETS = {
     name: epochs
@@ -870,7 +873,7 @@ _V7_FROM_TEXT_RICH = (
     - _V7_FREED["cosyn"]
 )
 _V7_TEXT_RICH_SHARE = sum(_V7_OCR_FUNDED[name] for name in _V7_TEXT_RICH)
-STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
+STAGE1_V7_BASE_LOSS_TARGETS: dict[str, float] = {
     **_V7_OCR_FUNDED,
     **_V7_CAPPED,
     **_V7_OLMOCR_GROWN,
@@ -884,7 +887,8 @@ STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
         _V7_FREED["olmocr"] + _V7_FREED["scene_ocr"] - _V7_TO_OLMOCR,
     ),
 }
-"""Target loss mass of each stage-1 v7 source, in two steps.
+"""Target loss mass of each source of the stage-1 v7 base split (the v7 of OLMo-core #935), from
+which :data:`STAGE1_V7_LOSS_TARGETS` sets the passes of the 256K hero, in two steps.
 
 1. The Nemotron sources take the loss of their :data:`STAGE1_V7_NEMOTRON_EPOCHS` within
    :data:`STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS`, all of it from the OCR group, whose sources keep
@@ -906,18 +910,18 @@ def _visual_positions_per_loss_token(targets: dict[str, float]) -> float:
 
 
 _V6_TEXT_LOSS_SHARE = 0.9
-STAGE1_V7_TEXT_LOSS_SHARE: float = (
+STAGE1_V7_BASE_TEXT_LOSS_SHARE: float = (
     _V6_TEXT_LOSS_SHARE
     / (1.0 - _V6_TEXT_LOSS_SHARE)
-    * _visual_positions_per_loss_token(STAGE1_V7_LOSS_TARGETS)
+    * _visual_positions_per_loss_token(STAGE1_V7_BASE_LOSS_TARGETS)
     / (
         _visual_positions_per_loss_token(STAGE1_V6_LOSS_TARGETS)
         + _V6_TEXT_LOSS_SHARE
         / (1.0 - _V6_TEXT_LOSS_SHARE)
-        * _visual_positions_per_loss_token(STAGE1_V7_LOSS_TARGETS)
+        * _visual_positions_per_loss_token(STAGE1_V7_BASE_LOSS_TARGETS)
     )
 )
-"""Default text loss share of the merged stage with stage-1 v7 visual data (0.883, not 0.9). A v7
+"""Text loss share of the v7 base split (0.883, not 0.9). A v7
 response token takes fewer positions than a v6 one (the Nemotron sources are text-dense and the
 capped CoSyn sets were position-heavy: 9.7 positions per visual response token against 11.5), so at
 v6's 0.9 the vision share would fill fewer positions per step and the text more. This share splits
@@ -951,6 +955,140 @@ def build_stage1_nemotron_sources(
         )
         for name in STAGE1_V7_NEMOTRON_EPOCHS
     }
+
+
+STAGE1_V7_GUI_SYN_ROWS: int = 36_192
+"""Screenshots of MolmoPoint-GUISyn (desktop, mobile and web train splits) with at least one usable
+element, as :class:`~olmo_core.data.multimodal.gui_syn.GuiSynDatasetConfig` builds them; they hold
+1,985,821 usable elements, 550,240 of them drawn per pass (16 per screenshot)."""
+
+STAGE1_V7_GUI_SYN_MEAN_LOSS_WEIGHT: float = 323.875
+"""GUISyn's mean loss weight per draw in documents mode (each sampled element its own document),
+with the Nemotron probe (128 draws, seed 0, dolma2 at the pinned revision, 65,536 tokens),
+measured 2026-10-26."""
+
+STAGE1_V7_RUN_STEPS: int = 22_240
+"""Steps of the 256K hero stage (373,125,283,840 tokens in 16 Mi-token batches). v7 counts passes
+over this run, at the loss per step the run trains."""
+
+_V7_RUN_SCALE = STAGE1_V7_RUN_STEPS / 20_000
+# A base-split source's loss per step, in units of v6's visual loss per step: the base split holds
+# v6's text per step and trains (1 - text share) / text share of it on vision, 1.2x v6's 1/9.
+_V7_BASE_STEP_LOSS = {
+    name: share
+    * (1.0 - STAGE1_V7_BASE_TEXT_LOSS_SHARE)
+    / STAGE1_V7_BASE_TEXT_LOSS_SHARE
+    * _V6_TEXT_LOSS_SHARE
+    / (1.0 - _V6_TEXT_LOSS_SHARE)
+    for name, share in STAGE1_V7_BASE_LOSS_TARGETS.items()
+}
+
+
+def _v7_share_per_pass(name: str) -> float:
+    if name == "gui_syn":
+        return (
+            STAGE1_V7_GUI_SYN_ROWS
+            * STAGE1_V7_GUI_SYN_MEAN_LOSS_WEIGHT
+            / STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
+        )
+    return _share_per_pass(name)
+
+
+def stage1_run_passes(name: str, step_loss: float) -> float:
+    """Passes over source ``name`` in a :data:`STAGE1_V7_RUN_STEPS`-step run that trains
+    ``step_loss`` of its loss per step, in units of v6's visual loss per step."""
+    return step_loss * _V7_RUN_SCALE / _v7_share_per_pass(name)
+
+
+def _v7_step_loss(name: str, passes: float) -> float:
+    return passes * _v7_share_per_pass(name) / _V7_RUN_SCALE
+
+
+STAGE1_V7_POINTS_SCALE: float = 0.5
+"""PixMo-Points' loss per step against the base split: half, 12.7 passes over the hero instead of
+25.4 (the v6 hero's point F1 fell after step 10,000, about 10 passes in)."""
+
+STAGE1_V7_RUN_PASS_CAPS: dict[str, float] = {
+    "cosyn_point_v2": 5.0,
+    "synth_receipts_en": 5.0,
+    **{
+        name: 5.0 for name in STAGE1_V7_CAPPED_SOURCES["cosyn"] + STAGE1_V7_CAPPED_SOURCES["olmocr"]
+    },
+}
+"""The base split's 5-pass caps (:data:`STAGE1_V7_PASS_CAPS`) restated over the hero. The base
+split counted passes over 20,000 steps at v6's visual loss per step, so its "5" is 6.7 over the
+hero; its "10" (PixMo-Cap and TextOCR) is 13.3, which :data:`STAGE1_V7_RUN_PASSES` raises."""
+
+STAGE1_V7_RUN_PASSES: dict[str, float] = {
+    "pixmo_caption": 15.0,
+    "pixmo_transcript": 15.0,
+    "textocr": 15.0,
+    "gui_syn": 12.0,
+    "nvidia_synth_en": 5.0,
+    **{name: 5.0 for name in STAGE1_V7_NEMOTRON_EPOCHS},
+}
+"""Passes over the hero of the sources v7 sets outright. PixMo-Cap, its transcripts and TextOCR go
+from the base split's 13.3 to 15. GUISyn's 12 passes train each element about 3.4 times, as the
+Molmo3 stage 1 of mm_olmo main does: there every screenshot is two examples of half its elements
+(``split_annotations``) in a pointing group sized for 4 epochs of its 424,423 examples before
+GUISyn joined, 3.4 epochs with it; here a pass draws 16 elements of each screenshot (550,240 of
+1,985,821). NVIDIA's synthetic OCR set and the Nemotron sources, which the base split draws 2.4-3.3
+times over the hero, go to 5."""
+
+_V7_STEP_LOSS = {
+    **{
+        name: min(loss, _v7_step_loss(name, STAGE1_V7_RUN_PASS_CAPS[name]))
+        if name in STAGE1_V7_RUN_PASS_CAPS
+        else loss
+        for name, loss in _V7_BASE_STEP_LOSS.items()
+    },
+    "pixmo_points_v2": STAGE1_V7_POINTS_SCALE * _V7_BASE_STEP_LOSS["pixmo_points_v2"],
+    **{name: _v7_step_loss(name, passes) for name, passes in STAGE1_V7_RUN_PASSES.items()},
+}
+_V7_STEP_LOSS_TOTAL = sum(_V7_STEP_LOSS.values())
+
+STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
+    name: loss / _V7_STEP_LOSS_TOTAL for name, loss in _V7_STEP_LOSS.items()
+}
+"""Target loss mass of each stage-1 v7 source: the base split (:data:`STAGE1_V7_BASE_LOSS_TARGETS`)
+plus MolmoPoint-GUISyn, with PixMo-Points halved (:data:`STAGE1_V7_POINTS_SCALE`), the sources of
+:data:`STAGE1_V7_RUN_PASS_CAPS` capped and those of :data:`STAGE1_V7_RUN_PASSES` set, in passes over
+the 256K hero. Every other source (PixMo-Count, the text-rich captions, DVQA, FigureQA, PlotQA and
+clocks) trains the base split's loss per step. v7 trains every annotation as a document, as v5
+does."""
+
+_V7_VISUAL_POSITIONS = sum(
+    loss * STAGE1_POSITIONS_PER_LOSS_TOKEN[name] for name, loss in _V7_STEP_LOSS.items()
+)
+# Positions per step in units of v6's visual loss per step: 9 of text and v6's visual positions.
+_V6_STEP_POSITIONS = _V6_TEXT_LOSS_SHARE / (
+    1.0 - _V6_TEXT_LOSS_SHARE
+) + _visual_positions_per_loss_token(STAGE1_V6_LOSS_TARGETS)
+_V7_TEXT_STEP_LOSS = _V6_STEP_POSITIONS - _V7_VISUAL_POSITIONS
+STAGE1_V7_TEXT_LOSS_SHARE: float = _V7_TEXT_STEP_LOSS / (_V7_TEXT_STEP_LOSS + _V7_STEP_LOSS_TOTAL)
+"""Default text loss share of the merged stage with stage-1 v7 visual data. The step keeps v6's
+positions, and the positions v7's vision does not use go to the text (one position per loss
+token)."""
+
+
+def build_stage1_gui_syn_source(sequence_length: int) -> Config:
+    """Configure MolmoPoint-GUISyn as the stage-1 v7 ``gui_syn`` source: the v2 pointing sources'
+    settings (eight crops, every response token weighted equally, plain documents, every sampled
+    element its own document), truncated at ``sequence_length``.
+
+    :param sequence_length: Maximum serialized example length.
+    """
+    from olmo_core.data.multimodal.gui_syn import GuiSynDatasetConfig
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    return GuiSynDatasetConfig(
+        max_crops=8,
+        max_sequence_length=sequence_length,
+        loss_token_weighting="none",
+        message_format="document",
+        annotation_sampling="documents",
+    )
 
 
 STAGE1_V4_EPOCHS: dict[str, float] = {

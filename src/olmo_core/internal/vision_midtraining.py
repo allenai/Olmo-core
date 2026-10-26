@@ -79,9 +79,11 @@ from .vision_alignment_data import (
     STAGE1_V4_LOSS_TARGETS,
     STAGE1_V5_LOSS_TARGETS,
     STAGE1_V6_LOSS_TARGETS,
+    STAGE1_V7_GUI_SYN_MEAN_LOSS_WEIGHT,
     STAGE1_V7_LOSS_TARGETS,
     STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
     STAGE1_V7_TEXT_LOSS_SHARE,
+    build_stage1_gui_syn_source,
     build_stage1_nemotron_sources,
     build_stage1_v3_sources,
 )
@@ -152,7 +154,7 @@ class MixedMidtrainingRecipeConfig(Config):
     """Target text fraction of expected supervised-token loss mass; one is text-only. Unset, it is
     the visual data's default: 0.9, or
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V7_TEXT_LOSS_SHARE` for ``stage1_v7``
-    (which keeps v6's positions per step)."""
+    (which gives the text the step's positions v7's vision does not use)."""
     visual_example_weights: dict[str, float] = field(
         default_factory=lambda: dict(DEFAULT_VISUAL_EXAMPLE_WEIGHTS)
     )
@@ -245,9 +247,8 @@ class MixedMidtrainingRecipeConfig(Config):
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V5_LOSS_TARGETS`) or ``stage1_v6`` (v5
     with the most repeated sources capped at 10 epochs, their loss moved to the large OCR sources;
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V6_LOSS_TARGETS`) or ``stage1_v7`` (v6
-    plus ten Nemotron-Image-Training caption and reasoning sources taking their loss from the OCR
-    group and the CoSyn and olmOCR sets capped at 5 passes, at a text loss share that keeps v6's
-    positions per step, see
+    plus ten Nemotron-Image-Training caption and reasoning sources and MolmoPoint-GUISyn, with
+    PixMo-Points halved and passes set over the 256K hero, see
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V7_LOSS_TARGETS`)."""
     compile_loss: bool = True
     """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs
@@ -1225,6 +1226,7 @@ def build_config(
         )
         if nemotron:
             means.update(STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS)
+            means["gui_syn"] = STAGE1_V7_GUI_SYN_MEAN_LOSS_WEIGHT
     else:
         means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if _text_loss_share(recipe) < 1.0 else {}
     if not masked_text:
@@ -1241,6 +1243,7 @@ def build_config(
         _set_annotation_sampling(visual_sources, "documents" if documents else "one")
         if nemotron:
             visual_sources.update(build_stage1_nemotron_sources(recipe.sequence_length))
+            visual_sources["gui_syn"] = build_stage1_gui_syn_source(recipe.sequence_length)
     elif _text_loss_share(recipe) < 1.0 and not replaced_sources:
         visual_sources = build_visual_sources(
             sequence_length=recipe.sequence_length,
