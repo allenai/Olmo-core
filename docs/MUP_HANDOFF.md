@@ -41,6 +41,61 @@ The two halves are configured independently: the init on the model config, the L
 optimizer config. The optimizer logs a one-time warning if muP LRs are enabled on a model whose
 `init_method` is not `nanochat`.
 
+**Update (2026-10-25): base-model mode.** `MuPConfig` now also accepts a base model instead of a
+single `base_width`; see [Section 0.1](#01-base-model-mode-base_fan_ins). The rest of this document
+describes the original `base_width` mode, which is unchanged.
+
+### 0.1 Base-model mode (`base_fan_ins`)
+
+With a fixed `base_width`, the base model is not trained at `lr` everywhere: any matrix whose
+fan-in differs from `base_width` gets another LR even at the base size (e.g. an FFN down-projection
+with fan-in `8 * d_model` gets `lr / 8`). In effect, each kind of matrix gets an arbitrary
+base LR. Base-model mode fixes the base LR of every matrix at `lr` and only scales by how much each
+matrix's fan-in changed relative to the base model:
+
+```text
+lr_l = lr * base_fan_in(role) / fan_in      (matrices)
+```
+
+where `base_fan_in(role)` is the fan-in of the same matrix in the base model. Embeddings and
+element-wise parameters are unchanged. A group override's `lr` is still multiplied, so a group can
+be given its own base LR. The fixed-`base_width` mode is the special case where every role's base
+fan-in is `base_width`.
+
+```python
+from olmo_core.optim import MuPConfig
+
+base_model = base_model_config.build(init_device="meta")  # the base size, e.g. a 275M rung
+mup = MuPConfig.from_base_model(base_model)               # sets base_fan_ins; exactly one of
+                                                          # base_width / base_fan_ins is allowed
+```
+
+`base_fan_ins` is a plain `{role: fan_in}` table stored in the config, so the optimizer never
+builds the base model, and the table is visible in the saved config.
+
+**Roles** (`named_matrix_roles` in `src/olmo_core/nn/transformer/mup.py`) name the same matrix in
+models of different width and depth:
+
+- Outside the blocks, the role is the parameter name without wrapper prefixes, e.g.
+  `lm_head.w_out.weight`.
+- Inside a block, the role is `blocks[<kind>].<path within block>`, e.g.
+  `blocks[attention:KimiDeltaAttention+feed_forward].attention.w_out.weight`. The block kind lists
+  the block's non-norm child modules in registration order, with the sequence mixer's class
+  (the `attention` child). So linear-attention vs. full-attention blocks, and dense vs. MoE
+  blocks, get different roles, while models with more layers share them.
+- Roles ignore the `module.` wrapper prefix, activation-checkpointing (`_checkpoint_wrapped_module`)
+  and `torch.compile` (`_orig_mod`) name segments, and FSDP's `FSDP<Class>` class swaps.
+
+**Strictness:** `matrix_fan_ins_by_role` raises if two matrices with the same role have different
+fan-ins in the base model (the role would be ambiguous), and `mup_lr_multipliers` raises if a
+matrix's role is not in `base_fan_ins` (e.g. a block kind the base model doesn't have).
+
+Tests: `test_named_matrix_roles_*` and `test_matrix_fan_ins_by_role_rejects_ambiguous_roles` in
+`src/test/nn/transformer/mup_test.py`; `test_mup_config_rejects_invalid_bases` and
+`test_mup_base_model_*` in `src/test/optim/mup_test.py`;
+`test_build_groups_applies_mup_base_model_with_wrapper_prefix` in
+`src/test/optim/moe_optimizer_test.py`.
+
 ---
 
 ## 1. Design decisions

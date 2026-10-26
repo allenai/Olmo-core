@@ -126,6 +126,37 @@ def test_build_groups_applies_mup_with_wrapper_prefix():
     assert "weight_decay" not in by_name["module.1.weight"]
 
 
+def test_build_groups_applies_mup_base_model_with_wrapper_prefix():
+    class Wrapper(nn.Module):
+        def __init__(self, module: nn.Module):
+            super().__init__()
+            self.module = module
+
+    def transformer(d_model: int, n_layers: int) -> nn.Module:
+        return TransformerConfig.llama_like(
+            d_model=d_model,
+            vocab_size=256,
+            n_layers=n_layers,
+            n_heads=2,
+            feed_forward=FeedForwardConfig(hidden_size=4 * d_model, bias=False),
+        ).build(init_device="meta")
+
+    model = Wrapper(transformer(128, 4))
+    config = OLMoDDPOptimizerConfig(
+        lr=1e-3,
+        mup=MuPConfig.from_base_model(transformer(64, 2)),
+        group_overrides=[OptimGroupOverride(params=["*w2.weight"], opts={"lr": 2e-3})],
+    )
+    groups = config.build_groups([model])
+
+    by_name = {name: g for g in groups for name in g["named_params"]}
+    assert set(by_name) == {name for name, _ in model.named_parameters()}
+    assert by_name["module.embeddings.weight"]["lr"] == pytest.approx(1e-3)
+    assert by_name["module.blocks.3.attention.w_q.weight"]["lr"] == pytest.approx(0.5e-3)
+    assert by_name["module.blocks.3.feed_forward.w2.weight"]["lr"] == pytest.approx(1e-3)
+    assert by_name["module.lm_head.w_out.weight"]["lr_multiplier"] == 0.5
+
+
 def test_build_groups_applies_completedp_with_wrapper_prefix():
     class Wrapper(nn.Module):
         def __init__(self, module: nn.Module):

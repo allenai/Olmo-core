@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Optional
 
 import pytest
@@ -5,6 +6,7 @@ import torch
 import torch.nn as nn
 
 from olmo_core.config import DType
+from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.attention import (
     AttentionBackendName,
     AttentionConfig,
@@ -25,13 +27,20 @@ from olmo_core.nn.moe.v2.routed_experts import RoutedExpertsConfig
 from olmo_core.nn.moe.v2.router import MoERouterConfigV2
 from olmo_core.nn.moe.v2.shared_experts import SharedExpertsConfig
 from olmo_core.nn.transformer import (
+    TransformerActivationCheckpointingMode,
     TransformerBlockConfig,
     TransformerBlockType,
     TransformerConfig,
     TransformerType,
 )
 from olmo_core.nn.transformer.init import InitMethod, nanochat_std
-from olmo_core.nn.transformer.mup import ParamKind, ParamShape, named_param_shapes
+from olmo_core.nn.transformer.mup import (
+    ParamKind,
+    ParamShape,
+    matrix_fan_ins_by_role,
+    named_matrix_roles,
+    named_param_shapes,
+)
 
 VECTOR = ParamShape(ParamKind.vector)
 
@@ -263,3 +272,85 @@ def test_param_shapes_match_nanochat_init_ddp_block(latent_dim: Optional[int]):
     InitMethod.nanochat.init_attention(block.attention, **kwargs)
     InitMethod.nanochat.init_moe_v2(block, **kwargs)
     _assert_matrices_match_nanochat_init(block)
+
+
+def _hybrid_model(d_model: int, n_layers: int) -> nn.Module:
+    """Full-attention blocks, with GatedDeltaNet in every odd block."""
+    config = TransformerConfig.llama_like(
+        d_model=d_model,
+        vocab_size=1000,
+        n_layers=n_layers,
+        n_heads=d_model // 64,
+        feed_forward=FeedForwardConfig(hidden_size=d_model * 4, bias=False),
+    )
+    linear = deepcopy(config.block)
+    linear.sequence_mixer = GatedDeltaNetConfig(n_heads=d_model // 64)
+    config.block_overrides = {idx: deepcopy(linear) for idx in range(1, n_layers, 2)}
+    return config.build(init_device="meta")
+
+
+ATTENTION_BLOCK = "blocks[attention:Attention+feed_forward]"
+GDN_BLOCK = "blocks[attention:GatedDeltaNet+feed_forward]"
+
+
+@pytest.mark.skipif(not _has_fla(), reason="fla not installed")
+def test_named_matrix_roles_match_across_sizes():
+    base, wider_and_deeper = _hybrid_model(256, 2), _hybrid_model(512, 4)
+    roles = named_matrix_roles(base)
+
+    assert set(roles) == {
+        name for name, shape in named_param_shapes(base).items() if shape.kind == ParamKind.matrix
+    }
+    assert roles["lm_head.w_out.weight"] == "lm_head.w_out.weight"
+    assert roles["blocks.0.attention.w_out.weight"] == f"{ATTENTION_BLOCK}.attention.w_out.weight"
+    assert roles["blocks.1.attention.w_out.weight"] == f"{GDN_BLOCK}.attention.w_out.weight"
+    assert set(named_matrix_roles(wider_and_deeper).values()) == set(roles.values())
+
+    fan_ins = matrix_fan_ins_by_role(base)
+    assert list(fan_ins) == sorted(set(roles.values()))
+    assert fan_ins[f"{ATTENTION_BLOCK}.feed_forward.w2.weight"] == 1024
+    assert fan_ins[f"{GDN_BLOCK}.attention.w_q.weight"] == 256
+    assert fan_ins["lm_head.w_out.weight"] == 256
+
+
+def test_named_matrix_roles_ignore_wrappers():
+    class Wrapper(nn.Module):
+        def __init__(self, module: nn.Module):
+            super().__init__()
+            self.module = module
+
+    checkpointed = _dense_model()
+    checkpointed.apply_activation_checkpointing(TransformerActivationCheckpointingMode.full)
+    wrapped = Wrapper(checkpointed)
+    names = [name for name, _ in wrapped.named_parameters()]
+    assert "module.blocks.0._checkpoint_wrapped_module.attention.w_q.weight" in names
+
+    roles = named_matrix_roles(wrapped)
+    assert set(roles) <= set(names)
+    assert sorted(roles.values()) == sorted(named_matrix_roles(_dense_model()).values())
+    assert (
+        roles["module.blocks.0._checkpoint_wrapped_module.attention.w_q.weight"]
+        == f"{ATTENTION_BLOCK}.attention.w_q.weight"
+    )
+
+
+def test_matrix_fan_ins_by_role_rejects_ambiguous_roles():
+    config = TransformerConfig.llama_like(
+        d_model=256,
+        vocab_size=1000,
+        n_layers=2,
+        n_heads=4,
+        feed_forward=FeedForwardConfig(hidden_size=1024, bias=False),
+    )
+    wider_feed_forward = deepcopy(config.block)
+    assert wider_feed_forward.feed_forward is not None
+    wider_feed_forward.feed_forward.hidden_size = 2048
+    config.block_overrides = {1: wider_feed_forward}
+
+    with pytest.raises(OLMoConfigurationError, match="feed_forward.w2.weight' has fan-ins"):
+        matrix_fan_ins_by_role(config.build(init_device="meta"))
+
+
+def test_named_matrix_roles_require_a_transformer():
+    with pytest.raises(OLMoConfigurationError, match="require a Transformer"):
+        named_matrix_roles(nn.Sequential(nn.Linear(4, 4)))
