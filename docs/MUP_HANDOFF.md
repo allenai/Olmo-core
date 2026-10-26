@@ -128,8 +128,9 @@ Tests: `test_named_matrix_roles_*` and `test_matrix_fan_ins_by_role_rejects_ambi
 - Multiplier 1 for embeddings (configurable through `embedding_lr_multiplier`), vectors and
   depthwise convs.
 - Weight decay coupled by default: the optimizer applies `p *= 1 - lr_l * wd`, so decay scales
-  with the multiplier (the `mup` library's behavior). `scale_weight_decay=True` sets
-  `wd_l = wd / m`, which keeps `lr_l * wd_l` at its base value for every parameter.
+  with the multiplier (the `mup` library's `decoupled_wd=True`; its default,
+  `decoupled_wd=False`, scales weight decay instead). `scale_weight_decay=True` sets
+  `wd_l = wd / m`, which keeps `lr_l * wd_l` at its base value for every parameter (section 5.1).
 - Strict: an unrecognized parameter with ndim >= 2 raises.
 - Muon and Dion (`MatrixAwareOptimConfig`) raise if `mup` is set.
 - No hero script changes.
@@ -312,6 +313,14 @@ Exports `MuPConfig` (import at line 14, `__all__` at line 47). `mup_lr_multiplie
     decay), `test_mup_split_requires_every_param` (135),
     `test_mup_rejected_for_matrix_aware_optimizers` (141; Muon),
     `test_mup_warns_without_nanochat_init` (146; clears the `log_once` cache first).
+  - `scale_weight_decay` with base-model fan-ins and an embeddings `weight_decay=0.0`
+    override (as in the scaling-ladders mainline ladder), each run for `AdamWConfig` and
+    `SkipStepAdamWConfig` with and without foreach:
+    `test_mup_base_model_scale_weight_decay` (stored `weight_decay = wd / m`, `lr * wd` fixed),
+    `test_mup_weight_decay_applied` (a zero-gradient step, where Adam's update is exactly zero,
+    shrinks each parameter by `lr * wd` scaled or `lr * m * wd` coupled),
+    `test_mup_scheduler_keeps_decay` and `test_mup_scale_weight_decay_state_dict_roundtrip`
+    (a loaded state dict's group `weight_decay` replaces the config's).
 - **`src/test/optim/moe_optimizer_test.py`** (modified):
   `test_build_groups_applies_mup_with_wrapper_prefix` (line 28): `OLMoDDPOptimizerConfig` on a
   wrapper exposing `module.`-prefixed names, with a `*bias*` weight-decay override.
@@ -415,6 +424,42 @@ muP       embedding  0.02181   0.02172   0.02083  0.0194   -0.06
 - **Static checks:** isort, black and ruff are clean on all new and changed files. mypy reports
   only the pre-existing error at `src/olmo_core/nn/moe/v2/routed_experts.py:940`.
 
+### 5.1 Scaled weight decay (`scale_weight_decay=True`)
+
+Verified later, on the scaling-ladders mainline ladder (base-model mode pinned to its 275M rung,
+`weight_decay=0.1`, embeddings 0.0). The checks measure the decay each parameter actually
+receives rather than reading `weight_decay` from the groups. Full write-up:
+`ladders/mainline/MUP_WEIGHT_DECAY.md` in scaling-ladders.
+
+- **Unit tests:** the four `scale_weight_decay` tests in section 3.6 pass (75 muP tests in total
+  across `src/test/optim/mup_test.py`, `src/test/nn/transformer/mup_test.py` and
+  `src/test/optim/completedp_test.py`).
+- **GPU smoke runs** (one B300, script `/tmp/mup_smoke/mainline_gpu_smoke_wd.py`, **not checked
+  in**): real mainline pretraining config at 275M, 450M, 810M, 1.4B and 2.7B (HSDP, compile,
+  `SkipStepAdamW` with foreach, KDA with FLA kernels), with the flag switched on through the CLI
+  override `--train_module.optim.mup.scale_weight_decay=true`.
+  - Step 1 zeroes every gradient before the optimizer step, so each weight should become exactly
+    `fp32(w * fp32(1 - fp32(lr_l * wd_l)))`. Compared against that value computed from
+    hand-derived `lr_l * wd_l`, zero elements differed at every rung (all 2.6B parameters at
+    2.7B).
+  - Steps 2 to 5 fit each weight change to `alpha * w_prev + beta * m_hat / (sqrt(v_hat) + eps)`.
+    `-beta / lr` matched `m` (1.0 at 275M down to 0.4167 at 2.7B), and `-alpha / (lr * wd)` was
+    0.9999 to 1.0003 for every matrix at every rung. Fit residuals were at most 1e-5.
+  - Stored groups had `weight_decay = 0.1 / m` at every rung, with zero mismatches (e.g. 0.24 at
+    `m = 0.4167` and 0.2 at `m = 0.5` at 2.7B).
+  - **Control:** with the flag off, the same probe at 1.4B measured `-alpha / (lr * wd) = 0.5 = m`
+    for every scaled matrix.
+  - **Checkpoint resume** (generic `OptimConfig` path, 1.4B): saving at step 3 and resuming with
+    the flag on kept `weight_decay = 0.1 / m` and decay ratios of 1.0. Resuming the same
+    checkpoint with the flag off kept the checkpoint's `weight_decay = 0.2`; see gotcha 5.
+- **Measurement notes.** `SkipStepAdamW` computes its decay factor `1 - step_factor * (lr * wd)`
+  in float32, so a measured step-1 decay reads about 0.9999 of the exact value under either
+  setting. Zero-initialized parameters (KDA `dt_bias`, `g_proj_2.bias`) show decay only from
+  step 3. `lm_head.norm.weight` was excluded from the step-2 fit because its weights and Adam
+  direction are almost parallel there; it passes at step 1 and steps 3 to 5.
+- **Not exercised:** the DDP path (`OLMoDDPOptimizerConfig`) with `scale_weight_decay=True`, and
+  `base_width` mode on GPU (unit tests only).
+
 ---
 
 ## 6. Gotchas and things that may cause problems later
@@ -439,11 +484,14 @@ muP       embedding  0.02181   0.02172   0.02083  0.0194   -0.06
      config. So a changed `base_width` or `embedding_lr_multiplier` takes effect, because it
      changes `initial_lr`, but a changed `scale_weight_decay` or override `weight_decay` does
      not: the checkpoint's value wins. This is the existing behavior for every group
-     hyperparameter.
+     hyperparameter. Confirmed on GPU (section 5.1): a run resumed from a scaled checkpoint with
+     `scale_weight_decay=False` keeps decaying at the scaled rate. Switching the setting
+     mid-run needs fresh optimizer state, or `weight_decay` added to `fixed_fields` (untested).
    - **The DDP path** (`OLMoDDPOptimizer`) saves no group hyperparameters, so on resume every
      setting comes from the config.
 6. **Weight decay is coupled by default.** Halving a layer's LR also halves its effective decay
-   per step. Use `scale_weight_decay=True` to keep `lr * wd` fixed. On the DDP path, the scaled
+   per step. Use `scale_weight_decay=True` to keep `lr * wd` fixed (verified on GPU on the
+   generic path, section 5.1). On the DDP path, the scaled
    value is written into every split group (including the default group), which overrides the
    optimizer's default `weight_decay` for those groups.
 7. **Tied embeddings.** The shared weight is classified as an embedding (its first owner), so it
