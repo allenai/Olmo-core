@@ -314,7 +314,7 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
             K32doff) set -- ARM=D AC=full_offload "EXTRA=--lora-rank 64 --lora-scale 32" ;;
             *) log "MAXT: unknown arm $A"; continue ;;
           esac
-          run "$name" "$@" CTX=${T}k DATA_OVERRIDE=probe${T}k_ee MAX_TOKENS=$((3 * GBT * SEQ)) SMOKE=1 NOWANDB=1 EXPECTED_MIN=20
+          run "$name" "$@" CTX=${T}k DATA_OVERRIDE=probe${T}k_ee MAX_STEPS_TOTAL=3 MAX_TOKENS=$((3 * GBT * SEQ)) SMOKE=1 NOWANDB=1 EXPECTED_MIN=20
           rc=$?; L="$ROOT/logs/$name.log"
           pk=$(grep -oE "GPU active mem \(GiB\)=[0-9.]+" "$L" | grep -oE "[0-9.]+$" | sort -n | tail -1)
           rs=$(grep -oE "GPU reserved mem \(GiB\)=[0-9.]+" "$L" | grep -oE "[0-9.]+$" | sort -n | tail -1)
