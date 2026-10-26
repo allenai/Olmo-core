@@ -18,9 +18,11 @@ Code: `research/token_routing/olmo3_cptdrop/`. Every number below is in the ops 
 ## Verdict
 
 - **Recipe: whole-model LoRA ("K32").** Freeze the embeddings and every block, and train rank-64 adapters (scale 32) on
-  every linear in all 32 blocks, at LR 1e-5 to 2e-5, 16 rows/step, no token dropping.
+  every linear in all 32 blocks, at LR 1e-5 to 2e-5, 16 rows/step, no token dropping. The untied LM head and the final
+  norm still train at full rank, so the cost and memory figures include a full-rank head; a frozen-head or head-LoRA
+  variant has not been run.
   - Cost: 0.700x dense FLOPs/step (measured by the FLOP meter); peak 25.0 vs 35.2 GiB per GPU.
-  - Quality: below dense at the same step count at every budget tested, at 32k and 64k.
+  - Quality: below dense at the same step count at every budget up to 480 steps, at 32k and 64k.
 - **The win is real but modest, and it ends:** FLOPs-to-match (m) peaks at about 3.9x near 48–120 steps, decays to about
   1.8x at 480 steps and to 1.1x at 960 steps, where K32 is BEHIND dense at the same step count (+0.0012 ± 0.0001; far
   bin +0.0035). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure. That
