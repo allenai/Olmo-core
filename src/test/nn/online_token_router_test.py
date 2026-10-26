@@ -1505,3 +1505,38 @@ def test_keep_sched_scales_stage_one_and_keeps_later_stages_absolute():
     assert r.keep_mult() == pytest.approx(0.5)
     with pytest.raises(ValueError):
         _router(keep_sched="0:1")
+
+
+def test_ctx_features_doc_stats_rank_and_neighbours():
+    from olmo_core.nn.online_token_router import _ctx_features
+
+    cos = torch.tensor([[0.0, 1.0, 3.0, 2.0, 0.0, 5.0, 4.0, 0.0]])
+    inq = torch.tensor([[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0]])
+    cid = torch.tensor([[-1, 0, 0, 0, -1, 1, 1, -1]])
+    body = cid >= 0
+    f = _ctx_features(cos, inq, cid, body)
+    assert f.shape == (1, 8, 8)
+    assert torch.allclose(f[0, 1:4, 0], torch.tensor(2.0))  # doc 0 mean cos
+    assert torch.allclose(f[0, 1:4, 1], torch.tensor(3.0))  # doc 0 max
+    assert torch.allclose(f[0, 5:7, 2], torch.tensor(1.0))  # doc 1 in-query rate
+    assert f[0, 1:4, 3].tolist() == [0.0, 1.0, 0.5]  # within-doc rank of cos (1 < 2 < 3)
+    assert f[0, 2, 5] == 1.0 and f[0, 2, 6] == 2.0  # -1 / +1 neighbours inside the document
+    assert f[0, 3, 6] == 0.0 and f[0, 5, 5] == 0.0  # no neighbour across a document boundary
+    assert (f[0, ~body[0]] == 0).all()
+
+
+def test_ctx_and_task_features_widen_the_fit_consistently():
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=2)
+    base = _router(use_hidden=True)
+    r = _router(use_hidden=True, ctx_feats=True, task_onehot=3)
+    assert r.n_features == base.n_features + 8 + 31
+    assert len(r.feature_names()) == r.n_features
+    assert r.feature_names()[r.n_scalar - 1] == "task30"
+    r.begin_step(1, model=m)
+    r.select(m, ids, cid, labels)  # warmup step builds the full feature rows
+    e = r._current
+    assert e["feats"].shape[1] == r.n_features
+    with pytest.raises(ValueError):
+        _router(use_hidden=False, ctx_feats=True)

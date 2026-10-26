@@ -62,6 +62,10 @@ _N_LOG = 11
 N_STRUCT = 1 + 2 * (_N_ONEHOT + _N_LOG) + 3
 #: in-query flag, log repeat count
 N_LEX = 2
+#: ctx_feats: doc mean / max cos_h_q, doc mean in-query, within-doc cos rank, cos at -2 / -1 / +1 / +2
+N_CTX = 8
+#: task_onehot: hashed task slots
+N_TASK = 31
 #: gnorm = log ||dL/dh_t|| (at the embedding output, or at the drop layer in mid-stack mode); gxh = log |<dL/dh_t, h_t>|;
 #: dh = log ||h_t^L - h_t^0|| (residual change through blocks [0, L): an activation-strength target that does not
 #: vanish once a token is well learned; mid-stack only, no backward needed); mix = within-row average of the gnorm
@@ -120,6 +124,13 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    ctx_feats: bool = False
+    """Document-context scalar features (2026-10-26): per token, its document's mean and max of the query-match
+    score ``cos_h_q`` and mean in-query flag, the token's within-document rank of ``cos_h_q``, and ``cos_h_q`` of its
+    +-1 / +-2 neighbours in the same document (importance is smooth). Needs ``use_hidden`` and ``use_query``."""
+    task_onehot: int = 0
+    """Hashed task one-hot features: the row's task key (hash of its first ``task_onehot`` tokens, as
+    ``per_task_key_tokens``) mod 31 as a 31-way one-hot on every body token, in the shared fit. 0 = off."""
     keep_mode: str = "topk"
     """``topk``: each document keeps its own top ``doc_share`` x budget, the rest of the row budget by score (the
     default). ``threshold`` (2026-10-26): one threshold over the whole micro-batch -- every body token whose score
@@ -317,6 +328,10 @@ class OnlineRouterConfig:
             if not self.mod_layers and self.explore_frac <= 0:
                 raise ValueError("online router target_layer with the drop fits on the exploration tokens: "
                                  "set explore_frac > 0")
+        if self.ctx_feats and not (self.use_hidden and self.use_query):
+            raise ValueError("online router ctx_feats needs use_hidden and use_query (they derive from cos_h_q)")
+        if self.task_onehot < 0:
+            raise ValueError("online router task_onehot must be >= 0")
         if self.keep_mode not in ("topk", "threshold"):
             raise ValueError(f"online router keep_mode must be topk / threshold, got {self.keep_mode!r}")
         if self.keep_mode == "threshold" and (self.mass_target > 0 or self.row_cap < 1.0):
@@ -333,6 +348,45 @@ def _log_bucket(j: torch.Tensor) -> torch.Tensor:
     """Bucket of an offset j >= 16: floor(log2 j) - 4, clamped to [0, _N_LOG)."""
     jf = j.clamp(min=16).to(torch.float32)
     return (torch.floor(torch.log2(jf)) - 4).clamp(0, _N_LOG - 1).to(torch.long)
+
+
+def _ctx_features(cos: torch.Tensor, inq: torch.Tensor, cid: torch.Tensor, body: torch.Tensor) -> torch.Tensor:
+    """(B, T, N_CTX) document-context features of ``cos`` (B, T) and the in-query flag ``inq`` (B, T) over each row's
+    documents (``cid`` >= 0, body tokens only); 0 off the body."""
+    B, T = cos.shape
+    dev = cos.device
+    cid = cid.to(torch.long)
+    nd = max(1, int(cid.max().item()) + 1) if cid.numel() else 1
+    gid = torch.arange(B, device=dev)[:, None] * nd + cid.clamp(min=0)
+    dump = B * nd
+    gid = torch.where(body, gid, torch.full_like(gid, dump)).reshape(-1)
+    c, q, bf = cos.reshape(-1).float(), inq.reshape(-1).float(), body.reshape(-1)
+    n = torch.zeros(dump + 1, device=dev).index_add_(0, gid, bf.float())
+    mean_c = torch.zeros(dump + 1, device=dev).index_add_(0, gid, c * bf) / n.clamp(min=1)
+    mean_q = torch.zeros(dump + 1, device=dev).index_add_(0, gid, q * bf) / n.clamp(min=1)
+    max_c = torch.full((dump + 1,), -1e9, device=dev).scatter_reduce(
+        0, gid, torch.where(bf, c, torch.full_like(c, -1e9)), reduce="amax")
+    # within-document rank of cos (0 = lowest, 1 = highest): sort by (document, cos)
+    key = gid.double() * 4.0 + torch.sigmoid(c.double())
+    order = torch.argsort(key)
+    pos = torch.empty_like(order)
+    pos[order] = torch.arange(order.numel(), device=dev)
+    first = torch.cumsum(torch.bincount(gid, minlength=dump + 1), 0) - torch.bincount(gid, minlength=dump + 1)
+    rank = (pos - first[gid]).float() / (n[gid] - 1).clamp(min=1)
+    g2 = gid.reshape(B, T)
+
+    def nb(k):
+        sh = torch.roll(cos, shifts=k, dims=1)
+        same = (torch.roll(g2, shifts=k, dims=1) == g2) & body
+        if k > 0:
+            same[:, :k] = False
+        else:
+            same[:, k:] = False
+        return torch.where(same, sh, torch.zeros_like(sh))
+
+    f = torch.stack([mean_c[gid].reshape(B, T), max_c[gid].reshape(B, T), mean_q[gid].reshape(B, T),
+                     rank.reshape(B, T), nb(2), nb(1), nb(-1), nb(-2)], dim=-1)
+    return f * body.unsqueeze(-1).to(f.dtype)
 
 
 def structural_features(
@@ -564,7 +618,8 @@ class OnlineTokenRouter:
                     items = [a for p in items for a in p]
                 self.gold[fp] = sorted({int(a) for a in items})
         self.hdim = cfg.proj_dim if (cfg.proj_dim and cfg.use_hidden) else (self.d_model if cfg.use_hidden else 0)
-        self.n_scalar = N_STRUCT + N_LEX + (1 if cfg.use_query and cfg.use_hidden else 0) + (1 if cfg.use_gold else 0)
+        self.n_scalar = (N_STRUCT + N_LEX + (1 if cfg.use_query and cfg.use_hidden else 0) + (N_CTX if cfg.ctx_feats else 0)
+                         + (N_TASK if cfg.task_onehot else 0) + (1 if cfg.use_gold else 0))
         self.n_features = self.n_scalar + self.hdim * (1 + int(cfg.use_query))
         self.step = 0
         self.total_steps: Optional[int] = None  # set by the callback (dense_tail_frac)
@@ -607,6 +662,11 @@ class OnlineTokenRouter:
         names += ["rel_in_doc", "doc_rel_idx", "log_doc_len", "in_query", "log_repeat"]
         if self.cfg.use_query and self.cfg.use_hidden:
             names.append("cos_h_q")
+        if self.cfg.ctx_feats:
+            names += ["doc_mean_cos", "doc_max_cos", "doc_mean_inq", "doc_rank_cos", "cos_m2", "cos_m1", "cos_p1",
+                      "cos_p2"]
+        if self.cfg.task_onehot:
+            names += [f"task{i}" for i in range(N_TASK)]
         if self.cfg.use_gold:
             names.append("gold")
         names += [f"h{i}" for i in range(self.hdim)]
@@ -726,10 +786,18 @@ class OnlineTokenRouter:
         )
         rep = torch.log1p(cnt[key]) / 5.0
         out: Dict[str, torch.Tensor] = {"body": body, "query": qm, "_edge": torch.minimum(offs["j"], offs["r"]),
-                                        "_j": offs["j"]}
+                                        "_j": offs["j"], "_cid": chunk_ids.to(torch.long)}
         out["_s0"] = torch.cat([struct, (in_q * body).unsqueeze(-1), (rep * body).unsqueeze(-1)], dim=-1)
         if c.use_gold:
             out["_gold"] = (self._row_gold(input_ids, chunk_ids) * body).unsqueeze(-1)
+        if c.task_onehot:
+            N = min(int(c.task_onehot), int(input_ids.shape[1]))
+            pw = torch.tensor([pow(1_000_003, i, 2**31 - 1) for i in range(N)], dtype=torch.int64,
+                              device=input_ids.device)
+            slot = ((input_ids[:, :N].to(torch.int64) * pw[None, :]).sum(dim=1) % N_TASK)
+            oh = torch.zeros(B, N_TASK, device=input_ids.device)
+            oh[torch.arange(B, device=input_ids.device), slot] = 1.0
+            out["_task"] = oh[:, None, :] * body.unsqueeze(-1).to(torch.float32)
         if c.use_hidden and hidden:
             self.add_hidden(out, self._hidden(model, input_ids))
         elif not c.use_hidden:
@@ -751,12 +819,14 @@ class OnlineTokenRouter:
             q = q * torch.rsqrt(q.pow(2).mean(-1, keepdim=True) + 1e-6)
             out["q"] = q
             out["_cos"] = ((h * q[:, None, :]).mean(-1) * body).unsqueeze(-1)
+            if c.ctx_feats:
+                out["_ctx"] = _ctx_features(out["_cos"][..., 0], out["_s0"][..., N_STRUCT], out["_cid"], body)
         out["h"] = h * body.unsqueeze(-1)
         self._assemble(out)
 
     @staticmethod
     def _assemble(out: Dict[str, torch.Tensor]) -> None:
-        out["s"] = torch.cat([out[k] for k in ("_s0", "_cos", "_gold") if k in out], dim=-1)
+        out["s"] = torch.cat([out[k] for k in ("_s0", "_cos", "_ctx", "_task", "_gold") if k in out], dim=-1)
 
     def full_features(self, fp: Dict[str, torch.Tensor], rows: torch.Tensor, cols: torch.Tensor) -> torch.Tensor:
         """Materialise the (N, F) feature rows of the selected tokens."""

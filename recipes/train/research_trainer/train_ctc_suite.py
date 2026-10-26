@@ -1960,6 +1960,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora", type=int, default=0,
                     help="online router: LOW-RANK early stack -- blocks [0, drop_layer) + embeddings frozen from step 0, "
                     "every linear in those blocks gets a rank-R LoRA adapter (no base grads / Adam state). 0 = off")
+    ap.add_argument("--st-otr-ctx-feats", action="store_true",
+                    help="online router: document-context features (doc mean / max of cos_h_q, doc in-query rate, "
+                    "within-doc cos rank, +-1 / +-2 neighbour cos)")
+    ap.add_argument("--st-otr-task-onehot", type=int, default=0,
+                    help="online router: hashed 31-way task one-hot (task key = hash of the first N tokens) in the "
+                    "shared fit. 0 = off")
     ap.add_argument("--st-otr-keep-mode", choices=["topk", "threshold"], default="topk",
                     help="online router: threshold = one score threshold over the micro-batch (hard docs / rows keep "
                     "more, easy ones less, same total), per-row cap --st-otr-row-cap x budget, floor counted; the fit "
