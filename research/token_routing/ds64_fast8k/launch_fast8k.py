@@ -503,7 +503,10 @@ def do_launch(args, mode):
     for arm in args.arms.split(","):
         for budget in args.budgets.split(","):
             variant, data, largs, extra = arm_args(args.task, arm, budget)
-            name = run_name(args.task, arm, budget)
+            # --seed N: a seed replicate; the seed rides on the arm (<arm>sd<N>) so the collectors' name patterns
+            # still parse and seed copies average (collect_pareto_points / make_overview_page strip sd<N>)
+            label = f"{arm}sd{args.seed}" if args.seed else arm
+            name = run_name(args.task, label, budget)
             if name in st["runs"] and mode == "launch" and not args.force:
                 print(f"[skip] {name} already launched ({st['runs'][name].get('ex')})")
                 continue
@@ -512,7 +515,7 @@ def do_launch(args, mode):
                    "--run-name", name, "--exact-run-name", "--num-nodes", str(NODES),
                    "--num-gpus", str(GPUS), "--epochs", str(budget_epochs(budget)), "--lr", str(args.lr),
                    "--cluster", CLUSTER, "--wandb-group", args.wandb_group, "--priority", "urgent",
-                   "--no-follow", "--no-compile"] + largs + (["--extra-args", extra] if extra else []) + [mode]
+                   "--no-follow", "--no-compile"] + (["--seed", str(args.seed)] if args.seed else []) + largs + (["--extra-args", extra] if extra else []) + [mode]
             print(" ".join(cmd), flush=True)
             rc, out = sh(cmd)
             _log(name, mode, out)
@@ -520,7 +523,7 @@ def do_launch(args, mode):
             tail = "\n".join(out.strip().splitlines()[-2:]).replace("\t", " ")[:200]
             print(f"  -> rc={rc} ex={ex}: {tail[:200]}", flush=True)
             if mode == "launch":
-                st["runs"][name] = {"ex": ex, "task": args.task, "arm": arm, "budget": budget,
+                st["runs"][name] = {"ex": ex, "task": args.task, "arm": label, "budget": budget,
                                     "steps_expected": (parse_budget(args.task, budget)[2]
                                                        or budget_epochs(budget) * -(-parse_budget(args.task, budget)[1] // GLOBAL_BATCH)),
                                     "gpus": GPUS * NODES, "state": "S" if ex else "LAUNCH-FAILED"}
@@ -729,6 +732,7 @@ def main():
     ap.add_argument("--parity-rows", default=PARITY_ROWS)
     ap.add_argument("--parity-gen-rows", default=PARITY_GEN_ROWS)
     ap.add_argument("--force", action="store_true", help="relaunch even if state.json has it")
+    ap.add_argument("--seed", type=int, default=0, help="launch: training seed (run named <arm>sd<seed>; 0 = default)")
     ap.add_argument("--eval-rerank", action="store_true",
                     help="eval (mt11): also score rerank on its suite rows (needs them staged on weka: "
                     "stage_suite_rows_beaker.sh); default once RERANK_SUITE_ROWS_STAGED is True")

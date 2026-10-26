@@ -41,7 +41,7 @@ def parse_name(run):
         tag = lambda pre: next((int(t[len(pre):]) for t in after if re.fullmatch(pre + r"\d+", t)), 0)
         return dict(mix=mix, rows=int(rows or 488), arm="-".join(before), lr=float(lr.group(1)), campaign=camp,
                     seed=seed, epochs=tag("ep") or 1, max_steps=tag("s"))
-    m = re.match(r"f8k-(mt\d+)-(.+)-[sf](\d+)(?:x(\d+))?(?:st(\d+))?-(tdb|tdc|tde|otr)-lr(\d[\d.]*(?:e-\d+)?)$", run)
+    m = re.match(r"f8k-(mt\d+)-(.+)-[sf](\d+)(?:x(\d+))?(?:st(\d+))?-(tdb|tdc|tde|tdx|otr)-lr(\d[\d.]*(?:e-\d+)?)$", run)
     if m:
         mix, arm, rows, ep, steps, camp, lr = m.groups()
         seed = int(re.search(r"sd(\d+)$", arm).group(1)) if re.search(r"sd\d+$", arm) else 0
@@ -123,9 +123,12 @@ def beaker_runs():
     session's runs (its state.json on its branch). Scores come from ops results (any experiment), PF / steps /
     wall-clock from the training log."""
     srcs = []
-    st_path = os.path.join(HERE, "state.json")
-    if os.path.exists(st_path):
-        srcs += [(k, v) for k, v in json.load(open(st_path))["runs"].items() if "-tdc" in k or "-tde" in k]
+    # F8K_EXTRA_STATE: colon-separated state.json files of other campaigns' checkouts (the LoRA x routing 2x2's
+    # -tdx runs live in their own worktree's state.json)
+    for st_path in [os.path.join(HERE, "state.json")] + [p for p in os.environ.get("F8K_EXTRA_STATE", "").split(":") if p]:
+        if os.path.exists(st_path):
+            srcs += [(k, v) for k, v in json.load(open(st_path))["runs"].items()
+                     if "-tdc" in k or "-tde" in k or "-tdx" in k]
     try:
         rs = subprocess.run(["git", "-C", HERE, "show", ":".join(ROUTER_STATE)], capture_output=True, text=True,
                             timeout=60).stdout
