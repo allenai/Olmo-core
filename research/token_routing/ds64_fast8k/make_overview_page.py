@@ -161,7 +161,7 @@ a { color: var(--c2); }
     <li><b>SFT, 11-task mix:</b> ≈1.7× for the recipe; whole-model LoRA + two-stage scores 0.762 against dense's 0.697 at the same 232 PF (2 seeds), ≈2.4×. Gains concentrate on xabsence, contradiction and outlier; four retrieval tasks are near dense's ceiling; grouping is the one task the router loses.</li>
     <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. <b>The recipe at 64k (1/4 epoch, one seed): +0.037 task-average at 0.365× dense FLOPs, ahead on all 10 graded tasks, 24% less peak active memory</b> (37.2 vs 48.7 GiB); its gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k).</li>
     <li><b>The recipe:</b> rank-64 LoRA adapters on blocks 0–6 (frozen base), an online gradient-norm router that keeps 20% of tokens from block 7 and rescores to 7% at block 16, no full-context steps, LR 5e-6, plus a 16-token floor per document on the 11-task mix. Whole-model LoRA (all 32 blocks, LR 1e-5) is cheaper still at the same quality.</li>
-    <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and parity by 960 steps (dev CE +0.0012 behind dense; ≈1.04× counting recompute). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure, so this is a short-budget recipe. (64k/128k CPT numbers are being re-scored: the eval only scored each row's first 32k targets.) <b>Freezing the output layer too is cheaper and better</b> (no full-rank weights trained at all): −0.0037 / −0.0041 vs dense at 48 / 120 steps, ≈4.8× / ≈4.3× FLOPs-to-match, 0.685× FLOPs per step, 22.3 vs 35.2 GiB peak; longer budgets are training.</li>
+    <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and parity by 960 steps (dev CE +0.0012 behind dense; ≈1.04× counting recompute). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure, so this is a short-budget recipe. At 64k context the lead is ≈1.4–1.5× the 32k one, and about the same at 128k. <b>Freezing the output layer too is cheaper and better</b> (no full-rank weights trained at all): −0.0037 / −0.0041 vs dense at 48 / 120 steps, ≈4.8× / ≈4.3× FLOPs-to-match, 0.685× FLOPs per step, 22.3 vs 35.2 GiB peak; longer budgets are training.</li>
     <li><b>Max train length at 80 GB (SFT):</b> ≈1.8× dense for the recipe and ≈2.4× for whole-model LoRA (extrapolated from short probes).</li>
   </ul>
 </section>
@@ -224,9 +224,9 @@ a { color: var(--c2); }
     <figure><h3>Dense FLOPs needed to match the router, by eval length</h3><div class="chart"><canvas id="lenF" aria-label="FLOPs to match by eval length"></canvas></div>
       <figcaption>Same runs: training PF dense needs to reach the router's score at that length, divided by the router's PF. Above 1 = the router is FLOP-cheaper.</figcaption></figure>
     <figure><h3>CPT: whole-model LoRA vs dense, training at 32k vs 64k</h3><div class="chart"><canvas id="lenC" aria-label="CPT gap by training length"></canvas></div>
-      <figcaption><b>⚠ The 64k line is unverified:</b> its eval scored only the first 32k targets of each row (bug fixed, re-scoring running). Dev CE of whole-model LoRA minus dense at the same step count (more negative = better).</figcaption></figure>
+      <figcaption>Dev CE of whole-model LoRA minus dense at the same step count, full-row scoring (more negative = better). The gap is ≈1.4–1.5× larger at 64k than at 32k and about the same at 128k as at 64k. On the far half of each row alone (32k–64k, 64k–128k positions) it is essentially the same.</figcaption></figure>
   </div>
-  <p class="note" id="lenNote"><b>Reading:</b> at 2k the router barely beats dense (Δ ≈ 0.001–0.004; these tasks are near their ceiling at 2k). The gain rises to +0.015–0.033 at 8k and +0.03–0.05 at 16k–32k, then stays at +0.02–0.04 at 64k; dense FLOPs to match go from ≈1.1–1.3× at 2k to ≈1.4–1.9× at 8k–32k and ≈1.3–1.6× at 64k. So the advantage grows with eval length up to ~16–32k and holds at 64k, rather than growing without bound (1/2- and 1-epoch points are one seed). The CPT 64k-vs-32k comparison is withdrawn until the full-row re-scoring lands (the 64k eval scored only the first 32k targets).</p>
+  <p class="note" id="lenNote"><b>Reading:</b> at 2k the router barely beats dense (Δ ≈ 0.001–0.004; these tasks are near their ceiling at 2k). The gain rises to +0.015–0.033 at 8k and +0.03–0.05 at 16k–32k, then stays at +0.02–0.04 at 64k; dense FLOPs to match go from ≈1.1–1.3× at 2k to ≈1.4–1.9× at 8k–32k and ≈1.3–1.6× at 64k. So the advantage grows with eval length up to ~16–32k and holds at 64k, rather than growing without bound (1/2- and 1-epoch points are one seed). In CPT (full-row scoring), LoRA's lead over dense is ≈1.4–1.5× larger when training at 64k than at 32k, and about the same at 128k as at 64k: it grows to 64k and then stops.</p>
 </section>
 
 <section>
@@ -240,8 +240,8 @@ a { color: var(--c2); }
   <div class="figs">
     <figure><h3>32k: dev CE vs training FLOPs (lower is better)</h3><div class="chart"><canvas id="cpt32" aria-label="CPT 32k"></canvas></div>
       <figcaption>dev32k_1024 (1,024 rows of 32k), full-context CE; paired SE ≈ ±0.0001, seed-to-seed ≈ ±0.0001. Dense curve 5–960 steps.</figcaption></figure>
-    <figure><h3>64k: dev CE vs training FLOPs</h3><div class="chart"><canvas id="cpt64" aria-label="CPT 64k"></canvas></div>
-      <figcaption><b>⚠ Unverified:</b> these dev64k numbers scored only the first 32k targets of each row (an eval binning bug, now fixed); full-row re-scoring is running. Both arms used the same metric, so the comparison is internally consistent but does not yet measure long-range CE. dev64k_512 (512 rows); dense 64k PF estimated as LoRA PF ÷ 0.696.</figcaption></figure>
+    <figure><h3>LoRA's gap to dense at 32k, 64k and 128k context</h3><div class="chart"><canvas id="cpt64" aria-label="CPT 64k"></canvas></div>
+      <figcaption>Whole-model LoRA minus dense dev CE at the same step count, scored on full rows (dev32k_1024 / dev64k_512 / dev128k_512; paired SE ≈ ±0.0001–0.0002). More negative = LoRA better.</figcaption></figure>
     <figure><h3>Whole-model LoRA: dense FLOPs to match, by budget (32k)</h3><div class="chart"><canvas id="cptm" aria-label="CPT FLOPs to match"></canvas></div>
       <figcaption>The edge peaks near 48 steps and decays as dense keeps learning, reaching parity by 960 steps (dev CE +0.0012 behind dense there; far-repeat CE +0.0035). At 64k the gap is ≈1.5× larger at every budget.</figcaption></figure>
   </div>
@@ -368,7 +368,7 @@ function draw() {
     ch.options.scales.y.min = 0; ch.options.scales.y.max = 85; ch.options.scales.x.min = 0; ch.options.scales.x.max = xm;
     ch.data.datasets.forEach(ds => { if (ds.label.includes("fit")) { ds.pointRadius = 0; } }); ch.update(); } });
   plot("cpt32", Object.entries(D.cpt32).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
-  plot("cpt64", Object.entries(D.cpt64).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
+  plot("cpt64", Object.entries(D.cptlen).map(([k, v], i) => ({ label: "train + eval at " + k, col: COL[i + 1], pts: v.map(p => ({ x: p[0], y: p[1] })) })), "LoRA − dense dev CE (nats)", { xlab: "training steps (log)", dp: 4 });
   plot("cptm", [{ label: "whole-model LoRA, 32k", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1" }], "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
 }
 function multiples(hostId, sets, tasks, prefix) {
@@ -554,7 +554,8 @@ def main():
            {"label": "Router keep 10% + floor", "dense": False, "p": pick(S, "mt11", "s", "otr10M7de0f16")}]
     data = {"f4fresh": [{"label": l, "dense": dn, "p": pick(S, "mt4", "f", arm)} for l, arm, dn in f4fresh],
             "f4orig": f4orig, "f11": f11, "m64": m64_data(a.m64),
-            "cptlen": {"32k": [(120, -0.0034), (240, -0.0023), (480, -0.0012)], "64k": [(120, -0.0049), (240, -0.0033), (480, -0.0020)]}, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT, "memstd": MEM_STD, "memflags": MEM_FLAGS, "memstdfit": MEM_STD_FIT, "memflagsfit": MEM_FLAGS_FIT}
+            "cptlen": {"32k": [(48, -0.0031), (120, -0.0034), (240, -0.0023), (480, -0.0012)], "64k": [(120, -0.0050), (240, -0.0030), (480, -0.0017)],
+                       "128k": [(48, -0.0035), (120, -0.0041)]}, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT, "memstd": MEM_STD, "memflags": MEM_FLAGS, "memstdfit": MEM_STD_FIT, "memflagsfit": MEM_FLAGS_FIT}
     data["bylen"] = by_length(data["m64"])
     try:
         data["gc"] = json.load(open(a.gradcomp))
