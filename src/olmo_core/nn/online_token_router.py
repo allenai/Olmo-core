@@ -124,6 +124,13 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    mlp_hidden: int = 0
+    """Residual 2-layer MLP router (2026-10-26): score = ridge + MLP(features), the MLP (``mlp_hidden`` ReLU units,
+    output layer zero-initialised so it starts at the ridge) trained online on the ridge's residual with
+    ``mlp_steps`` Adam steps per training step on that step's targets (gradients all-reduced over ranks). Charged:
+    2 F H per scored token + 6 F H per training sample and step. 0 = ridge only."""
+    mlp_steps: int = 4
+    mlp_lr: float = 1e-3
     later_mass_target: float = 0.0
     """Pyramid stages after the first use the adaptive mass keep (``mass_target`` semantics: each document's fewest
     top tokens covering this share of its predicted gradient mass among the survivors), capped per row at
@@ -337,6 +344,8 @@ class OnlineRouterConfig:
                                            and 0.0 < self.later_max_keep_frac <= 1.0 and self.keep_mode == "topk"):
             raise ValueError("online router later_mass_target needs stages, a share in (0, 1], "
                              "later_max_keep_frac in (0, 1] and keep_mode topk")
+        if self.mlp_hidden < 0 or self.mlp_steps < 1 or self.mlp_lr <= 0:
+            raise ValueError("online router mlp_hidden must be >= 0, mlp_steps >= 1 and mlp_lr > 0")
         if self.ctx_feats and not (self.use_hidden and self.use_query):
             raise ValueError("online router ctx_feats needs use_hidden and use_query (they derive from cos_h_q)")
         if self.task_onehot < 0:
@@ -854,6 +863,9 @@ class OnlineTokenRouter:
         """(B, T) linear score without materialising the full feature matrix."""
         assert self.w is not None
         sc = self._score_with(fp, self.w)
+        ms = self._mlp_score(fp)
+        if ms is not None:
+            sc = sc + ms
         if self.task_w and self._row_task is not None:
             # per-task routers: a row whose task already has its own fit is scored by it (else by the pooled fit)
             for b, k in enumerate(self._row_task.tolist()):
@@ -953,7 +965,8 @@ class OnlineTokenRouter:
         score = None
         if self.w is not None:
             score = self.score(fp)
-            self._flop(model, 2.0 * self.n_features * float(body.sum()))
+            self._flop(model, 2.0 * self.n_features * (1 + self.cfg.mlp_hidden * int(getattr(self, "_mlp", None)
+                                                                                   is not None)) * float(body.sum()))
         if dense:
             keep = body.clone()
         else:
@@ -1701,7 +1714,65 @@ class OnlineTokenRouter:
                 self._flop(model, F**3 / 3.0 + 4.0 * F * F)
         if self.cfg.per_task_key_tokens > 0:
             self._fit_per_task(model, Xc, yc, torch.cat(tks).to(dev) if len(tks) == len(X) and tks else None, dev)
+        if self.cfg.mlp_hidden > 0 and self.w is not None:
+            self._train_mlp(model, Xc, yc, dev)
         self.step = int(step)
+
+    def _train_mlp(self, model, Xc: torch.Tensor, yc: torch.Tensor, dev) -> None:
+        """mlp_hidden: a few Adam steps of the residual MLP on this step's (row-centred) targets minus the ridge's
+        prediction. Every rank runs the same number of steps (gradients all-reduced), samples or not."""
+        import torch.distributed as dist
+
+        c, F, H = self.cfg, self.n_features, self.cfg.mlp_hidden
+        if getattr(self, "_mlp", None) is None:
+            g = torch.Generator().manual_seed(c.seed * 7919 + 17 + self.stage_idx)
+            ps = [(torch.randn(F, H, generator=g) / math.sqrt(F)).to(dev), torch.zeros(H, device=dev),
+                  torch.zeros(H, device=dev), torch.zeros(1, device=dev)]
+            ps = [p.requires_grad_(True) for p in ps]
+            self._mlp = {"p": ps, "opt": torch.optim.Adam(ps, lr=c.mlp_lr)}
+        W1, b1, w2, b2 = self._mlp["p"]
+        X = Xc.to(dev, torch.float32)
+        r = (yc.to(dev, torch.float64) - Xc.to(dev, torch.float64) @ self.w.to(dev, torch.float64)).to(torch.float32)
+        n = torch.tensor([float(X.shape[0])], device=dev)
+        ddp = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
+        if ddp:
+            dist.all_reduce(n)
+        N = float(n.item())
+        if N <= 0:
+            return
+        losses = []
+        with torch.enable_grad():
+            for _ in range(c.mlp_steps):
+                self._mlp["opt"].zero_grad(set_to_none=False)
+                pred = torch.relu(X @ W1 + b1) @ w2 + b2
+                loss = ((pred - r) ** 2).sum()
+                loss.backward()
+                for p in self._mlp["p"]:
+                    if p.grad is None:
+                        p.grad = torch.zeros_like(p)
+                    if ddp:
+                        dist.all_reduce(p.grad)
+                    p.grad.div_(N)
+                self._mlp["opt"].step()
+                losses.append(float(loss.detach()) / max(1.0, float(X.shape[0])))
+        self._stat("mlp_resid_mse", losses[-1])
+        self._stat("mlp_resid_var", float(r.var()) if r.numel() > 1 else float("nan"))
+        if model is not None:
+            self._flop(model, 6.0 * F * H * X.shape[0] * c.mlp_steps)
+
+    def _mlp_score(self, fp: Dict[str, torch.Tensor]) -> Optional[torch.Tensor]:
+        """(B, T) residual MLP score, or None before it exists."""
+        st = getattr(self, "_mlp", None)
+        if st is None:
+            return None
+        W1, b1, w2, b2 = [p.detach() for p in st["p"]]
+        ns, hd = self.n_scalar, self.hdim
+        pre = fp["s"] @ W1[:ns]
+        if "h" in fp:
+            pre = pre + fp["h"] @ W1[ns : ns + hd]
+            if "q" in fp:
+                pre = pre + (fp["h"] * fp["q"][:, None, :]) @ W1[ns + hd : ns + 2 * hd]
+        return torch.relu(pre + b1) @ w2 + b2
 
     def _fit_per_task(self, model, Xc: torch.Tensor, yc: torch.Tensor, tk: Optional[torch.Tensor], dev) -> None:
         """One ridge fit per task key (same decay / ridge as the pooled fit; a task's statistics decay only on the

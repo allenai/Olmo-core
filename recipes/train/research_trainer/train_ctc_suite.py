@@ -1966,6 +1966,11 @@ def parse_args() -> argparse.Namespace:
                     "--st-otr-later-max-keep-frac of the stage's input. 0 = fixed budgets")
     ap.add_argument("--st-otr-later-max-keep-frac", type=float, default=1.0,
                     help="--st-otr-later-mass-target: per-row cap (share of the tokens entering the stage)")
+    ap.add_argument("--st-otr-mlp-hidden", type=int, default=0,
+                    help="online router: residual 2-layer MLP (H ReLU units) on top of the ridge, trained online on the "
+                    "ridge residual. 0 = ridge only")
+    ap.add_argument("--st-otr-mlp-steps", type=int, default=4, help="--st-otr-mlp-hidden: Adam steps per training step")
+    ap.add_argument("--st-otr-mlp-lr", type=float, default=1e-3, help="--st-otr-mlp-hidden: Adam LR")
     ap.add_argument("--st-otr-ctx-feats", action="store_true",
                     help="online router: document-context features (doc mean / max of cos_h_q, doc in-query rate, "
                     "within-doc cos rank, +-1 / +-2 neighbour cos)")

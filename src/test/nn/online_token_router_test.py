@@ -1549,3 +1549,23 @@ def test_later_mass_target_applies_to_later_stages_only():
     assert s[1].cfg.mass_target == pytest.approx(0.6) and s[1].cfg.max_keep_frac == pytest.approx(0.5)
     with pytest.raises(ValueError):
         _router(drop_layer=2, later_mass_target=0.6)  # needs stages
+
+
+def test_residual_mlp_router_fits_what_the_ridge_cannot():
+    torch.manual_seed(0)
+    r = _router(use_hidden=False, mlp_hidden=32, mlp_steps=200, mlp_lr=1e-2)
+    F = r.n_features
+    X = torch.randn(512, F, dtype=torch.float64)
+    y = X[:, 3] ** 2 - 1.0  # zero-mean, uncorrelated with every feature: invisible to a linear fit
+    r.w = torch.zeros(F)
+    r._train_mlp(None, X, y, torch.device("cpu"))
+    m = r.last_metrics if hasattr(r, "last_metrics") else None  # noqa: F841
+    stats = r._stats
+    assert stats["mlp_resid_mse"][-1] < 0.5 * stats["mlp_resid_var"][-1]
+    # scoring from feature parts matches the MLP on materialised rows
+    fp = {"s": X[:4].to(torch.float32)[None]}
+    W1, b1, w2, b2 = [p.detach() for p in r._mlp["p"]]
+    want = torch.relu(X[:4].float() @ W1 + b1) @ w2 + b2
+    assert torch.allclose(r._mlp_score(fp)[0], want, atol=1e-5)
+    with pytest.raises(ValueError):
+        _router(mlp_hidden=-1)
