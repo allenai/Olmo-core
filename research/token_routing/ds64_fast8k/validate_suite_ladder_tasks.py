@@ -59,7 +59,7 @@ class _Count(logging.Handler):
 
 #: ladder base task -> (suite subset, {rung tokens: file tokens}) for --base-tasks defaults
 BASE_SUBSETS = {"nq": ("nq", {}), "outlier": ("outlier", {}), "oolong": ("oolong", {}),
-                "contradiction": ("contradiction_iid", {"2048": "2560"})}
+                "contradiction": ("contradiction_iid", {"2048": "2560"}), "rerank": ("rerank", {})}
 
 
 def _perturb(text):
@@ -89,7 +89,7 @@ def main() -> None:
     ap.add_argument("--rungs", nargs="+", default=["2048", "8192"])
     ap.add_argument("--tasks", nargs="+", default=None, help="SUITE_TASKS subset (default all)")
     ap.add_argument("--base-tasks", nargs="*", default=[],
-                    help="nq/outlier/oolong/contradiction: graded by the ctc spec (--ctc-grade)")
+                    help="nq/outlier/oolong/contradiction/rerank: graded by the ctc spec (--ctc-grade)")
     ap.add_argument("--files", default=None,
                     help='JSON {task: {rung: path}} replacing the default rung files of a task')
     ap.add_argument("--out", default=None, help="write the summary JSON here")

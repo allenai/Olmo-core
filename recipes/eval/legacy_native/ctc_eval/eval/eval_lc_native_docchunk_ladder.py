@@ -27,8 +27,13 @@ Per-task chunk granularity (matches the training converter):
 Plus 6 CTC-suite tasks (see ``SUITE_TASKS``): hotpotqa, qdmatch_nq, xabsence, reorder, strmatch,
 grouping -- rendered like the setA converter and graded by the vendored ctc spec exactly as olmo-eval
 grades the suite row. Their rung files come from ``DC_RUNG_FILES`` or ``CTC_SUITE_ROWS_ROOT``.
-``--ctc-grade`` (env ``LADDER_CTC_GRADE``) grades nq / outlier / oolong / contradiction the same way
-(``CTC_GRADED_BASE``), for scoring those four on the suite's own rows.
+``--ctc-grade`` (env ``LADDER_CTC_GRADE``) grades nq / outlier / oolong / contradiction / rerank the
+same way (``CTC_GRADED_BASE``), for scoring those five on the suite's own rows (rerank: the HF
+``rerank`` subset, primary ``ce_pos_recall`` averaged over CE-scorable rows as olmo-eval does).
+reorder also reports ``kendall_tau_tolerant`` / ``pairwise_acc_tolerant`` (parse-tolerant partial
+credit, :func:`reorder_tolerant_scores`) beside the unchanged strict ``kendall_tau``.
+``--repetition-stop id|ngram`` (env ``LADDER_REPETITION_STOP``; default off) stops a generation at a
+repeated id / token n-gram; it changes what is scored, so it is off unless asked for.
 
 The rung ladder files resolve against ``EVAL500_ROOT`` (env), exactly like ``eval_lc_native.py`` -- on
 Beaker the runner sets ``EVAL500_ROOT=$PRASANNS/_eval_bundle_eval500_v2`` (v2) so ``{E5}/<sub>/<file>``
@@ -55,10 +60,13 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 
-import torch
+# torch is imported inside main() (2026-10-25), so the grading helpers below (ctc_score_one,
+# make_ctc_score_fn, reorder_tolerant_scores, RepetitionStop) import torch-free: CPU tests and
+# research/token_routing/ds64_fast8k/rescore_saved_generations.py load this module on any node.
 
 # Reserved ids. DEFAULTS are the Qwen3 family; main() overwrites every one of them from
 # olmo_core.data.document_chunk_landmark.RESERVED_IDS[family] (+ the tokenizer's <|im_end|>) once
@@ -119,8 +127,15 @@ SUITE_RUNG_TOKENS = {"2k": 2048, "4k": 4096, "8k": 8192, "16k": 16384, "32k": 32
 #: Prompt rendering / segmentation stay the ladder's (loadtask, chunk_by, item_regex unchanged); the
 #: primary metric, decode budget and stop preset become the spec's, as for SUITE_TASKS.
 #:   ladder task: ctc grader spec
+#: rerank (2026-10-25) is graded by the ctc ``rerank`` spec on its suite rows (HF subset ``rerank``,
+#: olmo-eval roster row ctc_rerank): primary ``ce_pos_recall``, newline stop, 512-token budget, and
+#: the primary mean taken over the rows that HAVE a CE-positive document only (olmo-eval's
+#: ``skip_when_zero="ce_ref_available"``; 14/500 rows at r2k and r8k have none).
 CTC_GRADED_BASE = {"nq": "retrieval", "outlier": "outlier", "oolong": "oolong",
-                   "contradiction": "contradiction"}
+                   "contradiction": "contradiction", "rerank": "rerank"}
+#: ctc specs whose primary-metric mean skips rows where this sub-metric is 0 (metric undefined there,
+#: not failed) -- olmo-eval ctc_suite._SKIP_WHEN_ZERO, so the ladder number equals olmo-eval's.
+CTC_SKIP_WHEN_ZERO = {"rerank": "ce_ref_available"}
 
 
 def _ctc_registry():
@@ -150,7 +165,7 @@ def _ctc_registry():
     from ctc.tasks._grouping import make_grouping_spec
 
     for mod in ("retrieval", "qdmatch", "xabsence", "reorder", "strmatch", "outlier", "oolong",
-                "contradiction"):
+                "contradiction", "rerank"):
         importlib.import_module(f"ctc.tasks.{mod}")  # registers on first import
     if "grouping" not in registry.names():
         registry.register(
@@ -203,18 +218,97 @@ def ctc_score_one(spec, example, text):
     return parsed, {k: float(v) for k, v in spec.score(parsed, gold).items()}
 
 
+_INT_RE = re.compile(r"\d+")
+
+#: The reorder metrics added beside the strict ``kendall_tau`` (2026-10-25). See reorder_tolerant_scores.
+REORDER_TOLERANT_KEYS = ("kendall_tau_tolerant", "pairwise_acc_tolerant", "id_coverage", "dup_rate")
+
+
+def reorder_tolerant_scores(text, gold_order):
+    """
+    Parse-tolerant partial credit for ``reorder``, next to the ctc spec's strict ``kendall_tau``
+    (which scores 0 unless the output contains an EXACT permutation of ``1..n``; at 8k nearly every
+    generation repeats ids or loops, so the strict metric reads ~0 for every arm, dense included).
+
+    Parsing: every integer in ``text`` in emission order; an id outside the gold set is ignored, a
+    repeated id keeps its FIRST occurrence (so a repetition loop costs nothing beyond the ids it
+    never reached). Scoring is over all ``T = n(n-1)/2`` gold pairs ``(a, b)``, ``a`` before ``b`` in
+    ``gold_order``: concordant ``C`` = both emitted, ``a`` first; discordant ``D`` = both emitted,
+    ``b`` first; a pair with a never-emitted id is "missing".
+
+    :returns: ``kendall_tau_tolerant = (C - D) / T`` in ``[-1, 1]`` -- missing pairs count 0, the
+        chance value, so an empty answer scores 0 like the strict metric's parse failure, a full
+        exact permutation scores its true Kendall tau, and an exact reversal scores -1;
+        ``pairwise_acc_tolerant = C / T`` in ``[0, 1]`` -- missing pairs count WRONG (a random full
+        permutation scores 0.5, an empty answer 0); ``id_coverage`` = share of gold ids emitted;
+        ``dup_rate`` = share of emitted in-range ids that were repeats.
+
+    .. note::
+       On an exact permutation this is NOT the strict ``kendall_tau``: the vendored
+       ``ctc.format.metrics.kendall_tau(pred, gold)`` correlates the id VALUES position by position
+       (``scipy.stats.kendalltau(pred, gold)``), not the order of each id pair, so it equals the
+       ordering tau only when ``gold_order`` is the identity (a reversed answer scores 1/3 on
+       ``gold=[3,1,2]``). Both give 1.0 on a perfect answer.
+    """
+    gold = [int(g) for g in gold_order]
+    n = len(gold)
+    valid = set(gold)
+    pos, n_in_range, n_dup = {}, 0, 0
+    for tok in _INT_RE.findall(text or ""):
+        i = int(tok)
+        if i not in valid:
+            continue
+        n_in_range += 1
+        if i in pos:
+            n_dup += 1
+        else:
+            pos[i] = len(pos)
+    total = n * (n - 1) // 2
+    seq = [pos[g] for g in gold if g in pos]  # emitted positions, in gold order
+    conc = sum(1 for a in range(len(seq)) for b in range(a + 1, len(seq)) if seq[a] < seq[b])
+    disc = len(seq) * (len(seq) - 1) // 2 - conc
+    return {
+        "kendall_tau_tolerant": (conc - disc) / total if total else 0.0,
+        "pairwise_acc_tolerant": conc / total if total else 0.0,
+        "id_coverage": len(pos) / n if n else 0.0,
+        "dup_rate": n_dup / n_in_range if n_in_range else 0.0,
+    }
+
+
+def ctc_clean_text(spec, text):
+    """The text :func:`ctc_score_one` parses (stop preset applied), or ``None`` for a generation
+    still inside an unclosed ``<think>`` (a parse failure there)."""
+    from ctc.eval.stopping import STOP_PRESETS
+    from ctc.eval.stopping import apply as apply_stop
+    from ctc.eval.stopping import in_unclosed_think
+
+    cleaned = apply_stop(text or "", STOP_PRESETS[spec.stop])
+    return None if in_unclosed_think(cleaned) else cleaned
+
+
 def make_ctc_score_fn(spec_name):
     """
     A ladder ``score_fn(examples, responses) -> (metrics, per_row)`` for one suite grader: the mean
     of every metric the spec returns over ALL rows (a too-long row is an empty response, scored 0),
     plus ``parse_rate`` and ``eval_size``. The primary key is ``spec.primary_metric``.
+
+    ``reorder`` also gets :data:`REORDER_TOLERANT_KEYS` (:func:`reorder_tolerant_scores` on the same
+    stop-cleaned text; the strict ``kendall_tau`` is unchanged). A spec in
+    :data:`CTC_SKIP_WHEN_ZERO` (rerank) takes its PRIMARY mean over the rows where the gate metric
+    is > 0 only, as olmo-eval does, and reports ``eval_size_gated`` (that row count); every other
+    metric, ``parse_rate`` and ``eval_size`` stay over all rows.
     """
     spec = ctc_spec(spec_name)
+    gate = CTC_SKIP_WHEN_ZERO.get(spec.name)
 
     def score_fn(examples, responses):
         rows, sums, n_parsed = [], {}, 0
         for ex, resp in zip(examples, responses):
-            parsed, scored = ctc_score_one(spec, ex.get("ex", ex), resp or "")
+            raw = ex.get("ex", ex)
+            parsed, scored = ctc_score_one(spec, raw, resp or "")
+            if spec.name == "reorder":
+                cleaned = ctc_clean_text(spec, resp or "")
+                scored.update(reorder_tolerant_scores(cleaned or "", raw["gold_order"]))
             n_parsed += parsed is not None
             rows.append(scored)
             for k, v in scored.items():
@@ -224,9 +318,70 @@ def make_ctc_score_fn(spec_name):
         res = {k: v / n for k, v in sums.items()}
         res["parse_rate"] = n_parsed / n
         res["eval_size"] = len(rows)
+        if gate is not None:
+            counted = [r for r in rows if r.get(gate, 0.0) > 0.0]
+            prim = spec.primary_metric
+            res[prim] = sum(r[prim] for r in counted) / len(counted) if counted else 0.0
+            res["eval_size_gated"] = len(counted)
         return res, rows
 
     return score_fn
+
+
+class RepetitionStop:
+    """
+    Opt-in decode stop for runaway repetition (``--repetition-stop``, default ``off``).
+
+    * ``id``: stop once an integer id the generation already emitted is emitted again (checked when
+      the repeated number is terminated by a non-digit, e.g. ``", 23,"``). Meant for ``reorder``
+      (and ``rerank``), whose answer lists each id once.
+    * ``ngram``: stop once the last ``ngram`` generated TOKENS repeat an earlier ``ngram``-token
+      window of the same generation.
+
+    The token that triggers the stop is kept, so the text ends with the start of the repeat. Feed
+    tokens with :meth:`update`, which returns True when decoding should stop. ``piece`` decodes ONE
+    token id to text (``id`` mode only).
+    """
+
+    def __init__(self, kind, ngram=16, piece=None):
+        if kind not in ("id", "ngram"):
+            raise ValueError(f"repetition stop kind {kind!r} not in (id, ngram)")
+        if kind == "id" and piece is None:
+            raise ValueError("repetition stop 'id' needs a piece(token_id) -> str decoder")
+        self.kind, self.ngram, self.piece = kind, int(ngram), piece
+        self.reset()
+
+    def reset(self):
+        self._toks, self._grams, self._seen, self._buf = [], set(), set(), ""
+
+    def update(self, token_id):
+        if self.kind == "ngram":
+            self._toks.append(int(token_id))
+            if len(self._toks) < self.ngram:
+                return False
+            gram = tuple(self._toks[-self.ngram:])
+            if gram in self._grams:
+                return True
+            self._grams.add(gram)
+            return False
+        for ch in self.piece(token_id):
+            if ch.isdigit():
+                self._buf += ch
+                continue
+            if self._buf:
+                num, self._buf = int(self._buf), ""
+                if num in self._seen:
+                    return True
+                self._seen.add(num)
+        return False
+
+
+def make_repetition_stop(kind, ngram, piece):
+    """:returns: A fresh :class:`RepetitionStop` factory (``None`` when ``kind`` is off/empty)."""
+    if not kind or kind == "off":
+        return None
+    RepetitionStop(kind, ngram, piece)  # validate now, not mid-eval
+    return lambda: RepetitionStop(kind, ngram, piece)
 
 
 def make_ctc_answer_complete(spec_name, decode):
@@ -630,9 +785,25 @@ def main():
     ap.add_argument(
         "--ctc-grade",
         default=os.environ.get("LADDER_CTC_GRADE", ""),
-        help="comma list of nq/outlier/oolong/contradiction (or 'all') to grade with the ctc spec "
-        "olmo-eval uses for the suite row (CTC_GRADED_BASE), e.g. when scoring suite rows.",
+        help="comma list of nq/outlier/oolong/contradiction/rerank (or 'all') to grade with the ctc "
+        "spec olmo-eval uses for the suite row (CTC_GRADED_BASE), e.g. when scoring suite rows.",
     )
+    ap.add_argument(
+        "--repetition-stop",
+        default=os.environ.get("LADDER_REPETITION_STOP", "off"),
+        choices=["off", "id", "ngram"],
+        help="OPT-IN decode stop for repetition loops (default off = scores comparable with every "
+        "earlier number): 'id' stops once an already-emitted integer id repeats, 'ngram' once the "
+        "last --repetition-ngram tokens repeat an earlier window. Applies to "
+        "--repetition-stop-tasks only. When on, the log's metric names get a '_repstop_<kind>' "
+        "suffix and _meta.repetition_stop records it. Env LADDER_REPETITION_STOP.",
+    )
+    ap.add_argument("--repetition-stop-tasks",
+                    default=os.environ.get("LADDER_REPETITION_STOP_TASKS", "reorder"),
+                    help="comma list of tasks the --repetition-stop applies to (default reorder)")
+    ap.add_argument("--repetition-ngram", type=int,
+                    default=int(os.environ.get("LADDER_REPETITION_NGRAM", "16")),
+                    help="window length in tokens for --repetition-stop ngram")
     ap.add_argument(
         "--suite-max-new-tokens",
         default=os.environ.get("LADDER_SUITE_MAX_NEW_TOKENS", ""),
@@ -688,6 +859,8 @@ def main():
         help="landmark variant: top-k = ceil(fraction * num_prompt_blocks) (reference: 0.1).",
     )
     args = ap.parse_args()
+    import torch
+
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     if args.root:
         os.chdir(args.root)
@@ -854,7 +1027,7 @@ def main():
         print(f"[docchunk-ladder] FLA length autotune frozen on {freeze_fla_length_autotune()} kernel(s)", flush=True)
 
     @torch.inference_mode()  # (not no_grad: generate_batch builds its caches as inference tensors)
-    def generate_one(prefill, max_new_tokens, answer_complete):
+    def generate_one(prefill, max_new_tokens, answer_complete, rep_stop=None):
         # Size the KV cache to THIS example's actual need (prefill + decode budget), not the raised
         # --max-length. At the xlong 64k/128k rungs the runner raises --max-length to cover the longest
         # rung, so a full-max_length cache wastes ~10 GiB at the 64k rung and starves the FlexAttention
@@ -874,6 +1047,7 @@ def main():
             )
             nxt = int(logits[0, -1].argmax().item())
             new_content = []
+            rs = rep_stop() if rep_stop is not None else None
             for _ in range(max_new_tokens):
                 if nxt == EOS_TOKEN_ID or nxt == IM_END_ID:
                     break
@@ -883,6 +1057,8 @@ def main():
                     and answer_complete is not None
                     and answer_complete(new_content)
                 ):
+                    break
+                if rs is not None and rs.update(nxt):
                     break
                 logits = gm.model(torch.tensor([[nxt]], device=device), logits_to_keep=1)
                 nxt = int(logits[0, -1].argmax().item())
@@ -898,10 +1074,13 @@ def main():
         nxt = int(logits[0, -1].argmax().item())
         new_content = []
         since_landmark = 0
+        rs = rep_stop() if rep_stop is not None else None
         for _ in range(max_new_tokens):
             if nxt == EOS_TOKEN_ID or nxt == IM_END_ID:
                 break
             new_content.append(nxt)
+            if rs is not None and rs.update(nxt):
+                break
             logits = gm.model(torch.tensor([[nxt]], device=device), logits_to_keep=1)
             since_landmark += 1
             if since_landmark == args.mem_freq:
@@ -914,20 +1093,24 @@ def main():
             nxt = int(logits[0, -1].argmax().item())
         return strip_think(tok.decode(new_content, skip_special_tokens=True))
 
-    def finish_tokens(gen_ids, answer_complete):
+    def finish_tokens(gen_ids, answer_complete, rep_stop=None):
         """The bs=1 loop's stopping rule applied to an already generated token list: stop BEFORE
-        EOS / im_end, and after a newline once answer_complete(prefix) holds (newline kept)."""
+        EOS / im_end, after a newline once answer_complete(prefix) holds (newline kept), and after
+        the token that fires the opt-in repetition stop (kept)."""
         new_content = []
+        rs = rep_stop() if rep_stop is not None else None
         for t in gen_ids:
             if t == EOS_TOKEN_ID or t == IM_END_ID:
                 break
             new_content.append(t)
             if t == NEWLINE_ID and answer_complete is not None and answer_complete(new_content):
                 break
+            if rs is not None and rs.update(t):
+                break
         return strip_think(tok.decode(new_content, skip_special_tokens=True))
 
     @torch.no_grad()
-    def generate_many(items, max_new_tokens, answer_complete):
+    def generate_many(items, max_new_tokens, answer_complete, rep_stop=None):
         """Batched greedy decode for non-landmark models: length-sorted, left-padded batches of at
         most --gen-batch rows and --gen-batch-tokens padded prompt tokens, via
         generate_batch (one decode step serves the whole batch, where the bs=1 loop is
@@ -953,7 +1136,9 @@ def main():
                 max_new_tokens=max_new_tokens, stop_token_ids=[EOS_TOKEN_ID, IM_END_ID],
             )
             for j, (gi, _) in enumerate(batch):
-                out[gi] = finish_tokens(gen[j].tolist(), answer_complete)
+                # (the batched decode runs to EOS / max_new_tokens; the repetition stop truncates
+                # afterwards, which yields the bs=1 loop's text, not its speed)
+                out[gi] = finish_tokens(gen[j].tolist(), answer_complete, rep_stop)
             i += bs
         return out
 
@@ -1001,6 +1186,18 @@ def main():
         print(f"[ladder] {_t}: graded by the ctc '{CTC_GRADED_BASE[_t]}' spec (--ctc-grade)", flush=True)
     if ctc_graded and "_meta" in summary:
         summary["_meta"]["ctc_graded"] = {t: CTC_GRADED_BASE[t] for t in sorted(ctc_graded)}
+    # Opt-in repetition stop (default off): one fresh RepetitionStop per generation.
+    rep_tasks = {t.strip() for t in args.repetition_stop_tasks.split(",") if t.strip()}
+    rep_factory = make_repetition_stop(args.repetition_stop, args.repetition_ngram,
+                                       lambda t: tok.decode([t], skip_special_tokens=True))
+    rep_suffix = f"_repstop_{args.repetition_stop}" if rep_factory is not None else ""
+    if rep_factory is not None:
+        print(f"[ladder] repetition stop '{args.repetition_stop}' (ngram={args.repetition_ngram}) ON "
+              f"for {sorted(rep_tasks)}: metric names carry '{rep_suffix}'", flush=True)
+        if "_meta" in summary:
+            summary["_meta"]["repetition_stop"] = {"kind": args.repetition_stop,
+                                                   "ngram": args.repetition_ngram,
+                                                   "tasks": sorted(rep_tasks)}
     rung_filter = set(r.strip() for r in args.rungs.split(",")) if args.rungs else None
 
     for task in ALL_TASKS:
@@ -1008,6 +1205,8 @@ def main():
             continue
         loadtask, chunk_by, item_regex, primary_key, max_new_tokens, stopkind = task_spec[task]
         answer_complete = make_answer_complete(stopkind)
+        rep_stop = rep_factory if task in rep_tasks else None
+        msfx = rep_suffix if rep_stop is not None else ""
         score_fn = SCORE_FNS[task]
         cap = args.max_length - max_new_tokens
         rungs = ladders[task]
@@ -1040,13 +1239,13 @@ def main():
                     else:
                         todo.append((gi, prefill))
                 t_b = time.time()
-                got = generate_many(todo, max_new_tokens, answer_complete)
+                got = generate_many(todo, max_new_tokens, answer_complete, rep_stop)
                 t_b = time.time() - t_b
                 local += sorted(got.items())
                 if args.gen_compare > 0:  # same rows one at a time: agreement + speed check
                     sub = todo[: args.gen_compare]
                     t_1 = time.time()
-                    one = {gi: generate_one(p, max_new_tokens, answer_complete) for gi, p in sub}
+                    one = {gi: generate_one(p, max_new_tokens, answer_complete, rep_stop) for gi, p in sub}
                     t_1 = time.time() - t_1
                     agree = sum(one[gi] == got[gi] for gi, _ in sub)
                     print(f"[gen-compare] {task}@{label} rank{rank}: batched == bs1 on {agree}/{len(sub)}; "
@@ -1067,7 +1266,7 @@ def main():
                     gm.model.set_landmark_eval_top_k(
                         max(1, math.ceil(args.landmark_top_k_fraction * n_blocks))
                     )
-                local.append((gi, generate_one(prefill, max_new_tokens, answer_complete)))
+                local.append((gi, generate_one(prefill, max_new_tokens, answer_complete, rep_stop)))
 
             full = [None] * len(examples)
             if world > 1:
@@ -1086,7 +1285,8 @@ def main():
                 with open(resp_path, "w") as rf:
                     for gi, resp in enumerate(full):
                         raw = examples[gi].get("ex", examples[gi])
-                        gold = {k: raw[k] for k in ("gold_doc_indices", "gold_pairs", "answers", "gold_order") if k in raw}
+                        gold = {k: raw[k] for k in ("gold_doc_indices", "gold_pairs", "answers", "gold_order",
+                                                    "ce_scores") if k in raw}
                         rf.write(json.dumps({"i": gi, "response": resp, **gold}) + "\n")
                 res, _ = score_fn(examples, full)
                 if primary_key is not None:
@@ -1098,12 +1298,26 @@ def main():
                     summary["_meta"]["eval_size"][f"{task}_{label}"] = len(examples)
                     if task in SUITE_TASKS or task in ctc_graded:  # ctc graders: parse rate too
                         summary["_meta"].setdefault("parse_rate", {})[f"{task}_{label}"] = res["parse_rate"]
+                        # every metric the grader returned (tolerant reorder, gated rerank, ...)
+                        summary["_meta"].setdefault("metrics", {})[f"{task}_{label}"] = {
+                            k: float(v) for k, v in res.items()}
                 print(
-                    f"[ladder:{task}@{label}] {primary_key or 'mrr'}="
+                    f"[ladder:{task}@{label}] {primary_key or 'mrr'}{msfx}="
                     f"{prim if prim is None else round(float(prim), 3)} "
                     f"(n={len(examples)}, skipped_too_long={skipped})",
                     flush=True,
                 )
+                # Secondary metrics in the SAME line format record_beaker_evals.py parses, after the
+                # primary line: reorder's parse-tolerant tau; rerank's gated row count.
+                if task in SUITE_TASKS or task in ctc_graded:
+                    for k in ("kendall_tau_tolerant", "pairwise_acc_tolerant"):
+                        if k in res:
+                            print(f"[ladder:{task}@{label}] {k}{msfx}={round(float(res[k]), 3)} "
+                                  f"(n={len(examples)}, skipped_too_long={skipped})", flush=True)
+                    if "eval_size_gated" in res:
+                        print(f"[ladder:{task}@{label}] {primary_key} averaged over "
+                              f"{res['eval_size_gated']}/{len(examples)} rows with a CE-positive "
+                              f"document (olmo-eval's skip_when_zero)", flush=True)
                 if task in SUITE_TASKS or task in ctc_graded:
                     print(f"[ladder:{task}@{label}] ctc metrics: "
                           f"{ {k: round(v, 4) for k, v in res.items()} }", flush=True)

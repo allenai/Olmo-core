@@ -30,12 +30,13 @@ HF_DATASET = "PrasannSinghal/ctc-suite-eval"
 HF_REVISION = "04ab86006124b3f34c566f44bbc82d4fec98fcda"
 #: the six setA tasks the ladder grades through the ctc spec (ladder task == HF subset, except none)
 NEW_SUBSETS = ["hotpotqa", "qdmatch_nq", "xabsence", "reorder", "strmatch", "grouping"]
-#: the suite rows of the four tasks the Lambda screen already runs (from other eval files)
-EXISTING_SUBSETS = ["nq", "outlier", "oolong", "contradiction_iid"]
+#: the suite rows of the base ladder tasks graded through the ctc spec (--ctc-grade); rerank added
+#: 2026-10-25 (it is in the mt11 training mix but had no suite rows staged, so it was never scored)
+EXISTING_SUBSETS = ["nq", "outlier", "oolong", "contradiction_iid", "rerank"]
 RUNG_TOKENS = {"r2k": 2048, "r4k": 4096, "r8k": 8192, "r16k": 16384, "r32k": 32768}
 #: olmo-eval ROSTER rung_alias: the IID contradiction ladder starts one step up at r2k
 RUNG_ALIAS = {("contradiction_iid", "r2k"): 2560}
-#: reference manifest of the default fetch (10 subsets x r2k/r8k x 500 rows at HF_REVISION)
+#: reference manifest of the default fetch (11 subsets x r2k/r8k x 500 rows at HF_REVISION)
 REF_MANIFEST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "suite_rows_MANIFEST.json")
 
 

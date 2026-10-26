@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stage the CTC-suite eval rows (10 mt11 subsets incl. contradiction_iid, r2k + r8k, 500 rows each, at
+# Stage the CTC-suite eval rows (11 mt11 subsets incl. contradiction_iid and rerank, r2k + r8k, 500 rows each, at
 # olmo-eval's pinned HF revision) onto weka for the Beaker mt11 evals:
 #   $WEKA/_eval_bundle/ctc_suite_rows/<subset>/rung_<tokens>.jsonl  (+ MANIFEST.json)
 # A CPU-only gantry job: fetch_suite_eval_rows.py into node /tmp, verify against the checked-in

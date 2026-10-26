@@ -12,6 +12,9 @@
 # node-local /tmp checkpoints and eval files. Submit with explicit gres and node, e.g.
 #   sbatch --gres=gpu:A100:2 --qos=preemptive_high -w lambda-hyperplane02 --job-name=<run>-ev<task> \
 #     --export=ALL,RUN=<run>,TASK=<contradiction|nq|outlier|oolong>,ROOT=/tmp/prasann/tdlr run_eval_lambda.sbatch
+# Opt-in repetition stop for reorder (default off; it changes what is scored, so the logged metric
+# names get _repstop_<kind>): add LADDER_REPETITION_STOP=id (or =ngram, LADDER_REPETITION_NGRAM=16)
+# to --export. TASK=rerank (mt11 / suite rows) scores rerank with the ctc spec (ce_pos_recall).
 # (mt11 runs: EVAL_ROWS=suite QUERY_POSITION=both, automatic for RUN=*mt11*; see below)
 # CTC-suite tasks (TASK=hotpotqa|qdmatch_nq|xabsence|reorder|strmatch|grouping, 2026-10-21) read the
 # suite's own r2k/r8k rows from $ROOT/eval/suite/<subset>/rung_{2048,8192}.jsonl (fetched with
@@ -37,7 +40,8 @@ case "$RUN" in *mt11*) EVAL_ROWS="${EVAL_ROWS:-suite}" ;; *) EVAL_ROWS="${EVAL_R
 [ "$EVAL_ROWS" = suite ] && QUERY_POSITION="${QUERY_POSITION:-both}" || QUERY_POSITION="${QUERY_POSITION:-after}"
 case "$EVAL_ROWS:$TASK" in
   suite:contradiction) KEY=contra; R8=suite/contradiction_iid/rung_8192.jsonl; R2=suite/contradiction_iid/rung_2560.jsonl ;;
-  suite:nq|suite:outlier|suite:oolong) KEY=$TASK; R8=suite/$TASK/rung_8192.jsonl; R2=suite/$TASK/rung_2048.jsonl ;;
+  # rerank (2026-10-25): suite rows only, ctc-graded (ce_pos_recall); fetch_suite_eval_rows.py includes it
+  suite:nq|suite:outlier|suite:oolong|suite:rerank) KEY=$TASK; R8=suite/$TASK/rung_8192.jsonl; R2=suite/$TASK/rung_2048.jsonl ;;
   old:*|suite:*) KEY= ;;
   *) echo "unknown EVAL_ROWS=$EVAL_ROWS (old|suite)"; exit 2 ;;
 esac

@@ -142,6 +142,20 @@
       "rows": 500,
       "parquet_rows": 500,
       "sha256": "9e7612bb1ec2b96e7a2ed2d84fecb467d6fb9699de2d9aa00c96e34a1b731c5d"
+    },
+    "rerank/rung_2048.jsonl": {
+      "subset": "rerank",
+      "rung": "r2k",
+      "rows": 500,
+      "parquet_rows": 500,
+      "sha256": "dfd9a62f339c5adf17841643b3abdb4ab1bd866b2a8164057ed9fa271c8a21a9"
+    },
+    "rerank/rung_8192.jsonl": {
+      "subset": "rerank",
+      "rung": "r8k",
+      "rows": 500,
+      "parquet_rows": 500,
+      "sha256": "f5654a9c6871660ab90619f670ad9c69c9bc33ab799cfdee5eb896918c228164"
     }
   }
 }
