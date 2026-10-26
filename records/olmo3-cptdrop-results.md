@@ -44,6 +44,10 @@ Code: `research/token_routing/olmo3_cptdrop/`. Every number below is in the ops 
   - Short-document guard `short4k_v2`: 256 rows ⚠ eval_size=256 only (relative forgetting check).
 - **m** = PF dense needs to reach the arm's CE ÷ the arm's PF. Both come from the measured FLOP meter; dense is ~27.5 PF/step
   plus a ~27 PF constant. Read piecewise log-linear between measured dense points; beyond the last point it is a bound.
+- **The meter does not charge activation-checkpoint recompute.** It counts forward + backward (≈ 6N per token plus
+  attention). Every run here uses full AC, which recomputes each block's forward once more. True cost is then ≈ 8N per token
+  for dense and ≈ 6N for K32 (no base weight grads), so **K32 is ≈ 0.75× dense in real FLOPs, not the metered 0.70×.**
+  The m values below use the metered convention for both arms; with recompute charged, K32's m shrinks by ~7%.
 
 ## Dense reference (32k, dev32k_1024)
 

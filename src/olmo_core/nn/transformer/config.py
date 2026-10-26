@@ -68,6 +68,8 @@ class TransformerActivationCheckpointingMode(StrEnum):
 
     full = "full"
     """Checkpoint every block."""
+    full_offload = "full_offload"
+    """Checkpoint every block and hold each block's input in pinned host memory (``olmo_core.nn.offload_checkpoint``)."""
     selected_blocks = "selected_blocks"
     """Checkpoint only selected blocks."""
     selected_modules = "selected_modules"

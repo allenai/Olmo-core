@@ -130,7 +130,7 @@ ARGS=(--task cpt --model-family olmo3 --model-scale 7b $VAR
   --lr "${LR:-2.0712352850360292e-4}" --weight-decay 0.1 --z-loss 1e-5
   --scheduler wsd --warmup-fraction "${WARMUP:-0.017}" --wsd-decay-fraction "${DECAY_FRAC:-0.1}"
   --max-tokens "${MAX_TOKENS:-$(( STEPS * TOK_PER_STEP ))}"
-  --activation-checkpointing full --shard-degree "$NGPU" --attn-backend flash_2 --no-compile
+  --activation-checkpointing "${AC:-full}" --shard-degree "$NGPU" --attn-backend flash_2 --no-compile
   --save-folder "$SAVE" --work-dir "$ROOT/work/$RUN" --run-name "$RUN"
   --wandb-group "${WANDB_GROUP:-o3cd-q3-7b}" --seed "${SEED:-0}")
 if [ -n "${SMOKE:-}" ]; then ARGS+=(--no-final-checkpoint); else ARGS+=(--save-checkpoint); fi

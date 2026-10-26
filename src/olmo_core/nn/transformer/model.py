@@ -3313,6 +3313,14 @@ class Transformer(nn.Module):
                         preserve_rng_state=preserve_rng_state,
                         determinism_check=determinism_check,
                     )
+                elif mode == TransformerActivationCheckpointingMode.full_offload:
+                    if isinstance(block, MoETransformerBlock):
+                        raise OLMoConfigurationError(
+                            "Wrapping MoE blocks for activation checkpointing is not supported."
+                        )
+                    from ..offload_checkpoint import offload_input_checkpoint_wrapper
+
+                    block = offload_input_checkpoint_wrapper(block)
                 elif mode == TransformerActivationCheckpointingMode.selected_ops:
                     block = ptd_checkpoint_wrapper(
                         block,
