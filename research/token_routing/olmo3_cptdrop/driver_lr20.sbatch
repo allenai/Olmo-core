@@ -292,6 +292,24 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       done ;;
     K32L)
       run o3cd-DLORA64k32lr2-960 ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 LR=2e-5 OTR_EXTRA="--st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32" MAX_STEPS_TOTAL=960 EXPECTED_MIN=170 || exit 97 ;;
+    C128)
+      # 128k check of the recipe (2026-10-26): dense vs K32 (plain dense-arm LoRA) on train128k_ee (2^17+ docs, dev-disjoint),
+      # 8 rows x 131,072 per step (1.05M tokens), YaRN x16; budgets in 524k-token units (48 / 120 = 24 / 60 optimizer
+      # steps); scored on dev128k_512 (512 rows) and the short guard, YaRN as trained.
+      for b in 48 120; do
+        run "o3cd-D128lr20-$b" ARM=D CTX=128k MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 2 + 15)) || { log "FAIL D128 $b"; break; }
+        run "o3cd-L128K32dlr20-$b" ARM=D CTX=128k "EXTRA=--lora-rank 64 --lora-scale 32" MAX_STEPS_TOTAL=$b EXPECTED_MIN=$((b / 2 + 15)) \
+          || { log "FAIL L128K32d $b"; break; }
+      done
+      SPECS=""
+      for r in D128lr20-48 L128K32dlr20-48 D128lr20-120 L128K32dlr20-120; do
+        [ -f "$ROOT/runs/o3cd-$r/model_and_optim/.metadata" ] && [ ! -f "$ROOT/devce/${r}_dev128k_512.json" ] && SPECS="$SPECS $r:runs/o3cd-$r:16"
+      done
+      log "C128 specs:$SPECS"
+      SPECS="$SPECS" SHARDS="dev128k_512:64 short4k_v2:256" CODE="$CODE" PY="$PY" ROOT="$ROOT" \
+        bash "$CODE/research/token_routing/olmo3_cptdrop/devce_multi.sh" > "$ROOT/logs/devce-c128-$SLURM_JOB_ID.log" 2>&1 \
+        || log "WARN: c128 eval had failures"
+      grep -h "merged" "$ROOT/logs/devce-c128-$SLURM_JOB_ID.log" ;;
     MAXT)
       # max trainable T per GPU (memory probe): dense vs K32 on synthetic long rows (probe_shard.py), 3 steps each,
       # ascending T; an arm stops at its first failure. Peak = max "GPU active mem" (the dry run is a full-length step).
