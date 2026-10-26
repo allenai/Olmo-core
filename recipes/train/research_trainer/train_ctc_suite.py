@@ -1945,6 +1945,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-route-min-len", type=int, default=0,
                     help="online router: route only rows (packed: documents) with >= this many tokens; shorter ones "
                     "run dense in the same step (hybrid short-window + routed long-row batches). 0 = route all")
+    ap.add_argument("--st-otr-early-lora-start", type=int, default=0,
+                    help="early LoRA adapters only on blocks [B, K); [0, B) frozen with no adapter. With "
+                    "--st-otr-freeze-early and B = --st-otr-drop-layer, [0, B) runs forward-only (no backward below B)")
     ap.add_argument("--st-otr-early-lora-blocks", type=int, default=0,
                     help="early LoRA on blocks [0, K) instead of [0, drop_layer), e.g. the whole model; blocks at or "
                     "above the drop layer then run at the kept length with frozen base + adapters. 0 = drop_layer")

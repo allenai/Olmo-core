@@ -1397,3 +1397,58 @@ def test_early_lora_blocks_validate():
         _router(drop_layer=2, early_lora_blocks=4)  # needs early_lora
     assert _router(drop_layer=2, early_lora=4, early_lora_blocks=6).lora_blocks() == 6
     assert _router(drop_layer=2, early_lora=4).lora_blocks() == 2
+
+
+def test_frozen_nograd_bottom_with_lora_above_cpu():
+    """freeze_early + early_lora_start = drop_layer (keep 1.0, a pure depth split): blocks [0, B) are frozen, carry no
+    adapter and run forward-only; blocks [B, K) train only their adapters; FLOPs charge [0, B) at 1/3, [B, K) at 2/3
+    plus the adapters; the eval side re-installs the adapters on [B, K) only."""
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, enable_from_config_block, install_early_lora
+    from olmo_core.nn.online_token_router import freeze_early_blocks
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, keep_frac=1.0, explore_frac=0.0, freeze_early=True,
+                               early_lora=4, early_lora_blocks=4, early_lora_start=2)
+    mods = install_early_lora(model, 4, 4, scale=8.0, start=2)
+    freeze_early_blocks(model, 2)
+    blocks = list(model.blocks.values())
+    assert {m._lora_block for m in mods} == {2, 3}
+    assert not any(hasattr(m, "lora_A") for b in blocks[:2] for m in b.modules())
+    ids, cid, labels = _row(B=1)
+    flops = []
+    orig = router._flop
+    router._flop = lambda m, v: (flops.append(float(v)), orig(m, v))
+    for step in (1, 2):
+        model.zero_grad(set_to_none=True)
+        router.begin_step(step, model=model)
+        flops.clear()
+        router.metrics()
+        model(ids, labels=labels).loss.backward()
+    assert all(p.grad is None for b in blocks for n, p in b.named_parameters() if "lora_" not in n)
+    assert all(m.lora_A.grad is not None and m.lora_B.grad is not None for m in mods)
+    assert router.metrics()["online_router/mid_row_frac"] == pytest.approx(1.0)
+    real = int((ids != PH).sum())
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    ab = early_lora_flops_per_block(model)
+    assert ab[0] == ab[1] == 0.0 and ab[2] > 0
+    expect = (real * (1 / 3) * (f(blocks[0], real) + f(blocks[1], real))
+              + real * ((2 / 3) * (f(blocks[2], real) + f(blocks[3], real)) + head)
+              + real * (ab[2] + ab[3])
+              - real * (sum(f(b, real) for b in blocks) + head))
+    assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+    # eval side: the config block re-installs adapters on [2, 4) only
+    model2, _ = _mid_model(4, drop_layer=2)
+    enable_from_config_block(model2, {"n_blocks": 4, "rank": 4, "scale": 8.0, "start": 2})
+    assert {m._lora_block for m in model2._early_lora["modules"]} == {2, 3}
+
+
+def test_early_lora_start_validate():
+    _router(drop_layer=2, freeze_early=True, early_lora=4, early_lora_blocks=4, early_lora_start=2)
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, freeze_early=True, early_lora=4, early_lora_blocks=4)  # start != drop_layer
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, freeze_early=True, early_lora=4, early_lora_blocks=4, early_lora_start=3)
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, early_lora_start=1)  # needs early_lora
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, early_lora=4, early_lora_start=2)  # start must be < the LoRA end (drop_layer = 2)

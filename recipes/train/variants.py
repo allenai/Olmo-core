@@ -320,6 +320,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_early_lora: int = 0
     st_otr_early_lora_scale: float = 32.0
     st_otr_early_lora_blocks: int = 0
+    st_otr_early_lora_start: int = 0
     st_otr_route_min_len: int = 0
     st_otr_warmup_random: bool = False
     st_otr_mass_target: float = 0.0
@@ -1154,6 +1155,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         target_layer=o.st_otr_target_layer,
         early_lora=o.st_otr_early_lora,
         early_lora_blocks=o.st_otr_early_lora_blocks,
+        early_lora_start=o.st_otr_early_lora_start,
         route_min_len=o.st_otr_route_min_len,
         warmup_random=o.st_otr_warmup_random,
         mass_target=o.st_otr_mass_target,
@@ -1324,8 +1326,9 @@ class SoftToken(Variant):
 
             r = model._online_token_router
             K = o.st_otr_early_lora_blocks or r.cfg.drop_layer
-            mods = install_early_lora(model, K, o.st_otr_early_lora, o.st_otr_early_lora_scale)
-            print(f"[variants] online router early LoRA: blocks [0, {K}) + embeddings frozen, "
+            B0 = o.st_otr_early_lora_start
+            mods = install_early_lora(model, K, o.st_otr_early_lora, o.st_otr_early_lora_scale, start=B0)
+            print(f"[variants] online router early LoRA: blocks [0, {K}) + embeddings frozen, adapters on [{B0}, {K}), "
                   f"{len(mods)} linears get rank-{o.st_otr_early_lora} adapters (scale {o.st_otr_early_lora_scale})",
                   flush=True)
         if online and o.st_otr_freeze_early:
@@ -1429,6 +1432,8 @@ class SoftToken(Variant):
                 L = parse_stages(o.st_otr_stages)[0][0]
             L = o.st_otr_early_lora_blocks or L
             out["early_lora"] = {"n_blocks": L, "rank": o.st_otr_early_lora, "scale": o.st_otr_early_lora_scale}
+            if o.st_otr_early_lora_start:
+                out["early_lora"]["start"] = o.st_otr_early_lora_start
         return {
             **out,
             "softtoken": {

@@ -133,6 +133,10 @@ class OnlineRouterConfig:
     """With ``early_lora``: adapt blocks [0, K) instead of [0, drop_layer) -- e.g. the whole model (K = n_layers), which
     removes nearly all gradients and optimizer state. Blocks at or above the drop layer then run at the kept length,
     still frozen-with-adapters: charged 2/3 there plus their adapters at that length. 0 = drop_layer."""
+    early_lora_start: int = 0
+    """With ``early_lora``: adapters only on blocks [B, K); blocks [0, B) stay frozen with no adapter. Allowed with
+    ``freeze_early`` when B = drop_layer, which makes [0, B) a frozen FORWARD-ONLY bottom stack (no backward below B)
+    under a LoRA-adapted rest -- e.g. keep_frac 1.0 for a pure depth split. 0 = adapters from block 0."""
     early_lora: int = 0
     """Low-rank early stack (:mod:`olmo_core.nn.early_lora`, installed by the recipe): blocks [0, drop_layer) train
     only rank-``early_lora`` adapters from step 0. Charged: those blocks at 2/3 (the activation gradient still runs
@@ -284,9 +288,15 @@ class OnlineRouterConfig:
         if self.early_lora:
             if self.early_lora < 0 or self.drop_layer <= 0:
                 raise ValueError("online router early_lora needs rank > 0 and the mid-stack drop (drop_layer > 0)")
-            if self.freeze_early or self.freeze_schedule or self.early_nograd:
-                raise ValueError("online router early_lora is exclusive with freeze_early / freeze_schedule / "
-                                 "early_nograd (freeze_after is allowed: LoRA from step 0, then the adapters freeze too)")
+            if self.freeze_schedule or self.early_nograd or (
+                    self.freeze_early and not (self.early_lora_start and self.early_lora_start == self.drop_layer)):
+                raise ValueError("online router early_lora is exclusive with freeze_schedule / early_nograd, and with "
+                                 "freeze_early unless early_lora_start == drop_layer (a frozen forward-only [0, B) under "
+                                 "LoRA on [B, K)); freeze_after is allowed: LoRA from step 0, then the adapters freeze")
+        if self.early_lora_start < 0 or (self.early_lora_start and (
+                not self.early_lora or self.early_lora_start >= (self.early_lora_blocks or self.drop_layer))):
+            raise ValueError("online router early_lora_start needs early_lora > 0 and 0 <= start < the LoRA end "
+                             "(early_lora_blocks, else drop_layer)")
         if self.target_layer:
             if self.drop_layer <= 0 or self.target_layer <= self.drop_layer:
                 raise ValueError("online router target_layer must be > drop_layer (> 0)")

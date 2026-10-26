@@ -56,11 +56,13 @@ def _lora_reset_parameters(self: nn.Linear) -> None:
 
 
 def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0, freeze_embeddings: bool = True,
-                       check_calls: bool = True) -> List[nn.Linear]:
-    """Freeze blocks [0, n_blocks) (and the embeddings) and give every ``nn.Linear`` in them a rank-``rank``
-    adapter. Returns the adapted modules (``model._early_lora`` keeps them)."""
-    if rank <= 0 or n_blocks <= 0:
-        raise ValueError(f"early LoRA needs rank > 0 and n_blocks > 0, got rank={rank} n_blocks={n_blocks}")
+                       check_calls: bool = True, start: int = 0) -> List[nn.Linear]:
+    """Freeze blocks [0, n_blocks) (and the embeddings) and give every ``nn.Linear`` in blocks [start, n_blocks) a
+    rank-``rank`` adapter; blocks [0, start) stay frozen with no adapter (the frozen forward-only bottom stack of
+    ``--st-otr-freeze-early --st-otr-early-lora-start B``). Returns the adapted modules (``model._early_lora``)."""
+    if rank <= 0 or n_blocks <= 0 or not 0 <= start < n_blocks:
+        raise ValueError(f"early LoRA needs rank > 0 and 0 <= start < n_blocks, got rank={rank} start={start} "
+                         f"n_blocks={n_blocks}")
     if freeze_embeddings:
         for p in model.embeddings.parameters():
             p.requires_grad_(False)
@@ -70,6 +72,8 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
             break
         for p in block.parameters():
             p.requires_grad_(False)
+        if i < start:
+            continue
         for m in block.modules():
             if not isinstance(m, nn.Linear):
                 continue
@@ -88,7 +92,7 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
     if not mods:
         raise RuntimeError(f"early LoRA: no nn.Linear found in blocks [0, {n_blocks})")
     model._early_lora = {"modules": mods, "n_blocks": int(n_blocks), "rank": int(rank), "scale": float(scale),
-                         "checked": not check_calls}
+                         "start": int(start), "checked": not check_calls}
 
     def _check(module, args, output):
         st = module._early_lora
@@ -102,8 +106,8 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
 
     model.register_forward_hook(_check)
     n = sum(m.lora_A.numel() + m.lora_B.numel() for m in mods)
-    log.info("[early-lora] blocks [0, %d): %d linears, rank %d, scale %g, %.1fM adapter params",
-             n_blocks, len(mods), rank, scale, n / 1e6)
+    log.info("[early-lora] blocks [%d, %d) (base frozen from 0): %d linears, rank %d, scale %g, %.1fM adapter params",
+             start, n_blocks, len(mods), rank, scale, n / 1e6)
     return mods
 
 
@@ -156,11 +160,14 @@ def lora_block_from_checkpoint(model_path: str) -> Optional[Dict[str, Any]]:
     except (OSError, KeyError, ValueError) as exc:
         raise RuntimeError(f"{model_path}: checkpoint holds {len(lora)} LoRA adapters but neither config.json nor "
                            f"provenance.json describes them ({exc}); refusing to load it as a plain model") from exc
-    return {"n_blocks": max(blocks) + 1, "rank": rank, "scale": scale}
+    out = {"n_blocks": max(blocks) + 1, "rank": rank, "scale": scale}
+    if min(blocks) > 0:
+        out["start"] = min(blocks)
+    return out
 
 
 def enable_from_config_block(model: Any, block: Dict[str, Any]) -> None:
     """Eval side: re-install the adapters recorded in ``config.json`` before the strict checkpoint load."""
     install_early_lora(model, int(block["n_blocks"]), int(block["rank"]), float(block.get("scale", 32.0)),
-                       check_calls=False)
+                       check_calls=False, start=int(block.get("start", 0)))
     print(f"[early-lora] adapters re-installed from config.json: {block}", flush=True)
