@@ -339,7 +339,7 @@ _LDL = "--layer-drop-p 0.2 --layer-drop-schedule linear --layer-drop-exclude-fir
 #: dense + a train-time modifier (variant full with extra flags)
 DENSE_EXTRA = {
     # dense with the LM head only at supervised positions (exact; meter charges it so from router d74ad1194)
-    "densesp": "--sparse-loss-positions",
+    "densesp": "--sparse-loss-positions --sparse-loss-positions",  # repeated: a single dash-token string is parsed as a launcher option
     # review controls (2026-10-26): dense + whole-model LoRA, no router (is the LoRA-all gain LoRA or routing?)
     "denselora64all": "--lora-rank 64 --lora-blocks 0 --lora-scale 32",
     "denseffn50": "--ffn-width-frac 0.5",
