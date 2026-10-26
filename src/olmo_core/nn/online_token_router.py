@@ -941,6 +941,10 @@ class OnlineTokenRouter:
         c = self.cfg
         body = fp["body"]
         dev = ids.device
+        if self.stage_idx > 0:
+            # later pyramid stages never run select(): advance the draw per forward so exploration differs across a
+            # step's micro-batches (the root's counter advances in select)
+            self._calls += 1
         gen = torch.Generator(device=dev).manual_seed(
             (self.cfg.seed * 1_000_003 + self.step * 7919 + self.rank * 104_729 + self._calls) % (2**62)
         )

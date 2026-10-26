@@ -1569,3 +1569,37 @@ def test_residual_mlp_router_fits_what_the_ridge_cannot():
     assert torch.allclose(r._mlp_score(fp)[0], want, atol=1e-5)
     with pytest.raises(ValueError):
         _router(mlp_hidden=-1)
+
+
+def test_later_stage_exploration_differs_across_microbatches():
+    r = _router(drop_layer=2, stages="2:0.2,3:0.07")
+    s1 = r.chain()[1]
+    c0 = s1._calls
+    ids, cid, _ = _row(B=1)
+    fp = {"body": (cid >= 0) & (ids != DS) & (ids != DE), "_edge": torch.zeros_like(ids), "_j": torch.zeros_like(ids)}
+    try:
+        s1._choose(None, fp, ids, cid)
+    except Exception:
+        pass  # only the draw counter matters here
+    assert s1._calls == c0 + 1
+
+
+def test_eval_reinstalled_adapters_are_checked_on_the_first_eval_forward():
+    from olmo_core.nn.early_lora import enable_from_config_block
+
+    ids, _, _ = _row(B=1)
+    model, _ = _mid_model(3, drop_layer=1, dense_every=0)
+    model._online_token_router = None
+    enable_from_config_block(model, {"n_blocks": 1, "rank": 2, "scale": 8.0})
+    model.eval()
+    with torch.no_grad():
+        model(ids)
+    assert model._early_lora["checked"]
+    bad, _ = _mid_model(3, drop_layer=1, dense_every=0)
+    bad._online_token_router = None
+    enable_from_config_block(bad, {"n_blocks": 1, "rank": 2, "scale": 8.0})
+    bad._early_lora["modules"][0]._forward_hooks.clear()  # a path that bypasses one adapter
+    bad.eval()
+    with pytest.raises(RuntimeError, match="never ran"):
+        with torch.no_grad():
+            bad(ids)

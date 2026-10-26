@@ -96,7 +96,7 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
 
     def _check(module, args, output):
         st = module._early_lora
-        if st["checked"] or not module.training:
+        if st["checked"]:
             return
         dead = [i for i, m in enumerate(st["modules"]) if m._lora_calls == 0]
         if dead:
@@ -186,6 +186,8 @@ def lora_block_from_checkpoint(model_path: str) -> Optional[Dict[str, Any]]:
 
 def enable_from_config_block(model: Any, block: Dict[str, Any]) -> None:
     """Eval side: re-install the adapters recorded in ``config.json`` before the strict checkpoint load."""
+    # check_calls: the first eval forward (the prefill) must run every adapter's hook -- a fused eval path that reads
+    # .weight directly would otherwise score the frozen base silently
     install_early_lora(model, int(block["n_blocks"]), int(block["rank"]), float(block.get("scale", 32.0)),
-                       check_calls=False, start=int(block.get("start", 0)))
+                       check_calls=True, start=int(block.get("start", 0)))
     print(f"[early-lora] adapters re-installed from config.json: {block}", flush=True)
