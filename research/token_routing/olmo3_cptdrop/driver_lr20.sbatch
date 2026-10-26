@@ -292,6 +292,29 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       done ;;
     K32L)
       run o3cd-DLORA64k32lr2-960 ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 LR=2e-5 OTR_EXTRA="--st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32" MAX_STEPS_TOTAL=960 EXPECTED_MIN=170 || exit 97 ;;
+    MAXT)
+      # max trainable T per GPU (memory probe): dense vs K32 on synthetic long rows (probe_shard.py), 3 steps each,
+      # ascending T; an arm stops at its first failure. Peak = max "GPU active mem" (the dry run is a full-length step).
+      K32X="--st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32"
+      declare -A dead
+      for T in ${MAXT_TS:-96 128 160 192 224 256}; do
+        SEQ=$((T * 1024)); GBT=$((524288 / SEQ)); [ "$GBT" -ge 1 ] || GBT=1
+        [ -f "$ROOT/data/probe${T}k_ee/metadata.json" ] || "$PY" "$CODE/research/token_routing/olmo3_cptdrop/probe_shard.py" \
+          --src "$ROOT/data/train32k_ee" --out "$ROOT/data/probe${T}k_ee" --row-len "$SEQ" --rows 16 || exit 98
+        for A in D K32; do
+          [ -n "${dead[$A]:-}" ] && continue
+          name="o3cd-MAXT-$A-${T}k"; rm -rf -- "$ROOT/runs/$name" "$ROOT/work/$name"
+          if [ "$A" = D ]; then set -- ARM=D; else set -- ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 "OTR_EXTRA=$K32X"; fi
+          run "$name" "$@" CTX=${T}k DATA_OVERRIDE=probe${T}k_ee MAX_TOKENS=$((3 * GBT * SEQ)) SMOKE=1 NOWANDB=1 EXPECTED_MIN=20
+          rc=$?; L="$ROOT/logs/$name.log"
+          pk=$(grep -oE "GPU active mem \(GiB\)=[0-9.]+" "$L" | grep -oE "[0-9.]+$" | sort -n | tail -1)
+          rs=$(grep -oE "GPU reserved mem \(GiB\)=[0-9.]+" "$L" | grep -oE "[0-9.]+$" | sort -n | tail -1)
+          oom=$(grep -c "OutOfMemoryError" "$L")
+          log "MAXT $A T=${T}k rc=$rc peak_active=${pk:-na} peak_reserved=${rs:-na} oom_lines=$oom"
+          [ "$rc" -eq 0 ] || dead[$A]=1
+          rm -rf -- "$ROOT/runs/$name" "$ROOT/work/$name"
+        done
+      done ;;
     FFNW)
       run o3cd-FFNWsmoke ARM=D EXTRA="--ffn-width-frac 0.5 --ffn-width-mode random" MAX_STEPS_TOTAL=12 SMOKE=1 NOWANDB=1 EXPECTED_MIN=12 || exit 95
       for f in 50 25; do for b in 24 48 120; do
