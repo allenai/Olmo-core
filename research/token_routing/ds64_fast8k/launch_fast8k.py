@@ -338,6 +338,8 @@ _SK8 = "--train-skip-layers 16,17,18,20,21,22,24,25"
 _LDL = "--layer-drop-p 0.2 --layer-drop-schedule linear --layer-drop-exclude-first 4 --layer-drop-exclude-last 2"
 #: dense + a train-time modifier (variant full with extra flags)
 DENSE_EXTRA = {
+    # dense with the LM head only at supervised positions (exact; meter charges it so from router d74ad1194)
+    "densesp": "--sparse-loss-positions",
     # review controls (2026-10-26): dense + whole-model LoRA, no router (is the LoRA-all gain LoRA or routing?)
     "denselora64all": "--lora-rank 64 --lora-blocks 0 --lora-scale 32",
     "denseffn50": "--ffn-width-frac 0.5",
