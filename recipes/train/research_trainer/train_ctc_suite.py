@@ -432,6 +432,11 @@ def variant_and_options(opts: argparse.Namespace) -> Tuple["V.Variant", "V.Varia
     return variant, variant.options_from_namespace(opts)
 
 
+def _needs_tolerant_load(opts: argparse.Namespace) -> bool:
+    """The arm adds parameters the base lacks (its own, or the ``--lora-rank`` modifier's adapters)."""
+    return bool(variant_and_options(opts)[0].new_params or getattr(opts, "lora_rank", 0) > 0)
+
+
 def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.VariantOptions"]]:
     """Every variant whose hooks run, in hook order: the ``--ffn-drop-*`` modifier (drop-CPT, any
     non-routed arm) first, then the ``--variant`` arm, then the ``--train-skip-layers`` /
@@ -456,6 +461,13 @@ def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.Vari
     if fwidth_opts.active:  # type: ignore[attr-defined]
         fwidth.validate(fwidth_opts)
         out.append((fwidth, fwidth_opts))
+    lora = V.VARIANTS["lora"]
+    lora_opts = lora.options_from_namespace(opts)
+    if lora_opts.active:  # type: ignore[attr-defined]
+        if getattr(opts, "st_otr_early_lora", 0):
+            raise SystemExit("--lora-rank and --st-otr-early-lora both install adapters: use one")
+        lora.validate(lora_opts)
+        out.append((lora, lora_opts))
     fchunk = V.VARIANTS["ffnchunk"]
     fchunk_opts = fchunk.options_from_namespace(opts)
     if fchunk_opts.active:  # type: ignore[attr-defined]
@@ -1054,13 +1066,13 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             load_path=(
                 opts.branch_from
                 if opts.branch_from
-                else (None if variant_and_options(opts)[0].new_params else base_checkpoint)
+                else (None if _needs_tolerant_load(opts) else base_checkpoint)
             ),
             # ...and "always" would then demand a checkpoint that no longer exists: those arms
             # resume from the save folder only if a step checkpoint is there.
             load_strategy=(
                 LoadStrategy.if_available
-                if variant_and_options(opts)[0].new_params and not opts.branch_from
+                if _needs_tolerant_load(opts) and not opts.branch_from
                 else LoadStrategy.always
             ),
             # --branch-optim-only (arm C's 8k -> 32k switch): the next phase reads a DIFFERENT shard,
@@ -1293,7 +1305,7 @@ def build_and_fit(opts: argparse.Namespace) -> None:
     if getattr(opts, "skip_dry_run", False):
         # the mock batch has no document markers, so even a routed method runs it at full length and dense
         trainer._dry_run_batch = lambda: None
-    if variant_and_options(opts)[0].new_params and not opts.branch_from:
+    if _needs_tolerant_load(opts) and not opts.branch_from:
         _tolerant_base_load(base_checkpoint, train_module.model, save_folder)
     if opts.mem_snapshot or opts.mem_probe_steps:
         import torch
@@ -1544,6 +1556,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--ffn-chunk-tokens", type=int, default=0,
                     help="sequence-chunked FFN sublayer in training: h + FFN(norm(h)) over chunks of this many tokens, "
                     "each under its own activation checkpoint (exact; cuts the long-row recompute peak). 0 = off")
+    # ---- LoRA on any arm (olmo_core.nn.early_lora; no online-router path) ----
+    ap.add_argument("--lora-rank", type=int, default=0,
+                    help="frozen base + rank-R LoRA adapters on blocks [--lora-start, --lora-blocks) on any arm (e.g. "
+                    "the dense one); embeddings frozen; exported as config.json's early_lora block. 0 = off")
+    ap.add_argument("--lora-blocks", type=int, default=0, help="--lora-rank: adapt blocks below K (0 = every block)")
+    ap.add_argument("--lora-start", type=int, default=0,
+                    help="--lora-rank: adapters from block B; [0, B) frozen with no adapter, so no backward below B")
+    ap.add_argument("--lora-scale", type=float, default=32.0, help="--lora-rank: adapter output scale")
     ap.add_argument("--gdn-segment-tokens", type=int, default=0,
                     help="GatedDeltaNet training forward over segments of this many tokens (multiple of 64) carrying "
                     "the recurrent state: backward rebuilds one segment's chunk states at a time (exact). 0 = off")

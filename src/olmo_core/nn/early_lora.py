@@ -35,7 +35,7 @@ import torch.nn.functional as F
 
 log = logging.getLogger(__name__)
 
-__all__ = ["install_early_lora", "early_lora_flops_per_token", "early_lora_flops_per_block", "enable_from_config_block", "lora_block_from_checkpoint"]
+__all__ = ["install_early_lora", "lora_flop_adjust_per_token", "early_lora_flops_per_token", "early_lora_flops_per_block", "enable_from_config_block", "lora_block_from_checkpoint"]
 
 
 def _lora_hook(mod: nn.Linear, inp, out):
@@ -132,6 +132,24 @@ def early_lora_flops_per_block(model: Any) -> List[float]:
     for m in st["modules"]:
         out[int(m._lora_block)] += 6.0 * r * (m.in_features + m.out_features)
     return out
+
+
+def lora_flop_adjust_per_token(model: Any, seq_len: int) -> float:
+    """FLOP adjustment per token vs the dense count, for adapters installed WITHOUT the online router (which charges
+    them itself): blocks [0, start) run forward-only (nothing below them needs a gradient: -2/3 of the block), blocks
+    [start, K) have frozen base weights (no weight gradient: -1/3) plus their adapters' 6 r (in + out)."""
+    st = getattr(model, "_early_lora", None)
+    if not st:
+        return 0.0
+    B, K = int(st.get("start", 0)), int(st["n_blocks"])
+    ab = early_lora_flops_per_block(model)
+    adj = 0.0
+    for i, blk in enumerate(model.blocks.values()):
+        if i >= K:
+            break
+        f = float(blk.num_flops_per_token(int(seq_len)))
+        adj += -(2.0 / 3.0) * f if i < B else -(1.0 / 3.0) * f + ab[i]
+    return adj
 
 
 def lora_block_from_checkpoint(model_path: str) -> Optional[Dict[str, Any]]:

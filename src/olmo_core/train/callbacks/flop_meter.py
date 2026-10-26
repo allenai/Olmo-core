@@ -283,6 +283,12 @@ class FlopMeterCallback(Callback):
             # partial-MLP without a mid-stack router: every partial FFN ran at its fraction on every real token (the
             # mid-stack router charges this credit itself, per document and at each block's length)
             actual += tokens * sum(fw.credits_per_block(len(m.blocks)))
+        if getattr(m, "_early_lora", None) and otr is None:
+            # LoRA without the online router (the --lora-rank modifier): frozen-base blocks skip their weight
+            # gradient, blocks below the adapters run forward-only, plus the adapters themselves
+            from olmo_core.nn.early_lora import lora_flop_adjust_per_token
+
+            actual += tokens * lora_flop_adjust_per_token(m, self.seq_len)
         if hasattr(m, "_flop_extra_actual"):
             # a method's own overhead outside the model forward/backward (the online token router's
             # prefix pass, scoring and ridge fit), accumulated per rank by the model this step

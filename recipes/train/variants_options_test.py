@@ -85,3 +85,9 @@ def test_every_trainer_ffn_width_flag_is_an_ffnwidth_option_field():
 def test_every_trainer_ffn_chunk_flag_is_an_ffnchunk_option_field():
     flags = {f.replace("-", "_") for f in re.findall(r'"--(ffn-chunk-[a-z-]+)"', open(TRAINER).read())}
     assert flags and flags <= _option_fields("FFNChunkOptions"), flags - _option_fields("FFNChunkOptions")
+
+
+def test_every_trainer_lora_flag_is_a_lora_option_field():
+    flags = {f.replace("-", "_") for f in re.findall(r'"--(lora-[a-z-]+)"', open(TRAINER).read())}
+    assert flags and flags <= _option_fields("LoRAOptions"), flags - _option_fields("LoRAOptions")
+

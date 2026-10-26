@@ -222,6 +222,21 @@ class FFNWidthOptions(VariantOptions):
 
 
 @dataclass
+class LoRAOptions(VariantOptions):
+    """lora: frozen base + rank-R adapters on blocks [B, K) for ANY arm (olmo_core.nn.early_lora), without the
+    online-router path. Embeddings frozen; blocks [0, B) frozen with no adapter (no backward below B)."""
+
+    lora_rank: int = 0
+    lora_blocks: int = 0
+    lora_start: int = 0
+    lora_scale: float = 32.0
+
+    @property
+    def active(self) -> bool:
+        return self.lora_rank > 0
+
+
+@dataclass
 class FFNChunkOptions(VariantOptions):
     """ffnchunk: sequence-chunked FFN sublayer (olmo_core.nn.ffn_chunk) in training -- exact, cuts the long-row
     recompute working set (peak memory / max train length). No params, no FLOP change."""
@@ -904,6 +919,44 @@ class FFNWidth(Variant):
         return {"ffn_width": FFNWidthCallback()}
 
 
+class LoRA(Variant):
+    """LoRA modifier (``--lora-rank R [--lora-blocks K] [--lora-start B] [--lora-scale S]`` on any arm, e.g. the dense
+    one): base weights of blocks [0, K) and the embeddings frozen, rank-R adapters on [B, K). FLOPs: the meter charges
+    [0, B) forward-only (1/3), [B, K) at 2/3 + the adapters (the online router's accounting). Exported as the
+    ``early_lora`` block so the eval re-installs the adapters before its strict load."""
+
+    name = "lora"
+    options_cls = LoRAOptions
+    new_params = True
+
+    def _K(self, o, model=None) -> int:
+        return o.lora_blocks or (len(model.blocks) if model is not None else 0)
+
+    def validate(self, o):
+        assert isinstance(o, LoRAOptions)
+        if o.lora_rank <= 0 or o.lora_start < 0 or (o.lora_blocks and o.lora_start >= o.lora_blocks):
+            raise ValueError("lora needs rank > 0 and 0 <= lora_start < lora_blocks")
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, LoRAOptions)
+        from olmo_core.nn.early_lora import install_early_lora
+
+        K = self._K(o, model)
+        mods = install_early_lora(model, K, o.lora_rank, o.lora_scale, start=o.lora_start)
+        o.lora_blocks = K  # recorded for the export
+        print(f"[variants] lora: base of blocks [0, {K}) + embeddings frozen, rank-{o.lora_rank} adapters on "
+              f"[{o.lora_start}, {K}) ({len(mods)} linears, scale {o.lora_scale})", flush=True)
+
+    def export_config(self, o):
+        assert isinstance(o, LoRAOptions)
+        if not o.lora_blocks:
+            raise RuntimeError("lora export before post_build_model resolved the block count")
+        out = {"n_blocks": o.lora_blocks, "rank": o.lora_rank, "scale": o.lora_scale}
+        if o.lora_start:
+            out["start"] = o.lora_start
+        return {"early_lora": out}
+
+
 class FFNChunk(Variant):
     """Sequence-chunked FFN sublayer modifier (``--ffn-chunk-tokens N`` on any arm): the listed blocks run
     ``h + FFN(norm(h))`` over N-token chunks, each under its own activation checkpoint. Exact; memory only."""
@@ -1471,6 +1524,7 @@ VARIANTS: Dict[str, Variant] = {
         LayerDrop(),
         FFNWidth(),
         FFNChunk(),
+        LoRA(),
     )
 }
 #: setA spells the dense arm ``dense``.

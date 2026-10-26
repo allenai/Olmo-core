@@ -74,3 +74,19 @@ def test_soft_token_compaction_path_charges_only_blocks_that_ran():
     cb.post_step()
     want = 128 * (m.num_flops_per_token(64) - _blk(m, 64))
     assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)
+
+
+def test_lora_without_router_charges_frozen_base_and_adapters():
+    """--lora-rank modifier (no online router): blocks [0, B) forward-only, [B, K) frozen base + adapters."""
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, install_early_lora
+
+    m, cb, metrics = _setup(per_example=False)
+    install_early_lora(m, 3, 4, scale=8.0, start=1)
+    cb.post_step()
+    blocks = list(m.blocks.values())
+    f = [b.num_flops_per_token(256) for b in blocks]
+    ab = early_lora_flops_per_block(m)
+    adj = -(2 / 3) * f[0] + sum(-(1 / 3) * f[i] + ab[i] for i in (1, 2))
+    want = 2 * 256 * (m.num_flops_per_token(256) + adj)
+    assert ab[0] == 0.0 and ab[3] == 0.0 and ab[1] > 0
+    assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)
