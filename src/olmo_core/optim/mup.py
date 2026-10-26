@@ -12,7 +12,12 @@ import torch.nn as nn
 from ..config import Config
 from ..exceptions import OLMoConfigurationError
 from ..nn.transformer.init import InitMethod
-from ..nn.transformer.mup import ParamKind, named_param_shapes
+from ..nn.transformer.mup import (
+    ParamKind,
+    matrix_fan_ins_by_role,
+    named_matrix_roles,
+    named_param_shapes,
+)
 from ..utils import log_once
 
 if TYPE_CHECKING:
@@ -38,18 +43,31 @@ class MuPConfig(Config):
     Use it together with :data:`~olmo_core.nn.transformer.init.InitMethod.nanochat`, which is the
     matching initialization.
 
-    A weight matrix with fan-in ``fan_in`` gets the learning rate ``lr * base_width / fan_in``,
-    embeddings get ``lr * embedding_lr_multiplier``, and element-wise parameters (norm gains,
-    biases, per-head scalars, depthwise convolutions) get ``lr``. Here ``lr`` is the optimizer's
-    learning rate, or a group override's ``lr`` if one is set.
+    Set exactly one of :data:`base_fan_ins` and :data:`base_width`. A weight matrix with fan-in
+    ``fan_in`` gets the learning rate ``lr * base_fan_in / fan_in``, where ``base_fan_in`` is
+    either the fan-in of the same matrix in a base model (:data:`base_fan_ins`), or one constant
+    for every matrix (:data:`base_width`). Embeddings get ``lr * embedding_lr_multiplier``, and
+    element-wise parameters (norm gains, biases, per-head scalars, depthwise convolutions) get
+    ``lr``. Here ``lr`` is the optimizer's learning rate, or a group override's ``lr`` if one is
+    set.
 
-    Keep ``base_width`` fixed across the models being compared: that is what lets a learning rate
-    tuned at one width transfer to other widths.
+    Keep the base fixed across the models being compared: that is what lets a learning rate tuned
+    at one width transfer to other widths.
     """
 
-    base_width: int
+    base_width: Optional[int] = None
     """
-    The fan-in at which a weight matrix gets exactly the base learning rate.
+    One fan-in at which every weight matrix gets exactly the base learning rate. Even in a model of
+    this width, matrices whose fan-in differs from it get other learning rates.
+    """
+
+    base_fan_ins: Optional[Dict[str, int]] = None
+    """
+    The fan-in of every weight-matrix role in the base model, from :meth:`from_base_model`. Every
+    weight matrix of the base model gets exactly the base learning rate, and a matrix in another
+    model gets it scaled by how much its fan-in changed. Roles are matched by
+    :func:`~olmo_core.nn.transformer.mup.named_matrix_roles`, so the models can differ in depth
+    but must have the same kinds of blocks.
     """
 
     embedding_lr_multiplier: float = 1.0
@@ -65,8 +83,31 @@ class MuPConfig(Config):
     """
 
     def __post_init__(self):
-        if self.base_width <= 0:
+        if (self.base_width is None) == (self.base_fan_ins is None):
+            raise OLMoConfigurationError(
+                "MuPConfig requires exactly one of base_width and base_fan_ins"
+            )
+        if self.base_width is not None and self.base_width <= 0:
             raise OLMoConfigurationError(f"base_width must be positive, got {self.base_width}")
+        if self.base_fan_ins is not None:
+            if not self.base_fan_ins:
+                raise OLMoConfigurationError("base_fan_ins must not be empty")
+            for role, fan_in in self.base_fan_ins.items():
+                if fan_in <= 0:
+                    raise OLMoConfigurationError(
+                        f"base_fan_ins['{role}'] must be positive, got {fan_in}"
+                    )
+
+    @classmethod
+    def from_base_model(cls, model: nn.Module, **kwargs) -> "MuPConfig":
+        """
+        A config whose :data:`base_fan_ins` are read from ``model``, which can be built on the
+        ``meta`` device.
+
+        :param model: The base model.
+        :param kwargs: Other fields of the config.
+        """
+        return cls(base_fan_ins=matrix_fan_ins_by_role(model), **kwargs)
 
 
 def mup_lr_multipliers(model: nn.Module, config: MuPConfig) -> Dict[str, float]:
@@ -94,11 +135,22 @@ def mup_lr_multipliers(model: nn.Module, config: MuPConfig) -> Dict[str, float]:
             level=logging.WARNING,
         )
 
+    roles = named_matrix_roles(model) if config.base_fan_ins is not None else {}
     multipliers: Dict[str, float] = {}
     for name, shape in named_param_shapes(model).items():
         if shape.kind == ParamKind.matrix:
             assert shape.fan_in is not None
-            multipliers[name] = config.base_width / shape.fan_in
+            if config.base_fan_ins is None:
+                assert config.base_width is not None
+                base_fan_in = config.base_width
+            else:
+                role = roles[name]
+                if role not in config.base_fan_ins:
+                    raise OLMoConfigurationError(
+                        f"muP base model has no matrix with role '{role}' (parameter '{name}')"
+                    )
+                base_fan_in = config.base_fan_ins[role]
+            multipliers[name] = base_fan_in / shape.fan_in
         elif shape.kind == ParamKind.embedding:
             multipliers[name] = config.embedding_lr_multiplier
         else:

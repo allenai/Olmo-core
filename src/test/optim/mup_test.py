@@ -26,15 +26,25 @@ VOCAB = 256
 BASE_WIDTH = 64
 
 
-def _model(init_method: InitMethod = InitMethod.nanochat) -> nn.Module:
+def _model(
+    init_method: InitMethod = InitMethod.nanochat,
+    d_model: int = D_MODEL,
+    hidden: int = HIDDEN,
+    n_layers: int = 2,
+) -> nn.Module:
     return TransformerConfig.llama_like(
-        d_model=D_MODEL,
+        d_model=d_model,
         vocab_size=VOCAB,
-        n_layers=2,
+        n_layers=n_layers,
         n_heads=2,
-        feed_forward=FeedForwardConfig(hidden_size=HIDDEN, bias=False),
+        feed_forward=FeedForwardConfig(hidden_size=hidden, bias=False),
         init_method=init_method,
     ).build(init_device="cpu")
+
+
+def _base_model() -> nn.Module:
+    """Half the width and depth of :func:`_model`."""
+    return _model(d_model=D_MODEL // 2, hidden=HIDDEN // 2, n_layers=1)
 
 
 def _group_of(optim: torch.optim.Optimizer, param: torch.Tensor) -> dict:
@@ -57,6 +67,54 @@ def test_mup_lr_multipliers():
 def test_mup_config_rejects_nonpositive_base_width():
     with pytest.raises(OLMoConfigurationError, match="base_width"):
         MuPConfig(base_width=0)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        pytest.param({}, "exactly one", id="neither"),
+        pytest.param({"base_width": 8, "base_fan_ins": {"a": 8}}, "exactly one", id="both"),
+        pytest.param({"base_fan_ins": {}}, "must not be empty", id="empty"),
+        pytest.param({"base_fan_ins": {"a": 0}}, r"base_fan_ins\['a'\]", id="nonpositive"),
+    ],
+)
+def test_mup_config_rejects_invalid_bases(kwargs, match):
+    with pytest.raises(OLMoConfigurationError, match=match):
+        MuPConfig(**kwargs)
+
+
+def test_mup_base_model_multipliers():
+    config = MuPConfig.from_base_model(_base_model(), embedding_lr_multiplier=3.0)
+    assert MuPConfig.from_dict(config.as_config_dict()) == config
+
+    # Every parameter of the base model gets the base learning rate.
+    for name, multiplier in mup_lr_multipliers(_base_model(), config).items():
+        assert multiplier == (3.0 if name == "embeddings.weight" else 1.0), name
+
+    # A wider, deeper model scales each matrix by how much its own fan-in grew.
+    multipliers = mup_lr_multipliers(_model(), config)
+    assert multipliers["embeddings.weight"] == 3.0
+    for idx in ("0", "1"):
+        assert multipliers[f"blocks.{idx}.attention.w_q.weight"] == 0.5
+        assert multipliers[f"blocks.{idx}.feed_forward.w2.weight"] == 0.5
+        assert multipliers[f"blocks.{idx}.attention_norm.weight"] == 1.0
+    assert multipliers["lm_head.w_out.weight"] == 0.5
+
+
+def test_mup_base_model_param_groups():
+    base = _base_model()
+    optim = AdamWConfig(lr=1e-3, mup=MuPConfig.from_base_model(base)).build(base)
+
+    (group,) = optim.param_groups
+    assert len(group["params"]) == len(list(base.parameters()))
+    assert group["lr"] == pytest.approx(1e-3)
+    assert group["lr_multiplier"] == 1.0
+
+
+def test_mup_base_model_rejects_unknown_roles():
+    config = MuPConfig(base_fan_ins={"lm_head.w_out.weight": D_MODEL})
+    with pytest.raises(OLMoConfigurationError, match="no matrix with role 'blocks"):
+        mup_lr_multipliers(_model(), config)
 
 
 @pytest.mark.parametrize("config_cls", [AdamWConfig, SkipStepAdamWConfig])

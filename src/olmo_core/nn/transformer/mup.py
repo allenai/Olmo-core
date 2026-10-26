@@ -3,13 +3,27 @@ Per-parameter shapes used by the muP learning-rate rules.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 import torch.nn as nn
 
 from olmo_core.config import StrEnum
+from olmo_core.exceptions import OLMoConfigurationError
 
-__all__ = ["ParamKind", "ParamShape", "named_param_shapes"]
+if TYPE_CHECKING:
+    from .model import Transformer
+
+__all__ = [
+    "ParamKind",
+    "ParamShape",
+    "named_param_shapes",
+    "named_matrix_roles",
+    "matrix_fan_ins_by_role",
+]
+
+# Name segments added by wrappers (activation checkpointing, ``torch.compile``) that don't change
+# what a parameter is.
+_WRAPPER_SEGMENTS = ("_checkpoint_wrapped_module", "_orig_mod")
 
 
 class ParamKind(StrEnum):
@@ -129,3 +143,107 @@ def named_param_shapes(model: nn.Module) -> Dict[str, ParamShape]:
                     f"{tuple(param.shape)} in {type(module).__name__}"
                 )
     return shapes
+
+
+def _find_transformer(model: nn.Module) -> Tuple["Transformer", str]:
+    from .model import Transformer
+
+    for module_name, module in model.named_modules():
+        if isinstance(module, Transformer):
+            return module, f"{module_name}." if module_name else ""
+    raise OLMoConfigurationError("muP base-model fan-ins require a Transformer model")
+
+
+def _strip_wrappers(path: str) -> str:
+    return ".".join(segment for segment in path.split(".") if segment not in _WRAPPER_SEGMENTS)
+
+
+def _unwrap(module: nn.Module) -> nn.Module:
+    for segment in _WRAPPER_SEGMENTS:
+        while isinstance(getattr(module, segment, None), nn.Module):
+            module = getattr(module, segment)
+    return module
+
+
+def _class_name(module: nn.Module) -> str:
+    # FSDP's ``fully_shard`` swaps a module's class for a generated ``FSDP<Class>`` subclass.
+    for cls in type(module).__mro__:
+        if not cls.__module__.startswith("torch.distributed"):
+            return cls.__name__
+    return type(module).__name__
+
+
+def _block_kind(block: nn.Module) -> str:
+    from ..layer_norm import LayerNorm
+
+    parts = []
+    for name, child in _unwrap(block).named_children():
+        child = _unwrap(child)
+        if isinstance(child, LayerNorm) or next(child.parameters(), None) is None:
+            continue
+        # The sequence mixer's type tells e.g. linear-attention blocks from full-attention ones.
+        parts.append(f"{name}:{_class_name(child)}" if name == "attention" else name)
+    return "+".join(parts)
+
+
+def named_matrix_roles(model: nn.Module) -> Dict[str, str]:
+    """
+    Give every weight matrix of a transformer a role that names the same matrix in a model of
+    another size, so that muP can scale its learning rate relative to a base model.
+
+    Matrices outside the blocks keep their name (e.g. ``lm_head.w_out.weight``). A matrix inside a
+    block is named by the kind of block and its path within the block, e.g.
+    ``blocks[attention:KimiDeltaAttention+feed_forward].attention.w_out.weight``. The block kind
+    lists the block's non-norm submodules, with the sequence mixer's type, so blocks of different
+    kinds (e.g. linear vs. full attention, dense vs. MoE) don't share roles, while models of
+    different depths do.
+
+    Wrapper prefixes (``module.``), activation-checkpointing and ``torch.compile`` wrappers, and
+    FSDP's class swaps don't change roles.
+
+    :param model: A :class:`~olmo_core.nn.transformer.Transformer`, or a wrapper around one.
+
+    :returns: A mapping from matrix parameter name (as in ``model.named_parameters()``) to role.
+
+    :raises OLMoConfigurationError: If the model has no transformer.
+    """
+    transformer, prefix = _find_transformer(model)
+    block_kinds = {idx: _block_kind(block) for idx, block in transformer.blocks.items()}
+    roles: Dict[str, str] = {}
+    for name, shape in named_param_shapes(model).items():
+        if shape.kind != ParamKind.matrix:
+            continue
+        local = name[len(prefix) :] if name.startswith(prefix) else name
+        if local.startswith("blocks."):
+            idx, path = local[len("blocks.") :].split(".", 1)
+            roles[name] = f"blocks[{block_kinds[idx]}].{_strip_wrappers(path)}"
+        else:
+            roles[name] = _strip_wrappers(local)
+    return roles
+
+
+def matrix_fan_ins_by_role(model: nn.Module) -> Dict[str, int]:
+    """
+    The fan-in of every weight-matrix role in a model, keyed by :func:`named_matrix_roles`. This is
+    the table that :class:`~olmo_core.optim.MuPConfig` uses as its base model. The model can be
+    built on the ``meta`` device.
+
+    :param model: The base model: a :class:`~olmo_core.nn.transformer.Transformer`, or a wrapper
+        around one.
+
+    :returns: A mapping from role to fan-in, sorted by role.
+
+    :raises OLMoConfigurationError: If the model has no transformer, or if matrices sharing a role
+        have different fan-ins, which would make the role ambiguous.
+    """
+    shapes = named_param_shapes(model)
+    fan_ins: Dict[str, int] = {}
+    for name, role in named_matrix_roles(model).items():
+        fan_in = shapes[name].fan_in
+        assert fan_in is not None
+        if fan_ins.setdefault(role, fan_in) != fan_in:
+            raise OLMoConfigurationError(
+                f"muP role '{role}' has fan-ins {fan_ins[role]} and {fan_in} (at '{name}') in the "
+                "base model"
+            )
+    return dict(sorted(fan_ins.items()))
