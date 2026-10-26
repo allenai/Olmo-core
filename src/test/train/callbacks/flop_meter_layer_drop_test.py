@@ -90,3 +90,20 @@ def test_lora_without_router_charges_frozen_base_and_adapters():
     want = 2 * 256 * (m.num_flops_per_token(256) + adj)
     assert ab[0] == 0.0 and ab[3] == 0.0 and ab[1] > 0
     assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)
+
+
+def test_sparse_loss_positions_charges_the_head_only_at_supervised_positions():
+    import torch
+
+    m, cb, metrics = _setup(per_example=False)
+    m.lm_head._sparse_loss_positions = True
+    ids = torch.randint(1, 1000, (2, 256))
+    mask = torch.zeros(2, 256, dtype=torch.bool)
+    mask[:, -10:] = True  # 10 labelled tokens per row -> 10 supervised positions after the shift
+    cb.pre_step({"input_ids": ids, "label_mask": mask})
+    cb.post_step()
+    sup = 2 * 10
+    head = m.lm_head.num_flops_per_token(256)
+    want = 2 * 256 * m.num_flops_per_token(256) - head * (2 * 256 - sup)
+    assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)
+    assert metrics["flop_meter/supervised_frac"] == pytest.approx(sup / 512)

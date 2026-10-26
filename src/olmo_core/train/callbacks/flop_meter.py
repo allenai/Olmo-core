@@ -65,6 +65,7 @@ class FlopMeterCallback(Callback):
     _dense: float = 0.0
     _tokens: int = 0
     _real_tokens_this_step: Optional[int] = None
+    _supervised_this_step: Optional[int] = None
     _fpt_cache: Optional[Dict[int, int]] = None
     _examples: int = 0
 
@@ -120,10 +121,20 @@ class FlopMeterCallback(Callback):
         return float(v[0]), float(v[1]), int(v[2]), int(v[3])
 
     def pre_step(self, batch):
-        if self.pad_id is None:
-            return
         import torch
         import torch.distributed as dist
+
+        m = self._model()
+        if getattr(getattr(m, "lm_head", None), "_sparse_loss_positions", False):
+            # --sparse-loss-positions: the LM head runs only at supervised positions (count them for post_step)
+            from olmo_core.data.utils import get_labels
+
+            ns = torch.tensor([int((get_labels(batch) != -100).sum().item())], device=batch["input_ids"].device)
+            if dist.is_available() and dist.is_initialized():
+                dist.all_reduce(ns, op=dist.ReduceOp.SUM)
+            self._supervised_this_step = int(ns.item())
+        if self.pad_id is None:
+            return
 
         ids = batch["input_ids"]
         n = torch.tensor([int((ids != self.pad_id).sum().item())], device=ids.device)
@@ -283,6 +294,15 @@ class FlopMeterCallback(Callback):
             # partial-MLP without a mid-stack router: every partial FFN ran at its fraction on every real token (the
             # mid-stack router charges this credit itself, per document and at each block's length)
             actual += tokens * sum(fw.credits_per_block(len(m.blocks)))
+        if self._supervised_this_step is not None:
+            if otr is not None:
+                raise ValueError("FlopMeter: --sparse-loss-positions with the online router is not priced (the router "
+                                 "charges the LM head per kept token); refusing to guess")
+            # the head ran only at the supervised positions, not at every (real) token
+            head = float(m.lm_head.num_flops_per_token(self.seq_len))
+            actual -= head * max(0, tokens - self._supervised_this_step)
+            self.trainer.record_metric("flop_meter/supervised_frac", self._supervised_this_step / max(1, tokens))
+            self._supervised_this_step = None
         if getattr(m, "_early_lora", None) and otr is None:
             # LoRA without the online router (the --lora-rank modifier): frozen-base blocks skip their weight
             # gradient, blocks below the adapters run forward-only, plus the adapters themselves
