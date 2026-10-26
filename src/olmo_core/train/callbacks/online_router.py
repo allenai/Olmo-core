@@ -37,6 +37,8 @@ class OnlineRouterCallback(Callback):
         import torch
 
         router0 = self._router()
+        de = int(getattr(router0.cfg, "diag_every", 0) or 0)
+        self._diag_batch = batch if de > 0 and self.trainer.global_step % de == 0 else None
         fa = int(getattr(router0.cfg, "freeze_after", 0) or 0)
         if fa and self.trainer.global_step > fa and not router0.cfg.freeze_early:
             # warmup-then-freeze: from now on the early stack is frozen, and its grads / optimizer state are released
@@ -75,6 +77,48 @@ class OnlineRouterCallback(Callback):
         for r in router.chain():  # every pyramid stage refits from its own targets
             r.begin_step(self.trainer.global_step, model=self.trainer.train_module.model)  # type: ignore[union-attr]
 
+    def _diag(self, router, batch) -> Dict[str, float]:
+        """diag_every: answer CE of the first micro-batch routed vs full context, no_grad, state restored."""
+        import copy
+
+        import torch
+
+        tm = self.trainer.train_module
+        model = tm.model  # type: ignore[union-attr]
+        B = int(batch["input_ids"].shape[0])
+        n = max(1, min(B, int(getattr(tm, "rank_microbatch_size", 0) or 0) // max(1, int(batch["input_ids"].shape[1]))
+                       or 2))
+        sub = {k: (v[:n] if torch.is_tensor(v) and v.dim() > 0 and v.shape[0] == B else v) for k, v in batch.items()}
+        saved_r = []
+        for r in router.chain():
+            d = {k: copy.copy(v) for k, v in r.__dict__.items()}
+            d["_stats"] = {k: list(v) for k, v in r._stats.items()}
+            saved_r.append(d)
+        saved_m = {k: copy.deepcopy(getattr(model, k)) for k in ("_flop_extra_actual", "_flop_example_lens",
+                                                                  "_soft_token_compaction") if hasattr(model, k)}
+        out = {}
+        try:
+            with torch.no_grad():
+                input_ids, labels, kw = tm._prepare_batch(sub)  # type: ignore[union-attr]
+                nl = float((labels != tm.label_ignore_index).sum().clamp(min=1))  # type: ignore[union-attr]
+                for name, force in (("routed", False), ("full", True)):
+                    for r in router.chain():
+                        r._force_dense = force
+                    o = tm.model_forward(input_ids, labels=labels,  # type: ignore[union-attr]
+                                         ignore_index=tm.label_ignore_index, loss_reduction="sum", **kw)
+                    ce = getattr(o, "ce_loss", None)
+                    out[f"online_router/diag_ce_{name}"] = float((ce if ce is not None else o.loss).float()) / nl
+        finally:
+            for r, d in zip(router.chain(), saved_r):
+                r.__dict__.clear()
+                r.__dict__.update(d)
+                r._force_dense = False
+            for k, v in saved_m.items():
+                setattr(model, k, v)
+        if len(out) == 2:
+            out["online_router/diag_ce_gap"] = out["online_router/diag_ce_full"] - out["online_router/diag_ce_routed"]
+        return out
+
     def post_step(self):
         router = self._router()
         import torch
@@ -85,6 +129,14 @@ class OnlineRouterCallback(Callback):
         if torch.cuda.is_available():
             # this step's peak allocated memory on this rank (reset in pre_step)
             m["online_router/peak_mem_gib"] = torch.cuda.max_memory_allocated() / 2**30
+        if getattr(self, "_diag_batch", None) is not None:
+            dg = self._diag(router, self._diag_batch)
+            self._diag_batch = None
+            for k, v in dg.items():
+                self.trainer.record_metric(k, v)
+            if get_rank() == 0 and dg:
+                log.info("[online-router] step %d diag: %s", self.step,
+                         " ".join(f"{k.split('/')[-1]}={v:.4f}" for k, v in sorted(dg.items())))
         if self.log_every and self.step % self.log_every == 0:
             for k, v in m.items():
                 self.trainer.record_metric(k, v)

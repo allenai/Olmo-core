@@ -1609,3 +1609,34 @@ def test_ridge_groups_scales_the_penalty_per_feature_group():
     torch.manual_seed(0)
     r = _router(use_hidden=False, ridge_groups=True)
     assert r.cfg.ridge_groups
+
+
+def test_diag_scores_routed_and_full_context_and_restores_router_state():
+    from types import SimpleNamespace
+
+    from olmo_core.train.callbacks.online_router import OnlineRouterCallback
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, diag_every=1)
+    ids, cid, labels = _row(B=2)
+    router.begin_step(1, model=model)
+    model(ids, labels=labels).loss.backward()
+    model.zero_grad(set_to_none=True)
+    router.begin_step(2, model=model)
+    assert not router.dense_now()
+
+    def fwd(input_ids, labels=None, ignore_index=-100, loss_reduction="sum", **kw):
+        return model(input_ids, labels=labels, loss_reduction=loss_reduction)
+
+    tm = SimpleNamespace(model=model, label_ignore_index=-100, rank_microbatch_size=0,
+                         _prepare_batch=lambda b: (b["input_ids"], labels[: b["input_ids"].shape[0]], {}),
+                         model_forward=fwd)
+    cb = OnlineRouterCallback()
+    cb._trainer = SimpleNamespace(train_module=tm)  # type: ignore[assignment]
+    before = (len(router._pending), router._calls, dict(router._stats))
+    out = cb._diag(router, {"input_ids": ids})
+    assert set(out) == {"online_router/diag_ce_routed", "online_router/diag_ce_full", "online_router/diag_ce_gap"}
+    assert out["online_router/diag_ce_gap"] == pytest.approx(out["online_router/diag_ce_full"]
+                                                             - out["online_router/diag_ce_routed"])
+    assert out["online_router/diag_ce_routed"] != out["online_router/diag_ce_full"]  # routing changed the forward
+    assert (len(router._pending), router._calls, dict(router._stats)) == before
+    assert not router.dense_now() and not getattr(router, "_force_dense", False)

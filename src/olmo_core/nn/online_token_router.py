@@ -124,6 +124,12 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    diag_every: int = 0
+    """Train/eval-mismatch diagnostic: every N steps the callback scores the step's first micro-batch twice under
+    no_grad with the post-step weights -- routed as in training, and full context as at eval -- and logs the answer
+    CE of each (``online_router/diag_ce_routed`` / ``diag_ce_full`` / ``diag_ce_gap`` = full - routed). A model
+    adapted to the routed context (GDN conv / decay over compacted rows) shows full > routed. Not charged (a
+    diagnostic, not part of the method); router targets, stats and FLOP counters are restored. 0 = off."""
     ridge_groups: bool = False
     """Scale the ridge penalty per feature GROUP (scalar / hidden / hidden x query: lambda = ridge x that group's
     mean diagonal of X^T X) instead of by the whole matrix's mean diagonal, which the thousands of hidden dimensions
@@ -711,6 +717,8 @@ class OnlineTokenRouter:
 
     def dense_now(self) -> bool:
         """Whether this step trains uncompressed (warmup or a periodic dense step)."""
+        if getattr(self, "_force_dense", False):
+            return True
         c = self.cfg
         if self.w is None or self.step <= c.warmup_steps:
             return True
