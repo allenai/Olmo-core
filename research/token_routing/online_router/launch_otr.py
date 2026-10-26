@@ -95,6 +95,8 @@ ARMS = {
     "lora64K32r20to7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32"),
     # overnight hill-climb on the LoRA-all recipe (2026-10-26)
     "lora64K32r20to7pt": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-per-task-key-tokens 11"),
+    "lora64K32th": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-keep-mode threshold --st-otr-row-cap 2"),
+    "lora64K32ks": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-keep-sched 1.33:0.67"),
     "lora64K32r20to12": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,12:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32"),
     "lora64K32r20to7tk50": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --ffn-width-frac 0.5 --ffn-width-mode topk"),
     "lora64K32r20to7tk75": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --ffn-width-frac 0.75 --ffn-width-mode topk"),
