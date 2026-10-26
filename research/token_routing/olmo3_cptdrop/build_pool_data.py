@@ -227,6 +227,9 @@ def main():
     ap.add_argument("--train-name", default="train32k")
     ap.add_argument("--dev-name", default="dev32k")
     ap.add_argument("--short-name", default="short4k")
+    ap.add_argument("--exclude-rows-tsv", default="",
+                    help="comma list of rows.tsv files (e.g. the dev shards'): their doc ids never enter train "
+                    "(needed when train comes from the 2^17+ buckets dev is drawn from, e.g. train128k)")
     ap.add_argument("--short-shards", default="000500",
                     help="comma list of dolma3_longmino_0625 shard ids for the short-document guard")
     a = ap.parse_args()
@@ -247,9 +250,15 @@ def main():
         buckets = {int(x) for x in a.train_buckets.split(",")}
         files = sorted(p for (t, b), ps in by.items() if b in buckets for p in ps)
         rng.shuffle(files)  # uniform over files = proportional to each (topic, bucket)'s size
+        skip = set()
+        for f in [x for x in a.exclude_rows_tsv.split(",") if x]:
+            skip |= {ln.split("\t")[1] for ln in open(f).read().splitlines()[1:] if ln.strip()}
+        if skip:
+            log(f"[train] excluding {len(skip)} doc ids from {a.exclude_rows_tsv}")
         rows, prov, lens, train_ids = build_long(
-            api, tok, files, a.train_rows, a.row_len, a.max_windows, a.cache, "train"
+            api, tok, files, a.train_rows, a.row_len, a.max_windows, a.cache, "train", skip_ids=skip
         )
+        assert not (train_ids & skip), "excluded doc ids leaked into train"
         order = list(range(len(rows)))
         random.Random(a.seed + 1).shuffle(order)
         q = np.percentile(lens, [10, 50, 90, 99]).astype(int).tolist()
