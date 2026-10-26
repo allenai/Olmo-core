@@ -63,7 +63,7 @@ from .vision_alignment import (
     _image_token_rows,
     _load_text_config,
     _restore_pretraining_router_lb,
-    _sample_one_annotation,
+    _set_annotation_sampling,
     _uses_document_mode,
     parse_cli_args,
     resolve_hf_datasets_cache_dir,
@@ -73,9 +73,12 @@ from .vision_alignment import (
 )
 from .vision_alignment_data import (
     DEFAULT_ALIGNMENT_ARTIFACT_ROOT,
+    STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
     STAGE1_V3_LOSS_TARGETS,
     STAGE1_V3_MEAN_LOSS_WEIGHTS,
     STAGE1_V4_LOSS_TARGETS,
+    STAGE1_V5_LOSS_TARGETS,
+    STAGE1_V6_LOSS_TARGETS,
     build_stage1_v3_sources,
 )
 from .vision_midtraining_data import (
@@ -101,6 +104,16 @@ _NUM_NODES = 2
 count (the merged mid-training + long-context stage runs on the text stage's eight)."""
 _STAGE1_V3_MEANS = {8192: STAGE1_V3_MEAN_LOSS_WEIGHTS, 65536: STAGE1_V3_MEAN_LOSS_WEIGHTS}
 """Stage-1 v3 means by the sequence lengths they were measured at (identical at both)."""
+
+
+def _stage1_v3_means_length(sequence_length: int) -> int | None:
+    """The calibrated length whose stage-1 v3 means hold at ``sequence_length``: itself, or
+    65,536 for longer sequences (the 256K stage). The means were identical at 8,192 and 65,536
+    because no sampled example (nor documents-mode draw, at most 26,864 tokens) reached the
+    budget, so a longer budget truncates nothing either."""
+    if sequence_length in _STAGE1_V3_MEANS:
+        return sequence_length
+    return 65536 if sequence_length > 65536 else None
 
 
 @dataclass
@@ -199,21 +212,19 @@ class MixedMidtrainingRecipeConfig(Config):
     the sources are memory-mapped from Weka, and a loading thread that page-faults holds the
     interpreter lock, so one slow read stalls every loading thread of the rank; same batches and
     checkpoints. Off by default; turn it on, with :attr:`batch_prefetch_process`."""
-    batch_prefetch_depth: int = 8
+    batch_prefetch_depth: int = 2
     """Finished rank batches the loader builds ahead on a background thread, so the trainer's
     fetch returns as soon as one is queued (the batch order and the checkpointed cursor are the
     thread-free loader's; see
     :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.batch_prefetch_depth`).
-    Eight batches are over a minute of steps on 8 nodes, enough to ride out a storage pause
-    that delays one rank's batch, which every rank would wait for. ``0`` packs and collates on
-    the trainer's thread."""
+    ``0`` packs and collates on the trainer's thread."""
     batch_prefetch_process: bool = False
     """Build those batches in a forked child process instead of on a thread of the trainer (see
     :attr:`~olmo_core.data.multimodal.mixture_data_loader.MixtureDataLoaderConfig.batch_prefetch_process`),
     whose interpreter lock the batch building otherwise shares with the training step; same
     batches and checkpoints. Off by default; turn it on, with :attr:`prefetch_processes`. The
     queued batches take ``/dev/shm``: about ``batch_prefetch_depth + 1`` batches per rank, 6.4 GB
-    each at 8 GPUs on the 90/10 stage and 0.8 GB at 64 (about 460 and 60 GB a node at depth 8),
+    each at 8 GPUs on the 90/10 stage and 0.8 GB at 64 (about 150 and 20 GB a node at depth 2),
     so runs on few nodes need a larger ``--launch.shared_memory`` or a lower depth."""
     visual_data: str = "midtraining"
     """Visual sources: ``midtraining`` (Rustin's eight groups), ``stage1_v3`` (the Molmo2
@@ -221,13 +232,36 @@ class MixedMidtrainingRecipeConfig(Config):
     example, its calibrated means, and its loss shares within the visual share) or ``stage1_v4``
     (the same sources and means with the loss shares of
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V4_LOSS_TARGETS`, which set each
-    source's passes for the merged mid-training + long-context stage)."""
+    source's passes for the merged mid-training + long-context stage) or ``stage1_v5`` (v3's
+    sources with every annotation of a drawn image as its own document, see
+    :attr:`annotation_documents`, and the loss shares of
+    :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V5_LOSS_TARGETS`) or ``stage1_v6`` (v5
+    with the most repeated sources capped at 10 epochs, their loss moved to the large OCR sources;
+    :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V6_LOSS_TARGETS`)."""
     compile_loss: bool = True
     """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs
     (see :attr:`~olmo_core.nn.vision.MultimodalLMConfig.compile_loss`) instead of eagerly."""
     balance_vit_crops: bool = False
     """Share each micro-batch's image crops evenly among all ranks for the vision encoder (see
     :attr:`~olmo_core.train.train_module.transformer.multimodal_train_module.MultimodalOLMoDDPTrainModuleConfig.balance_vit_crops`)."""
+    text_document_masking: bool = False
+    """Isolate the documents of each text instance from one another, as the text team's 256K stage
+    does (scaling-ladders ``hero_mt_lc_256k``): segments end after every EOS and, in instances of
+    :attr:`text_chunked_source`, at every :attr:`text_chunk_length` boundary; a padding run is
+    one segment (see :class:`~olmo_core.data.multimodal.pretraining_replay.ComposableTextReplayConfig`).
+    Composable text sources only."""
+    text_chunked_source: int | None = None
+    """The interleaved text source's child whose instances are concatenated chunks (MT: 0)."""
+    text_chunk_length: int | None = None
+    """Their chunk length (MT: 8,192)."""
+    annotation_documents: bool = False
+    """With ``stage1_v3`` or ``stage1_v4`` visual data, keep every annotation of a drawn image, each
+    as its own document sharing the image's crops (``annotation_sampling="documents"``), instead
+    of one sampled annotation per example: the vision encoder runs once for all of an image's
+    documents, and every document is the one-annotation example. The per-source loss shares stay
+    (calibrated means :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS`,
+    65,536 tokens only); images with more annotations weigh more, as in the released Molmo2 v3
+    recipe, which trains every annotation of each drawn image."""
 
 
 @dataclass
@@ -311,9 +345,20 @@ def _build_recipe(
             continue
         if type(value) is not int or value < minimum:
             raise OLMoConfigurationError(f"recipe.{name} must be an integer of at least {minimum}")
-    if recipe.visual_data not in ("midtraining", "stage1_v3", "stage1_v4"):
+    if recipe.visual_data not in (
+        "midtraining",
+        "stage1_v3",
+        "stage1_v4",
+        "stage1_v5",
+        "stage1_v6",
+    ):
         raise OLMoConfigurationError(
-            "recipe.visual_data must be midtraining, stage1_v3 or stage1_v4"
+            "recipe.visual_data must be midtraining, stage1_v3, stage1_v4, stage1_v5 or stage1_v6"
+        )
+    if recipe.annotation_documents and recipe.visual_data not in ("stage1_v3", "stage1_v4"):
+        raise OLMoConfigurationError(
+            "recipe.annotation_documents needs stage1_v3 or stage1_v4 visual data (stage1_v5 "
+            "and stage1_v6 always train annotations as documents)"
         )
     if (
         isinstance(recipe.text_loss_share, bool)
@@ -1095,6 +1140,9 @@ def build_config(
             work_dir=str(text["data_loader"]["work_dir"]),
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
+            document_masking=recipe.text_document_masking,
+            chunked_source=recipe.text_chunked_source,
+            chunk_length=recipe.text_chunk_length,
         )
         masked_text = True
     else:
@@ -1119,12 +1167,32 @@ def build_config(
         model = _build_lm_model(recipe, text, token_ids)
     model.compile_loss = recipe.compile_loss
     # v4 is v3's sources and calibration with its own loss split.
-    stage1_v3 = recipe.visual_data in ("stage1_v3", "stage1_v4") and recipe.text_loss_share < 1.0
+    stage1_v3 = (
+        recipe.visual_data in ("stage1_v3", "stage1_v4", "stage1_v5", "stage1_v6")
+        and recipe.text_loss_share < 1.0
+    )
+    documents = recipe.annotation_documents or recipe.visual_data in ("stage1_v5", "stage1_v6")
     if stage1_v3:
-        means = dict(_STAGE1_V3_MEANS.get(recipe.sequence_length, {}))
+        # The documents means were measured at 65,536 tokens, where no draw reached the
+        # budget (the largest, a PixMo-Points image's documents, is 26,864 tokens), so they
+        # hold at any longer sequence (the 256K stage) too.
+        if documents and recipe.sequence_length < 65536:
+            raise OLMoConfigurationError(
+                "recipe.annotation_documents is calibrated at 65,536 tokens and longer, not "
+                f"{recipe.sequence_length}"
+            )
+        means = dict(
+            STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS
+            if documents
+            else _STAGE1_V3_MEANS.get(_stage1_v3_means_length(recipe.sequence_length) or 0, {})
+        )
         recipe.visual_example_weights = {}
         recipe.visual_loss_shares = dict(
-            STAGE1_V4_LOSS_TARGETS if recipe.visual_data == "stage1_v4" else STAGE1_V3_LOSS_TARGETS
+            {
+                "stage1_v4": STAGE1_V4_LOSS_TARGETS,
+                "stage1_v5": STAGE1_V5_LOSS_TARGETS,
+                "stage1_v6": STAGE1_V6_LOSS_TARGETS,
+            }.get(recipe.visual_data, STAGE1_V3_LOSS_TARGETS)
         )
     else:
         means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if recipe.text_loss_share < 1.0 else {}
@@ -1139,7 +1207,7 @@ def build_config(
             "joint", recipe.sequence_length, recipe.alignment_artifact_root
         )
         # KDA's document mode isolates packed documents, not sibling annotation branches.
-        _sample_one_annotation(visual_sources)
+        _set_annotation_sampling(visual_sources, "documents" if documents else "one")
     elif recipe.text_loss_share < 1.0 and not replaced_sources:
         visual_sources = build_visual_sources(
             sequence_length=recipe.sequence_length,
@@ -1206,7 +1274,7 @@ def build_config(
         )
     reusable_visual_calibration = (
         stage1_v3
-        and recipe.sequence_length in _STAGE1_V3_MEANS
+        and _stage1_v3_means_length(recipe.sequence_length) is not None
         and tokenizer == TokenizerConfig.dolma2()
         and revision == _DOLMA2_REVISION
     ) or (

@@ -821,6 +821,7 @@ class MultimodalLM(nn.Module):
         position_ids: Optional[torch.Tensor] = None,
         example_ids: Optional[torch.Tensor] = None,
         image_crop_counts: Optional[torch.Tensor] = None,
+        document_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
         """
@@ -856,11 +857,17 @@ class MultimodalLM(nn.Module):
         :param position_ids: Optional ``(B, seq_len)`` int tensor of explicit RoPE
             positions. Required with ``subsegment_ids`` (parallel branches share an
             overlapping position range and cannot use sequential positions).
+        :param document_ids: Optional ``(B, seq_len)`` per-token document ids, set when a packed
+            example holds several documents sharing one image's crops. Documents are isolated
+            from each other (in place of ``example_ids``, which then only number the examples).
         :returns: Logits or loss (same as
             :meth:`~olmo_core.nn.transformer.Transformer.forward`).
         """
         if subsegment_ids is not None and position_ids is None:
             raise ValueError("`position_ids` is required when `subsegment_ids` is provided")
+        if document_ids is not None:
+            # Isolation follows documents; examples only group a shared image's documents.
+            example_ids = document_ids
 
         response_logits_only = kwargs.pop("response_logits_only", False)
         loss_masks = kwargs.pop("loss_masks", None)
