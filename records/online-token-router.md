@@ -1185,3 +1185,17 @@ fw50a collapses. **The dense control shows partial MLP is itself the problem, no
 dense loses 0.59 on contra and 0.42 on outlier at 0.75x dense's compute, and is far below dense's own 488-row point
 (387 PF: 0.893 / 0.896 / 0.617 / 0.302). The likely cause is the train/eval mismatch: training sees a random half of
 the neurons scaled by 1/f, and eval runs the full width. The thread is closed.
+
+## Known trap: freeze-early + early-lora-start crash at the end of a run with a mid-run save (2026-10-25, CPT side)
+
+Reported by CPT Run Iteration on 51322b89c (`--st-otr-freeze-early --st-otr-early-lora-start B`, OLMo 3 7B, Beaker,
+8 ranks):
+- **Failure.** Two of two 120-step runs with SAVE_INTERVAL 60 died AFTER step 120. Rank 6 hit a gloo `Connection reset
+  by peer` in the trainer's bookkeeping thread (trainer.py `_error`) after another rank had died first; that rank's
+  traceback was not captured. The step-120 checkpoint had been written.
+- **What works.** 48-step runs (no mid-run save) and K32 runs without freeze-early at SAVE 60 / 120 steps finish
+  cleanly.
+- **Not deterministic.** Relaunching into the same dir resumes at step 120 and exports cleanly (rc=0).
+- **Suspect.** A process that ran the mid-run save and then the final save / teardown. Unresolved.
+- **Workaround.** Relaunch into the same dir.
+- **To debug.** Capture every rank's log. A 2-rank repro is: save at step N, then train to 2N with a final save.

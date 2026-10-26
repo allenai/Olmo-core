@@ -704,6 +704,46 @@
    "lr": 1e-05,
    "mix": "mt11",
    "seed": 1
+  },
+  "f8k-mt4-lora64K32r20to7tk50-s1464-tdb-lr1e-05": {
+   "ex": "01M5TZDJ34001CWHQ3KTB8G0NV",
+   "arm": "lora64K32r20to7tk50",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32r20to7tk75-s1464-tdb-lr1e-05": {
+   "ex": "01M5TZEBGHRZMGFKHRKZQPC5CQ",
+   "arm": "lora64K32r20to7tk75",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05": {
+   "ex": "01M5TZF66A3T6F0KKME2MYC1T6",
+   "arm": "lora64K32r20to7fw75a",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32r20to7fw90a-s1464-tdb-lr1e-05": {
+   "ex": "01M5TZG1SQPN61RQHCTMR9WFHT",
+   "arm": "lora64K32r20to7fw90a",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32r20to7-s1464-tdb-lr1e-05": {
+   "ex": "01M5TZH99692CXEMGX05PVAH9Z",
+   "arm": "lora64K32r20to7",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
   }
  },
  "evals": {
