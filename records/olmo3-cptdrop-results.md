@@ -17,7 +17,10 @@ Code: `research/token_routing/olmo3_cptdrop/`. Every number below is in the ops 
 
 ## Verdict
 
-- **Recipe: whole-model LoRA ("K32").** Freeze the embeddings and every block, and train rank-64 adapters (scale 32) on
+- **Recipe: whole-model LoRA with the LM head frozen too ("K32fh").** It trains no full-rank weights at all: 0.685x
+  dense FLOPs/step, 22.3 GiB peak. CE 1.6842 / 1.6812 at 48 / 120 steps (dense 1.6880 / 1.6853), m ≈ 4.8 / 4.3. The
+  table below is for K32 with a trained head, which is slightly worse (m 3.9 / 3.45).
+- **Base: whole-model LoRA ("K32").** Freeze the embeddings and every block, and train rank-64 adapters (scale 32) on
   every linear in all 32 blocks, at LR 1e-5 to 2e-5, 16 rows/step, no token dropping. The untied LM head and the final
   norm still train at full rank, so the cost and memory figures include a full-rank head; a frozen-head or head-LoRA
   variant has not been run.
@@ -27,7 +30,8 @@ Code: `research/token_routing/olmo3_cptdrop/`. Every number below is in the ops 
   1.8x at 480 steps and to 1.1x at 960 steps, where K32 is BEHIND dense at the same step count (+0.0012 ± 0.0001; far
   bin +0.0035). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure. That
   is well short of the 10–20x target. K32 suits short CPT budgets; for long ones, full CPT wins.
-- **The edge grows with context length:** at 64k it is about 1.5x the 32k gap at every budget.
+- **The edge is larger at long context:** at 64k it is about 1.4–1.5x the 32k gap at every budget, and the same on
+  the 32k–64k positions. At 128k it is about the same size as at 64k (−0.0035 / −0.0041 at 48 / 120 steps).
 - **Everything that removes work per token loses, alone or stacked on K32:**
   - token drops, slots and routers;
   - mixture-of-depths;
@@ -85,14 +89,18 @@ Further checks:
 | 32k CE | 1.6926 | 1.6880 | 1.6849 | 1.6819 | 1.6804 | 1.6788 | 1.6774 |
 | 32k Δ vs dense | −0.0046 | −0.0032 | −0.0031 | −0.0034 | −0.0023 | −0.0012 | **+0.0012** |
 | 32k m | 1.65 | 2.75 | 3.9 | 3.45 | 2.5 | ~1.8 | 1.12 |
-| 64k Δ vs dense (dev64k_512, 512 rows) | | | | −0.0049 | −0.0033 | −0.0020 | |
-| 64k m | | | | ~3.4 | ~2.7 | >1.44 (bound) | |
+| 64k Δ vs dense (dev64k_512, full row, 512 rows) | | | | −0.0050 | −0.0030 | −0.0017 | |
+| 64k Δ on the 32k–64k positions | | | | −0.0050 | −0.0028 | −0.0014 | |
+| 128k Δ vs dense (dev128k_512, full row, 512 rows) | | | −0.0035 | −0.0041 | | | |
 
 - **Context gain** (CE with an 8k window minus CE with full 32k, on each row's last 4k): K32 matches dense up to 120 steps
   and lags slightly at 960.
   - K32 at 12/24/48/120/960 steps: 0.0681 / 0.0700 / 0.0725 / 0.0739 / 0.0771. Dense: 0.0671 / 0.0700 / 0.0726 / 0.0750 / 0.0788. Per-run SE ±0.0036.
 - **Short guard:** level with dense throughout ⚠ (256 rows).
 - **64k PF:** the dense-64k meter files are partial counts, so 64k dense PF is taken as K32 PF / 0.696.
+- **Eval fix (2026-10-26):** the bins once stopped at 32k, and overall CE is summed from the bins, so the first
+  dev64k / dev128k numbers scored only the first 32k targets. All long-context numbers here are full-row re-scores
+  (`devce_full/`). Row-sum check: tokens = rows × (row_len − 1).
 
 ## Max trainable context per GPU (memory probe)
 
