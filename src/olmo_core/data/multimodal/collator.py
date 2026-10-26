@@ -292,6 +292,18 @@ class MultimodalCollator:
             ]
             batch["example_ids"] = self._pad_1d(example_arrays, -1, max_len, np.int64)
 
+        # Document ids (documents sharing an image's crops): the model isolates by them instead
+        # of example ids. Rows without any number their examples as single documents.
+        if any("document_ids" in ex for ex in examples):
+            document_arrays = [
+                ex.get(
+                    "document_ids",
+                    ex.get("example_ids", np.zeros(len(ex["input_ids"]), dtype=np.int64)),
+                )
+                for ex in examples
+            ]
+            batch["document_ids"] = self._pad_1d(document_arrays, -1, max_len, np.int64)
+
         if any("pack_source_names" in ex for ex in examples):
             batch["pack_source_names"] = [ex.get("pack_source_names", []) for ex in examples]
 

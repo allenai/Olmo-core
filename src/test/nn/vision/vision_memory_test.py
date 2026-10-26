@@ -3,6 +3,7 @@
 import pytest
 import torch
 
+from olmo_core.nn.vision import sdpa
 from olmo_core.nn.vision.config import VisionEncoderConfig
 from olmo_core.nn.vision.image_vit import VisionTransformer
 from olmo_core.nn.vision.sdpa import (
@@ -34,18 +35,19 @@ def test_vision_sdpa_runs_on_cpu():
 @pytest.mark.parametrize(
     "device, capability, cudnn, expected",
     [
-        ("cuda", (10, 3), 92000, True),
-        ("cuda", (10, 3), 91002, False),
+        ("cuda", (10, 3), (9, 20, 0), True),
+        ("cuda", (10, 3), (9, 13, 0), True),
+        ("cuda", (10, 3), (9, 10, 2), False),
         ("cuda", (10, 3), None, False),
-        ("cuda", (9, 0), 92000, False),
-        ("cpu", (10, 3), 92000, False),
+        ("cuda", (9, 0), (9, 20, 0), False),
+        ("cpu", (10, 3), (9, 20, 0), False),
     ],
 )
 def test_cudnn_first_needs_sm100_and_a_recent_cudnn(
     monkeypatch, device, capability, cudnn, expected
 ):
     monkeypatch.setattr(torch.cuda, "get_device_capability", lambda _: capability)
-    monkeypatch.setattr(torch.backends.cudnn, "version", lambda: cudnn)
+    monkeypatch.setattr(sdpa, "cudnn_runtime_version", lambda: cudnn)
     assert cudnn_first_supported(torch.device(device)) is expected
 
 

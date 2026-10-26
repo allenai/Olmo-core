@@ -1164,7 +1164,7 @@ def test_prefetch_workers_is_a_recipe_knob(mixed_recipe, text_config):
     )
     assert deeper.data_loader.prefetch_max_in_flight == 128
     # Whole-batch prefetching is on by default and a recipe knob; the loader itself defaults off.
-    assert default.data_loader.batch_prefetch_depth == 8
+    assert default.data_loader.batch_prefetch_depth == 2
     assert (
         MixtureDataLoaderConfig(global_batch_size=8, sequence_length=8, work_dir="x")
     ).batch_prefetch_depth == 0
@@ -1422,6 +1422,128 @@ def test_merged_stage_takes_its_shape_from_the_text_config(merged_stage):
     assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
     # Packing scales with the sequence: 64 crops and 48 candidates per 8,192 tokens.
     assert (config.data_loader.pack_max_crops, config.data_loader.pack_buffer_size) == (512, 384)
+
+
+@dataclass
+class _MultiAnnotationConfig(PixMoCapDatasetConfig):
+    """A stand-in source with ``annotation_sampling``, as the multi-annotation sources have."""
+
+    annotation_sampling: str = "all"
+
+
+@pytest.mark.parametrize("documents", [False, True])
+def test_merged_stage_annotation_documents(merged_stage, monkeypatch, documents):
+    """``--recipe.annotation_documents`` switches the multi-annotation sources from one sampled
+    annotation per example to every annotation as a document, with their calibrated means."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+    )
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _MultiAnnotationConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    config = merged_stage.build(*(["--recipe.annotation_documents=true"] if documents else []))
+    visual = {k: v for k, v in config.dataset.sources.items() if k != "text_midtraining"}
+    assert {source.annotation_sampling for source in visual.values()} == {
+        "documents" if documents else "one"
+    }
+    means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"}
+    assert means == (
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS if documents else STAGE1_V3_MEAN_LOSS_WEIGHTS
+    )
+    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+
+def test_merged_stage_v5_trains_documents_with_its_loss_shares(merged_stage, monkeypatch):
+    """``stage1_v5``: v3's sources with every annotation as a document, the documents means, and
+    v3's loss shares with PixMo-Points v2 scaled to keep its positions per step."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_LOSS_TARGETS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V5_LOSS_TARGETS,
+        STAGE1_V5_POINTING_SCALE,
+    )
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _MultiAnnotationConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    config = merged_stage.build("--recipe.visual_data=stage1_v5")
+    visual = {k: v for k, v in config.dataset.sources.items() if k != "text_midtraining"}
+    assert {source.annotation_sampling for source in visual.values()} == {"documents"}
+    means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"}
+    assert means == STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS
+    assert sum(STAGE1_V5_LOSS_TARGETS.values()) == pytest.approx(1.0)
+    ratio = {name: STAGE1_V5_LOSS_TARGETS[name] / STAGE1_V3_LOSS_TARGETS[name] for name in visual}
+    others = {r for name, r in ratio.items() if name != "pixmo_points_v2"}
+    assert max(others) == pytest.approx(min(others))
+    assert ratio["pixmo_points_v2"] / min(others) == pytest.approx(STAGE1_V5_POINTING_SCALE)
+    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+
+def test_merged_stage_v6_caps_the_repeated_sources(merged_stage, monkeypatch):
+    """``stage1_v6``: documents as v5, PixMo-Cap and PixMo-Count down, the large OCR sources up, the
+    loss shares still summing to one."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V5_LOSS_TARGETS,
+        STAGE1_V6_LOSS_TARGETS,
+    )
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _MultiAnnotationConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    config = merged_stage.build("--recipe.visual_data=stage1_v6")
+    visual = {k: v for k, v in config.dataset.sources.items() if k != "text_midtraining"}
+    assert {source.annotation_sampling for source in visual.values()} == {"documents"}
+    means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"}
+    assert means == STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS
+    assert sum(STAGE1_V6_LOSS_TARGETS.values()) == pytest.approx(1.0)
+    for name in ("pixmo_caption", "pixmo_transcript", "pixmo_count_v2", "olmocr_documents"):
+        assert STAGE1_V6_LOSS_TARGETS[name] < STAGE1_V5_LOSS_TARGETS[name]
+    for name in ("text_rich_doc", "text_rich_table", "text_rich_chart", "nvidia_synth_en"):
+        assert STAGE1_V6_LOSS_TARGETS[name] > 1.9 * STAGE1_V5_LOSS_TARGETS[name]
+    assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+
+def test_merged_stage_passes_text_document_masking(merged_stage):
+    """The 256K text stage's document masking reaches the text replay; off by default."""
+    default = merged_stage.build().dataset.sources["text_midtraining"]
+    assert default.document_masking is False and default.chunked_source is None
+    replay = merged_stage.build(
+        "--recipe.text_document_masking=true",
+        "--recipe.text_chunked_source=0",
+        "--recipe.text_chunk_length=8192",
+    ).dataset.sources["text_midtraining"]
+    assert (replay.document_masking, replay.chunked_source, replay.chunk_length) == (True, 0, 8192)
+
+
+def test_annotation_documents_needs_stage1_data(mixed_recipe):
+    with pytest.raises(OLMoConfigurationError, match="annotation_documents"):
+        mixed_recipe.build("--recipe.annotation_documents=true")
 
 
 def test_merged_stage_lm_takes_the_text_stage_runtime(merged_stage):
