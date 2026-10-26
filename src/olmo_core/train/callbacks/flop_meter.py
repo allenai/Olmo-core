@@ -125,6 +125,13 @@ class FlopMeterCallback(Callback):
         import torch.distributed as dist
 
         m = self._model()
+        if int(getattr(self.trainer, "global_step", 0)) <= 1:
+            # the trainer's dry-run batch ran before step 1: drop what it logged (router FLOP adjustments, example
+            # lengths) so it is not charged to step 1
+            if hasattr(m, "_flop_extra_actual"):
+                m._flop_extra_actual = 0.0
+            if getattr(m, "_flop_example_lens", None) is not None:
+                m._flop_example_lens = {"dense": [], "actual": []}
         if getattr(getattr(m, "lm_head", None), "_sparse_loss_positions", False):
             # --sparse-loss-positions: the LM head runs only at supervised positions (count them for post_step)
             from olmo_core.data.utils import get_labels

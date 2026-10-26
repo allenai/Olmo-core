@@ -124,6 +124,10 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    ridge_groups: bool = False
+    """Scale the ridge penalty per feature GROUP (scalar / hidden / hidden x query: lambda = ridge x that group's
+    mean diagonal of X^T X) instead of by the whole matrix's mean diagonal, which the thousands of hidden dimensions
+    dominate (over-shrinking the structural and lexical scalars)."""
     mlp_hidden: int = 0
     """Residual 2-layer MLP router (2026-10-26): score = ridge + MLP(features), the MLP (``mlp_hidden`` ReLU units,
     output layer zero-initialised so it starts at the ridge) trained online on the ridge's residual with
@@ -1707,8 +1711,17 @@ class OnlineTokenRouter:
         self._stat("fit_samples", float(cnt.item()))
         if self.n_seen > 0:
             A = self.XtX.clone()
-            lam = self.cfg.ridge * float(torch.diagonal(A).mean().clamp(min=1e-12))
-            A.diagonal().add_(lam)
+            dg = torch.diagonal(A)
+            if self.cfg.ridge_groups:
+                ns, hd = self.n_scalar, self.hdim
+                lam_v = torch.empty_like(dg)
+                for lo, hi in ((0, ns), (ns, ns + hd), (ns + hd, F)):
+                    if hi > lo:
+                        lam_v[lo:hi] = self.cfg.ridge * dg[lo:hi].mean().clamp(min=1e-12)
+                A.diagonal().add_(lam_v)
+            else:
+                lam = self.cfg.ridge * float(dg.mean().clamp(min=1e-12))
+                A.diagonal().add_(lam)
             try:
                 Lc = torch.linalg.cholesky(A)
                 self.w = torch.cholesky_solve(self.Xty[:, None], Lc).squeeze(-1).to(torch.float32)

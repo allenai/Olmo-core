@@ -107,3 +107,14 @@ def test_sparse_loss_positions_charges_the_head_only_at_supervised_positions():
     want = 2 * 256 * m.num_flops_per_token(256) - head * (2 * 256 - sup)
     assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)
     assert metrics["flop_meter/supervised_frac"] == pytest.approx(sup / 512)
+
+
+def test_dry_run_flop_adjustments_are_not_charged_to_step_one():
+    import torch
+
+    m, cb, metrics = _setup(per_example=False)
+    m._flop_extra_actual = -1e15  # logged by the dry-run batch before step 1
+    cb._trainer.global_step = 1
+    cb.pre_step({"input_ids": torch.ones(2, 256, dtype=torch.long)})
+    cb.post_step()
+    assert metrics["flop_meter/actual_pflops"] == pytest.approx(2 * 256 * m.num_flops_per_token(256) / 1e15)

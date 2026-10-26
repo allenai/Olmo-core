@@ -341,6 +341,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_keep_mode: str = "topk"
     st_otr_ctx_feats: bool = False
     st_otr_mlp_hidden: int = 0
+    st_otr_ridge_groups: bool = False
     st_otr_mlp_steps: int = 4
     st_otr_mlp_lr: float = 1e-3
     st_otr_later_mass_target: float = 0.0
@@ -1224,6 +1225,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         keep_mode=o.st_otr_keep_mode,
         ctx_feats=o.st_otr_ctx_feats,
         mlp_hidden=o.st_otr_mlp_hidden,
+        ridge_groups=o.st_otr_ridge_groups,
         mlp_steps=o.st_otr_mlp_steps,
         mlp_lr=o.st_otr_mlp_lr,
         later_mass_target=o.st_otr_later_mass_target,

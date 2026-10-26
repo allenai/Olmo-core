@@ -1966,6 +1966,9 @@ def parse_args() -> argparse.Namespace:
                     "--st-otr-later-max-keep-frac of the stage's input. 0 = fixed budgets")
     ap.add_argument("--st-otr-later-max-keep-frac", type=float, default=1.0,
                     help="--st-otr-later-mass-target: per-row cap (share of the tokens entering the stage)")
+    ap.add_argument("--st-otr-ridge-groups", action="store_true",
+                    help="online router: ridge penalty per feature group (scalar / hidden / hidden x query) instead of "
+                    "one lambda scaled by the hidden-dominated mean diagonal")
     ap.add_argument("--st-otr-mlp-hidden", type=int, default=0,
                     help="online router: residual 2-layer MLP (H ReLU units) on top of the ridge, trained online on the "
                     "ridge residual. 0 = ridge only")

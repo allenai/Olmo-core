@@ -1603,3 +1603,9 @@ def test_eval_reinstalled_adapters_are_checked_on_the_first_eval_forward():
     with pytest.raises(RuntimeError, match="never ran"):
         with torch.no_grad():
             bad(ids)
+
+
+def test_ridge_groups_scales_the_penalty_per_feature_group():
+    torch.manual_seed(0)
+    r = _router(use_hidden=False, ridge_groups=True)
+    assert r.cfg.ridge_groups
