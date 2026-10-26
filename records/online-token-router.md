@@ -1167,6 +1167,32 @@ so the read is direct, with no interpolation:
 **~2.2x** LoRA-all's compute. The recipe's ratio is ~1.7x. LoRA-all also has the larger max T (~400k vs ~300k). Oolong is
 the one primary task it loses on mt11, -0.023 vs dense and -0.03 vs the recipe at 5e-6 (0.594); single seed.
 
+### Memory probes on Beaker H100 (2026-10-26): two-stage without LoRA, keep 20%; comparability with the A100 probes
+
+Setup: same probe (`--mem-probe-steps 3`, steady routed step), 2 x H100-80GB, FSDP-2, full AC, rows built at startup
+by `--long-rows-target` (c09282fe5). Raw output: `memprobe/bkprobe_summary.txt`.
+
+**Comparability.**
+- **Transients match the A100 numbers to 0.03 GiB:** dense 16.36 / 28.72 vs 16.37 / 28.72, otr10M7de0 14.30 / 22.53 vs
+  14.30 / 22.54 at 32k / 64k.
+- **Two Beaker-side differences.**
+  - The trainer's dry run leaves a T-proportional allocation resident on the Beaker image (+5.2 GiB at 32k, +10.3 at
+    64k on dense). It is absent with `--skip-dry-run`, which every new probe uses.
+  - Usable memory is ~8 GiB lower: Beaker OOMs at ~69-70 GiB allocated vs ~77 on the A100s, from non-PyTorch memory
+    and fragmentation. So the A100-equivalent max T below is computed from the fits at the A100 cap (79.25 GiB).
+
+**Steady routed step, GiB:**
+
+| arm | flags | fixed | transient 32k / 64k / 128k / 196k | GiB per 1k | Beaker | A100-equivalent max T |
+|---|---|---|---|---|---|---|
+| r20to7M7de0 (two-stage, no LoRA) | standard | 28.4-31.2 | 14.3 / 22.6 / 38.9 / -- | 0.255 | 128k fits (70.1) | ~165k |
+| otr20M7de0 (keep 20% after block 7) | standard | 28.6-30.1 | 14.3 / 22.5 / OOM / -- | ~0.26 | 128k OOM | ~160k |
+| r20to7M7de0 | + chunk + GDN seg | 31.7-33.5 | -- / -- / 26.6 / 36.2 | 0.150 | 196k at the edge (OOM on step 3), 256k OOM | ~255k |
+| otr20M7de0 | + chunk + GDN seg | 31.0-31.3 | -- / -- / 26.5 / 36.2 | 0.150 | 196k fits (67.5), 256k OOM | ~270k |
+
+These sit with otr10M7de0 (~177k standard / ~250k with the flags). They are below the LoRA arms (recipe ~300k,
+LoRA-all ~400k), whose fixed state is 5-15 GiB lower.
+
 ## Partial MLP (2026-10-25): loses at matched FLOPs
 
 All runs are mt4s1464, LR 5e-6, de0, 8k, eval_size 500 per task; numbers are contra / nq / oolong / outlier.

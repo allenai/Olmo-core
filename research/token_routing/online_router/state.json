@@ -744,6 +744,94 @@
    "lr": 1e-05,
    "mix": "mt4",
    "seed": 0
+  },
+  "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05": {
+   "ex": "01M5VH87SXQVSBJZXYW2JVTDWF",
+   "arm": "lora64K32r20to7pt",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05": {
+   "ex": "01M5VH90RXG5WBY5WKXWZDAD9T",
+   "arm": "lora64K32r20to12",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05": {
+   "ex": "01M5VH9W7M8NKVQFTZZERP75ET",
+   "arm": "lora64K32r20to7",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 1
+  },
+  "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05": {
+   "ex": "01M5VHKKCCPYQFCH2NFPMA6QHH",
+   "arm": "lora64K32th",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32ks-s1464-tdb-lr1e-05": {
+   "ex": "01M5VHMCPNPJRBEDPKMM5CB8ZP",
+   "arm": "lora64K32ks",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32cx-s1464-tdb-lr1e-05": {
+   "ex": "01M5VHWTMFNCNMZHPJSNDDNNKG",
+   "arm": "lora64K32cx",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05": {
+   "ex": "01M5VHXMTP153EKYXAFEN49MWP",
+   "arm": "lora64K32to",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05": {
+   "ex": "01M5VHYH7RXR8Y6089PJTW4VW6",
+   "arm": "lora64K32r20at5",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32cxr20at5-s1464-tdb-lr1e-05": {
+   "ex": "01M5VHZCDS2AQMXP21DDTVYRZF",
+   "arm": "lora64K32cxr20at5",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32m50c50-s1464-tdb-lr1e-05": {
+   "ex": "01M5VJ75BS89Z3NJH5Q47YERJP",
+   "arm": "lora64K32m50c50",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32m70c50-s1464-tdb-lr1e-05": {
+   "ex": "01M5VJ7YFQXK0M1EVTF012GVR1",
+   "arm": "lora64K32m70c50",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
   }
  },
  "evals": {
