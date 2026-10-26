@@ -4098,6 +4098,11 @@
    "ex": "01M5VKC1J09T4ZTKCGV8E6B25T",
    "train_run": "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05",
    "task": "oolong"
+  },
+  "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05-evcontradiction": {
+   "ex": "01M5VKD80ANXQJ5SBFNDKA2967",
+   "train_run": "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05",
+   "task": "contradiction"
   }
  },
  "failed_evals": {

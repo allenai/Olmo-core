@@ -1632,11 +1632,11 @@ def test_diag_scores_routed_and_full_context_and_restores_router_state():
                          model_forward=fwd)
     cb = OnlineRouterCallback()
     cb._trainer = SimpleNamespace(train_module=tm)  # type: ignore[assignment]
-    before = (len(router._pending), router._calls, dict(router._stats))
+    before = (len(router._pending), router._calls, {k: list(v) for k, v in router._stats.items()})
     out = cb._diag(router, {"input_ids": ids})
     assert set(out) == {"online_router/diag_ce_routed", "online_router/diag_ce_full", "online_router/diag_ce_gap"}
     assert out["online_router/diag_ce_gap"] == pytest.approx(out["online_router/diag_ce_full"]
                                                              - out["online_router/diag_ce_routed"])
     assert out["online_router/diag_ce_routed"] != out["online_router/diag_ce_full"]  # routing changed the forward
-    assert (len(router._pending), router._calls, dict(router._stats)) == before
+    assert (len(router._pending), router._calls, {k: list(v) for k, v in router._stats.items()}) == before
     assert not router.dense_now() and not getattr(router, "_force_dense", False)

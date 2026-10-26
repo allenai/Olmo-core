@@ -1582,6 +1582,8 @@ class OnlineTokenRouter:
         return h
 
     def _register_target(self, model, entry: Dict[str, Any], h: torch.Tensor) -> None:
+        if not h.requires_grad:
+            return  # a no_grad forward (diag_every): there is no backward to read targets from
         rows, cols = entry["rows"], entry["cols"]
         hrows = entry.get("hrows", rows)  # packed rows: every sample lives in row 0 of the packed hidden state
         if self.cfg.target == "gxh":
