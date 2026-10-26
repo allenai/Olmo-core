@@ -76,16 +76,22 @@ CPT_M = [(12, 1.65), (24, 2.75), (48, 3.9), (120, 3.45), (240, 2.5), (480, 1.8),
 # --skip-dry-run, chunked FFN 8192, GDN segments 16384): measured peaks. ----
 MEM_STD = {"Dense": [(32, 43.7), (64, 56.0)], "Router keep 10%": [(32, 42.1), (64, 50.3), (128, 66.7)],
            "Recipe: two-stage + adapters 0–6": [(32, 36.4), (64, 44.4), (128, 60.2)],
-           "Whole-model LoRA + two-stage": [(32, 23.3), (64, 29.3), (128, 45.2)]}
+           "Whole-model LoRA + two-stage": [(32, 23.3), (64, 29.3), (128, 45.2)],
+           "Two-stage, no adapters (Beaker)": [(32, 44.1), (64, 52.4), (128, 68.7)],
+           "Router keep 20% (Beaker)": [(32, 43.6), (64, 51.8)]}
 MEM_FLAGS = {"Dense": [(128, 68.3), (160, 77.5)], "Router keep 10%": [(192, 64.3), (224, 69.9)],
              "Recipe: two-stage + adapters 0–6": [(262, 71.6)],
-             "Whole-model LoRA + two-stage": [(262, 56.5), (393, 77.4)]}
+             "Whole-model LoRA + two-stage": [(262, 56.5), (393, 77.4)],
+             "Two-stage, no adapters (Beaker)": [(128, 59.2), (196, 68.8)],
+             "Router keep 20% (Beaker)": [(128, 57.6), (196, 67.3)]}
 # linear fits (intercept GiB, slope GiB per 1k tokens) from the router record's probe tables: standard = fixed + its
 # transient fit; all flags = the record's per-1k slopes through the measured points (recipe slope from round 1)
 MEM_STD_FIT = {"Dense": (31.3, 0.386), "Router keep 10%": (34.0, 0.255), "Recipe: two-stage + adapters 0–6": (28.5, 0.248),
-               "Whole-model LoRA + two-stage": (13.4, 0.248)}
+               "Whole-model LoRA + two-stage": (13.4, 0.248), "Two-stage, no adapters (Beaker)": (36.1, 0.255),
+               "Router keep 20% (Beaker)": (35.2, 0.26)}
 MEM_FLAGS_FIT = {"Dense": (32.7, 0.28), "Router keep 10%": (31.8, 0.17), "Recipe: two-stage + adapters 0–6": (16.6, 0.21),
-                 "Whole-model LoRA + two-stage": (14.6, 0.16)}
+                 "Whole-model LoRA + two-stage": (14.6, 0.16), "Two-stage, no adapters (Beaker)": (39.4, 0.15),
+                 "Router keep 20% (Beaker)": (37.9, 0.15)}
 # early-block parameter-gradient share over training, three tracks (records/grad-composition.md tables; mt11 rows
 # 32-42/task, CPT 48 rows x 32k)
 EARLY_SHARE = {"SFT 4-task (LR 5e-6)": [(0, 0.45), (31, 0.31), (61, 0.28), (122, 0.25), (366, 0.23)],
@@ -94,8 +100,8 @@ EARLY_SHARE = {"SFT 4-task (LR 5e-6)": [(0, 0.45), (31, 0.31), (61, 0.28), (122,
 CPT_CTX = {"base": [(0, 0.99), (8, 0.94), (16, 0.83), (24, 0.79)], "after CPT (12-480 steps)": [(0, 0.94), (8, 0.78), (16, 0.42), (24, 0.21)]}
 # ---- max train length at 80 GB, SFT 4B, 2 x A100, FSDP-2, full AC (records/online-token-router.md; linear
 # extrapolation from 3-step probes, one sample each) ----
-MAXT = [("Dense", 165), ("Router, no full-context steps", 250), ("Recipe (adapters 0–6 + two-stage)", 300),
-        ("Whole-model LoRA + two-stage", 400)]
+MAXT = [("Dense", 165), ("Router keep 10%", 250), ("Two-stage, no adapters", 255), ("Router keep 20%", 270),
+        ("Recipe (adapters 0–6 + two-stage)", 300), ("Whole-model LoRA + two-stage", 400)]
 
 PAGE = r"""<title>Token Drop Results</title>
 <style>
@@ -191,7 +197,7 @@ a { color: var(--c2); }
     <figure><h3>Peak memory vs row length (standard settings)</h3><div class="chart"><canvas id="memstd" aria-label="memory vs length standard"></canvas></div>
       <figcaption>Peak GPU memory per GPU at the steady (routed) training step vs tokens per row. Qwen3.5-4B, 2× A100-80GB, FSDP-2, full checkpointing. The slope is memory per token: dense 0.39 GiB per 1k tokens, routed arms ≈0.25. Dense out of memory at 128k. Markers = measured; dashed = linear fit run out to where it reaches the 80 GB line (the estimated max length); dotted = 79.25 GiB usable.</figcaption></figure>
     <figure><h3>Peak memory vs row length (all memory optimizations)</h3><div class="chart"><canvas id="memflags" aria-label="memory vs length optimized"></canvas></div>
-      <figcaption>Same probe with routed warmup, no dry run, chunked FFN recompute and segmented GDN. Slopes: dense 0.28, router 0.17, whole-model LoRA 0.16 GiB per 1k tokens. Markers = measured, dashed = linear fit run out to the 80 GB line (the recipe has one point at this setting, so its line uses the slope from the chunked-FFN round). Two-stage without adapters and a 20% router are being measured.</figcaption></figure>
+      <figcaption>Same probe with routed warmup, no dry run, chunked FFN recompute and segmented GDN. Slopes: dense 0.28, router 0.17, whole-model LoRA 0.16 GiB per 1k tokens. Markers = measured, dashed = linear fit run out to the 80 GB line (the recipe has one point at this setting, so its line uses the slope from the chunked-FFN round). Two-stage without adapters and the 20% router were measured on Beaker H100s (per-length memory matches the A100 probes to 0.03 GiB).</figcaption></figure>
     <figure><h3>Max train length at 80 GB</h3><div class="chart"><canvas id="maxt" aria-label="max train length"></canvas></div>
       <figcaption>Qwen3.5-4B SFT, 2× A100-80GB, FSDP-2, full activation checkpointing, chunked FFN + segmented GDN. Linear extrapolation from 3-step probes, one sample each (router session record).</figcaption></figure>
   </div>
