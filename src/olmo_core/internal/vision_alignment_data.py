@@ -754,12 +754,15 @@ STAGE1_POSITIONS_PER_LOSS_TOKEN: dict[str, float] = {
     "nemotron_fintabnet": 1.468,
     "nemotron_hopchain": 1.752,
     "nemotron_raven": 1.977,
+    "gui_syn": 53.249,
 }
 """Sequence positions (text and image tokens) per response token of each v6 and v7 source as the
 merged stage builds it (dolma2 at the pinned revision, 65,536 tokens, every annotation a document):
 mean ``len(input_ids)`` over 32 draws (seed 0) divided by the source's calibrated mean loss weight,
 measured 2026-10-24/25. The Nemotron sources are text-dense (1.4-3.7, a long response per image),
-the OCR captions 2.5-7, pointing and the multi-question academic sets 25-340."""
+the OCR captions 2.5-7, pointing and the multi-question academic sets 25-340. GUISyn (v8) was
+measured the same way on 2026-10-26: 14.9 element documents per draw, each with its own copy of
+the screenshot's ~1,100 image tokens."""
 
 _V7_NEMOTRON_TARGETS = {
     name: epochs
@@ -951,6 +954,143 @@ def build_stage1_nemotron_sources(
         )
         for name in STAGE1_V7_NEMOTRON_EPOCHS
     }
+
+
+STAGE1_V8_GUI_SYN_ROWS: int = 36_192
+"""Screenshots of MolmoPoint-GUISyn (desktop, mobile and web train splits) with at least one usable
+element, as :class:`~olmo_core.data.multimodal.gui_syn.GuiSynDatasetConfig` builds them."""
+
+STAGE1_V8_GUI_SYN_MEAN_LOSS_WEIGHT: float = 323.875
+"""GUISyn's mean loss weight per draw in documents mode (16 sampled elements per screenshot and
+epoch, each its own document), with the stage-1 v7 probe (128 draws, seed 0, dolma2 at the pinned
+revision, 65,536 tokens), measured 2026-10-26."""
+
+STAGE1_V8_RUN_STEPS: int = 22_240
+"""Steps of the 256K hero stage v8 is for (373,125,283,840 tokens in 16 Mi-token batches). v8
+counts passes over this run, not over v6's 20,000-step reference."""
+
+_V8_RUN_SCALE = STAGE1_V8_RUN_STEPS / 20_000
+# A v7 source's loss per step, in units of v6's visual loss per step: v7 holds v6's text per step
+# and trains (1 - text share) / text share of it on vision, 1.2x v6's 1/9.
+_V7_STEP_LOSS = {
+    name: share
+    * (1.0 - STAGE1_V7_TEXT_LOSS_SHARE)
+    / STAGE1_V7_TEXT_LOSS_SHARE
+    * _V6_TEXT_LOSS_SHARE
+    / (1.0 - _V6_TEXT_LOSS_SHARE)
+    for name, share in STAGE1_V7_LOSS_TARGETS.items()
+}
+
+
+def _v8_share_per_pass(name: str) -> float:
+    if name == "gui_syn":
+        return (
+            STAGE1_V8_GUI_SYN_ROWS
+            * STAGE1_V8_GUI_SYN_MEAN_LOSS_WEIGHT
+            / STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
+        )
+    return _share_per_pass(name)
+
+
+def stage1_run_passes(name: str, step_loss: float) -> float:
+    """Passes over source ``name`` in a :data:`STAGE1_V8_RUN_STEPS`-step run that trains
+    ``step_loss`` of its loss per step, in units of v6's visual loss per step."""
+    return step_loss * _V8_RUN_SCALE / _v8_share_per_pass(name)
+
+
+def _v8_step_loss(name: str, passes: float) -> float:
+    return passes * _v8_share_per_pass(name) / _V8_RUN_SCALE
+
+
+STAGE1_V8_PASS_CAPS: dict[str, float] = {
+    "pixmo_points_v2": 5.0,
+    "pixmo_count_v2": 5.0,
+    "cosyn_point_v2": 5.0,
+    "pixmo_caption": 10.0,
+    "pixmo_transcript": 10.0,
+    "textocr": 10.0,
+    "synth_receipts_en": 5.0,
+    **{
+        name: 5.0
+        for name in STAGE1_V7_CAPPED_SOURCES["cosyn"] + STAGE1_V7_CAPPED_SOURCES["olmocr"]
+        if name != "cosyn_point_v2"
+    },
+}
+"""Passes over the hero run beyond which v8 caps a source. Pointing comes down to Molmo3's level
+(mm_olmo ``train_molmo3_stage1.py`` gives its pointing group 4 epochs): v7 cycles PixMo-Points 25
+times, and the v6 hero's point F1 fell after step 10,000, about 10 passes in. The other caps are
+v7's, counted over the run v7 actually trains: v7 counted passes over 20,000 steps at v6's visual
+loss per step, so its "10" (PixMo-Cap, TextOCR) and "5" (CoSyn, olmOCR, receipts) are 13.3 and 6.7
+over the hero."""
+
+STAGE1_V8_FRESH_SOURCES: tuple[str, ...] = (
+    "gui_syn",
+    "nvidia_synth_en",
+    *STAGE1_V7_NEMOTRON_EPOCHS,
+)
+"""Sources v8 raises to :data:`STAGE1_V8_FRESH_PASSES`: GUISyn (new), NVIDIA's synthetic OCR set and
+the Nemotron sources, which v7 draws 2.4-3.3 times over the hero."""
+
+STAGE1_V8_FRESH_PASSES: float = 5.0
+
+_V8_STEP_LOSS = {
+    **{
+        name: min(loss, _v8_step_loss(name, STAGE1_V8_PASS_CAPS[name]))
+        if name in STAGE1_V8_PASS_CAPS
+        else loss
+        for name, loss in _V7_STEP_LOSS.items()
+    },
+    **{name: _v8_step_loss(name, STAGE1_V8_FRESH_PASSES) for name in STAGE1_V8_FRESH_SOURCES},
+}
+_V8_STEP_LOSS_TOTAL = sum(_V8_STEP_LOSS.values())
+
+STAGE1_V8_LOSS_TARGETS: dict[str, float] = {
+    name: loss / _V8_STEP_LOSS_TOTAL for name, loss in _V8_STEP_LOSS.items()
+}
+"""Target loss mass of each stage-1 v8 source: v7 with GUISyn added, every source of
+:data:`STAGE1_V8_PASS_CAPS` capped, and :data:`STAGE1_V8_FRESH_SOURCES` at
+:data:`STAGE1_V8_FRESH_PASSES` passes over the hero. Every other source (PixMo-Count aside, the
+text-rich captions, DVQA, FigureQA, PlotQA and clocks) keeps v7's loss per step. Pointing (PixMo-
+Points, PixMo-Count, CoSyn-Point and GUISyn) trains 0.24x v7's response tokens per step: 10.0% of
+the visual loss and 38% of its positions become 2.2% and 13% (21.5% and 5.4% of all positions).
+GUISyn at 5 passes is 0.26% of the visual loss: 36,192 screenshots, 16 elements each per pass."""
+
+_V8_VISUAL_POSITIONS = sum(
+    loss * STAGE1_POSITIONS_PER_LOSS_TOKEN[name] for name, loss in _V8_STEP_LOSS.items()
+)
+# Positions per step in units of v6's visual loss per step: 9 of text and v6's visual positions.
+_V6_STEP_POSITIONS = _V6_TEXT_LOSS_SHARE / (
+    1.0 - _V6_TEXT_LOSS_SHARE
+) + _visual_positions_per_loss_token(STAGE1_V6_LOSS_TARGETS)
+_V8_TEXT_STEP_LOSS = _V6_STEP_POSITIONS - _V8_VISUAL_POSITIONS
+STAGE1_V8_TEXT_LOSS_SHARE: float = _V8_TEXT_STEP_LOSS / (_V8_TEXT_STEP_LOSS + _V8_STEP_LOSS_TOTAL)
+"""Default text loss share of the merged stage with stage-1 v8 visual data. The step keeps its
+positions; the positions the caps free beyond what the fresh sources take go to the text (one
+position per loss token): 0.905, so text gets 1.35x v7's (and v6's) tokens per step, about 1.35
+passes over the hero's text instead of one, and vision 0.73x its positions (41% of the step, from
+56%). The vision pool has no fresh data to fill those positions: every source left under
+:data:`STAGE1_V8_FRESH_PASSES` (DVQA, FigureQA, PlotQA, clocks) would take under a quarter of them. Every vision source but the capped
+and fresh ones trains exactly v7's response tokens per step."""
+
+
+def build_stage1_gui_syn_source(sequence_length: int) -> Config:
+    """Configure MolmoPoint-GUISyn as the stage-1 v8 ``gui_syn`` source: the v2 pointing sources'
+    settings (eight crops, every response token weighted equally, plain documents, every sampled
+    element its own document), truncated at ``sequence_length``.
+
+    :param sequence_length: Maximum serialized example length.
+    """
+    from olmo_core.data.multimodal.gui_syn import GuiSynDatasetConfig
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    return GuiSynDatasetConfig(
+        max_crops=8,
+        max_sequence_length=sequence_length,
+        loss_token_weighting="none",
+        message_format="document",
+        annotation_sampling="documents",
+    )
 
 
 STAGE1_V4_EPOCHS: dict[str, float] = {

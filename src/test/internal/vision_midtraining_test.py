@@ -1627,6 +1627,87 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
     assert explicit.dataset.target_loss_mass["text_midtraining"] == 0.9
 
 
+def test_merged_stage_v8_adds_gui_syn_and_caps_pointing(merged_stage, monkeypatch):
+    """``stage1_v8``: v7 plus MolmoPoint-GUISyn, the pointing sources and v7's capped sets capped
+    in passes over the 256K hero, the fresh sources at five passes, every other source at v7's
+    loss per step, and the positions the caps free given to the text."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_POSITIONS_PER_LOSS_TOKEN,
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V6_LOSS_TARGETS,
+        STAGE1_V7_LOSS_TARGETS,
+        STAGE1_V7_NEMOTRON_EPOCHS,
+        STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+        STAGE1_V7_TEXT_LOSS_SHARE,
+        STAGE1_V8_FRESH_PASSES,
+        STAGE1_V8_FRESH_SOURCES,
+        STAGE1_V8_GUI_SYN_MEAN_LOSS_WEIGHT,
+        STAGE1_V8_LOSS_TARGETS,
+        STAGE1_V8_PASS_CAPS,
+        STAGE1_V8_TEXT_LOSS_SHARE,
+        stage1_run_passes,
+    )
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _MultiAnnotationConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    config = merged_stage.build("--recipe.visual_data=stage1_v8")
+    visual = {k: v for k, v in config.dataset.sources.items() if k != "text_midtraining"}
+    assert set(visual) == (
+        set(STAGE1_V3_MEAN_LOSS_WEIGHTS) | set(STAGE1_V7_NEMOTRON_EPOCHS) | {"gui_syn"}
+    )
+    gui = visual["gui_syn"]
+    assert (gui.message_format, gui.annotation_sampling) == ("document", "documents")
+    assert gui.max_sequence_length == config.recipe.sequence_length
+    means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"}
+    assert means == {
+        **STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+        "gui_syn": STAGE1_V8_GUI_SYN_MEAN_LOSS_WEIGHT,
+    }
+    assert set(STAGE1_V8_LOSS_TARGETS) == set(STAGE1_V7_LOSS_TARGETS) | {"gui_syn"}
+    assert sum(STAGE1_V8_LOSS_TARGETS.values()) == pytest.approx(1.0)
+
+    def step_loss(targets, text_share):
+        # Per-source loss per step at v6's text tokens per step, in units of v6's visual loss.
+        visual_positions = sum(s * STAGE1_POSITIONS_PER_LOSS_TOKEN[n] for n, s in targets.items())
+        v6_positions = 9.0 + sum(
+            s * STAGE1_POSITIONS_PER_LOSS_TOKEN[n] for n, s in STAGE1_V6_LOSS_TARGETS.items()
+        )
+        text = text_share / (1 - text_share)
+        scale = v6_positions / (text + visual_positions)
+        return {n: s * scale for n, s in targets.items()}, text * scale
+
+    v7, v7_text = step_loss(STAGE1_V7_LOSS_TARGETS, STAGE1_V7_TEXT_LOSS_SHARE)
+    v8, v8_text = step_loss(STAGE1_V8_LOSS_TARGETS, STAGE1_V8_TEXT_LOSS_SHARE)
+    assert v7_text == pytest.approx(9.0)  # v7 keeps v6's text per step
+    assert v8_text > 1.3 * v7_text  # v8 gives the freed positions to the text
+    for name, cap in STAGE1_V8_PASS_CAPS.items():
+        assert stage1_run_passes(name, v8[name]) <= cap + 1e-9
+    assert stage1_run_passes("pixmo_points_v2", v7["pixmo_points_v2"]) > 25
+    assert stage1_run_passes("pixmo_points_v2", v8["pixmo_points_v2"]) == pytest.approx(5.0)
+    for name in STAGE1_V8_FRESH_SOURCES:
+        assert stage1_run_passes(name, v8[name]) == pytest.approx(STAGE1_V8_FRESH_PASSES)
+    untouched = set(v7) - set(STAGE1_V8_PASS_CAPS) - set(STAGE1_V8_FRESH_SOURCES)
+    assert {"text_rich_doc", "plot_qa", "pixmo_clocks"} <= untouched
+    for name in untouched:
+        assert v8[name] == pytest.approx(v7[name])
+    pointing = ("pixmo_points_v2", "pixmo_count_v2", "cosyn_point_v2", "gui_syn")
+    assert sum(STAGE1_V8_LOSS_TARGETS[n] for n in pointing) < 0.25 * sum(
+        STAGE1_V7_LOSS_TARGETS.get(n, 0.0) for n in pointing
+    )
+    assert config.recipe.text_loss_share == STAGE1_V8_TEXT_LOSS_SHARE
+    assert config.dataset.target_loss_mass["text_midtraining"] == STAGE1_V8_TEXT_LOSS_SHARE
+
+
 def test_merged_stage_passes_text_document_masking(merged_stage):
     """The 256K text stage's document masking reaches the text replay; off by default."""
     default = merged_stage.build().dataset.sources["text_midtraining"]
