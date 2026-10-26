@@ -1,10 +1,12 @@
 """Memory-related vision tests (activation checkpointing, SDPA backend)."""
 
+import pytest
 import torch
 
 from olmo_core.nn.vision.config import VisionEncoderConfig
 from olmo_core.nn.vision.image_vit import VisionTransformer
 from olmo_core.nn.vision.sdpa import (
+    cudnn_first_supported,
     vision_scaled_dot_product_attention,
     vision_sdpa_context,
 )
@@ -27,6 +29,24 @@ def test_vision_sdpa_runs_on_cpu():
     with vision_sdpa_context():
         out = vision_scaled_dot_product_attention(q, k, v)
     assert out.shape == q.shape
+
+
+@pytest.mark.parametrize(
+    "device, capability, cudnn, expected",
+    [
+        ("cuda", (10, 3), 92000, True),
+        ("cuda", (10, 3), 91002, False),
+        ("cuda", (10, 3), None, False),
+        ("cuda", (9, 0), 92000, False),
+        ("cpu", (10, 3), 92000, False),
+    ],
+)
+def test_cudnn_first_needs_sm100_and_a_recent_cudnn(
+    monkeypatch, device, capability, cudnn, expected
+):
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda _: capability)
+    monkeypatch.setattr(torch.backends.cudnn, "version", lambda: cudnn)
+    assert cudnn_first_supported(torch.device(device)) is expected
 
 
 def test_vit_forward_with_activation_checkpointing():

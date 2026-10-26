@@ -150,6 +150,11 @@ def test_hero_bridge_inherits_text_side_settings(alignment_recipe, hero_checkpoi
     assert trainer.callbacks["checkpointer"].save_interval == 500
     assert trainer.callbacks["checkpointer"].ephemeral_save_interval == 50
     assert config.data_loader.prefetch_workers == 8
+    assert config.data_loader.batch_prefetch_depth == 2
+    sync = alignment_recipe.build(
+        overrides=[f"--recipe.text_config={FIXTURE}", "--recipe.batch_prefetch_depth=0"]
+    )
+    assert sync.data_loader.batch_prefetch_depth == 0
 
 
 def test_document_mode_turns_the_experimental_kda_kernels_off(alignment_recipe, hero_checkpoint):
@@ -234,7 +239,12 @@ def test_launch_inherits_the_text_image_resources_and_environment(monkeypatch, t
         cluster="ai2/holmes",
         overrides=["--recipe.phase=bridge"],
     )
-    launch = vision_alignment._build_launch(cli, work_dir="/tmp/cache", text=text_config)
+    launch = vision_alignment._build_launch(
+        cli,
+        work_dir="/tmp/cache",
+        text=text_config,
+        hf_datasets_cache_dir="/weka/oe-training-default/jasonr/hf-home/datasets",
+    )
     assert launch is not None
     text_launch = text_config["launch"]
     assert launch.beaker_image == text_launch["beaker_image"]
@@ -255,6 +265,8 @@ def test_launch_inherits_the_text_image_resources_and_environment(monkeypatch, t
             assert env[entry["name"]] == entry["value"]
     assert env["PYTHONPATH"] == "/gantry-runtime/src"
     assert env["OLMO_CORE_DATA_VERIFICATION_CACHE_DIR"] == "/tmp/cache/data-verification"
+    assert env["HF_DATASETS_CACHE"] == "/weka/oe-training-default/jasonr/hf-home/datasets"
+    assert "HF_DATASETS_CACHE" not in {entry["name"] for entry in text_launch["env_vars"]}
     assert "OLMO_USE_OWN_SYMM_MEM" not in env
     secrets = {entry.name: entry.secret for entry in launch.env_secrets}
     assert secrets["BEAKER_TOKEN"] == "jasonr_BEAKER_TOKEN"
