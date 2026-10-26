@@ -105,6 +105,7 @@ ARMS = {
     "lora64K32m70c50": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-later-mass-target 0.7 --st-otr-later-max-keep-frac 0.5"),
     "lora64K32mlp": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-mlp-hidden 64"),
     "lora64K32mlpr20at5": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 5:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-mlp-hidden 64"),
+    "lora64K32rg": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-ridge-groups"),
     "lora64K32r20to12": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,12:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32"),
     "lora64K32r20to7tk50": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --ffn-width-frac 0.5 --ffn-width-mode topk"),
     "lora64K32r20to7tk75": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --ffn-width-frac 0.75 --ffn-width-mode topk"),
