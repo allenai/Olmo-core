@@ -842,7 +842,7 @@
    "seed": 0
   },
   "f8k-mt4-lora64K32mlpr20at5-s1464-tdb-lr1e-05": {
-   "ex": "01M5VJGEE868SYT9F1EZFTSSGJ",
+   "ex": "01M5W2JZB9T9R3MSSX7H58KX30",
    "arm": "lora64K32mlpr20at5",
    "budget": "s1464",
    "lr": 1e-05,
@@ -856,6 +856,22 @@
    "lr": 1e-05,
    "mix": "mt4",
    "seed": 0
+  },
+  "f8k-mt4-lora64K32mlprg-s1464-tdb-lr1e-05": {
+   "ex": "01M5W2P0WE7932GVPBN5G2T75X",
+   "arm": "lora64K32mlprg",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32rgsd1-s1464-tdb-lr1e-05": {
+   "ex": "01M5W2PSDKJG58ST9Q1G14BWR3",
+   "arm": "lora64K32rg",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 1
   }
  },
  "evals": {
@@ -4308,6 +4324,46 @@
    "ex": "01M5VQHHES1CM9ZD5324SNWDPR",
    "train_run": "f8k-mt4-lora64K32rg-s1464-tdb-lr1e-05",
    "task": "oolong"
+  },
+  "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05-evnq": {
+   "ex": "01M5W5XT9F6W7T4RPR113CY135",
+   "train_run": "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05-evoutlier": {
+   "ex": "01M5W5YM8NG2RTR1RPSH16Y0J8",
+   "train_run": "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05-evnq": {
+   "ex": "01M5W5ZFSZAR263WXBH0M0AGN4",
+   "train_run": "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05-evoutlier": {
+   "ex": "01M5W60BEDCZ915EN6GKD4AEYN",
+   "train_run": "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05-evoolong": {
+   "ex": "01M5W616DV32N40BZESVVNGR8A",
+   "train_run": "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05-evcontradiction": {
+   "ex": "01M5W62258WX72430YTHG17EV3",
+   "train_run": "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05-evnq": {
+   "ex": "01M5W62XJ9BV50GZWW2XHJYMNS",
+   "train_run": "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05-evcontradiction": {
+   "ex": "01M5W63QGYFQWDQVBSY4EPVDHP",
+   "train_run": "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05",
+   "task": "contradiction"
   }
  },
  "failed_evals": {
