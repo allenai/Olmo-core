@@ -3916,6 +3916,26 @@
    "ex": "01M5V1SZQYPWZFFBESZ57BCGB5",
    "train_run": "f8k-mt4-lora64K32r20to7tk75-s1464-tdb-lr1e-05",
    "task": "oolong"
+  },
+  "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05-evcontradiction": {
+   "ex": "01M5V1V2C11VFTBHSE8S19S8V6",
+   "train_run": "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05-evnq": {
+   "ex": "01M5V1VX0EGAJ3GYRVYSKF1QRT",
+   "train_run": "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05-evoutlier": {
+   "ex": "01M5V1WPBQ4PFN1RH1DF3CB7BY",
+   "train_run": "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05-evoolong": {
+   "ex": "01M5V1XHJNVD0VDJFVA6HRX18G",
+   "train_run": "f8k-mt4-lora64K32r20to7fw75a-s1464-tdb-lr1e-05",
+   "task": "oolong"
   }
  },
  "failed_evals": {
