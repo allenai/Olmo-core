@@ -25,6 +25,43 @@ def examples(src, eos, dtype, mdtype):
             start = e + 1
 
 
+def build(src, out, target, rows=8, sep=198):
+    """Write ``rows`` rows of up to ``target`` tokens built from ``src`` into ``out``; returns the row lengths."""
+    meta = json.load(open(os.path.join(src, "metadata.json")))
+    eos = int(meta["eos_token_id"])
+    dtype, mdtype = np.dtype(meta.get("dtype", "uint32")), np.dtype(meta.get("mask_dtype", "bool"))
+    got, cur_i, cur_l = [], [], []
+    for ids, lab in examples(src, eos, dtype, mdtype):
+        n = sum(len(x) for x in cur_i)
+        if cur_i and n + len(ids) > target - 64:
+            got.append((cur_i, cur_l))
+            cur_i, cur_l = [], []
+            if len(got) == rows:
+                break
+        cur_i.append(ids)
+        cur_l.append(lab)
+    if len(got) < rows:
+        raise SystemExit(f"only {len(got)} rows of <= {target} tokens could be built")
+    out_ids, out_lab, lens = [], [], []
+    for ci, cl in got:
+        ids = np.concatenate(ci).astype(dtype)
+        lab = np.concatenate(cl).astype(mdtype)
+        inner = np.nonzero(ids[:-1] == eos)[0]
+        ids[inner] = sep
+        out_ids.append(ids)
+        out_lab.append(lab)
+        lens.append(len(ids))
+    os.makedirs(out, exist_ok=True)
+    np.concatenate(out_ids).tofile(os.path.join(out, "token_ids_part_t0_000.npy"))
+    np.concatenate(out_lab).tofile(os.path.join(out, "labels_mask_t0_000.npy"))
+    m = {k: v for k, v in meta.items() if k not in ("merged_from",)}
+    m.update(num_instances=len(got), num_tokens=int(sum(lens)), max_example_len=int(max(lens)),
+             min_example_len=int(min(lens)), num_loss_tokens=int(sum(int(x.sum()) for x in out_lab)),
+             long_rows={"src": src, "target": target, "sep": sep, "row_lens": lens})
+    json.dump(m, open(os.path.join(out, "metadata.json"), "w"), indent=1)
+    return lens
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True)
@@ -33,39 +70,8 @@ def main():
     ap.add_argument("--rows", type=int, default=8)
     ap.add_argument("--sep", type=int, default=198, help="token replacing the inner EOS tokens")
     a = ap.parse_args()
-    meta = json.load(open(os.path.join(a.src, "metadata.json")))
-    eos = int(meta["eos_token_id"])
-    dtype, mdtype = np.dtype(meta.get("dtype", "uint32")), np.dtype(meta.get("mask_dtype", "bool"))
-    rows, cur_i, cur_l = [], [], []
-    for ids, lab in examples(a.src, eos, dtype, mdtype):
-        n = sum(len(x) for x in cur_i)
-        if cur_i and n + len(ids) > a.target - 64:
-            rows.append((cur_i, cur_l))
-            cur_i, cur_l = [], []
-            if len(rows) == a.rows:
-                break
-        cur_i.append(ids)
-        cur_l.append(lab)
-    if len(rows) < a.rows:
-        raise SystemExit(f"only {len(rows)} rows of <= {a.target} tokens could be built")
-    out_ids, out_lab, lens = [], [], []
-    for ci, cl in rows:
-        ids = np.concatenate(ci).astype(dtype)
-        lab = np.concatenate(cl).astype(mdtype)
-        inner = np.nonzero(ids[:-1] == eos)[0]
-        ids[inner] = a.sep
-        out_ids.append(ids)
-        out_lab.append(lab)
-        lens.append(len(ids))
-    os.makedirs(a.out, exist_ok=True)
-    np.concatenate(out_ids).tofile(os.path.join(a.out, "token_ids_part_t0_000.npy"))
-    np.concatenate(out_lab).tofile(os.path.join(a.out, "labels_mask_t0_000.npy"))
-    m = {k: v for k, v in meta.items() if k not in ("merged_from",)}
-    m.update(num_instances=len(rows), num_tokens=int(sum(lens)), max_example_len=int(max(lens)),
-             min_example_len=int(min(lens)), num_loss_tokens=int(sum(int(x.sum()) for x in out_lab)),
-             long_rows={"src": a.src, "target": a.target, "sep": a.sep, "row_lens": lens})
-    json.dump(m, open(os.path.join(a.out, "metadata.json"), "w"), indent=1)
-    print(f"wrote {len(rows)} rows, lengths {lens} -> {a.out}")
+    lens = build(a.src, a.out, a.target, a.rows, a.sep)
+    print(f"wrote {len(lens)} rows, lengths {lens} -> {a.out}")
 
 
 if __name__ == "__main__":

@@ -1660,6 +1660,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="debug: print the live allocations at the peak of the first step, then exit",
     )
+    ap.add_argument("--long-rows-target", type=int, default=0,
+                    help="debug (memory probes): train on rows of up to this many tokens built at startup from --data "
+                    "(research/token_routing/online_router/make_long_rows.py, node-local /tmp). 0 = off")
+    ap.add_argument("--long-rows-count", type=int, default=8, help="--long-rows-target: rows to build")
     ap.add_argument(
         "--mem-probe-steps",
         type=int,
@@ -2524,6 +2528,21 @@ def main() -> None:
     # `kill -USR1 <pid>` dumps every thread's stack into the log (hung-job diagnosis, no py-spy).
     RG.install_stack_dump_handler()
     opts = parse_args()
+    if opts.long_rows_target:
+        # memory-vs-length probes on clusters without the prebuilt long-row shards: every rank builds the same
+        # deterministic rows from --data into node-local /tmp (a few MB) and trains on them
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "make_long_rows", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
+                                           "research", "token_routing", "online_router", "make_long_rows.py"))
+        mlr = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mlr)  # type: ignore[union-attr]
+        out = f"/tmp/long_rows_T{opts.long_rows_target}_r{os.environ.get('LOCAL_RANK', '0')}"
+        lens = mlr.build(opts.data, out, int(opts.long_rows_target), rows=int(opts.long_rows_count))
+        print(f"[long-rows] {len(lens)} rows of <= {opts.long_rows_target} tokens from {opts.data} -> {out}: {lens}",
+              flush=True)
+        opts.data = out
     if opts.dry_run:
         dry_run(opts)
         return
