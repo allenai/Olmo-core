@@ -888,6 +888,54 @@
    "lr": 1e-05,
    "mix": "mt4",
    "seed": 0
+  },
+  "f8k-mt4-lora64K32thsd1-s1464-tdb-lr1e-05": {
+   "ex": "01M5WEXWDDCFWBXQS80N69A645",
+   "arm": "lora64K32th",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 1
+  },
+  "f8k-mt4-lora64K32thsd2-s1464-tdb-lr1e-05": {
+   "ex": "01M5WEYPDK4D3S5RFEKDBYJ1H8",
+   "arm": "lora64K32th",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 2
+  },
+  "f8k-mt4-lora64K32mlpsd1-s1464-tdb-lr1e-05": {
+   "ex": "01M5WEZJ9PC2NX3H374XVFPYPB",
+   "arm": "lora64K32mlp",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 1
+  },
+  "f8k-mt4-lora64K32mlpsd2-s1464-tdb-lr1e-05": {
+   "ex": "01M5WF0DTSCWAS19RMHYHBSB4A",
+   "arm": "lora64K32mlp",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 2
+  },
+  "f8k-mt4-lora64K32thmlp-s1464-tdb-lr1e-05": {
+   "ex": "01M5WF18VCDMB1H64MDJBMC2J2",
+   "arm": "lora64K32thmlp",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32thmlpsd1-s1464-tdb-lr1e-05": {
+   "ex": "01M5WF26DV14PY84ARJGBC23FK",
+   "arm": "lora64K32thmlp",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 1
   }
  },
  "evals": {
