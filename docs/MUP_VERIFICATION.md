@@ -432,8 +432,11 @@ None pointed to a defect in the muP implementation. For completeness:
   and top-k are not scaled by this muP. Weight decay is not width-scaled either
   (`scale_weight_decay=False`), so the effective decay `lr_l * wd` shrinks with width for every
   matrix whose fan_in grows with width.
-- **Non-default options.** These runs used `MuPConfig` defaults. `embedding_lr_multiplier` and
-  `scale_weight_decay=True` are covered only by unit tests in `src/test/optim/mup_test.py`.
+- **Non-default options.** These runs used `MuPConfig` defaults. `embedding_lr_multiplier` is
+  covered only by unit tests in `src/test/optim/mup_test.py`. `scale_weight_decay=True` was
+  later verified with base-model fan-ins on GPU in the scaling-ladders mainline ladder (applied
+  per-step decay measured at every rung, plus checkpoint resume); see
+  `ladders/mainline/MUP_WEIGHT_DECAY.md` there.
 - **Only one `base_width`** (1024) was used.
 - **Full independence of the expected values.** The expected multipliers in check 1 were written
   by the same author as the muP code, so both share one reading of the tensor layouts. The
