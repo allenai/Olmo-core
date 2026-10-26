@@ -177,6 +177,104 @@ def test_mup_weight_decay(scale_weight_decay: bool):
     assert _group_of(optim, model.lm_head.norm.weight)["weight_decay"] == 0.0
 
 
+def _ladder_like_optim_config(config_cls, scale_weight_decay: bool, **kwargs):
+    return config_cls(
+        lr=1e-3,
+        weight_decay=0.1,
+        mup=MuPConfig.from_base_model(_base_model(), scale_weight_decay=scale_weight_decay),
+        group_overrides=[
+            OptimGroupOverride(params=["embeddings.weight"], opts={"weight_decay": 0.0})
+        ],
+        **kwargs,
+    )
+
+
+OPTIM_VARIANTS = [
+    pytest.param(AdamWConfig, {}, id="adamw"),
+    pytest.param(SkipStepAdamWConfig, {"foreach": True}, id="skip_step_foreach"),
+    pytest.param(SkipStepAdamWConfig, {"foreach": False}, id="skip_step"),
+]
+
+
+@pytest.mark.parametrize(("config_cls", "kwargs"), OPTIM_VARIANTS)
+def test_mup_base_model_scale_weight_decay(config_cls, kwargs):
+    base = _base_model()
+    optim = _ladder_like_optim_config(config_cls, True, **kwargs).build(base)
+    for name, param in base.named_parameters():
+        expected = 0.0 if name == "embeddings.weight" else 0.1
+        assert _group_of(optim, param)["weight_decay"] == expected, name
+
+    model = _model()
+    optim = _ladder_like_optim_config(config_cls, True, **kwargs).build(model)
+    multipliers = mup_lr_multipliers(model, MuPConfig.from_base_model(_base_model()))
+    assert set(multipliers.values()) == {0.5, 1.0}
+    for name, param in model.named_parameters():
+        group = _group_of(optim, param)
+        if name == "embeddings.weight":
+            assert group["weight_decay"] == 0.0
+            continue
+        assert group["weight_decay"] == pytest.approx(0.1 / multipliers[name]), name
+        assert group["lr"] * group["weight_decay"] == pytest.approx(1e-3 * 0.1), name
+
+
+@pytest.mark.parametrize("scale_weight_decay", [False, True])
+@pytest.mark.parametrize(("config_cls", "kwargs"), OPTIM_VARIANTS)
+def test_mup_weight_decay_applied(config_cls, kwargs, scale_weight_decay: bool):
+    # With zero gradients Adam's update is exactly zero, so a step only applies weight decay.
+    model = _model().double()
+    optim = _ladder_like_optim_config(config_cls, scale_weight_decay, **kwargs).build(model)
+    multipliers = mup_lr_multipliers(model, MuPConfig.from_base_model(_base_model()))
+    before = {name: p.detach().clone() for name, p in model.named_parameters()}
+    for p in model.parameters():
+        p.grad = torch.zeros_like(p)
+    optim.step()
+
+    for name, param in model.named_parameters():
+        shrink = 1 - param.detach() / before[name]
+        if name == "embeddings.weight":
+            expected = 0.0
+        elif scale_weight_decay:
+            expected = 1e-3 * 0.1
+        else:
+            expected = 1e-3 * multipliers[name] * 0.1
+        # SkipStepAdamW computes the decay factor in float32.
+        torch.testing.assert_close(
+            shrink, torch.full_like(shrink, expected), rtol=1e-3, atol=1e-12, msg=name
+        )
+
+
+def test_mup_scheduler_keeps_decay():
+    model = _model()
+    optim = _ladder_like_optim_config(AdamWConfig, True).build(model)
+    scheduler = CosWithWarmup(warmup=10, alpha_f=0.1)
+    for step in (0, 5, 10, 50, 100):
+        trainer = SimpleNamespace(global_step=step, max_steps=100)
+        for group in optim.param_groups:
+            scheduler.set_lr(group, trainer)  # type: ignore[arg-type]
+        expected = scheduler.get_lr(1e-3, step, 100)
+        for group in optim.param_groups:
+            if group["weight_decay"] != 0.0:
+                assert group["lr"] * group["weight_decay"] == pytest.approx(expected * 0.1)
+
+
+def test_mup_scale_weight_decay_state_dict_roundtrip():
+    model = _model()
+    optim = _ladder_like_optim_config(AdamWConfig, True).build(model)
+    for p in model.parameters():
+        p.grad = torch.zeros_like(p)
+    optim.step()
+
+    # A checkpoint's group values win over the config, even one built without scaling.
+    fresh = _ladder_like_optim_config(AdamWConfig, False).build(model)
+    assert [g["weight_decay"] for g in fresh.param_groups] != [
+        g["weight_decay"] for g in optim.param_groups
+    ]
+    fresh.load_state_dict(optim.state_dict())
+    for a, b in zip(optim.param_groups, fresh.param_groups):
+        assert a["weight_decay"] == b["weight_decay"]
+        assert a["lr"] == b["lr"]
+
+
 def test_mup_scheduler_keeps_ratios():
     model = _model()
     optim = AdamWConfig(lr=1e-3, mup=MuPConfig(base_width=BASE_WIDTH)).build(model)
