@@ -1186,6 +1186,29 @@ dense loses 0.59 on contra and 0.42 on outlier at 0.75x dense's compute, and is 
 (387 PF: 0.893 / 0.896 / 0.617 / 0.302). The likely cause is the train/eval mismatch: training sees a random half of
 the neurons scaled by 1/f, and eval runs the full width. The thread is closed.
 
+## Partial MLP v2 (topk) on the LoRA-all recipe (2026-10-25): no gain at matched FLOPs; closed
+
+Setup: Beaker, mt4s1464, LoRA r64 on all 32 blocks + two-stage router, LR 1e-5, de0, one seed each, eval_size 500 per
+task, with a same-backend baseline.
+
+| arm | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| LoRA-all baseline (Beaker) | 261 | 0.948 | 0.928 | 0.621 | 0.774 |
+| random f=0.9 | 247 | 0.929 | 0.908 | 0.636 | 0.689 |
+| topk f=0.75 | 228 | 0.936 | 0.920 | 0.571 | 0.648 |
+| random f=0.75 | 227 | 0.818 | 0.900 | 0.580 | 0.366 |
+| topk f=0.5 | 194 | 0.871 | 0.912 | 0.468 | 0.612 |
+
+- **topk vs random.** At f=0.75, topk beats random by a wide margin: contra +0.12, outlier +0.28.
+- **topk vs the baseline.** It still loses on the same data: tk75 is -0.01 / -0.01 / -0.05 / -0.13, and **oolong
+  falls (-0.05 at f=0.75, -0.15 at f=0.5)**.
+- **Matched FLOPs.** Against the LoRA-all compute curve, nothing beats the curve on the primary pair. Oolong is
+  -0.05 (tk75) / -0.14 (tk50). Outlier is within its ~±0.1 noise, and its curve has the non-monotone 976-row dip.
+- **Random f=0.9** sits on the curve, saving only 5%.
+
+Together with CPT's results (topk and random lose on both frozen and trainable bases and degrade with training),
+partial MLP is closed.
+
 ## Known trap: intermittent end-of-run crash after mid-run saves (2026-10-25, CPT side)
 
 Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not specific to freeze-early**:
