@@ -1452,3 +1452,56 @@ def test_early_lora_start_validate():
         _router(drop_layer=2, early_lora_start=1)  # needs early_lora
     with pytest.raises(ValueError):
         _router(drop_layer=2, early_lora=4, early_lora_start=2)  # start must be < the LoRA end (drop_layer = 2)
+
+
+def _routed(r, m):
+    r.w = torch.zeros(r.n_features)
+    r.step = 3
+    r.begin_step(3, model=m)
+    r.w = torch.zeros(r.n_features)
+
+
+def test_threshold_keep_mode_shares_one_budget_across_rows_with_cap_and_floor():
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=2)
+    body = (cid >= 0) & (ids != DS) & (ids != DE)
+    r = _router(use_hidden=False, keep_frac=0.2, doc_share=1.0, keep_mode="threshold", row_cap=1.5, min_per_doc=1)
+    _routed(r, m)
+    # row 0 is "hard" (high scores everywhere), row 1 "easy"
+    hard = torch.zeros(ids.shape)
+    hard[0] = 5.0
+    r.score = lambda fp: hard + 1e-3 * torch.rand(ids.shape)
+    keep = r.select(m, ids, cid, labels)
+    nb = body.sum(dim=1)
+    budget = int(torch.ceil(nb.float() * 0.2).sum())
+    assert int((keep & body).sum()) == budget  # the batch total matches the budget
+    k0, k1 = int((keep[0] & body[0]).sum()), int((keep[1] & body[1]).sum())
+    assert k0 > k1  # the hard row keeps more
+    assert k0 <= int(torch.ceil(nb[0].float() * 0.2 * 1.5)) + 3  # capped (+ the floor: 1 per document)
+    for d in (1000, 2000, 3000):  # every document keeps its floor token in both rows
+        for b in (0, 1):
+            dm = body[b] & (ids[b] >= d) & (ids[b] < d + 100)
+            assert bool((keep[b] & dm).any())
+
+
+def test_threshold_mode_fit_centres_over_the_batch_not_per_row():
+    r = _router(use_hidden=False, keep_mode="threshold")
+    assert r.cfg.keep_mode == "threshold"
+    with pytest.raises(ValueError):
+        _router(keep_mode="threshold", mass_target=0.8)
+    with pytest.raises(ValueError):
+        _router(keep_mode="bogus")
+
+
+def test_keep_sched_scales_stage_one_and_keeps_later_stages_absolute():
+    r = _router(use_hidden=False, keep_sched="1.5:0.5")
+    r.total_steps = 11
+    r.step = 1
+    assert r.keep_mult() == pytest.approx(1.5)
+    r.step = 6
+    assert r.keep_mult() == pytest.approx(1.0)
+    r.step = 11
+    assert r.keep_mult() == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        _router(keep_sched="0:1")

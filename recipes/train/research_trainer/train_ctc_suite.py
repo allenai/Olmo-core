@@ -1960,6 +1960,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora", type=int, default=0,
                     help="online router: LOW-RANK early stack -- blocks [0, drop_layer) + embeddings frozen from step 0, "
                     "every linear in those blocks gets a rank-R LoRA adapter (no base grads / Adam state). 0 = off")
+    ap.add_argument("--st-otr-keep-mode", choices=["topk", "threshold"], default="topk",
+                    help="online router: threshold = one score threshold over the micro-batch (hard docs / rows keep "
+                    "more, easy ones less, same total), per-row cap --st-otr-row-cap x budget, floor counted; the fit "
+                    "centres over the batch")
+    ap.add_argument("--st-otr-row-cap", type=float, default=2.0, help="keep-mode threshold: per-row cap (x budget)")
+    ap.add_argument("--st-otr-keep-sched", default="",
+                    help="online router: 'a:b' multiplies the first stage's keep linearly from a to b over training "
+                    "(later stages keep their absolute budgets)")
     ap.add_argument("--st-otr-warmup-random", action="store_true",
                     help="online router: warmup steps route at the normal budget with uniform random scores instead "
                     "of training the full context (no full-length pass; bounds peak memory / max train length)")

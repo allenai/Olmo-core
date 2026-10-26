@@ -338,6 +338,9 @@ class SoftTokenOptions(VariantOptions):
     st_otr_early_lora_start: int = 0
     st_otr_route_min_len: int = 0
     st_otr_warmup_random: bool = False
+    st_otr_keep_mode: str = "topk"
+    st_otr_row_cap: float = 2.0
+    st_otr_keep_sched: str = ""
     st_otr_mass_target: float = 0.0
     st_otr_max_keep_frac: float = 1.0
     st_otr_mod_layers: str = ""
@@ -1211,6 +1214,9 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         early_lora_start=o.st_otr_early_lora_start,
         route_min_len=o.st_otr_route_min_len,
         warmup_random=o.st_otr_warmup_random,
+        keep_mode=o.st_otr_keep_mode,
+        row_cap=o.st_otr_row_cap,
+        keep_sched=o.st_otr_keep_sched,
         mass_target=o.st_otr_mass_target,
         max_keep_frac=o.st_otr_max_keep_frac,
         mod_layers=o.st_otr_mod_layers,

@@ -120,6 +120,18 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    keep_mode: str = "topk"
+    """``topk``: each document keeps its own top ``doc_share`` x budget, the rest of the row budget by score (the
+    default). ``threshold`` (2026-10-26): one threshold over the whole micro-batch -- every body token whose score
+    clears the batch's budget quantile is kept, so hard documents / rows keep more and easy ones less at the same
+    total; per-row cap ``row_cap`` x budget, per-document floor (``min_per_doc``) counted against the budget. The fit
+    then centres its targets over the BATCH instead of per row, so scores carry the across-row difficulty too."""
+    row_cap: float = 2.0
+    """``keep_mode='threshold'``: a row keeps at most ``row_cap`` x its budget (memory and padding bound)."""
+    keep_sched: str = ""
+    """Training-time budget schedule ``"a:b"``: the first stage's keep fraction is multiplied by a factor going
+    linearly from ``a`` to ``b`` over training (e.g. ``1.33:0.67`` = more early, less late at about the same total);
+    later stages divide their relative keep by it, so their ABSOLUTE budgets are unchanged. Empty = constant."""
     warmup_random: bool = False
     """Warmup steps (no fitted router yet) ROUTE at the normal budget with uniform random scores instead of training the
     full context: no full-length pass ever runs past the drop layer, so the warmup does not set the peak memory (max
@@ -305,6 +317,14 @@ class OnlineRouterConfig:
             if not self.mod_layers and self.explore_frac <= 0:
                 raise ValueError("online router target_layer with the drop fits on the exploration tokens: "
                                  "set explore_frac > 0")
+        if self.keep_mode not in ("topk", "threshold"):
+            raise ValueError(f"online router keep_mode must be topk / threshold, got {self.keep_mode!r}")
+        if self.keep_mode == "threshold" and (self.mass_target > 0 or self.row_cap < 1.0):
+            raise ValueError("online router keep_mode threshold is exclusive with mass_target and needs row_cap >= 1")
+        if self.keep_sched:
+            a, _, b = self.keep_sched.partition(":")
+            if not (float(a) > 0 and float(b) > 0):
+                raise ValueError(f"online router keep_sched must be 'a:b' with a, b > 0, got {self.keep_sched!r}")
         if self.per_task_key_tokens < 0:
             raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
 
@@ -595,6 +615,15 @@ class OnlineTokenRouter:
         return names
 
     # ------------------------------------------------------------------ schedule
+    def keep_mult(self) -> float:
+        """keep_sched: the first stage's budget multiplier at this step (1.0 without a schedule)."""
+        if not self.cfg.keep_sched:
+            return 1.0
+        a, _, b = self.cfg.keep_sched.partition(":")
+        T = max(1, int(self.total_steps or 1))
+        t = min(1.0, max(0.0, (self.step - 1) / max(1, T - 1)))
+        return float(a) + (float(b) - float(a)) * t
+
     def dense_now(self) -> bool:
         """Whether this step trains uncompressed (warmup or a periodic dense step)."""
         c = self.cfg
@@ -825,6 +854,10 @@ class OnlineTokenRouter:
         n_body = body.sum(dim=1)
         dense = self.dense_now()
         kf = c.keep_frac
+        if c.keep_sched:
+            m_ = self.keep_mult()
+            kf = min(1.0, kf * m_) if self.stage_idx == 0 else min(1.0, kf / m_)
+            self._stat("keep_mult", m_)
         if dense and c.dense_keep_frac < 1.0 and self.w is not None and self.step > c.warmup_steps:
             # the periodic "dense" step routes at dense_keep_frac instead of the full context (bounded peak memory)
             dense, kf = False, c.dense_keep_frac
@@ -866,7 +899,7 @@ class OnlineTokenRouter:
             if c.keep_first > 0:
                 self._stat("forced_frac", float(forced.sum()) / max(1.0, float(body.sum())))
             keep = explore | forced
-            kd = 0.0 if c.mass_target > 0 else kf * c.doc_share
+            kd = 0.0 if (c.mass_target > 0 or c.keep_mode == "threshold") else kf * c.doc_share
             if c.mass_target > 0:
                 keep = keep | self._mass_keep(score, body, cid, c.mass_target)
             if kd > 0:
@@ -905,6 +938,27 @@ class OnlineTokenRouter:
                 capped = keep & ~(rank_c < cap[:, None])
                 self._stat("mass_capped_frac", float(capped.sum()) / max(1.0, float(body.sum())))
                 keep = keep & ~capped
+            elif c.keep_mode == "threshold":
+                # one threshold over the micro-batch: the remaining batch budget goes to the highest scores anywhere,
+                # each row capped at row_cap x its budget
+                elig = body & ~keep
+                n_left = int(k.sum()) - int(keep.sum())
+                if n_left > 0 and bool(elig.any()):
+                    # each row may add at most its room under the cap (its own best tokens); the batch then takes the
+                    # global top n_left of those, so a capped row's leftover budget goes to the next-best rows
+                    cap = torch.ceil(n_body.to(torch.float32) * kf * c.row_cap).to(torch.long)
+                    room = (cap - keep.sum(dim=1)).clamp(min=0)
+                    pri = torch.where(elig, score, torch.full_like(score, -float("inf")))
+                    rank_t = (-pri).argsort(dim=1).argsort(dim=1)
+                    allowed = elig & (rank_t < room[:, None])
+                    if bool(allowed.any()):
+                        sa = score[allowed].float()
+                        tau = torch.topk(sa, min(n_left, sa.numel())).values[-1]
+                        keep = keep | (allowed & (score.float() >= tau))
+                rf = keep.sum(dim=1).float() / n_body.clamp(min=1).float()
+                if rf.numel() > 1:
+                    self._stat("thresh_row_keep_cv", float(rf.std() / rf.mean().clamp(min=1e-6)))
+                self._stat("thresh_keep_frac", float(keep.sum()) / max(1.0, float(body.sum())))
             else:
                 # the rest of the budget by score over the whole row
                 left = (k - keep.sum(dim=1)).clamp(min=0)
@@ -1463,11 +1517,12 @@ class OnlineTokenRouter:
                 continue
             t = e["target"][ok]
             r = e["rows"][ok]
-            # per-row centring (only the within-row ranking is fit)
+            # per-row centring (only the within-row ranking is fit); keep_mode threshold centres over the batch so the
+            # scores also carry the across-row difficulty
             nb = int(r.max()) + 1
             s = torch.zeros(nb, device=t.device).index_add_(0, r, t)
             n = torch.zeros(nb, device=t.device).index_add_(0, r, torch.ones_like(t))
-            t = t - (s / n.clamp(min=1))[r]
+            t = t - t.mean() if self.cfg.keep_mode == "threshold" else t - (s / n.clamp(min=1))[r]
             X.append(e["feats"][ok])
             y.append(t)
             if e.get("task") is not None:
