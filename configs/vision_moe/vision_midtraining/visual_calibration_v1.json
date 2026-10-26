@@ -1,0 +1,26 @@
+{
+  "samples_per_source": 128,
+  "seed": 6198,
+  "sequence_length": 8192,
+  "max_crops": 8,
+  "message_format": "document",
+  "loss_token_weighting": "none",
+  "explicit_grounding_prompts": true,
+  "separate_scalar_count_source": true,
+  "alignment_train_selections": true,
+  "tokenizer": "allenai/dolma2-tokenizer",
+  "tokenizer_revision": "5292e5d6c0f40b67cc765fe41bec991cf4345b5c",
+  "model_vocab_size": 100352,
+  "alignment_artifact_root": "/weka/oe-training-default/rustin/experiments/vision-moe/vision-alignment/artifacts",
+  "midtraining_artifact_root": "/weka/oe-training-default/rustin/experiments/vision-moe/vision-midtraining/artifacts",
+  "mean_loss_weight": {
+    "audited_alignment": 104.0703125,
+    "cosyn_point": 100.984375,
+    "ocr_document": 4.65625,
+    "pixmo_cap": 443.8046875,
+    "pixmo_count": 37.4609375,
+    "pixmo_count_scalar": 3.0,
+    "pixmo_points_basic": 342.359375,
+    "pixmo_points_high_frequency": 250.4921875
+  }
+}
