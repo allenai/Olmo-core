@@ -131,6 +131,7 @@ a { color: var(--c2); }
   <ul>
     <li><b>SFT, 4-task mix:</b> dense needs about <b>3×</b> the training FLOPs to match the cheap methods on fresh data (3,904 rows/task), and <b>≈2.2×</b> or more at 7,808 rows/task where dense nears its ceiling. On the original pool, dense needs ≈3.5–3.9× to match the recipe and ≈4.4× for whole-model LoRA + two-stage keep.</li>
     <li><b>SFT, 11-task mix:</b> ≈1.7× for the recipe; whole-model LoRA + two-stage scores 0.762 against dense's 0.697 at the same 232 PF (2 seeds), ≈2.4×. Gains concentrate on xabsence, contradiction and outlier; four retrieval tasks are near dense's ceiling; grouping is the one task the router loses.</li>
+    <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. The recipe's 64k run is being collected.</li>
     <li><b>The recipe:</b> rank-64 LoRA adapters on blocks 0–6 (frozen base), an online gradient-norm router that keeps 20% of tokens from block 7 and rescores to 7% at block 16, no full-context steps, LR 5e-6, plus a 16-token floor per document on the 11-task mix. Whole-model LoRA (all 32 blocks, LR 1e-5) is cheaper still at the same quality.</li>
     <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and a larger edge at 64k.</li>
     <li><b>Max train length at 80 GB (SFT):</b> ≈1.8× dense for the recipe and ≈2.4× for whole-model LoRA (extrapolated from short probes).</li>
@@ -169,6 +170,18 @@ a { color: var(--c2); }
     <figure><h3>Max train length at 80 GB</h3><div class="chart"><canvas id="maxt" aria-label="max train length"></canvas></div>
       <figcaption>Qwen3.5-4B SFT, 2× A100-80GB, FSDP-2, full activation checkpointing, chunked FFN + segmented GDN. Linear extrapolation from 3-step probes, one sample each (router session record).</figcaption></figure>
   </div>
+</section>
+
+<section>
+  <h2>SFT: 11-task mix at 64k (10× data)</h2>
+  <div class="figs">
+    <figure><h3>Task average (2k–64k) vs training FLOPs</h3><div class="chart"><canvas id="m64avg" aria-label="64k task average"></canvas></div>
+      <figcaption>mt11L64 data (rows up to 65,536 tokens, 662M tokens), 8× H100, 128 rows/step. Average over the 9 graded tasks and all their rungs (2k–64k; xabsence/strmatch/grouping to 32k), eval_size 500 each, no-cot. Points = 1/16, 1/8, 1/4, 1/2, 1 epoch; the router at 1/4 is 2 seeds.</figcaption></figure>
+    <figure><h3>64k rung only</h3><div class="chart"><canvas id="m64r64" aria-label="64k rung"></canvas></div>
+      <figcaption>Mean over the 6 tasks with a 64k rung (nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction).</figcaption></figure>
+  </div>
+  <p class="note">The recipe (adapters + two-stage keep + floor) has trained at 1/4 epoch; its scores are being collected and will be added.</p>
+  <div class="figs small" id="pt64" style="margin-top:12px"></div>
 </section>
 
 <section>
@@ -289,10 +302,63 @@ function multiples(hostId, sets, tasks, prefix) {
 }
 try { draw(); multiples("pt4f", D.f4fresh, ["contradiction","nq","outlier","oolong"], "pt4f");
       multiples("pt4o", D.f4orig, ["contradiction","nq","outlier","oolong"], "pt4o");
+      if (D.m64) {
+        const M = [["Dense, LR 5e-6", "dense|5e-06", true], ["Dense, LR 2e-6", "dense|2e-06", false], ["Router keep 10%, LR 5e-6", "otr10M7|5e-06", false], ["Router keep 10%, LR 2e-6", "otr10M7|2e-06", false]];
+        const sets = M.filter(m => D.m64[m[1]]).map(m => ({ label: m[0], dense: m[2], p: D.m64[m[1]] }));
+        plot("m64avg", sets.map((s, i) => ({ label: s.label, dense: s.dense, dash: i % 2 ? [5, 4] : [], pts: s.p.map(p => ({ x: p.x, y: p.y, note: p.budget + (p.n > 1 ? ", " + p.n + " seeds" : "") })) })), "task average (2k–64k)");
+        plot("m64r64", sets.map((s, i) => ({ label: s.label, dense: s.dense, dash: i % 2 ? [5, 4] : [], pts: s.p.filter(p => p.rung["64k"] != null).map(p => ({ x: p.x, y: p.rung["64k"], note: p.budget })) })), "mean @64k");
+        const host = document.getElementById("pt64");
+        ["xabsence","contradiction","outlier","strmatch","grouping","hotpotqa","nq","qdmatch_nq","oolong"].forEach((t, j) => {
+          host.insertAdjacentHTML("beforeend", `<figure><h3>${t} (64k study, mean over rungs)</h3><div class="chart"><canvas id="pt64${j}" aria-label="${t} 64k"></canvas></div></figure>`);
+          plot(`pt64${j}`, sets.map((s, i) => ({ label: s.label, dense: s.dense, dash: i % 2 ? [5, 4] : [], pts: s.p.map(p => ({ x: p.x, y: p.t[t], note: p.budget })) })), t);
+          const ch = Chart.getChart(`pt64${j}`); if (ch) { ch.options.plugins.legend.display = j === 0; ch.update(); }
+        });
+      }
       multiples("pt11", D.f11, ["xabsence","contradiction","outlier","strmatch","grouping","hotpotqa","nq","qdmatch_nq","oolong"], "pt11"); }
 catch (e) { console.error(e); }
 </script>
 """
+
+
+M64_TASKS = ["xabsence", "contradiction", "outlier", "strmatch", "grouping", "hotpotqa", "nq", "qdmatch_nq", "oolong"]
+M64_RUNGS = ["2k", "8k", "16k", "32k", "64k"]
+
+
+def m64_data(path):
+    """64k study (mt11L64, rows to 65,536 tokens): per run PF, task-average over all (task, rung) cells except reorder,
+    per-rung means and per-task means over rungs; seed copies averaged."""
+    try:
+        j = json.load(open(path))
+    except Exception:
+        return None
+    pf = {t["run"]: t["pf"] for t in j["train"]}
+    cells = collections.defaultdict(dict)
+    for s in j["scores"]:
+        if s["eval_size"] >= 500 and s["task"] in M64_TASKS and s.get("final", True):
+            cells[s["train_run"]][(s["task"], s["rung"])] = s["value"]
+    groups = collections.defaultdict(list)
+    for run, c in cells.items():
+        m = re.match(r"m64-(.+?)-(f\d+)-lr([\d.e-]+?)(?:-sd\d+)?$", run)
+        if not m or run not in pf or len(c) < 30:
+            continue
+        groups[(m.group(1), m.group(3))].append((pf[run], c, m.group(2)))
+    out = {}
+    for (arm, lr), v in groups.items():
+        by_b = collections.defaultdict(list)
+        for x, c, b in v:
+            by_b[b].append((x, c))
+        pts = []
+        for b, w in by_b.items():
+            keys = set.intersection(*[set(c) for _, c in w])
+            avg = {k: sum(c[k] for _, c in w) / len(w) for k in keys}
+            rung = {r: round(sum(vv for (t, rr), vv in avg.items() if rr == r) / max(1, sum(1 for (t, rr) in avg if rr == r)), 4)
+                    for r in M64_RUNGS if any(rr == r for _, rr in avg)}
+            task = {t: round(sum(vv for (tt, _), vv in avg.items() if tt == t) / max(1, sum(1 for (tt, _) in avg if tt == t)), 4)
+                    for t in M64_TASKS if any(tt == t for tt, _ in avg)}
+            pts.append({"x": round(sum(x for x, _ in w) / len(w), 1), "y": round(sum(avg.values()) / len(avg), 4),
+                        "n": len(w), "budget": b, "rung": rung, "t": task})
+        out[f"{arm}|{lr}"] = sorted(pts, key=lambda p: p["x"])
+    return out
 
 
 def ftm_rows(S):
@@ -320,6 +386,7 @@ def main():
     ap.add_argument("--points", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--updated", default="")
+    ap.add_argument("--m64", default="/accounts/projects/berkeleynlp/prasann/projects/OLMo-core/.claude/worktrees/mt11-64k/research/token_routing/mt11_64k/results/points.json")
     a = ap.parse_args()
     S = series(json.load(open(a.points)))
     f4fresh = [("Dense", "dense", True), ("Recipe: adapters 0–6 + two-stage", "lora64r20to7", False),
@@ -343,7 +410,7 @@ def main():
            {"label": "Two-stage + floor", "dense": False, "p": pick(S, "mt11", "s", "r20to7f16")},
            {"label": "Router keep 10% + floor", "dense": False, "p": pick(S, "mt11", "s", "otr10M7de0f16")}]
     data = {"f4fresh": [{"label": l, "dense": dn, "p": pick(S, "mt4", "f", arm)} for l, arm, dn in f4fresh],
-            "f4orig": f4orig, "f11": f11, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT}
+            "f4orig": f4orig, "f11": f11, "m64": m64_data(a.m64), "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT}
     html = PAGE.replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
     for k in ("f4fresh", "f4orig", "f11"):
