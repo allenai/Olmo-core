@@ -310,6 +310,28 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
         bash "$CODE/research/token_routing/olmo3_cptdrop/devce_multi.sh" > "$ROOT/logs/devce-c128-$SLURM_JOB_ID.log" 2>&1 \
         || log "WARN: c128 eval had failures"
       grep -h "merged" "$ROOT/logs/devce-c128-$SLURM_JOB_ID.log" ;;
+    RESCORE)
+      # 2026-10-26: eval_devce bins stopped at 32k, so every dev64k / dev128k CE scored only the first 32k targets.
+      # Re-score the long-context checkpoints with full-row bins into devce_full/ (64k exports pulled from S3).
+      S3SYNC="$CODE/research/token_routing/olmo3_cptdrop/s3_sync.py"
+      for r in D64lr20-120 D64lr20-240 D64lr20-480 L64K16-120 L64K16-240 L64K16-480 L64K32lr20-120 L64K32lr20-240 L64K32lr20-480; do
+        d="$ROOT/runs/o3cd-$r"
+        [ -f "$d/model_and_optim/.metadata" ] || "$PY" -u "$S3SYNC" down "$d/model_and_optim" "runs/o3cd-$r/model_and_optim" | tail -1
+        [ -f "$d/config.json" ] || { "$PY" -u "$S3SYNC" down "$d/meta" "runs/o3cd-$r/meta" | tail -1; cp -n "$d"/meta/* "$d"/ 2>/dev/null || true; }
+      done
+      SPECS=""; OD="$ROOT/devce_full"
+      for r in D64lr20-120 D64lr20-240 D64lr20-480 L64K16-120 L64K16-240 L64K16-480 L64K32lr20-120 L64K32lr20-240 L64K32lr20-480; do
+        [ -f "$ROOT/runs/o3cd-$r/model_and_optim/.metadata" ] && [ ! -f "$OD/${r}_dev64k_512.json" ] && SPECS="$SPECS $r:runs/o3cd-$r:8"
+      done
+      [ -n "$SPECS" ] && SPECS="$SPECS" SHARDS="dev64k_512:64" OUT_DIR="$OD" CODE="$CODE" PY="$PY" ROOT="$ROOT" \
+        bash "$CODE/research/token_routing/olmo3_cptdrop/devce_multi.sh" > "$ROOT/logs/devce-full64-$SLURM_JOB_ID.log" 2>&1 || log "WARN: full64 failures"
+      SPECS=""
+      for r in D128lr20-48 L128K32dlr20-48 D128lr20-120 L128K32dlr20-120; do
+        [ -f "$ROOT/runs/o3cd-$r/model_and_optim/.metadata" ] && [ ! -f "$OD/${r}_dev128k_512.json" ] && SPECS="$SPECS $r:runs/o3cd-$r:16"
+      done
+      [ -n "$SPECS" ] && SPECS="$SPECS" SHARDS="dev128k_512:64" OUT_DIR="$OD" CODE="$CODE" PY="$PY" ROOT="$ROOT" \
+        bash "$CODE/research/token_routing/olmo3_cptdrop/devce_multi.sh" > "$ROOT/logs/devce-full128-$SLURM_JOB_ID.log" 2>&1 || log "WARN: full128 failures"
+      grep -h "merged" "$ROOT/logs/devce-full64-$SLURM_JOB_ID.log" "$ROOT/logs/devce-full128-$SLURM_JOB_ID.log" 2>/dev/null ;;
     MAXT)
       # max trainable T per GPU (memory probe): dense vs K32 on synthetic long rows (probe_shard.py), 3 steps each,
       # ascending T; an arm stops at its first failure. Peak = max "GPU active mem" (the dry run is a full-length step).
