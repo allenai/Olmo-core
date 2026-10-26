@@ -637,6 +637,12 @@ def _build_ac_config(ac_mode: str, ac_budget: float):
         return TransformerActivationCheckpointingConfig(
             mode=TransformerActivationCheckpointingMode.full
         )
+    if ac_mode == "full_offload":
+        # full + block inputs in pinned host memory (olmo_core.nn.offload_checkpoint): same recompute, ~half the
+        # activation memory per token at long context
+        return TransformerActivationCheckpointingConfig(
+            mode=TransformerActivationCheckpointingMode.full_offload
+        )
     if ac_mode == "budget":
         return TransformerActivationCheckpointingConfig(
             mode=TransformerActivationCheckpointingMode.budget,
@@ -2276,7 +2282,7 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument(
         "--activation-checkpointing",
-        choices=["auto", "full", "budget", "none"],
+        choices=["auto", "full", "full_offload", "budget", "none"],
         default="auto",
         help="activation checkpointing. auto (default) = full for 4b/9b, none for 0.8b. "
         "USE 'budget' for context-parallel (--cp-degree) runs: full-block AC is incompatible with "

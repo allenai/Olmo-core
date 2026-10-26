@@ -11,6 +11,10 @@ attention on 8), no dropping. Reported:
                  row length are omitted, so a 4k row has one bin = overall)
   per_row        per row and per bin: loss sum + token count, so paired deltas between two
                  checkpoints (``compare_devce.py``) get a per-row standard error
+  repeat         CE by target type (grad_composition's ``repeat_category``, N=4, FAR=4096): novel (the 4-gram
+                 ending at the target never occurred earlier in the row), near (its last earlier occurrence ends
+                 <= 4096 back, inside every sliding window) and far (it occurred only > 4096 back). Near = local
+                 copying; far = long-range use.
   ctx_gain       (``--ctx-window W``) long-context use, separated from domain adaptation: the last W/2 targets
                  of each row scored twice, with the full row as context and with only the last W tokens
                  (each target then sees W/2..W tokens back). gain = CE_window - CE_full on the same targets
@@ -193,6 +197,26 @@ def load_shard(shard: str, max_rows: Optional[int], family: str, row_start: int 
     return rows, masks, meta
 
 
+REPEAT_N, REPEAT_FAR = 4, 4096
+REPEAT_NAMES = ("novel", "near", "far")
+
+
+def repeat_category(ids) -> np.ndarray:
+    """(L,) int8 per TARGET index j (same convention as ``row_token_ce``): 0 novel, 1 near repeat (the 4-gram
+    ``ids[j-3 : j+1]`` last occurred ending <= REPEAT_FAR positions earlier), 2 far-only (only earlier than that).
+    Copied from research/token_routing/grad_composition/cpt_analyze.py (branch claude/grad-composition-6f09c7)."""
+    L = len(ids)
+    cat = np.zeros(L, dtype=np.int8)
+    last = {}
+    for j in range(REPEAT_N - 1, L):
+        key = tuple(ids[j - REPEAT_N + 1 : j + 1])
+        p = last.get(key)
+        if p is not None:
+            cat[j] = 1 if j - p <= REPEAT_FAR else 2
+        last[key] = j
+    return cat
+
+
 def bins_for(L: int, edges: Sequence[int] = BIN_EDGES) -> List[Tuple[str, int, int]]:
     """[(name, lo, hi)] target-position bins clipped to a row of length ``L``."""
     out = []
@@ -233,6 +257,8 @@ def score_rows(model, rows: np.ndarray, masks: np.ndarray, device, log_every=(1,
     sums = np.zeros((n, len(bins)), dtype=np.float64)
     cnts = np.zeros((n, len(bins)), dtype=np.int64)
     ctx = np.zeros((n, 3), dtype=np.float64)
+    rep_s = np.zeros((n, 3), dtype=np.float64)
+    rep_c = np.zeros((n, 3), dtype=np.int64)
     if ctx_window and not (0 < ctx_window < L and ctx_window % 2 == 0):
         raise SystemExit(f"--ctx-window {ctx_window} must be even and < row length {L}")
     t0 = time.time()
@@ -240,6 +266,12 @@ def score_rows(model, rows: np.ndarray, masks: np.ndarray, device, log_every=(1,
         x = torch.from_numpy(rows[i]).to(device)
         m = torch.from_numpy(masks[i]).to(device)
         ce = row_token_ce(model, x, m).cpu().numpy().astype(np.float64)
+        cat = repeat_category(rows[i].tolist())
+        okr = ~np.isnan(ce)
+        for k in range(3):
+            sel = okr & (cat == k)
+            rep_s[i, k] = ce[sel].sum()
+            rep_c[i, k] = int(sel.sum())
         if ctx_window:
             W, T = ctx_window, ctx_window // 2
             cw = row_token_ce(model, x[L - W:], m[L - W:]).cpu().numpy().astype(np.float64)[W - T:]
@@ -255,7 +287,7 @@ def score_rows(model, rows: np.ndarray, masks: np.ndarray, device, log_every=(1,
             el = time.time() - t0
             log(f"row {i + 1}/{n} running CE {sums[: i + 1].sum() / max(cnts[: i + 1].sum(), 1):.4f} "
                 f"({el:.0f}s, {el / (i + 1):.2f}s/row, ETA {el / (i + 1) * (n - i - 1):.0f}s)")
-    return {"bins": bins, "sums": sums, "cnts": cnts, "ctx": ctx if ctx_window else None,
+    return {"bins": bins, "sums": sums, "cnts": cnts, "ctx": ctx if ctx_window else None, "rep_s": rep_s, "rep_c": rep_c,
             "score_seconds": time.time() - t0}
 
 
@@ -287,10 +319,79 @@ def summarize(sums: np.ndarray, cnts: np.ndarray, bins) -> dict:
     return out
 
 
+def summarize_repeat(rep_s: np.ndarray, rep_c: np.ndarray) -> dict:
+    """CE by target type (novel / near / far), with the same fields as a position bin."""
+    return {nm: summarize(rep_s[:, [k]], rep_c[:, [k]], [(nm, 0, 1)])["overall"] for k, nm in enumerate(REPEAT_NAMES)}
+
+
+#: Checkpoint parameters a dense dev-CE eval legitimately ignores: the soft-token slot projector (the eval runs the
+#: model dense, without compaction or slots).
+EVAL_UNUSED_PREFIXES = ("pooled_projector.",)
+
+
+def _ckpt_model_keys(ckpt: str) -> set:
+    """Model parameter names stored in the distcp checkpoint (``model.`` prefix stripped)."""
+    from torch.distributed.checkpoint import FileSystemReader
+
+    md = FileSystemReader(find_distcp(ckpt)).read_metadata()
+    return {k[len("model."):] for k in md.state_dict_metadata if k.startswith("model.")}
+
+
+def reinstall_early_lora(ckpt: str, model) -> Optional[dict]:
+    """A low-rank-early-stack run (``--st-otr-early-lora``) stores ``lora_A`` / ``lora_B`` keys the base model lacks.
+    Re-install the adapters before the load so the trained model (not the base) is scored. The block comes from
+    config.json["early_lora"]; if that is missing (router branch <= 1e5a14c85 never exported it: SoftToken defines
+    export_config twice) but the checkpoint holds lora keys, it is rebuilt from the keys (n_blocks) and
+    provenance.json (rank, scale). No adapters -> no-op; the import is lazy (older trees lack the module)."""
+    path = os.path.join(ckpt, "config.json")
+    block = json.load(open(path)).get("early_lora") if os.path.isfile(path) else None
+    if not block:
+        try:
+            lora = [k for k in _ckpt_model_keys(ckpt) if k.endswith(".lora_A")]
+        except (Exception, SystemExit):
+            lora = []
+        if not lora:
+            return None
+        prov_p = os.path.join(ckpt, "provenance.json")
+        prov = json.load(open(prov_p)) if os.path.isfile(prov_p) else {}
+        flat = json.dumps(prov)
+        import re as _re
+
+        r = _re.search(r'"st_otr_early_lora": *(\d+)', flat)
+        sc = _re.search(r'"st_otr_early_lora_scale": *([0-9.eE+-]+)', flat)
+        if r is None or sc is None:
+            raise SystemExit(f"{ckpt}: checkpoint has {len(lora)} lora_A keys but neither config.json nor "
+                             "provenance.json records the adapter rank / scale; refusing to score it as the base")
+        idx = [int(k.split(".")[1]) for k in lora if k.startswith("blocks.")]
+        # adapters may start above block 0 (--st-otr-early-lora-start B: frozen adapter-less bottom stack)
+        block = {"n_blocks": 1 + max(idx), "rank": int(r.group(1)), "scale": float(sc.group(1))}
+        if min(idx) > 0:
+            block["start"] = min(idx)
+        log(f"early_lora block missing from config.json; rebuilt from checkpoint keys + provenance: {block}")
+    from olmo_core.nn.early_lora import enable_from_config_block
+
+    enable_from_config_block(model, block)
+    return block
+
+
 def load_model(ckpt: str, cfg, device: str, max_len: int):
     from olmo_core.distributed.checkpoint import load_model_and_optim_state
 
     model = cfg.build(init_device="cpu")
+    reinstall_early_lora(ckpt, model)
+    # never score a checkpoint whose parameters the built model would silently skip (distcp loads only the
+    # keys the model asks for): 2026-10-24, LoRA runs scored without their adapters
+    want = set(model.state_dict().keys())
+    try:
+        have = _ckpt_model_keys(ckpt)
+    except (Exception, SystemExit):
+        have = None
+    if have is not None:
+        # soft-token training adds a slot projector the dense eval never uses (slot-less / dense scoring)
+        extra = sorted(k for k in have - want if not k.startswith(EVAL_UNUSED_PREFIXES))
+        if extra:
+            raise SystemExit(f"{ckpt}: checkpoint holds {len(extra)} model keys the eval model lacks "
+                             f"(e.g. {extra[:3]}); refusing to score a partial model")
     t0 = time.time()
     load_model_and_optim_state(find_distcp(ckpt), model)
     load_s = time.time() - t0
@@ -329,6 +430,7 @@ def main(argv=None):
     log(f"loaded {find_distcp(a.ckpt)} in {load_s:.0f}s (yarn={a.yarn_factor}, {a.attn_backend}, {device})")
     sc = score_rows(model, rows, masks, device, ctx_window=a.ctx_window)
     summ = summarize(sc["sums"], sc["cnts"], sc["bins"])
+    summ["repeat"] = summarize_repeat(sc["rep_s"], sc["rep_c"])
     if a.ctx_window:
         summ["ctx_gain"] = summarize_ctx(sc["ctx"], a.ctx_window)
     out = {
@@ -338,6 +440,7 @@ def main(argv=None):
         "summary": summ,
         "bins": [{"name": nm, "lo": lo, "hi": hi} for nm, lo, hi in sc["bins"]],
         "per_row": {"loss_sum": sc["sums"].tolist(), "tokens": sc["cnts"].tolist(),
+                    "repeat_loss_sum": sc["rep_s"].tolist(), "repeat_tokens": sc["rep_c"].tolist(),
                     **({"ctx_full_win_cnt": sc["ctx"].tolist()} if a.ctx_window else {})},
         "ctx_window": a.ctx_window,
         "row_ids": list(range(a.row_start, a.row_start + n)),
@@ -357,6 +460,7 @@ def main(argv=None):
     o = summ["overall"]
     log(f"SUMMARY {a.label or a.ckpt}: overall CE {o['ce']:.4f} ({o['tokens']} tokens, eval_size={n} rows) | "
         + " ".join(f"{k} {v['ce']:.4f}" for k, v in summ["bins"].items())
+        + " | " + " ".join(f"{k} {v['ce']:.4f}" for k, v in summ["repeat"].items() if v["ce"] is not None)
         + (f" | ctx_gain@{a.ctx_window} {summ['ctx_gain']['gain']:+.4f}" if a.ctx_window else ""))
     log(f"timing: load {load_s:.0f}s, score {sc['score_seconds']:.0f}s; wrote {a.out}")
     return out
