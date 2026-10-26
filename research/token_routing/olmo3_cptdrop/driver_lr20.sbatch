@@ -307,11 +307,13 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
           # D = dense; K32 = whole-model LoRA via the online-router path; K32d = the same LoRA on the plain dense arm
           # (--lora-rank modifier); *off = activation checkpointing with block inputs in host memory (full_offload)
           case "$A" in
-            D) set -- ARM=D ;;
-            Doff) set -- ARM=D AC=full_offload ;;
-            K32) set -- ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 "OTR_EXTRA=$K32X" ;;
-            K32d) set -- ARM=D "EXTRA=--lora-rank 64 --lora-scale 32" ;;
-            K32doff) set -- ARM=D AC=full_offload "EXTRA=--lora-rank 64 --lora-scale 32" ;;
+            # --skip-dry-run: the trainer's full-length dry run leaves a T-proportional allocation resident
+            # (router session 2026-10-26: +5.2 GiB at 32k on dense), which would inflate every peak
+            D) set -- ARM=D "EXTRA=--skip-dry-run" ;;
+            Doff) set -- ARM=D AC=full_offload "EXTRA=--skip-dry-run" ;;
+            K32) set -- ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 "OTR_EXTRA=$K32X" "EXTRA=--skip-dry-run" ;;
+            K32d) set -- ARM=D "EXTRA=--lora-rank 64 --lora-scale 32 --skip-dry-run" ;;
+            K32doff) set -- ARM=D AC=full_offload "EXTRA=--lora-rank 64 --lora-scale 32 --skip-dry-run" ;;
             *) log "MAXT: unknown arm $A"; continue ;;
           esac
           run "$name" "$@" CTX=${T}k DATA_OVERRIDE=probe${T}k_ee MAX_STEPS_TOTAL=3 MAX_TOKENS=$((3 * GBT * SEQ)) DECAY_FRAC=0.5 SMOKE=1 NOWANDB=1 EXPECTED_MIN=20
