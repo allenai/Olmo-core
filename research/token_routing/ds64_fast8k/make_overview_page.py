@@ -183,9 +183,9 @@ a { color: var(--c2); }
     <figure><h3>Mean over 9 tasks @8k vs training FLOPs</h3><div class="chart"><canvas id="f11" aria-label="11-task Pareto"></canvas></div>
       <figcaption>720 rows/task unless noted; the recipe also at 240/480/960. Mean over nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction, xabsence, strmatch, grouping at 8k (reorder and rerank excluded: no working grader). Dense below 240 rows/task = 240-row runs cut at 32 and 64 steps.</figcaption></figure>
     <figure><h3>Peak memory vs row length (standard settings)</h3><div class="chart"><canvas id="memstd" aria-label="memory vs length standard"></canvas></div>
-      <figcaption>Peak GPU memory per GPU at the steady (routed) training step vs tokens per row. Qwen3.5-4B, 2× A100-80GB, FSDP-2, full checkpointing. The slope is memory per token: dense 0.39 GiB per 1k tokens, routed arms ≈0.25. Dense out of memory at 128k. Markers = measured; dashed = linear fit extended to 512k (crossing the 80 GB line gives the estimated max length); dotted = 79.25 GiB usable.</figcaption></figure>
+      <figcaption>Peak GPU memory per GPU at the steady (routed) training step vs tokens per row. Qwen3.5-4B, 2× A100-80GB, FSDP-2, full checkpointing. The slope is memory per token: dense 0.39 GiB per 1k tokens, routed arms ≈0.25. Dense out of memory at 128k. Markers = measured; dashed = linear fit run out to where it reaches the 80 GB line (the estimated max length); dotted = 79.25 GiB usable.</figcaption></figure>
     <figure><h3>Peak memory vs row length (all memory optimizations)</h3><div class="chart"><canvas id="memflags" aria-label="memory vs length optimized"></canvas></div>
-      <figcaption>Same probe with routed warmup, no dry run, chunked FFN recompute and segmented GDN. Slopes: dense 0.28, router 0.17, whole-model LoRA 0.16 GiB per 1k tokens. Markers = measured, dashed = linear fit extended to 512k (the recipe has one point at this setting, so its line uses the slope from the chunked-FFN round). Two-stage without adapters and a 20% router are being measured.</figcaption></figure>
+      <figcaption>Same probe with routed warmup, no dry run, chunked FFN recompute and segmented GDN. Slopes: dense 0.28, router 0.17, whole-model LoRA 0.16 GiB per 1k tokens. Markers = measured, dashed = linear fit run out to the 80 GB line (the recipe has one point at this setting, so its line uses the slope from the chunked-FFN round). Two-stage without adapters and a 20% router are being measured.</figcaption></figure>
     <figure><h3>Max train length at 80 GB</h3><div class="chart"><canvas id="maxt" aria-label="max train length"></canvas></div>
       <figcaption>Qwen3.5-4B SFT, 2× A100-80GB, FSDP-2, full activation checkpointing, chunked FFN + segmented GDN. Linear extrapolation from 3-step probes, one sample each (router session record).</figcaption></figure>
   </div>
@@ -319,21 +319,23 @@ function draw() {
     options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } },
       scales: { x: { title: { display: true, text: "max train length (thousand tokens)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } },
                 y: { ticks: { color: css("--fg"), font: { size: 10 } }, grid: { display: false } } } } });
-  const memSets = (M, F) => {
+  const memSets = (M, F, xmax) => {
     const out = [];
     Object.keys(M).forEach((k, i) => {
       const col = COL[i];
       out.push({ label: k + " (measured)", col, dense: i === 0, pts: M[k].map(p => ({ x: p[0], y: p[1] })) });
       const [b, m] = F[k], cross = (79.25 - b) / m;
-      out.push({ label: k + ` (linear fit; ≈${Math.round(cross)}k at 80 GB)`, col, dash: [5, 4], shape: "line",
-                 pts: [16, 64, 128, 256, 384, 512].map(x => ({ x, y: +(b + m * x).toFixed(1) })) });
+      const xs = [16, 32, 64, 96, 128, 160, 192, 224, 256, 320, 384].filter(x => x < cross).concat([cross]);
+      out.push({ label: k + ` (fit; reaches 80 GB at ≈${Math.round(cross)}k)`, col, dash: [5, 4], shape: "line",
+                 pts: xs.map(x => ({ x: +x.toFixed(1), y: +(b + m * x).toFixed(1) })) });
     });
-    out.push({ label: "80 GB GPU (usable)", col: "--c6", dash: [2, 3], pts: [{ x: 16, y: 79.25 }, { x: 512, y: 79.25 }] });
+    out.push({ label: "80 GB GPU (usable)", col: "--c6", dash: [2, 3], pts: [{ x: 16, y: 79.25 }, { x: xmax, y: 79.25 }] });
     return out;
   };
-  plot("memstd", memSets(D.memstd, D.memstdfit), "peak GiB per GPU", { xlin: true, xlab: "tokens per row (thousands)", dp: 1 });
-  plot("memflags", memSets(D.memflags, D.memflagsfit), "peak GiB per GPU", { xlin: true, xlab: "tokens per row (thousands)", dp: 1 });
-  ["memstd", "memflags"].forEach(id => { const ch = Chart.getChart(id); if (ch) { ch.options.scales.y.max = 160; ch.options.scales.y.min = 0;
+  plot("memstd", memSets(D.memstd, D.memstdfit, 290), "peak GiB per GPU", { xlin: true, xlab: "tokens per row (thousands)", dp: 1 });
+  plot("memflags", memSets(D.memflags, D.memflagsfit, 420), "peak GiB per GPU", { xlin: true, xlab: "tokens per row (thousands)", dp: 1 });
+  [["memstd", 290], ["memflags", 420]].forEach(([id, xm]) => { const ch = Chart.getChart(id); if (ch) {
+    ch.options.scales.y.min = 0; ch.options.scales.y.max = 85; ch.options.scales.x.min = 0; ch.options.scales.x.max = xm;
     ch.data.datasets.forEach(ds => { if (ds.label.includes("fit")) { ds.pointRadius = 0; } }); ch.update(); } });
   plot("cpt32", Object.entries(D.cpt32).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
   plot("cpt64", Object.entries(D.cpt64).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
