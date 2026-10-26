@@ -12,6 +12,33 @@ from typing import Iterable
 import torch
 
 
+def muon_momentum(
+    grad: torch.Tensor, previous: torch.Tensor, momentum: float
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute FP32 momentum and Nesterov direction before any BF16 conversion."""
+    updated = momentum * previous.float() + grad.float()
+    return updated, momentum * updated + grad.float()
+
+
+def apply_muon_update(
+    param: torch.Tensor,
+    momentum: torch.Tensor,
+    step: torch.Tensor,
+    updated_momentum: torch.Tensor,
+    update: torch.Tensor,
+    *,
+    lr: float,
+    weight_decay: float,
+    step_factor: torch.Tensor,
+) -> None:
+    """Apply an already scaled local update; a skipped step preserves all state."""
+    momentum.copy_(torch.where(step_factor.bool(), updated_momentum, momentum))
+    candidate = param * (1 - lr * weight_decay)
+    candidate = candidate - lr * update
+    param.copy_(torch.where(step_factor.bool(), candidate, param))
+    step.add_(step_factor)
+
+
 @dataclass(frozen=True)
 class MuonLayout:
     """Logical storage view and projection axis, recovered from the owning module."""
@@ -115,7 +142,18 @@ def _matrix_direction(direction: torch.Tensor, rms: float, split_dim: int | None
             (_matrix_direction(up, rms, None), _matrix_direction(gate, rms, None)), dim=split_dim
         )
     scale = math.sqrt(max(direction.shape[-2:])) * rms
-    # Bound Gram-matrix temporary memory for the many-expert case.
+    # Batch independent experts to amortize kernel launches. Limit the batch for
+    # larger matrices so Newton-Schulz's Gram and update temporaries stay bounded.
     if direction.ndim == 3:
-        return torch.cat([newton_schulz(chunk) * scale for chunk in direction.split(16)], dim=0)
+        batch_size = _expert_batch_size(direction.shape[-2], direction.shape[-1])
+        return torch.cat(
+            [newton_schulz(chunk) * scale for chunk in direction.split(batch_size)], dim=0
+        )
     return newton_schulz(direction) * scale
+
+
+def _expert_batch_size(rows: int, cols: int) -> int:
+    # Conservative fp32 workspace estimate, even though CUDA matmuls use bf16.
+    # This bounds temporary workspace, not the full input/output allocation.
+    workspace_per_expert = 4 * (3 * rows * cols + 3 * min(rows, cols) ** 2)
+    return max(1, min(128, (256 * 1024**2) // workspace_per_expert))

@@ -12,6 +12,7 @@ from olmo_core.nn.moe.v2.router import MoERouterV2
 from olmo_core.nn.moe.v2.shared_experts import SharedExperts
 from olmo_core.optim.moe_optimizer import OLMoDDPOptimizer, OLMoDDPOptimizerConfig
 from olmo_core.optim.muon_math import (
+    _expert_batch_size,
     collect_muon_layouts,
     muon_direction,
     newton_schulz,
@@ -167,6 +168,27 @@ def test_experts_and_packed_swiglu_are_independent():
         ]
     )
     torch.testing.assert_close(muon_direction("experts.w_up_gate", packed), expected)
+
+
+@pytest.mark.parametrize("transpose", [False, True])
+def test_expert_batching_matches_original_with_partial_tail(transpose):
+    torch.manual_seed(19)
+    matrices = torch.randn(131, 7, 11)
+    if transpose:
+        matrices = matrices.mT
+    expected = torch.cat([newton_schulz(chunk) for chunk in matrices.split(16)])
+    expected *= math.sqrt(11) * 0.2
+    torch.testing.assert_close(muon_direction("experts.w_down", matrices), expected)
+
+
+def test_expert_batch_workspace_bound():
+    assert _expert_batch_size(7, 11) == 128
+    assert _expert_batch_size(544, 272) > 16
+    for rows, cols in [(544, 272), (2048, 4096), (4096, 2048)]:
+        batch = _expert_batch_size(rows, cols)
+        estimated_workspace = batch * 4 * (3 * rows * cols + 3 * min(rows, cols) ** 2)
+        assert estimated_workspace <= 256 * 1024**2
+    assert _expert_batch_size(16384, 16384) == 1
 
 
 def _run_sharded_muon():

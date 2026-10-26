@@ -45,7 +45,13 @@ from ..exceptions import OLMoConfigurationError
 from .adamw import foreach_adamw_step
 from .config import INITIAL_LR_FIELD, LR_FIELD, OptimGroupOverride
 from .grad_debug import debug_nan_inf_grad_norm
-from .muon_math import MuonLayout, collect_muon_layouts
+from .muon_math import (
+    MuonLayout,
+    apply_muon_update,
+    collect_muon_layouts,
+    muon_momentum,
+)
+from .skip_step_optimizer import compute_step_factor
 
 log = logging.getLogger(__name__)
 
@@ -2068,22 +2074,13 @@ class OLMoDDPOptimizer:
         The tensor can be used within the optimizer's step computation to essentially skip a step
         without a host-device sync.
         """
-        if len(self._losses) < max(2, self.rolling_interval_length // 2):
-            return move_to_device(torch.tensor(1.0), self.device)
-
-        loss_std, loss_mean = torch.std_mean(torch.stack(self._losses[:-1]))
-        assert self.latest_loss is not None
-        if self._grad_norms:
-            assert self.latest_grad_norm is not None
-            grad_norm_std, grad_norm_mean = torch.std_mean(torch.stack(self._grad_norms[:-1]))
-            step_factor = torch.logical_and(
-                (self.latest_loss - loss_mean) <= self.sigma_factor * loss_std,
-                (self.latest_grad_norm - grad_norm_mean) <= self.sigma_factor * grad_norm_std,
-            )
-        else:
-            step_factor = (self.latest_loss - loss_mean) <= self.sigma_factor * loss_std
-
-        return step_factor.float()
+        return compute_step_factor(
+            self._losses,
+            self._grad_norms,
+            self.rolling_interval_length,
+            self.sigma_factor,
+            self.device,
+        )
 
     @torch.compiler.disable
     def _step_muon(
@@ -2114,8 +2111,7 @@ class OLMoDDPOptimizer:
             )
         full_grad = grad.full_tensor()
         old_momentum = moment.full_tensor()
-        momentum = self.muon_momentum * old_momentum + full_grad
-        direction = self.muon_momentum * momentum + full_grad
+        momentum, direction = muon_momentum(full_grad, old_momentum, self.muon_momentum)
         layout = getattr(self, "muon_layouts", {}).get(name)
         update = muon_direction(name, direction.reshape(shape), self.muon_rms, layout).reshape(-1)
 
@@ -2125,15 +2121,16 @@ class OLMoDDPOptimizer:
             )
             return full.narrow(0, offset[0], local_shape[0])
 
-        # A skipped step changes neither parameters nor momentum, including decay.
-        moment.to_local().copy_(
-            torch.where(step_factor.bool(), local_slice(momentum, moment), moment.to_local())
+        apply_muon_update(
+            main.to_local(),
+            moment.to_local(),
+            self.states[f"{name}.step"].to_local(),
+            local_slice(momentum, moment),
+            local_slice(update, main),
+            lr=group["lr"],
+            weight_decay=group["weight_decay"],
+            step_factor=step_factor,
         )
-        param = main.to_local()
-        candidate = param * (1 - group["lr"] * group["weight_decay"])
-        candidate = candidate - group["lr"] * local_slice(update, main)
-        param.copy_(torch.where(step_factor.bool(), candidate, param))
-        self.states[f"{name}.step"].to_local().add_(step_factor)
 
     @maybe_nvtx_annotate("OLMoDDPOptimizer._step_foreach")
     def _step_foreach(self, closure=None) -> None:

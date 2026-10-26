@@ -91,22 +91,13 @@ class SkipStepOptimizer(Optimizer):
         The tensor can be used within the optimizer's step computation to essentially skip a step
         without a host-device sync.
         """
-        if len(self._losses) < max(2, self.rolling_interval_length // 2):
-            return move_to_device(torch.tensor(1.0), self.device)
-
-        loss_std, loss_mean = torch.std_mean(torch.stack(self._losses[:-1]))
-        assert self.latest_loss is not None
-        if self._grad_norms:
-            assert self.latest_grad_norm is not None
-            grad_norm_std, grad_norm_mean = torch.std_mean(torch.stack(self._grad_norms[:-1]))
-            step_factor = torch.logical_and(
-                (self.latest_loss - loss_mean) <= self.sigma_factor * loss_std,
-                (self.latest_grad_norm - grad_norm_mean) <= self.sigma_factor * grad_norm_std,
-            )
-        else:
-            step_factor = (self.latest_loss - loss_mean) <= self.sigma_factor * loss_std
-
-        return step_factor.float()
+        return compute_step_factor(
+            self._losses,
+            self._grad_norms,
+            self.rolling_interval_length,
+            self.sigma_factor,
+            self.device,
+        )
 
     @property
     def step_skipped(self) -> torch.Tensor:
@@ -114,3 +105,29 @@ class SkipStepOptimizer(Optimizer):
         Returns a float tensor which will be `1.0` if the step was skipped and `0.0` otherwise.
         """
         return 1 - self.get_step_factor()
+
+
+def compute_step_factor(
+    losses: List[torch.Tensor],
+    grad_norms: List[torch.Tensor],
+    rolling_interval_length: int,
+    sigma_factor: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """Shared loss/gradient-spike policy for dense and OLMoDDP optimizers."""
+    if len(losses) < max(2, rolling_interval_length // 2):
+        return move_to_device(torch.tensor(1.0), device)
+
+    loss_std, loss_mean = torch.std_mean(torch.stack(losses[:-1]))
+    assert losses[-1] is not None
+    if grad_norms:
+        assert grad_norms[-1] is not None
+        grad_norm_std, grad_norm_mean = torch.std_mean(torch.stack(grad_norms[:-1]))
+        step_factor = torch.logical_and(
+            (losses[-1] - loss_mean) <= sigma_factor * loss_std,
+            (grad_norms[-1] - grad_norm_mean) <= sigma_factor * grad_norm_std,
+        )
+    else:
+        step_factor = (losses[-1] - loss_mean) <= sigma_factor * loss_std
+
+    return step_factor.float()

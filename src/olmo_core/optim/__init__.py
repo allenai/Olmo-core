@@ -29,6 +29,7 @@ from .scheduler import (
     SchedulerUnits,
     SequentialScheduler,
 )
+from .shared_muon import SharedMuon, SharedMuonConfig
 from .skip_step_optimizer import SkipStepOptimizer
 
 __all__ = [
@@ -43,6 +44,8 @@ __all__ = [
     "LionConfig",
     "Lion",
     "MuonConfig",
+    "SharedMuon",
+    "SharedMuonConfig",
     "NorMuonConfig",
     "OLMoDDPOptimizer",
     "OLMoDDPOptimizerConfig",
