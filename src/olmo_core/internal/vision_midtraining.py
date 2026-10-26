@@ -79,6 +79,10 @@ from .vision_alignment_data import (
     STAGE1_V4_LOSS_TARGETS,
     STAGE1_V5_LOSS_TARGETS,
     STAGE1_V6_LOSS_TARGETS,
+    STAGE1_V7_LOSS_TARGETS,
+    STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+    STAGE1_V7_TEXT_LOSS_SHARE,
+    build_stage1_nemotron_sources,
     build_stage1_v3_sources,
 )
 from .vision_midtraining_data import (
@@ -144,8 +148,11 @@ class MixedMidtrainingRecipeConfig(Config):
     from it; the connector and vision learning rates scale with the LM's. Without it, the
     legacy s002 recipe applies (OLMo 3 32B midtraining mix, LM learning rate 1e-5, EP8).
     """
-    text_loss_share: float = 0.9
-    """Target text fraction of expected supervised-token loss mass; one is text-only."""
+    text_loss_share: float | None = None
+    """Target text fraction of expected supervised-token loss mass; one is text-only. Unset, it is
+    the visual data's default: 0.9, or
+    :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V7_TEXT_LOSS_SHARE` for ``stage1_v7``
+    (which keeps v6's positions per step)."""
     visual_example_weights: dict[str, float] = field(
         default_factory=lambda: dict(DEFAULT_VISUAL_EXAMPLE_WEIGHTS)
     )
@@ -237,7 +244,11 @@ class MixedMidtrainingRecipeConfig(Config):
     :attr:`annotation_documents`, and the loss shares of
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V5_LOSS_TARGETS`) or ``stage1_v6`` (v5
     with the most repeated sources capped at 10 epochs, their loss moved to the large OCR sources;
-    :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V6_LOSS_TARGETS`)."""
+    :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V6_LOSS_TARGETS`) or ``stage1_v7`` (v6
+    plus ten Nemotron-Image-Training caption and reasoning sources taking their loss from the OCR
+    group and the CoSyn and olmOCR sets capped at 5 passes, at a text loss share that keeps v6's
+    positions per step, see
+    :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V7_LOSS_TARGETS`)."""
     compile_loss: bool = True
     """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs
     (see :attr:`~olmo_core.nn.vision.MultimodalLMConfig.compile_loss`) instead of eagerly."""
@@ -351,14 +362,20 @@ def _build_recipe(
         "stage1_v4",
         "stage1_v5",
         "stage1_v6",
+        "stage1_v7",
     ):
         raise OLMoConfigurationError(
-            "recipe.visual_data must be midtraining, stage1_v3, stage1_v4, stage1_v5 or stage1_v6"
+            "recipe.visual_data must be midtraining, stage1_v3, stage1_v4, stage1_v5, stage1_v6 "
+            "or stage1_v7"
         )
     if recipe.annotation_documents and recipe.visual_data not in ("stage1_v3", "stage1_v4"):
         raise OLMoConfigurationError(
-            "recipe.annotation_documents needs stage1_v3 or stage1_v4 visual data (stage1_v5 "
-            "and stage1_v6 always train annotations as documents)"
+            "recipe.annotation_documents needs stage1_v3 or stage1_v4 visual data (stage1_v5, "
+            "stage1_v6 and stage1_v7 always train annotations as documents)"
+        )
+    if recipe.text_loss_share is None:
+        recipe.text_loss_share = (
+            STAGE1_V7_TEXT_LOSS_SHARE if recipe.visual_data == "stage1_v7" else 0.9
         )
     if (
         isinstance(recipe.text_loss_share, bool)
@@ -375,6 +392,12 @@ def _build_recipe(
 
 
 _ALIGNMENT_PHASES = ("bridge", "perception", "joint")
+
+
+def _text_loss_share(recipe: MixedMidtrainingRecipeConfig) -> float:
+    """``recipe.text_loss_share``, which ``_build_recipe`` has resolved from the visual data."""
+    assert recipe.text_loss_share is not None
+    return recipe.text_loss_share
 
 
 def _resolve_parent(
@@ -912,7 +935,7 @@ def _configure_loss(
                 source.apply(validate_length)
     targets = loss_mass_targets(
         dataset.mean_loss_weight,
-        target_text_loss_mass=recipe.text_loss_share,
+        target_text_loss_mass=_text_loss_share(recipe),
         visual_example_weights=recipe.visual_example_weights,
         visual_loss_shares=recipe.visual_loss_shares,
     )
@@ -1168,10 +1191,15 @@ def build_config(
     model.compile_loss = recipe.compile_loss
     # v4 is v3's sources and calibration with its own loss split.
     stage1_v3 = (
-        recipe.visual_data in ("stage1_v3", "stage1_v4", "stage1_v5", "stage1_v6")
-        and recipe.text_loss_share < 1.0
+        recipe.visual_data in ("stage1_v3", "stage1_v4", "stage1_v5", "stage1_v6", "stage1_v7")
+        and _text_loss_share(recipe) < 1.0
     )
-    documents = recipe.annotation_documents or recipe.visual_data in ("stage1_v5", "stage1_v6")
+    documents = recipe.annotation_documents or recipe.visual_data in (
+        "stage1_v5",
+        "stage1_v6",
+        "stage1_v7",
+    )
+    nemotron = stage1_v3 and recipe.visual_data == "stage1_v7"
     if stage1_v3:
         # The documents means were measured at 65,536 tokens, where no draw reached the
         # budget (the largest, a PixMo-Points image's documents, is 26,864 tokens), so they
@@ -1192,10 +1220,13 @@ def build_config(
                 "stage1_v4": STAGE1_V4_LOSS_TARGETS,
                 "stage1_v5": STAGE1_V5_LOSS_TARGETS,
                 "stage1_v6": STAGE1_V6_LOSS_TARGETS,
+                "stage1_v7": STAGE1_V7_LOSS_TARGETS,
             }.get(recipe.visual_data, STAGE1_V3_LOSS_TARGETS)
         )
+        if nemotron:
+            means.update(STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS)
     else:
-        means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if recipe.text_loss_share < 1.0 else {}
+        means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if _text_loss_share(recipe) < 1.0 else {}
     if not masked_text:
         means[TEXT_SOURCE_NAME] = float(recipe.sequence_length - 1)
     elif recipe.text_loss_share == 1.0:
@@ -1208,7 +1239,9 @@ def build_config(
         )
         # KDA's document mode isolates packed documents, not sibling annotation branches.
         _set_annotation_sampling(visual_sources, "documents" if documents else "one")
-    elif recipe.text_loss_share < 1.0 and not replaced_sources:
+        if nemotron:
+            visual_sources.update(build_stage1_nemotron_sources(recipe.sequence_length))
+    elif _text_loss_share(recipe) < 1.0 and not replaced_sources:
         visual_sources = build_visual_sources(
             sequence_length=recipe.sequence_length,
             max_crops=recipe.max_crops,

@@ -656,6 +656,303 @@ showed training loss on the capped sources collapsing while their held-out loss 
 the OCR sources had headroom (1.2-7.5 epochs) and kept improving. v6 trains every annotation as a
 document, as v5 does."""
 
+STAGE1_V7_NEMOTRON_EPOCHS: dict[str, float] = {
+    "nemotron_openimages_1": 1.0,
+    "nemotron_openimages_2": 1.0,
+    "nemotron_cc3m": 1.0,
+    "nemotron_textcaps": 2.0,
+    "nemotron_ecd": 2.0,
+    "nemotron_deepvision": 2.0,
+    "nemotron_babyvision": 2.0,
+    "nemotron_fintabnet": 2.0,
+    "nemotron_hopchain": 2.0,
+    "nemotron_raven": 2.0,
+}
+"""Passes over each Nemotron-Image-Training source in a 20,000-step stage-1 v7 run (v6's reference
+horizon): one over the Qwen3-VL detailed captions, which stay a minority of the caption loss next to
+PixMo-Cap, and two over TextCaps' one-line captions and the reasoning traces (chosen 2026-10-24;
+FinTabNet, CC-PDF multi-hop QA, RAVEN and BabyVision's web images added 2026-10-25)."""
+
+STAGE1_V7_NEMOTRON_SOURCE_SIZES: dict[str, int] = {
+    "nemotron_openimages_1": 1_236_601,
+    "nemotron_openimages_2": 504_262,
+    "nemotron_cc3m": 867_064,
+    "nemotron_textcaps": 106_447,
+    "nemotron_ecd": 55_341,
+    "nemotron_deepvision": 9_818,
+    "nemotron_babyvision": 125_875,
+    "nemotron_fintabnet": 56_479,
+    "nemotron_hopchain": 7_328,
+    "nemotron_raven": 41_995,
+}
+"""Rows of each prepared Nemotron source (``len`` of each built dataset, 2026-10-25). Open Images
+lost 3.3% of openimages_1's images (not on the CVDF mirror), cc3m one image, TextCaps 3,355 exact
+duplicate rows, BabyVision 7% (web images no longer online)."""
+
+STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS: dict[str, float] = {
+    "nemotron_openimages_1": 539.703125,
+    "nemotron_openimages_2": 537.4453125,
+    "nemotron_cc3m": 314.5546875,
+    "nemotron_textcaps": 33.703125,
+    "nemotron_ecd": 2111.140625,
+    "nemotron_deepvision": 2993.09375,
+    "nemotron_babyvision": 1189.1953125,
+    "nemotron_fintabnet": 2540.1875,
+    "nemotron_hopchain": 3271.6328125,
+    "nemotron_raven": 1092.1796875,
+}
+"""Calibration of the Nemotron sources as :func:`build_stage1_nemotron_sources` builds them (dolma2
+at the pinned revision, 65,536 tokens, documents mode):
+:meth:`MultimodalMixtureConfig.estimate_mean_loss_weights` with 128 samples per source, seed 0,
+measured 2026-10-25."""
+
+STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS: float = (
+    10.0
+    * STAGE1_V3_SOURCE_SIZES["pixmo_caption"]
+    * STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS["pixmo_caption"]
+    / STAGE1_V6_LOSS_TARGETS["pixmo_caption"]
+)
+"""Visual loss (response tokens) of a 20,000-step v6 run: PixMo-Cap's caption branch is capped at
+10 passes there, and its loss is this mass times its v6 share (about 16.3B tokens)."""
+
+STAGE1_POSITIONS_PER_LOSS_TOKEN: dict[str, float] = {
+    "pixmo_caption": 5.577,
+    "pixmo_transcript": 5.442,
+    "pixmo_points_v2": 36.499,
+    "pixmo_count_v2": 25.826,
+    "cosyn_point_v2": 54.674,
+    "olmocr_documents": 2.514,
+    "olmocr_books": 3.143,
+    "olmocr_loc_transcripts": 4.757,
+    "olmocr_national_archives": 5.209,
+    "text_rich_chart": 6.297,
+    "text_rich_diagram": 5.795,
+    "text_rich_doc": 4.742,
+    "text_rich_graphic": 5.618,
+    "text_rich_table": 5.394,
+    "textocr": 26.703,
+    "nvidia_synth_en": 6.132,
+    "synth_receipts_en": 7.056,
+    "cosyn_chart_exp": 25.210,
+    "cosyn_chemical_exp": 21.198,
+    "cosyn_diagram_exp": 30.174,
+    "cosyn_document": 185.839,
+    "cosyn_math_exp": 3.528,
+    "cosyn_music_exp": 27.090,
+    "cosyn_table_exp": 23.467,
+    "dv_qa": 336.619,
+    "figure_qa": 286.728,
+    "plot_qa": 184.216,
+    "pixmo_clocks": 93.049,
+    "nemotron_openimages_1": 3.049,
+    "nemotron_openimages_2": 2.969,
+    "nemotron_cc3m": 3.700,
+    "nemotron_textcaps": 32.830,
+    "nemotron_ecd": 1.389,
+    "nemotron_deepvision": 1.449,
+    "nemotron_babyvision": 1.939,
+    "nemotron_fintabnet": 1.468,
+    "nemotron_hopchain": 1.752,
+    "nemotron_raven": 1.977,
+}
+"""Sequence positions (text and image tokens) per response token of each v6 and v7 source as the
+merged stage builds it (dolma2 at the pinned revision, 65,536 tokens, every annotation a document):
+mean ``len(input_ids)`` over 32 draws (seed 0) divided by the source's calibrated mean loss weight,
+measured 2026-10-24/25. The Nemotron sources are text-dense (1.4-3.7, a long response per image),
+the OCR captions 2.5-7, pointing and the multi-question academic sets 25-340."""
+
+_V7_NEMOTRON_TARGETS = {
+    name: epochs
+    * STAGE1_V7_NEMOTRON_SOURCE_SIZES[name]
+    * STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS[name]
+    / STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
+    for name, epochs in STAGE1_V7_NEMOTRON_EPOCHS.items()
+}
+_V6_OCR_SHARE = sum(STAGE1_V6_LOSS_TARGETS[name] for name in STAGE1_V3_GROUPS["ocr"])
+_V7_OCR_SCALE = (_V6_OCR_SHARE - sum(_V7_NEMOTRON_TARGETS.values())) / _V6_OCR_SHARE
+_V7_OCR_FUNDED = {
+    **{
+        name: share * (_V7_OCR_SCALE if name in STAGE1_V3_GROUPS["ocr"] else 1.0)
+        for name, share in STAGE1_V6_LOSS_TARGETS.items()
+    },
+    **_V7_NEMOTRON_TARGETS,
+}
+
+
+def _share_per_pass(name: str) -> float:
+    sizes = {**STAGE1_V3_SOURCE_SIZES, **STAGE1_V7_NEMOTRON_SOURCE_SIZES}
+    means = {**STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS, **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS}
+    return sizes[name] * means[name] / STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
+
+
+STAGE1_V7_PASS_CAP: float = 5.0
+"""Passes over a 20,000-step run beyond which v7 caps the CoSyn and olmOCR sources and the synthetic
+receipts (v6 drew them 8.7-30 times; olmOCR documents, at 4.5, is under the cap). 5 is about olmOCR
+documents' level, so both families come out even."""
+
+STAGE1_V7_CAPPED_SOURCES: dict[str, tuple[str, ...]] = {
+    "cosyn": tuple(name for name in STAGE1_V6_LOSS_TARGETS if name.startswith("cosyn_")),
+    "olmocr": tuple(name for name in STAGE1_V6_LOSS_TARGETS if name.startswith("olmocr_")),
+    "scene_ocr": ("synth_receipts_en", "textocr"),
+}
+"""The sources v7 caps: the CoSyn sets (the academic QA and CoSyn point), the olmOCR subsets, and the
+small synthetic-receipt and TextOCR sets."""
+
+STAGE1_V7_PASS_CAPS: dict[str, float] = {
+    **{
+        name: STAGE1_V7_PASS_CAP
+        for family in ("cosyn", "olmocr")
+        for name in STAGE1_V7_CAPPED_SOURCES[family]
+    },
+    "synth_receipts_en": STAGE1_V7_PASS_CAP,
+    "textocr": 10.0,
+}
+"""Pass cap of each capped source. TextOCR keeps 10 (v6 drew it 25 times): its 21,749 real photos
+are the stage's only natural-scene text transcription."""
+
+_V7_CAPPED = {
+    name: min(_V7_OCR_FUNDED[name], cap * _share_per_pass(name))
+    for name, cap in STAGE1_V7_PASS_CAPS.items()
+}
+_V7_FREED = {
+    family: sum(_V7_OCR_FUNDED[name] - _V7_CAPPED[name] for name in names)
+    for family, names in STAGE1_V7_CAPPED_SOURCES.items()
+}
+# The receipts and TextOCR loss goes to the olmOCR sources still under their cap (olmOCR documents),
+# up to the cap; anything left over joins the olmOCR cap's loss on the reasoning sets.
+_V7_OLMOCR_ROOM = {
+    name: STAGE1_V7_PASS_CAPS[name] * _share_per_pass(name) - _V7_CAPPED[name]
+    for name in STAGE1_V7_CAPPED_SOURCES["olmocr"]
+}
+_V7_TO_OLMOCR = min(_V7_FREED["scene_ocr"], sum(_V7_OLMOCR_ROOM.values()))
+_V7_OLMOCR_GROWN = {
+    name: _V7_CAPPED[name] + _V7_TO_OLMOCR * room / sum(_V7_OLMOCR_ROOM.values())
+    for name, room in _V7_OLMOCR_ROOM.items()
+}
+STAGE1_V7_NEMOTRON_CAPTIONS: tuple[str, ...] = (
+    "nemotron_openimages_1",
+    "nemotron_openimages_2",
+    "nemotron_cc3m",
+)
+"""The Qwen3-VL detailed-caption sources, which take the loss the CoSyn cap frees and, to reach
+:data:`STAGE1_V7_NEMOTRON_CAPTION_PASSES`, some of the text-rich sources' loss."""
+
+STAGE1_V7_NEMOTRON_CAPTION_PASSES: float = 2.0
+"""Passes over the Nemotron detailed captions in a 20,000-step run. The CoSyn cap frees enough for
+1.74; the rest (1.9% of the visual loss) comes from the text-rich OCR sources, which keep their
+ratio (about 5.9 to 5.4 passes on average)."""
+
+_V7_TEXT_RICH = tuple(name for name in STAGE1_V3_GROUPS["ocr"] if name.startswith("text_rich_"))
+STAGE1_V7_NEMOTRON_REASONING: tuple[str, ...] = (
+    "nemotron_ecd",
+    "nemotron_deepvision",
+    "nemotron_babyvision",
+    "nemotron_fintabnet",
+    "nemotron_hopchain",
+    "nemotron_raven",
+)
+"""The reasoning-trace sources, which take the loss the olmOCR cap frees."""
+
+
+def _grow(names: tuple[str, ...], freed: float) -> dict[str, float]:
+    # Spread ``freed`` over ``names`` in proportion to their loss, so they keep equal passes.
+    total = sum(_V7_OCR_FUNDED[name] for name in names)
+    return {name: _V7_OCR_FUNDED[name] * (1.0 + freed / total) for name in names}
+
+
+_V7_CAPTIONS = {
+    name: STAGE1_V7_NEMOTRON_CAPTION_PASSES * _share_per_pass(name)
+    for name in STAGE1_V7_NEMOTRON_CAPTIONS
+}
+_V7_FROM_TEXT_RICH = (
+    sum(_V7_CAPTIONS.values())
+    - sum(_V7_OCR_FUNDED[name] for name in STAGE1_V7_NEMOTRON_CAPTIONS)
+    - _V7_FREED["cosyn"]
+)
+_V7_TEXT_RICH_SHARE = sum(_V7_OCR_FUNDED[name] for name in _V7_TEXT_RICH)
+STAGE1_V7_LOSS_TARGETS: dict[str, float] = {
+    **_V7_OCR_FUNDED,
+    **_V7_CAPPED,
+    **_V7_OLMOCR_GROWN,
+    **{
+        name: _V7_OCR_FUNDED[name] * (1.0 - _V7_FROM_TEXT_RICH / _V7_TEXT_RICH_SHARE)
+        for name in _V7_TEXT_RICH
+    },
+    **_V7_CAPTIONS,
+    **_grow(
+        STAGE1_V7_NEMOTRON_REASONING,
+        _V7_FREED["olmocr"] + _V7_FREED["scene_ocr"] - _V7_TO_OLMOCR,
+    ),
+}
+"""Target loss mass of each stage-1 v7 source, in two steps.
+
+1. The Nemotron sources take the loss of their :data:`STAGE1_V7_NEMOTRON_EPOCHS` within
+   :data:`STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS`, all of it from the OCR group, whose sources keep
+   v6's ratio: v6 moved the loss of the capped PixMo-Cap and PixMo-Count to OCR (39% to 61% of the
+   visual loss) for want of fresh caption data, and the Nemotron captions are that data.
+2. The sources of :data:`STAGE1_V7_PASS_CAPS` are capped. The loss the CoSyn cap frees goes to the
+   Nemotron detailed captions, which the text-rich sources top up to
+   :data:`STAGE1_V7_NEMOTRON_CAPTION_PASSES` (1 to 2 passes), the loss the olmOCR cap frees to the Nemotron
+   reasoning sources (2 to about 2.5 passes, near the 7.5% reasoning traces have in the OLMo 3 text
+   mix), and the loss the receipts and TextOCR caps free to olmOCR documents (4.5 to about 4.9
+   passes, under its cap).
+
+PixMo-Cap, PixMo-Count, PixMo-Points, NVIDIA synthetic OCR, DVQA, FigureQA, PlotQA and clocks keep
+their step-1 shares. v7 trains every annotation as a document, as v5 does."""
+
+
+def _visual_positions_per_loss_token(targets: dict[str, float]) -> float:
+    return sum(share * STAGE1_POSITIONS_PER_LOSS_TOKEN[name] for name, share in targets.items())
+
+
+_V6_TEXT_LOSS_SHARE = 0.9
+STAGE1_V7_TEXT_LOSS_SHARE: float = (
+    _V6_TEXT_LOSS_SHARE
+    / (1.0 - _V6_TEXT_LOSS_SHARE)
+    * _visual_positions_per_loss_token(STAGE1_V7_LOSS_TARGETS)
+    / (
+        _visual_positions_per_loss_token(STAGE1_V6_LOSS_TARGETS)
+        + _V6_TEXT_LOSS_SHARE
+        / (1.0 - _V6_TEXT_LOSS_SHARE)
+        * _visual_positions_per_loss_token(STAGE1_V7_LOSS_TARGETS)
+    )
+)
+"""Default text loss share of the merged stage with stage-1 v7 visual data (0.883, not 0.9). A v7
+response token takes fewer positions than a v6 one (the Nemotron sources are text-dense and the
+capped CoSyn sets were position-heavy: 9.7 positions per visual response token against 11.5), so at
+v6's 0.9 the vision share would fill fewer positions per step and the text more. This share splits
+the positions per step between text (one position per loss token) and vision exactly as v6 at 0.9
+does, so the text seen per step and the step time stay v6's; the vision share trains about 19% more
+response tokens in the same positions."""
+
+
+def build_stage1_nemotron_sources(
+    sequence_length: int, dataset_path: str | None = None
+) -> dict[str, Config]:
+    """Configure the prepared Nemotron-Image-Training sources of stage-1 v7 (see
+    :mod:`olmo_core.data.multimodal.nemotron_image`), in :data:`STAGE1_V7_NEMOTRON_EPOCHS` order.
+
+    :param sequence_length: Maximum serialized example length.
+    :param dataset_path: Root of the prepared subsets; the module default when ``None``.
+    """
+    from olmo_core.data.multimodal.nemotron_image import NemotronImageDatasetConfig
+    from olmo_core.data.multimodal.paths import NEMOTRON_IMAGE
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    return {
+        name: NemotronImageDatasetConfig(
+            subset=name,
+            max_crops=8,
+            max_sequence_length=sequence_length,
+            loss_token_weighting="none",
+            message_format="document",
+            dataset_path=NEMOTRON_IMAGE if dataset_path is None else dataset_path,
+        )
+        for name in STAGE1_V7_NEMOTRON_EPOCHS
+    }
+
+
 STAGE1_V4_EPOCHS: dict[str, float] = {
     "pixmo_caption": 3.7,
     "pixmo_transcript": 3.6,

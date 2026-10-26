@@ -1529,6 +1529,104 @@ def test_merged_stage_v6_caps_the_repeated_sources(merged_stage, monkeypatch):
     assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
 
 
+def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
+    """``stage1_v7``: the Nemotron sources funded by the OCR group, the CoSyn and olmOCR sets capped
+    at five passes with their loss moved to the Nemotron captions and reasoning sets, every other
+    v6 source at its v6 share, and a text loss share that keeps v6's split of positions per step."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_POSITIONS_PER_LOSS_TOKEN,
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_GROUPS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_SOURCE_SIZES,
+        STAGE1_V6_LOSS_TARGETS,
+        STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS,
+        STAGE1_V7_CAPPED_SOURCES,
+        STAGE1_V7_LOSS_TARGETS,
+        STAGE1_V7_NEMOTRON_CAPTION_PASSES,
+        STAGE1_V7_NEMOTRON_CAPTIONS,
+        STAGE1_V7_NEMOTRON_EPOCHS,
+        STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+        STAGE1_V7_NEMOTRON_REASONING,
+        STAGE1_V7_NEMOTRON_SOURCE_SIZES,
+        STAGE1_V7_PASS_CAP,
+        STAGE1_V7_PASS_CAPS,
+        STAGE1_V7_TEXT_LOSS_SHARE,
+    )
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _MultiAnnotationConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    config = merged_stage.build("--recipe.visual_data=stage1_v7")
+    visual = {k: v for k, v in config.dataset.sources.items() if k != "text_midtraining"}
+    assert set(visual) == set(STAGE1_V3_MEAN_LOSS_WEIGHTS) | set(STAGE1_V7_NEMOTRON_EPOCHS)
+    for name in STAGE1_V7_NEMOTRON_EPOCHS:
+        assert visual[name].subset == name
+        assert visual[name].message_format == "document"
+    means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"}
+    assert means == {
+        **STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS,
+    }
+    assert sum(STAGE1_V7_LOSS_TARGETS.values()) == pytest.approx(1.0)
+
+    sizes = {**STAGE1_V3_SOURCE_SIZES, **STAGE1_V7_NEMOTRON_SOURCE_SIZES}
+    weights = {**STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS, **STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS}
+
+    def passes(name):
+        loss = STAGE1_V7_LOSS_TARGETS[name] * STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS
+        return loss / (sizes[name] * weights[name])
+
+    capped = {n for names in STAGE1_V7_CAPPED_SOURCES.values() for n in names}
+    assert all(passes(n) <= STAGE1_V7_PASS_CAPS[n] + 1e-9 for n in capped)
+    assert passes("cosyn_chemical_exp") == pytest.approx(STAGE1_V7_PASS_CAP)
+    assert passes("synth_receipts_en") == pytest.approx(STAGE1_V7_PASS_CAP)
+    assert passes("textocr") == pytest.approx(STAGE1_V7_PASS_CAPS["textocr"])
+    # olmOCR documents was under the cap; the receipts and TextOCR loss raises it toward it.
+    assert 4.5 < passes("olmocr_documents") < STAGE1_V7_PASS_CAP
+    ocr = set(STAGE1_V3_GROUPS["ocr"])
+    untouched = set(STAGE1_V6_LOSS_TARGETS) - ocr - capped
+    assert {
+        round(STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n], 12) for n in untouched
+    } == {1.0}
+    text_rich = {n for n in ocr if n.startswith("text_rich_")}
+    rich_ratios = [STAGE1_V7_LOSS_TARGETS[n] / STAGE1_V6_LOSS_TARGETS[n] for n in text_rich]
+    synth_ratio = (
+        STAGE1_V7_LOSS_TARGETS["nvidia_synth_en"] / STAGE1_V6_LOSS_TARGETS["nvidia_synth_en"]
+    )
+    # Both OCR-funded; the text-rich sources also top the captions up, in their ratio.
+    assert max(rich_ratios) == pytest.approx(min(rich_ratios))
+    assert max(rich_ratios) < synth_ratio < 0.8
+    assert all(
+        passes(n) == pytest.approx(STAGE1_V7_NEMOTRON_CAPTION_PASSES)
+        for n in STAGE1_V7_NEMOTRON_CAPTIONS
+    )
+    reasoning_passes = {round(passes(n), 9) for n in STAGE1_V7_NEMOTRON_REASONING}
+    assert len(reasoning_passes) == 1 and reasoning_passes.pop() > 2.0
+    assert passes("nemotron_textcaps") == pytest.approx(
+        STAGE1_V7_NEMOTRON_EPOCHS["nemotron_textcaps"]
+    )
+
+    def text_position_fraction(text_share, targets):
+        visual = sum(s * STAGE1_POSITIONS_PER_LOSS_TOKEN[n] for n, s in targets.items())
+        return text_share / (text_share + (1 - text_share) * visual)
+
+    assert text_position_fraction(STAGE1_V7_TEXT_LOSS_SHARE, STAGE1_V7_LOSS_TARGETS) == (
+        pytest.approx(text_position_fraction(0.9, STAGE1_V6_LOSS_TARGETS))
+    )
+    assert config.recipe.text_loss_share == STAGE1_V7_TEXT_LOSS_SHARE
+    assert config.dataset.target_loss_mass["text_midtraining"] == STAGE1_V7_TEXT_LOSS_SHARE
+    explicit = merged_stage.build("--recipe.visual_data=stage1_v7", "--recipe.text_loss_share=0.9")
+    assert explicit.dataset.target_loss_mass["text_midtraining"] == 0.9
+
+
 def test_merged_stage_passes_text_document_masking(merged_stage):
     """The 256K text stage's document masking reaches the text replay; off by default."""
     default = merged_stage.build().dataset.sources["text_midtraining"]
