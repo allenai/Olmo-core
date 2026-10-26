@@ -4119,8 +4119,13 @@
    "train_run": "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05",
    "task": "outlier"
   },
+  "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05-evnq": {
+   "ex": "01M5VKXJYAKTDR5ZECW4W1ANEY",
+   "train_run": "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05",
+   "task": "nq"
+  },
   "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05-evoolong": {
-   "ex": "01M5VKWKXR0KN7WMN5APJVH27H",
+   "ex": "01M5VKYJ4YBTPSE3VZ7VX1ETDQ",
    "train_run": "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05",
    "task": "oolong"
   }
