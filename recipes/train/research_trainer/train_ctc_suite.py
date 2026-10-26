@@ -432,6 +432,11 @@ def variant_and_options(opts: argparse.Namespace) -> Tuple["V.Variant", "V.Varia
     return variant, variant.options_from_namespace(opts)
 
 
+def _needs_tolerant_load(opts: argparse.Namespace) -> bool:
+    """The arm adds parameters the base lacks (its own, or the ``--lora-rank`` modifier's adapters)."""
+    return bool(variant_and_options(opts)[0].new_params or getattr(opts, "lora_rank", 0) > 0)
+
+
 def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.VariantOptions"]]:
     """Every variant whose hooks run, in hook order: the ``--ffn-drop-*`` modifier (drop-CPT, any
     non-routed arm) first, then the ``--variant`` arm, then the ``--train-skip-layers`` /
@@ -451,6 +456,23 @@ def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.Vari
     ldrop_opts = ldrop.options_from_namespace(opts)
     if ldrop_opts.active:  # type: ignore[attr-defined]
         out.append((ldrop, ldrop_opts))
+    fwidth = V.VARIANTS["ffnwidth"]
+    fwidth_opts = fwidth.options_from_namespace(opts)
+    if fwidth_opts.active:  # type: ignore[attr-defined]
+        fwidth.validate(fwidth_opts)
+        out.append((fwidth, fwidth_opts))
+    lora = V.VARIANTS["lora"]
+    lora_opts = lora.options_from_namespace(opts)
+    if lora_opts.active:  # type: ignore[attr-defined]
+        if getattr(opts, "st_otr_early_lora", 0):
+            raise SystemExit("--lora-rank and --st-otr-early-lora both install adapters: use one")
+        lora.validate(lora_opts)
+        out.append((lora, lora_opts))
+    fchunk = V.VARIANTS["ffnchunk"]
+    fchunk_opts = fchunk.options_from_namespace(opts)
+    if fchunk_opts.active:  # type: ignore[attr-defined]
+        fchunk.validate(fchunk_opts)
+        out.append((fchunk, fchunk_opts))
     return out
 
 
@@ -1054,13 +1076,13 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             load_path=(
                 opts.branch_from
                 if opts.branch_from
-                else (None if variant_and_options(opts)[0].new_params else base_checkpoint)
+                else (None if _needs_tolerant_load(opts) else base_checkpoint)
             ),
             # ...and "always" would then demand a checkpoint that no longer exists: those arms
             # resume from the save folder only if a step checkpoint is there.
             load_strategy=(
                 LoadStrategy.if_available
-                if variant_and_options(opts)[0].new_params and not opts.branch_from
+                if _needs_tolerant_load(opts) and not opts.branch_from
                 else LoadStrategy.always
             ),
             # --branch-optim-only (arm C's 8k -> 32k switch): the next phase reads a DIFFERENT shard,
@@ -1232,10 +1254,70 @@ def build_and_fit(opts: argparse.Namespace) -> None:
                     raise SystemExit(0)
 
         trainer_config = trainer_config.with_callback("mem_snapshot", _MemSnapshot())
+    if opts.mem_probe_steps:
+        # Memory-vs-length probe (2026-10-25). The --mem-snapshot replay counts only allocations made
+        # inside its trace (not the params loaded before it) and stops after step 1, which for the
+        # online router is the dense warmup step. This reads the allocator's own totals per step:
+        # the fixed state at the step start (params + Adam state once it exists), the forward +
+        # backward peak and the optimizer peak, plus whether the router routed; the last step's
+        # forward + backward window is also attributed by site. Then exits.
+        from olmo_core.train.callbacks.callback import Callback as _CB
+
+        n_probe = int(opts.mem_probe_steps)
+
+        class _MemProbe(_CB):
+            def _router(self):
+                return getattr(self.trainer.train_module.model, "_online_token_router", None)
+
+            def pre_step(self, batch):
+                import torch
+
+                torch.cuda.synchronize()
+                self._fixed = torch.cuda.memory_allocated()
+                r = self._router()
+                self._dense = None if r is None else bool(r.dense_now())
+                self._T = int(batch["input_ids"].numel())
+                torch.cuda.reset_peak_memory_stats()
+                if self.step == n_probe:
+                    torch.cuda.memory._record_memory_history(max_entries=400000)
+
+            def pre_optim_step(self):
+                import torch
+
+                torch.cuda.synchronize()
+                self._fb = torch.cuda.max_memory_allocated()
+                if self.step == n_probe:
+                    from olmo_core.nn.mem_attribution import summarize_peak
+
+                    print("[mem-probe] sites of the forward+backward transient (above the step start):",
+                          flush=True)
+                    summarize_peak(torch.cuda.memory._snapshot(), top=12)
+                    torch.cuda.memory._record_memory_history(enabled=None)
+                torch.cuda.reset_peak_memory_stats()
+
+            def post_step(self):
+                import torch
+                import torch.distributed as dist
+
+                torch.cuda.synchronize()
+                g = 2**30
+                if not dist.is_initialized() or dist.get_rank() == 0:
+                    print(f"[mem-probe] step {self.step} tokens/rank {self._T} router_dense {self._dense} "
+                          f"fixed {self._fixed / g:.2f} GB fwdbwd_peak {self._fb / g:.2f} GB "
+                          f"optim_peak {torch.cuda.max_memory_allocated() / g:.2f} GB "
+                          f"after {torch.cuda.memory_allocated() / g:.2f} GB "
+                          f"reserved_max {torch.cuda.max_memory_reserved() / g:.2f} GB", flush=True)
+                if self.step >= n_probe:
+                    raise SystemExit(0)
+
+        trainer_config = trainer_config.with_callback("mem_probe", _MemProbe())
     trainer = trainer_config.build(train_module, data_loader)
-    if variant_and_options(opts)[0].new_params and not opts.branch_from:
+    if getattr(opts, "skip_dry_run", False):
+        # the mock batch has no document markers, so even a routed method runs it at full length and dense
+        trainer._dry_run_batch = lambda: None
+    if _needs_tolerant_load(opts) and not opts.branch_from:
         _tolerant_base_load(base_checkpoint, train_module.model, save_folder)
-    if opts.mem_snapshot:
+    if opts.mem_snapshot or opts.mem_probe_steps:
         import torch
 
         try:
@@ -1245,7 +1327,9 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             from olmo_core.nn.mem_attribution import summarize_peak
 
             print(
-                "[mem-snapshot] OOM during the step; attribution of the trace so far:", flush=True
+                f"[mem-snapshot] OOM during step {trainer.global_step} (allocated "
+                f"{torch.cuda.memory_allocated() / 2**30:.2f} GB, peak {torch.cuda.max_memory_allocated() / 2**30:.2f}"
+                " GB); attribution of the trace so far:", flush=True
             )
             summarize_peak(torch.cuda.memory._snapshot(), top=16)
             raise
@@ -1458,6 +1542,46 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--ffn-drop-start-layer", type=int, default=1, help="drop-CPT: first droppable layer"
     )
+    # ---- partial-MLP training (olmo_core.nn.ffn_width; any arm, training only) ----
+    ap.add_argument("--ffn-width-frac", type=float, default=1.0,
+                    help="partial MLP: each step and listed layer compute a step-seeded subset of this fraction of FFN "
+                    "neurons for ALL tokens (gate/up rows + down columns gathered: real FLOP and activation savings), "
+                    "output rescaled by 1/f; eval full width; FLOPs charged at f. 1.0 = off")
+    ap.add_argument("--ffn-width-layers", default="",
+                    help="blocks for --ffn-width-frac, e.g. '0-6' or '0,2,4' (default: every block)")
+    ap.add_argument("--ffn-width-mode", choices=["random", "blocked", "topk"], default="random",
+                    help="random: f*d_ff neurons uniformly; blocked: random contiguous blocks of --ffn-width-block; "
+                    "topk (v2): the most active neurons by a running mean of |gate*up| from full-width refresh steps, "
+                    "+ a random explore share, no 1/f rescale")
+    ap.add_argument("--ffn-width-explore", type=float, default=0.1,
+                    help="topk: random share of the kept neurons (drawn from the rest)")
+    ap.add_argument("--ffn-width-refresh-every", type=int, default=50,
+                    help="topk: a full-width refresh step (all neurons train, charged at full width) every N steps; "
+                    "the first step always refreshes. 0 = only the first")
+    ap.add_argument("--ffn-width-ema", type=float, default=0.5,
+                    help="topk: decay of the importance running mean across refreshes")
+    ap.add_argument("--ffn-width-no-rescale", action="store_true",
+                    help="ablation: do not rescale the partial FFN output by 1/f")
+    ap.add_argument("--ffn-width-block", type=int, default=128, help="neurons per block in --ffn-width-mode blocked")
+    ap.add_argument("--ffn-chunk-tokens", type=int, default=0,
+                    help="sequence-chunked FFN sublayer in training: h + FFN(norm(h)) over chunks of this many tokens, "
+                    "each under its own activation checkpoint (exact; cuts the long-row recompute peak). 0 = off")
+    # ---- LoRA on any arm (olmo_core.nn.early_lora; no online-router path) ----
+    ap.add_argument("--lora-rank", type=int, default=0,
+                    help="frozen base + rank-R LoRA adapters on blocks [--lora-start, --lora-blocks) on any arm (e.g. "
+                    "the dense one); embeddings frozen; exported as config.json's early_lora block. 0 = off")
+    ap.add_argument("--lora-blocks", type=int, default=0, help="--lora-rank: adapt blocks below K (0 = every block)")
+    ap.add_argument("--lora-start", type=int, default=0,
+                    help="--lora-rank: adapters from block B; [0, B) frozen with no adapter, so no backward below B")
+    ap.add_argument("--lora-scale", type=float, default=32.0, help="--lora-rank: adapter output scale")
+    ap.add_argument("--lora-freeze-head", action="store_true",
+                    help="--lora-rank: also freeze the LM head (final norm + vocab projection): no weight gradient / "
+                    "Adam state; charged at 2/3")
+    ap.add_argument("--gdn-segment-tokens", type=int, default=0,
+                    help="GatedDeltaNet training forward over segments of this many tokens (multiple of 64) carrying "
+                    "the recurrent state: backward rebuilds one segment's chunk states at a time (exact). 0 = off")
+    ap.add_argument("--ffn-chunk-layers", default="",
+                    help="blocks for --ffn-chunk-tokens, e.g. '0-6' (default: every block; short rows are untouched)")
     # ---- whole-block skipping (olmo_core.nn.layer_drop; any arm, training only) ----
     ap.add_argument(
         "--train-skip-layers",
@@ -1548,6 +1672,17 @@ def parse_args() -> argparse.Namespace:
         "--mem-snapshot",
         action="store_true",
         help="debug: print the live allocations at the peak of the first step, then exit",
+    )
+    ap.add_argument("--long-rows-target", type=int, default=0,
+                    help="debug (memory probes): train on rows of up to this many tokens built at startup from --data "
+                    "(research/token_routing/online_router/make_long_rows.py, node-local /tmp). 0 = off")
+    ap.add_argument("--long-rows-count", type=int, default=8, help="--long-rows-target: rows to build")
+    ap.add_argument(
+        "--mem-probe-steps",
+        type=int,
+        default=0,
+        help="debug: print the true fixed / forward+backward / optimizer memory of each of the first N "
+        "steps (router arms: N >= 2, step 1 is the dense warmup), attribute step N's transient, exit",
     )
     ap.add_argument(
         "--flex-share-seq-len",
@@ -1807,6 +1942,112 @@ def parse_args() -> argparse.Namespace:
                     help="online router: body tokens kept per row (fraction of the row's body tokens)")
     ap.add_argument("--st-otr-explore-frac", type=float, default=0.1,
                     help="online router: share of the kept budget drawn uniformly at random (exploration)")
+    ap.add_argument("--st-otr-early-nograd", action="store_true",
+                    help="online router, mid-stack: on routed steps run blocks [0, drop_layer) forward-only (they learn "
+                    "only on the dense steps; charged forward-only)")
+    ap.add_argument("--st-otr-dense-tail-frac", type=float, default=0.0,
+                    help="online router: train the last FRAC of the steps uncompressed (e.g. 0.1, with "
+                    "--st-otr-dense-every 0 for routed-then-dense-tail)")
+    ap.add_argument("--st-otr-dense-keep-frac", type=float, default=1.0,
+                    help="online router: keep share on the periodic --st-otr-dense-every steps (1.0 = full context; e.g. "
+                    "0.5 routes them at 50%%, bounding the peak memory)")
+    ap.add_argument("--st-otr-exit-loss-weight", type=float, default=0.0,
+                    help="online router, mid-stack: add W x the LM loss of the DROPPED tokens read out at the split layer "
+                    "(early exit; 1.0 = every label counts once; CPT rows -- answer-only SFT has no dropped labels)")
+    ap.add_argument("--st-otr-freeze-after", type=int, default=0,
+                    help="online router: train normally for N steps, then freeze the embeddings + blocks [0, drop_layer) "
+                    "and free their optimizer state (warmup-then-freeze)")
+    ap.add_argument("--st-otr-min-per-doc", type=int, default=0,
+                    help="online router: per-document token floor -- every document keeps max(its share, K) body tokens "
+                    "(its top ones by score), counted against the budget")
+    ap.add_argument("--st-otr-freeze-early", action="store_true",
+                    help="online router, mid-stack: freeze the embeddings and blocks [0, drop_layer) (no grads, no "
+                    "optimizer state; forward-only on every step)")
+    ap.add_argument("--st-otr-merge-dropped", action="store_true",
+                    help="online router, mid-stack: average each document's dropped tokens into one summary token "
+                    "(no label) carried with the kept row past the split, instead of discarding them")
+    ap.add_argument("--st-otr-stages", default="",
+                    help="online router pyramid drop, e.g. '3:0.5,7:0.1,16:0.03' (layer:keep of the body, absolute and "
+                    "non-increasing; each stage scored from its own layer by its own router); overrides "
+                    "--st-otr-drop-layer / --st-otr-keep-frac")
+    ap.add_argument("--st-otr-early-lora", type=int, default=0,
+                    help="online router: LOW-RANK early stack -- blocks [0, drop_layer) + embeddings frozen from step 0, "
+                    "every linear in those blocks gets a rank-R LoRA adapter (no base grads / Adam state). 0 = off")
+    ap.add_argument("--st-otr-later-mass-target", type=float, default=0.0,
+                    help="online router stages: later stages keep each document's top tokens covering this share of "
+                    "their predicted gradient mass among survivors (adaptive budget), capped per row at "
+                    "--st-otr-later-max-keep-frac of the stage's input. 0 = fixed budgets")
+    ap.add_argument("--st-otr-later-max-keep-frac", type=float, default=1.0,
+                    help="--st-otr-later-mass-target: per-row cap (share of the tokens entering the stage)")
+    ap.add_argument("--st-otr-diag-every", type=int, default=0,
+                    help="online router diagnostic: every N steps log the first micro-batch's answer CE routed vs full "
+                    "context (no_grad, post-step weights; diag_ce_gap = full - routed > 0 means train/eval mismatch)")
+    ap.add_argument("--st-otr-ridge-groups", action="store_true",
+                    help="online router: ridge penalty per feature group (scalar / hidden / hidden x query) instead of "
+                    "one lambda scaled by the hidden-dominated mean diagonal")
+    ap.add_argument("--st-otr-mlp-hidden", type=int, default=0,
+                    help="online router: residual 2-layer MLP (H ReLU units) on top of the ridge, trained online on the "
+                    "ridge residual. 0 = ridge only")
+    ap.add_argument("--st-otr-mlp-steps", type=int, default=4, help="--st-otr-mlp-hidden: Adam steps per training step")
+    ap.add_argument("--st-otr-mlp-lr", type=float, default=1e-3, help="--st-otr-mlp-hidden: Adam LR")
+    ap.add_argument("--st-otr-ctx-feats", action="store_true",
+                    help="online router: document-context features (doc mean / max of cos_h_q, doc in-query rate, "
+                    "within-doc cos rank, +-1 / +-2 neighbour cos)")
+    ap.add_argument("--st-otr-task-onehot", type=int, default=0,
+                    help="online router: hashed 31-way task one-hot (task key = hash of the first N tokens) in the "
+                    "shared fit. 0 = off")
+    ap.add_argument("--st-otr-keep-mode", choices=["topk", "threshold"], default="topk",
+                    help="online router: threshold = one score threshold over the micro-batch (hard docs / rows keep "
+                    "more, easy ones less, same total), per-row cap --st-otr-row-cap x budget, floor counted; the fit "
+                    "centres over the batch")
+    ap.add_argument("--st-otr-row-cap", type=float, default=2.0, help="keep-mode threshold: per-row cap (x budget)")
+    ap.add_argument("--st-otr-keep-sched", default="",
+                    help="online router: 'a:b' multiplies the first stage's keep linearly from a to b over training "
+                    "(later stages keep their absolute budgets)")
+    ap.add_argument("--st-otr-warmup-random", action="store_true",
+                    help="online router: warmup steps route at the normal budget with uniform random scores instead "
+                    "of training the full context (no full-length pass; bounds peak memory / max train length)")
+    ap.add_argument("--skip-dry-run", action="store_true",
+                    help="skip the trainer's mock-batch dry run: a full-length dense forward + backward that sets the "
+                    "peak memory of routed methods (2026-10-25 max-length probes: every method OOMs there at 196k)")
+    ap.add_argument("--st-otr-route-min-len", type=int, default=0,
+                    help="online router: route only rows (packed: documents) with >= this many tokens; shorter ones "
+                    "run dense in the same step (hybrid short-window + routed long-row batches). 0 = route all")
+    ap.add_argument("--st-otr-early-lora-freeze-head", action="store_true",
+                    help="early LoRA: also freeze the LM head (no weight gradient / Adam state; charged at 2/3)")
+    ap.add_argument("--st-otr-early-lora-start", type=int, default=0,
+                    help="early LoRA adapters only on blocks [B, K); [0, B) frozen with no adapter. With "
+                    "--st-otr-freeze-early and B = --st-otr-drop-layer, [0, B) runs forward-only (no backward below B)")
+    ap.add_argument("--st-otr-early-lora-blocks", type=int, default=0,
+                    help="early LoRA on blocks [0, K) instead of [0, drop_layer), e.g. the whole model; blocks at or "
+                    "above the drop layer then run at the kept length with frozen base + adapters. 0 = drop_layer")
+    ap.add_argument("--st-otr-early-lora-scale", type=float, default=32.0,
+                    help="early LoRA output scale (acts as the adapters' LR multiplier under Adam; default 32)")
+    ap.add_argument("--st-otr-target-layer", type=int, default=0,
+                    help="online router: read the gradient targets at this deeper block (e.g. 16) instead of the drop "
+                    "layer; with the drop only the full-context (--st-otr-dense-every) steps fit, with "
+                    "--st-otr-mod-layers every step does. 0 = the drop layer")
+    ap.add_argument("--st-otr-mass-target", type=float, default=0.0,
+                    help="online router ADAPTIVE keep: per document, keep the fewest top-scored tokens whose predicted "
+                    "||dL/dh||^2 covers this share (e.g. 0.8); then --st-otr-min-per-doc, then the per-row "
+                    "--st-otr-max-keep-frac cap. --st-otr-keep-frac then only sizes exploration. 0 = fixed keep")
+    ap.add_argument("--st-otr-max-keep-frac", type=float, default=1.0,
+                    help="online router, with --st-otr-mass-target: cap on each row's kept body share (peak memory)")
+    ap.add_argument("--st-otr-freeze-schedule", default="",
+                    help="online router PROGRESSIVE freeze, e.g. '4:0.25,7:0.5,12:0.75': freeze embeddings + blocks "
+                    "[0, 4) after 25%% of the steps, [0, 7) after 50%%, [0, 12) after 75%% (gradients and optimizer state "
+                    "released at each stage); exclusive with --st-otr-freeze-after / --st-otr-freeze-early")
+    ap.add_argument("--st-otr-mod-layers", default="",
+                    help="online router MIXTURE-OF-DEPTHS, e.g. '8-31:2' (blocks 8, 10, ..., 30): at the first listed "
+                    "block the router picks --st-otr-keep-frac of each document's tokens; the listed blocks run on "
+                    "those (+ every non-document token) only and the rest pass the residual through; every token "
+                    "reaches the head (no label dropped). Sets --st-otr-drop-layer to the first listed block")
+    ap.add_argument("--st-otr-per-task-key-tokens", type=int, default=0,
+                    help="online router: a separate ridge router per task in a mixed batch, keyed on each row's first "
+                    "N tokens (its prompt template; 11 identifies every CTC mix task). 0 = one shared router")
+    ap.add_argument("--st-otr-keep-first", type=int, default=0,
+                    help="online router: always keep each document's first K body tokens (its header / id span); "
+                    "they count against the budget and the router picks the rest")
     ap.add_argument("--st-otr-doc-share", type=float, default=1.0,
                     help="online router: share of the budget spread over documents in proportion to length "
                     "(each keeps its own top tokens by score); the rest goes to the row-level top scores. "
@@ -2338,6 +2579,21 @@ def main() -> None:
     # `kill -USR1 <pid>` dumps every thread's stack into the log (hung-job diagnosis, no py-spy).
     RG.install_stack_dump_handler()
     opts = parse_args()
+    if opts.long_rows_target:
+        # memory-vs-length probes on clusters without the prebuilt long-row shards: every rank builds the same
+        # deterministic rows from --data into node-local /tmp (a few MB) and trains on them
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "make_long_rows", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
+                                           "research", "token_routing", "online_router", "make_long_rows.py"))
+        mlr = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mlr)  # type: ignore[union-attr]
+        out = f"/tmp/long_rows_T{opts.long_rows_target}_r{os.environ.get('LOCAL_RANK', '0')}"
+        lens = mlr.build(opts.data, out, int(opts.long_rows_target), rows=int(opts.long_rows_count))
+        print(f"[long-rows] {len(lens)} rows of <= {opts.long_rows_target} tokens from {opts.data} -> {out}: {lens}",
+              flush=True)
+        opts.data = out
     if opts.dry_run:
         dry_run(opts)
         return

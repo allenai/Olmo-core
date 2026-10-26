@@ -41,6 +41,7 @@ import torch.nn.functional as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import offline_probe as OP  # noqa: E402
 from offline_probe import (  # noqa: E402
     TASKS,
     build_model,
@@ -83,9 +84,10 @@ def _ranks(x):
 
 
 def mid_targets(o, tg, b):
-    """Body-token targets for the mid8 router-target ablation (all on the full-context pass)."""
-    g8, h8, e = o["g8"].float(), o["h8"].float(), o["e"].float()
-    t = {"gnorm": tg["gnorm@L8"][b].double(),
+    """Body-token targets for the mid-stack router-target ablation (all on the full-context pass)."""
+    L = MID_LAYER
+    g8, h8, e = o[f"g{L}"].float(), o[f"h{L}"].float(), o["e"].float()
+    t = {"gnorm": tg[f"gnorm@L{L}"][b].double(),
          "gxh": torch.log((g8 * h8).sum(-1).abs() + 1e-12)[b].double(),
          "dh": torch.log((h8 - e).norm(dim=-1) + 1e-12)[b].double()}
     t["mix"] = 0.5 * (_ranks(t["gnorm"]) + _ranks(t["dh"]))
@@ -184,16 +186,34 @@ def main():
     ap.add_argument("--row-offset", type=int, default=0,
                     help="first row per task used; a trained checkpoint needs rows it never trained on "
                     "(e.g. 1000 on mt4s1464 for anything trained on mt4s488 / mt4s976)")
+    ap.add_argument("--mid-layer", type=int, default=8, help="mid-stack drop layer L (every token runs blocks 0..L-1)")
+    ap.add_argument("--tasks", default="", help="comma-separated task names from the shard's metadata (default: mt4's 4)")
+    ap.add_argument("--no-input", action="store_true", help="skip the input-drop rules")
+    ap.add_argument("--no-target-ablation", action="store_true", help="skip the gxh / dh / mix mid-stack rules")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    global MID_LAYER
+    MID_LAYER = ML = a.mid_layer
+    # the probe module reads these globals at call time: capture h_L / dL/dh_L and add the L+q feature set
+    OP.HIDDEN_LAYERS = tuple(sorted(set(OP.HIDDEN_LAYERS) | {ML}))
+    OP.TARGET_LAYERS = {**OP.TARGET_LAYERS, f"gnorm@L{ML}": ML}
+    OP.FEATURE_SETS = {**OP.FEATURE_SETS, f"L{ML}+q": (ML, True, False)}
+    tasks = [t for t in a.tasks.split(",") if t] or None
+    task_names = tasks or TASKS
+    mid_rules = MID_RULES if not a.no_target_ablation else ("router_doc", "oracle_doc", "random_doc")
+    mid = f"mid{ML}"
     torch.manual_seed(0)
     model = build_model(find_ckpt(a.ckpt))
-    fit = load_rows(a.shard, a.fit_rows, a.row_offset)
+    fit = load_rows(a.shard, a.fit_rows, a.row_offset, tasks)
     # held-out rows: after the offline probe's fit + test rows (48 + 32), so neither probe saw them
-    test = load_rows(a.shard, a.test_rows, a.row_offset + 80)
+    test = load_rows(a.shard, a.test_rows, a.row_offset + 80, tasks)
 
     # ---- fit the router scorers (hidden-state gradients only; parameters frozen)
-    fits = {"input": ("L4+q", "gnorm@emb"), "mid8": ("L8+q", "gnorm@L8"), **{f"mid8_{t}": ("L8+q", t) for t in MID_TARGETS}}
+    fits = {"mid8": (f"L{ML}+q", f"gnorm@L{ML}")}
+    if not a.no_input:
+        fits["input"] = ("L4+q", "gnorm@emb")
+    if not a.no_target_ablation:
+        fits.update({f"mid8_{t}": (f"L{ML}+q", t) for t in MID_TARGETS})
     stats = {k: [0, 0] for k in fits}
     t0 = time.time()
     for i, row in enumerate(fit):
@@ -201,7 +221,7 @@ def main():
         tg = targets_of(o)
         parts = feature_parts(row, o)
         b = parts["body"]
-        mt = mid_targets(o, tg, b)
+        mt = mid_targets(o, tg, b) if not a.no_target_ablation else {}
         for k, (fs, t) in fits.items():
             X = design(parts, fs)
             yt = mt[t] if t in mt else tg[t][b].double()
@@ -242,15 +262,16 @@ def main():
         r = cnt[doc] - 1 - j
         fl_score = -torch.minimum(j, r).float() + 1e-6 * torch.rand(n, device=b.device)
         scores = {
-            "input": {"router": design(parts, "L4+q") @ W["input"], "oracle": tg["gnorm@emb"][b].double()},
-            "mid8": {"router": design(parts, "L8+q") @ W["mid8"], "oracle": tg["gnorm@L8"][b].double()},
+            "mid8": {"router": design(parts, f"L{ML}+q") @ W["mid8"], "oracle": tg[f"gnorm@L{ML}"][b].double()},
         }
-        mt = mid_targets(o, tg, b)
-        X8 = design(parts, "L8+q")
-        for t in MID_TARGETS:
+        if not a.no_input:
+            scores["input"] = {"router": design(parts, "L4+q") @ W["input"], "oracle": tg["gnorm@emb"][b].double()}
+        mt = mid_targets(o, tg, b) if not a.no_target_ablation else {}
+        X8 = design(parts, f"L{ML}+q")
+        for t in (MID_TARGETS if not a.no_target_ablation else ()):
             scores["mid8"][f"router_{t}"] = X8 @ W[f"mid8_{t}"]
             scores["mid8"][f"oracle_{t}"] = mt[t]
-        for t in MID_TARGETS:
+        for t in (MID_TARGETS if not a.no_target_ablation else ()):
             res.append(dict(task=row["task"], row=i, mode="tgt", rule=f"spearman_gnorm_vs_{t}", rho=1.0,
                             cos_all=float(np.corrcoef(_ranks(mt["gnorm"]).cpu(), _ranks(mt[t]).cpu())[0, 1])))
         for p in model.parameters():
@@ -262,7 +283,7 @@ def main():
             res.append(dict(base, mode="ref", rule="xrow", rho=1.0, **store.compare(g_full, prev[row["task"]])))
         gen = torch.Generator(device="cuda").manual_seed(1000 + i)
         rnd = torch.rand(n, device=b.device, generator=gen)
-        for mode, rules in (("input", INPUT_RULES), ("mid8", MID_RULES)):
+        for mode, rules in ((() if a.no_input else (("input", INPUT_RULES),)) + (("mid8", mid_rules),)):
             for rho in BUDGETS:
                 for rule in rules:
                     kind, alloc = rule.rsplit("_", 1)
@@ -273,7 +294,7 @@ def main():
                     keep_pos = torch.nonzero(keep, as_tuple=True)[0]
                     ce = grad_pass(model, row, keep_pos, mid_layer=(MID_LAYER if mode == "mid8" else 0))
                     g = store.take()
-                    res.append(dict(base, mode=mode, rule=rule, rho=rho, kept_frac=float(keep_b.float().mean()),
+                    res.append(dict(base, mode=(mid if mode == "mid8" else mode), rule=rule, rho=rho, kept_frac=float(keep_b.float().mean()),
                                     dce=ce - ce_full, **store.compare(g, g_full)))
         prev = {row["task"]: g_full}  # one stored reference gradient (rows are grouped by task)
         el = time.time() - t0
@@ -285,7 +306,7 @@ def main():
 
     summ = []
     keys = sorted({(r["mode"], r["rule"], r["rho"]) for r in res})
-    for task in TASKS + ["all"]:
+    for task in list(task_names) + ["all"]:
         for mode, rule, rho in keys:
             rr = [r for r in res if r["mode"] == mode and r["rule"] == rule and r["rho"] == rho
                   and (task == "all" or r["task"] == task)]
@@ -294,7 +315,7 @@ def main():
             summ.append(dict(task=task, mode=mode, rule=rule, rho=rho, eval_size=len(rr),
                              **{m: med([r[m] for r in rr if m in r]) for m in
                                 ("cos_all", "cos_blocks", "rel_err_all", "norm_ratio_all", "dce", "kept_frac")}))
-    json.dump(dict(ckpt=a.ckpt, shard=a.shard, row_offset=a.row_offset, test_rows_per_task=a.test_rows, fit_rows_per_task=a.fit_rows,
+    json.dump(dict(mid_layer=ML, tasks=list(task_names), ckpt=a.ckpt, shard=a.shard, row_offset=a.row_offset, test_rows_per_task=a.test_rows, fit_rows_per_task=a.fit_rows,
                    rows=res, summary=summ), open(a.out, "w"), indent=1)
     log("=== medians over held-out rows (cos_all / rel_err / norm_ratio / dCE) ===")
     for s in summ:
@@ -302,7 +323,7 @@ def main():
             log(f"{s['task']:13s} {s['mode']:5s} {s['rule']:15s} rho={s['rho']:.1f} cos={s['cos_all']:+.3f} "
                 f"(blocks {s['cos_blocks']:+.3f}) rel_err={s['rel_err_all']:.3f} norm={s['norm_ratio_all']:.3f} "
                 f"dCE={s['dce']:+.3f} n={s['eval_size']}")
-    for task in TASKS:
+    for task in task_names:
         for s in summ:
             if s["task"] == task and s["rho"] == 0.3:
                 log(f"{task:13s} {s['mode']:5s} {s['rule']:15s} rho=0.3 cos={s['cos_all']:+.3f} rel_err={s['rel_err_all']:.3f} "

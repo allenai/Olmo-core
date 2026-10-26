@@ -41,7 +41,7 @@ import hashlib
 import logging
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import torch
 
@@ -62,6 +62,10 @@ _N_LOG = 11
 N_STRUCT = 1 + 2 * (_N_ONEHOT + _N_LOG) + 3
 #: in-query flag, log repeat count
 N_LEX = 2
+#: ctx_feats: doc mean / max cos_h_q, doc mean in-query, within-doc cos rank, cos at -2 / -1 / +1 / +2
+N_CTX = 8
+#: task_onehot: hashed task slots
+N_TASK = 31
 #: gnorm = log ||dL/dh_t|| (at the embedding output, or at the drop layer in mid-stack mode); gxh = log |<dL/dh_t, h_t>|;
 #: dh = log ||h_t^L - h_t^0|| (residual change through blocks [0, L): an activation-strength target that does not
 #: vanish once a token is well learned; mid-stack only, no backward needed); mix = within-row average of the gnorm
@@ -108,6 +112,148 @@ class OnlineRouterConfig:
     """Leading optimizer steps (1-based) that train uncompressed (keep-all) and collect targets."""
     dense_every: int = 0
     """If > 0, every ``dense_every``-th step is also uncompressed (fresh unbiased targets)."""
+    early_nograd: bool = False
+    """Mid-stack only: on ROUTED steps run blocks [0, drop_layer) forward-only (no_grad; the hidden state is a fresh leaf
+    at the split, so the router's target hook still reads dL/dh there). Those blocks then learn only on the dense
+    (full-context) steps, and the FLOP meter charges them forward-only (1/3) on routed steps."""
+    freeze_early: bool = False
+    """Mid-stack only: FREEZE the embeddings and blocks [0, L) (L = the first drop layer): ``requires_grad=False`` before
+    the train module is built (:func:`freeze_early_blocks`), so they never get gradients or optimizer state, and every
+    forward (dense steps included) runs them forward-only -- no stored activations. Charged forward-only."""
+    freeze_after: int = 0
+    """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
+    ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
+    (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    diag_every: int = 0
+    """Train/eval-mismatch diagnostic: every N steps the callback scores the step's first micro-batch twice under
+    no_grad with the post-step weights -- routed as in training, and full context as at eval -- and logs the answer
+    CE of each (``online_router/diag_ce_routed`` / ``diag_ce_full`` / ``diag_ce_gap`` = full - routed). A model
+    adapted to the routed context (GDN conv / decay over compacted rows) shows full > routed. Not charged (a
+    diagnostic, not part of the method); router targets, stats and FLOP counters are restored. 0 = off."""
+    ridge_groups: bool = False
+    """Scale the ridge penalty per feature GROUP (scalar / hidden / hidden x query: lambda = ridge x that group's
+    mean diagonal of X^T X) instead of by the whole matrix's mean diagonal, which the thousands of hidden dimensions
+    dominate (over-shrinking the structural and lexical scalars)."""
+    mlp_hidden: int = 0
+    """Residual 2-layer MLP router (2026-10-26): score = ridge + MLP(features), the MLP (``mlp_hidden`` ReLU units,
+    output layer zero-initialised so it starts at the ridge) trained online on the ridge's residual with
+    ``mlp_steps`` Adam steps per training step on that step's targets (gradients all-reduced over ranks). Charged:
+    2 F H per scored token + 6 F H per training sample and step. 0 = ridge only."""
+    mlp_steps: int = 4
+    mlp_lr: float = 1e-3
+    later_mass_target: float = 0.0
+    """Pyramid stages after the first use the adaptive mass keep (``mass_target`` semantics: each document's fewest
+    top tokens covering this share of its predicted gradient mass among the survivors), capped per row at
+    ``later_max_keep_frac`` of the tokens entering the stage; the first stage keeps its fixed budget. 0 = off."""
+    later_max_keep_frac: float = 1.0
+    ctx_feats: bool = False
+    """Document-context scalar features (2026-10-26): per token, its document's mean and max of the query-match
+    score ``cos_h_q`` and mean in-query flag, the token's within-document rank of ``cos_h_q``, and ``cos_h_q`` of its
+    +-1 / +-2 neighbours in the same document (importance is smooth). Needs ``use_hidden`` and ``use_query``."""
+    task_onehot: int = 0
+    """Hashed task one-hot features: the row's task key (hash of its first ``task_onehot`` tokens, as
+    ``per_task_key_tokens``) mod 31 as a 31-way one-hot on every body token, in the shared fit. 0 = off."""
+    keep_mode: str = "topk"
+    """``topk``: each document keeps its own top ``doc_share`` x budget, the rest of the row budget by score (the
+    default). ``threshold`` (2026-10-26): one threshold over the whole micro-batch -- every body token whose score
+    clears the batch's budget quantile is kept, so hard documents / rows keep more and easy ones less at the same
+    total; per-row cap ``row_cap`` x budget, per-document floor (``min_per_doc``) counted against the budget. The fit
+    then centres its targets over the BATCH instead of per row, so scores carry the across-row difficulty too."""
+    row_cap: float = 2.0
+    """``keep_mode='threshold'``: a row keeps at most ``row_cap`` x its budget (memory and padding bound)."""
+    keep_sched: str = ""
+    """Training-time budget schedule ``"a:b"``: the first stage's keep fraction is multiplied by a factor going
+    linearly from ``a`` to ``b`` over training (e.g. ``1.33:0.67`` = more early, less late at about the same total);
+    later stages divide their relative keep by it, so their ABSOLUTE budgets are unchanged. Empty = constant."""
+    warmup_random: bool = False
+    """Warmup steps (no fitted router yet) ROUTE at the normal budget with uniform random scores instead of training the
+    full context: no full-length pass ever runs past the drop layer, so the warmup does not set the peak memory (max
+    train length). Gold-blind and fit-free (not a heuristic warm start); the targets are still sampled from the kept
+    tokens, so the first fit happens as usual."""
+    route_min_len: int = 0
+    """Route only rows (in packed segment mode: only DOCUMENTS) with at least this many real tokens; shorter ones keep
+    every token through every block in the same step (dense). For hybrid batches: short windows dense, long rows
+    routed. 0 = route every row."""
+    early_lora_blocks: int = 0
+    """With ``early_lora``: adapt blocks [0, K) instead of [0, drop_layer) -- e.g. the whole model (K = n_layers), which
+    removes nearly all gradients and optimizer state. Blocks at or above the drop layer then run at the kept length,
+    still frozen-with-adapters: charged 2/3 there plus their adapters at that length. 0 = drop_layer."""
+    early_lora_start: int = 0
+    """With ``early_lora``: adapters only on blocks [B, K); blocks [0, B) stay frozen with no adapter. Allowed with
+    ``freeze_early`` when B = drop_layer, which makes [0, B) a frozen FORWARD-ONLY bottom stack (no backward below B)
+    under a LoRA-adapted rest -- e.g. keep_frac 1.0 for a pure depth split. 0 = adapters from block 0."""
+    early_lora: int = 0
+    """Low-rank early stack (:mod:`olmo_core.nn.early_lora`, installed by the recipe): blocks [0, drop_layer) train
+    only rank-``early_lora`` adapters from step 0. Charged: those blocks at 2/3 (the activation gradient still runs
+    down to block 0 for the adapters; no base weight gradient) plus the adapters' own cost. With ``freeze_after`` the
+    adapters freeze too at that step, and from then on blocks [0, drop_layer) run forward-only (1/3, adapters forward
+    only). Exclusive with freeze_early / freeze_schedule / early_nograd. 0 = off."""
+    target_layer: int = 0
+    """Read the router's gradient targets at block ``target_layer`` (> ``drop_layer``) instead of at the drop layer,
+    e.g. 16: the importance that matters late in training sits deeper. Features still come from the drop layer. With
+    the drop, routed steps fit on the EXPLORATION tokens only -- a uniform random sample of the body that is kept, so
+    it reaches that block uncensored (the router's own picks would be a censored sample); full-context steps, if any,
+    fit on every sampled token. With ``mod_layers`` every token reaches it on every step. Needs ``explore_frac > 0``
+    with the drop. Targets gnorm / gxh only. 0 = the drop layer."""
+    mass_target: float = 0.0
+    """ADAPTIVE keep by predicted gradient mass: per document, keep the fewest top-scored body tokens whose predicted
+    ||dL/dh||^2 (exp(2 x score); the score predicts the row-centred log gradient norm) covers this share of the
+    document's predicted total, e.g. 0.8 -- easy documents keep few tokens, hard or tiny ones many. Then the
+    ``min_per_doc`` floor, then the per-row ``max_keep_frac`` cap (peak memory). ``keep_frac`` only sizes the
+    exploration draw (``explore_frac`` x ``keep_frac`` x |body|); ``doc_share`` is unused. Learned scorer only.
+    0 = off (fixed ``keep_frac``)."""
+    max_keep_frac: float = 1.0
+    """With ``mass_target``: hard cap on the kept share of each row's body tokens (bounds the kept row, so peak
+    memory); the exploration / forced / floor tokens rank first, the rest by score."""
+    freeze_schedule: str = ""
+    """PROGRESSIVE freeze, e.g. ``"4:0.25,7:0.5,12:0.75"``: freeze the embeddings + blocks [0, 4) after 25% of the
+    optimizer steps, [0, 7) after 50%, [0, 12) after 75% (each releasing those blocks' gradients and optimizer state;
+    run by the callback). Frozen blocks below the drop layer run forward-only (charged 1/3); frozen blocks at or above
+    it still pass the activation gradient down to the router's target hook, so they skip only their weight gradient
+    (charged 2/3, at the kept length). Exclusive with ``freeze_after`` / ``freeze_early``. Empty = off."""
+    dense_tail_frac: float = 0.0
+    """Train the LAST ``dense_tail_frac`` of the optimizer steps uncompressed (full context, every token, every block),
+    e.g. 0.1; combine with ``dense_every=0`` for "routed, then a dense tail". Needs the total step count (set by
+    :class:`~olmo_core.train.callbacks.OnlineRouterCallback`)."""
+    dense_keep_frac: float = 1.0
+    """Keep share on the periodic ``dense_every`` steps: 1.0 = full context (default); < 1 routes those steps at this share
+    instead (e.g. 0.5), bounding the peak memory. Such steps are ordinary routed steps (no full-pass fidelity stats).
+    Warmup steps stay full."""
+    exit_loss_weight: float = 0.0
+    """Mid-stack, single stage: an EARLY-EXIT LM loss for the dropped tokens -- their hidden state at the split goes through
+    the model's LM head (final norm + unembedding) and ``exit_loss_weight`` x its CE (same reduction / ``loss_div_factor``
+    as the main loss, so 1.0 counts every label once) is added to the loss. Only labelled dropped tokens contribute (zero
+    in answer-only SFT, every token in CPT). Charged: the head on every dropped token, forward + backward. 0 = off."""
+    merge_dropped: bool = False
+    """Mid-stack only: instead of discarding each document's dropped tokens at the split, average their hidden states
+    into ONE summary token per document, placed at the position of that document's last dropped token (causal: every
+    token it averages precedes it), with no LM label. It joins the kept row (and is charged as a kept token); the
+    gradient flows back through the mean into the dropped tokens' early blocks."""
+    stages: str = ""
+    """Pyramid (multi-stage) mid-stack drop, e.g. ``"3:0.5,7:0.1,16:0.03"``: at each ``layer:keep`` the kept tokens are cut
+    to ``keep`` of the row's body tokens (absolute, decreasing), each stage scored from ITS layer's hidden state by its
+    own router (own ridge fit, own gradient targets at that layer). Overrides ``drop_layer`` / ``keep_frac`` with the
+    first stage's. Empty = one stage."""
+    min_per_doc: int = 0
+    """Per-document token FLOOR: every document keeps max(its share, ``min_per_doc``) body tokens (its top ones by score;
+    all of a shorter document), counted against the budget. 0 = no floor."""
+    keep_first: int = 0
+    """Always keep each document's first ``keep_first`` body tokens (its header / id span); they count against the
+    budget (and their document's share), and the router picks the rest. 0 = everything is routable."""
+    mod_layers: str = ""
+    """MIXTURE-OF-DEPTHS instead of a drop, e.g. ``"8-31:2"`` (blocks 8, 10, ..., 30) or ``"8,12,16"``: at the first
+    listed block the router picks ``keep_frac`` of each document's body tokens (same scorer, budget, exploration and
+    floors as the drop); every LISTED block then runs on those tokens plus every non-body token only (gathered to a
+    shorter row at their original positions, scattered back), and the other tokens pass the residual through unchanged
+    there. Unlisted blocks run on every token and every token reaches the LM head, so no label is dropped (CPT keeps
+    its full-row loss). ``drop_layer`` is set to the first listed block. Targets are the gradient norms at that block
+    over EVERY token -- skipped tokens still get a gradient through the residual, so nothing is censored. Charged:
+    each listed block at the kept length. Empty = off."""
+    per_task_key_tokens: int = 0
+    """A separate router PER TASK in a mixed-task batch: a row's task key is its first N tokens (the prompt template;
+    on the CTC mixes N = 11 identifies every task file, except the two retrieval files that share one template), and
+    each task keeps its own ridge statistics and weights. The pooled fit scores a task until its own fit exists. The
+    keys are synchronised across ranks every step. 0 = one shared router."""
     samples_per_row: int = 2048
     proj_dim: int = 0
     """Random-project the hidden features to this many dims (0: use all d_model dims)."""
@@ -121,6 +267,30 @@ class OnlineRouterConfig:
             raise ValueError(f"online router doc_share must be in [0, 1], got {self.doc_share}")
         if not 0.0 <= self.explore_frac <= 1.0:
             raise ValueError(f"online router explore_frac must be in [0, 1], got {self.explore_frac}")
+        if self.stages:
+            st = parse_stages(self.stages)
+            if [l for l, _ in st] != sorted({l for l, _ in st}) or st[0][0] <= 0:
+                raise ValueError(f"online router stages must have strictly increasing layers > 0, got {self.stages!r}")
+            if any(not 0.0 < k <= 1.0 for _, k in st) or [k for _, k in st] != sorted((k for _, k in st), reverse=True):
+                raise ValueError(f"online router stage keeps must be in (0, 1] and non-increasing, got {self.stages!r}")
+        if not 0.0 < self.dense_keep_frac <= 1.0 or self.dense_keep_frac < self.keep_frac:
+            raise ValueError(f"online router dense_keep_frac must be in [keep_frac, 1], got {self.dense_keep_frac}")
+        if self.exit_loss_weight < 0 or (self.exit_loss_weight > 0 and (self.drop_layer <= 0 or self.stages)):
+            raise ValueError("online router exit_loss_weight must be >= 0 and needs a single-stage mid-stack drop")
+        if self.merge_dropped and (self.drop_layer <= 0 or self.stages):
+            raise ValueError("online router merge_dropped needs a single-stage mid-stack drop (drop_layer > 0, no stages)")
+        if self.freeze_after < 0 or (self.freeze_after and self.freeze_early):
+            raise ValueError("online router freeze_after must be >= 0 and is exclusive with freeze_early")
+        if self.freeze_early and self.drop_layer <= 0 and not self.stages:
+            raise ValueError("online router freeze_early needs the mid-stack drop (drop_layer > 0 or stages)")
+        if self.early_nograd and self.drop_layer <= 0 and not self.stages:
+            raise ValueError("online router early_nograd needs the mid-stack drop (drop_layer > 0)")
+        if not 0.0 <= self.dense_tail_frac < 1.0:
+            raise ValueError(f"online router dense_tail_frac must be in [0, 1), got {self.dense_tail_frac}")
+        if self.min_per_doc < 0:
+            raise ValueError(f"online router min_per_doc must be >= 0, got {self.min_per_doc}")
+        if self.keep_first < 0:
+            raise ValueError(f"online router keep_first must be >= 0, got {self.keep_first}")
         if self.score not in ("router", "random", "first_last", "dh"):
             raise ValueError(f"online router score must be router / random / first_last / dh, got {self.score!r}")
         if self.score == "dh" and self.drop_layer <= 0:
@@ -136,12 +306,115 @@ class OnlineRouterConfig:
                              "leave feature_layer at 0")
         if self.warmup_steps < 1:
             raise ValueError("online router warmup_steps must be >= 1 (the first fit needs targets)")
+        if self.mod_layers:
+            ml = parse_mod_layers(self.mod_layers)
+            if self.drop_layer != ml[0]:
+                raise ValueError(f"online router mod_layers {self.mod_layers!r}: drop_layer must be its first block "
+                                 f"{ml[0]}, got {self.drop_layer}")
+            if self.stages or self.merge_dropped or self.exit_loss_weight > 0:
+                raise ValueError("online router mod_layers is exclusive with stages / merge_dropped / exit_loss_weight")
+        if self.freeze_schedule:
+            fs = parse_freeze_schedule(self.freeze_schedule)
+            if self.freeze_after or self.freeze_early or self.drop_layer <= 0:
+                raise ValueError("online router freeze_schedule needs the mid-stack drop and is exclusive with "
+                                 "freeze_after / freeze_early")
+            if [n for n, _ in fs] != sorted({n for n, _ in fs}) or [f for _, f in fs] != sorted({f for _, f in fs}) \
+                    or not all(0.0 < f < 1.0 and n > 0 for n, f in fs):
+                raise ValueError(f"online router freeze_schedule needs increasing blocks > 0 and increasing fractions "
+                                 f"in (0, 1), got {self.freeze_schedule!r}")
+        if not 0.0 <= self.mass_target <= 1.0 or not 0.0 < self.max_keep_frac <= 1.0:
+            raise ValueError("online router mass_target must be in [0, 1] and max_keep_frac in (0, 1]")
+        if self.mass_target > 0 and self.score != "router":
+            raise ValueError("online router mass_target needs the learned scorer (score='router')")
+        if self.early_lora_blocks < 0 or (self.early_lora_blocks and not self.early_lora):
+            raise ValueError("online router early_lora_blocks needs early_lora > 0 and must be >= 0")
+        if self.early_lora_blocks and self.mod_layers:
+            raise ValueError("online router early_lora_blocks is not supported with mod_layers")
+        if self.early_lora:
+            if self.early_lora < 0 or self.drop_layer <= 0:
+                raise ValueError("online router early_lora needs rank > 0 and the mid-stack drop (drop_layer > 0)")
+            if self.freeze_schedule or self.early_nograd or (
+                    self.freeze_early and not (self.early_lora_start and self.early_lora_start == self.drop_layer)):
+                raise ValueError("online router early_lora is exclusive with freeze_schedule / early_nograd, and with "
+                                 "freeze_early unless early_lora_start == drop_layer (a frozen forward-only [0, B) under "
+                                 "LoRA on [B, K)); freeze_after is allowed: LoRA from step 0, then the adapters freeze")
+        if self.early_lora_start < 0 or (self.early_lora_start and (
+                not self.early_lora or self.early_lora_start >= (self.early_lora_blocks or self.drop_layer))):
+            raise ValueError("online router early_lora_start needs early_lora > 0 and 0 <= start < the LoRA end "
+                             "(early_lora_blocks, else drop_layer)")
+        if self.target_layer:
+            if self.drop_layer <= 0 or self.target_layer <= self.drop_layer:
+                raise ValueError("online router target_layer must be > drop_layer (> 0)")
+            if self.target not in ("gnorm", "gxh") or self.stages:
+                raise ValueError("online router target_layer needs target gnorm / gxh and a single stage")
+            if not self.mod_layers and self.explore_frac <= 0:
+                raise ValueError("online router target_layer with the drop fits on the exploration tokens: "
+                                 "set explore_frac > 0")
+        if self.later_mass_target and not (0.0 < self.later_mass_target <= 1.0 and self.stages
+                                           and 0.0 < self.later_max_keep_frac <= 1.0 and self.keep_mode == "topk"):
+            raise ValueError("online router later_mass_target needs stages, a share in (0, 1], "
+                             "later_max_keep_frac in (0, 1] and keep_mode topk")
+        if self.mlp_hidden < 0 or self.mlp_steps < 1 or self.mlp_lr <= 0:
+            raise ValueError("online router mlp_hidden must be >= 0, mlp_steps >= 1 and mlp_lr > 0")
+        if self.ctx_feats and not (self.use_hidden and self.use_query):
+            raise ValueError("online router ctx_feats needs use_hidden and use_query (they derive from cos_h_q)")
+        if self.task_onehot < 0:
+            raise ValueError("online router task_onehot must be >= 0")
+        if self.keep_mode not in ("topk", "threshold"):
+            raise ValueError(f"online router keep_mode must be topk / threshold, got {self.keep_mode!r}")
+        if self.keep_mode == "threshold" and (self.mass_target > 0 or self.row_cap < 1.0):
+            raise ValueError("online router keep_mode threshold is exclusive with mass_target and needs row_cap >= 1")
+        if self.keep_sched:
+            a, _, b = self.keep_sched.partition(":")
+            if not (float(a) > 0 and float(b) > 0):
+                raise ValueError(f"online router keep_sched must be 'a:b' with a, b > 0, got {self.keep_sched!r}")
+        if self.per_task_key_tokens < 0:
+            raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
 
 
 def _log_bucket(j: torch.Tensor) -> torch.Tensor:
     """Bucket of an offset j >= 16: floor(log2 j) - 4, clamped to [0, _N_LOG)."""
     jf = j.clamp(min=16).to(torch.float32)
     return (torch.floor(torch.log2(jf)) - 4).clamp(0, _N_LOG - 1).to(torch.long)
+
+
+def _ctx_features(cos: torch.Tensor, inq: torch.Tensor, cid: torch.Tensor, body: torch.Tensor) -> torch.Tensor:
+    """(B, T, N_CTX) document-context features of ``cos`` (B, T) and the in-query flag ``inq`` (B, T) over each row's
+    documents (``cid`` >= 0, body tokens only); 0 off the body."""
+    B, T = cos.shape
+    dev = cos.device
+    cid = cid.to(torch.long)
+    nd = max(1, int(cid.max().item()) + 1) if cid.numel() else 1
+    gid = torch.arange(B, device=dev)[:, None] * nd + cid.clamp(min=0)
+    dump = B * nd
+    gid = torch.where(body, gid, torch.full_like(gid, dump)).reshape(-1)
+    c, q, bf = cos.reshape(-1).float(), inq.reshape(-1).float(), body.reshape(-1)
+    n = torch.zeros(dump + 1, device=dev).index_add_(0, gid, bf.float())
+    mean_c = torch.zeros(dump + 1, device=dev).index_add_(0, gid, c * bf) / n.clamp(min=1)
+    mean_q = torch.zeros(dump + 1, device=dev).index_add_(0, gid, q * bf) / n.clamp(min=1)
+    max_c = torch.full((dump + 1,), -1e9, device=dev).scatter_reduce(
+        0, gid, torch.where(bf, c, torch.full_like(c, -1e9)), reduce="amax")
+    # within-document rank of cos (0 = lowest, 1 = highest): sort by (document, cos)
+    key = gid.double() * 4.0 + torch.sigmoid(c.double())
+    order = torch.argsort(key)
+    pos = torch.empty_like(order)
+    pos[order] = torch.arange(order.numel(), device=dev)
+    first = torch.cumsum(torch.bincount(gid, minlength=dump + 1), 0) - torch.bincount(gid, minlength=dump + 1)
+    rank = (pos - first[gid]).float() / (n[gid] - 1).clamp(min=1)
+    g2 = gid.reshape(B, T)
+
+    def nb(k):
+        sh = torch.roll(cos, shifts=k, dims=1)
+        same = (torch.roll(g2, shifts=k, dims=1) == g2) & body
+        if k > 0:
+            same[:, :k] = False
+        else:
+            same[:, k:] = False
+        return torch.where(same, sh, torch.zeros_like(sh))
+
+    f = torch.stack([mean_c[gid].reshape(B, T), max_c[gid].reshape(B, T), mean_q[gid].reshape(B, T),
+                     rank.reshape(B, T), nb(2), nb(1), nb(-1), nb(-2)], dim=-1)
+    return f * body.unsqueeze(-1).to(f.dtype)
 
 
 def structural_features(
@@ -233,6 +506,69 @@ def _spearman(a: torch.Tensor, b: torch.Tensor) -> float:
     return float((ra @ rb).item() / den) if den > 0 else float("nan")
 
 
+def freeze_early_blocks(model, n_blocks: int) -> int:
+    """``requires_grad_(False)`` on the embeddings and blocks [0, n_blocks); returns the number of frozen parameters."""
+    n = 0
+    mods = [model.embeddings] + [b for i, b in enumerate(model.blocks.values()) if i < n_blocks]
+    for m in mods:
+        for p in m.parameters():
+            p.requires_grad_(False)
+            n += p.numel()
+    return n
+
+
+def freeze_and_release(model, n_blocks: int, optimizer=None) -> int:
+    """Freeze the embeddings and blocks [0, n_blocks) mid-training: ``requires_grad_(False)``, drop their gradients and
+    (if given) their optimizer state, so the memory is returned. Returns the number of parameters frozen."""
+    mods = [model.embeddings] + [b for i, b in enumerate(model.blocks.values()) if i < n_blocks]
+    n = 0
+    for m in mods:
+        for p in m.parameters():
+            p.requires_grad_(False)
+            p.grad = None
+            if optimizer is not None:
+                optimizer.state.pop(p, None)
+            n += p.numel()
+    return n
+
+
+def parse_stages(spec: str) -> List[Tuple[int, float]]:
+    """``"3:0.5,7:0.1"`` -> ``[(3, 0.5), (7, 0.1)]``."""
+    out = []
+    for part in [p for p in spec.split(",") if p.strip()]:
+        layer, keep = part.split(":")
+        out.append((int(layer), float(keep)))
+    if not out:
+        raise ValueError(f"empty stages spec {spec!r}")
+    return out
+
+
+def parse_freeze_schedule(spec: str) -> List[Tuple[int, float]]:
+    """``"4:0.25,7:0.5"`` -> ``[(4, 0.25), (7, 0.5)]`` (blocks frozen, share of the optimizer steps)."""
+    out = []
+    for part in [p for p in spec.split(",") if p.strip()]:
+        n, frac = part.split(":")
+        out.append((int(n), float(frac)))
+    if not out:
+        raise ValueError(f"empty freeze_schedule {spec!r}")
+    return out
+
+
+def parse_mod_layers(spec: str) -> List[int]:
+    """``"8-31:2"`` -> ``[8, 10, ..., 30]``; ``"8,12,16"`` and mixes (``"8-15:2,20"``) also work. Sorted, unique."""
+    out: Set[int] = set()
+    for part in [p.strip() for p in spec.split(",") if p.strip()]:
+        rng, _, step = part.partition(":")
+        if "-" in rng:
+            lo, hi = (int(x) for x in rng.split("-"))
+            out.update(range(lo, hi + 1, int(step or 1)))
+        else:
+            out.add(int(rng))
+    if not out or min(out) <= 0:
+        raise ValueError(f"mod_layers must list blocks > 0, got {spec!r}")
+    return sorted(out)
+
+
 def _row_ranks(x: torch.Tensor, rows: torch.Tensor) -> torch.Tensor:
     """Ranks of ``x`` within each row of ``rows``, scaled to [0, 1]."""
     out = torch.zeros_like(x, dtype=torch.float32)
@@ -270,10 +606,37 @@ class OnlineTokenRouter:
         gold_table: Optional[Dict[str, Any]] = None,
         rank: int = 0,
     ):
+        if cfg.mod_layers and cfg.drop_layer == 0:
+            import dataclasses
+
+            cfg = dataclasses.replace(cfg, drop_layer=parse_mod_layers(cfg.mod_layers)[0])
         cfg.validate()
+        self.stage_idx = 0
+        self._next: Optional["OnlineTokenRouter"] = None
+        if cfg.stages:
+            import dataclasses
+
+            st = parse_stages(cfg.stages)
+            (l0, k0), rest = st[0], st[1:]
+            lmt, lmk = cfg.later_mass_target, cfg.later_max_keep_frac
+            cfg = dataclasses.replace(cfg, stages="", drop_layer=l0, keep_frac=k0, later_mass_target=0.0)
+            prev_k, prev = k0, self
+            for i, (l, k) in enumerate(rest, start=1):
+                # later stages: keep ``k`` of the ORIGINAL body = k / prev_k of the tokens entering; their own fit
+                c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False,
+                                        seed=cfg.seed + 1009 * i, keep_first=0)
+                if lmt > 0:
+                    c = dataclasses.replace(c, mass_target=lmt, max_keep_frac=lmk)
+                nxt = OnlineTokenRouter(c, doc_start_id=doc_start_id, doc_end_id=doc_end_id, eos_id=eos_id,
+                                        d_model=d_model, gold_table=None, rank=rank)
+                nxt.stage_idx = i
+                nxt._root_drop_layer = l0
+                prev._next, prev, prev_k = nxt, nxt, k
         if cfg.use_gold and gold_table is None:
             raise ValueError("online router use_gold needs the gold-fingerprint table")
         self.cfg = cfg
+        if not hasattr(self, "_root_drop_layer"):
+            self._root_drop_layer = cfg.drop_layer
         self.doc_start_id, self.doc_end_id, self.eos_id = int(doc_start_id), int(doc_end_id), int(eos_id)
         self.d_model = int(d_model)
         self.rank = int(rank)
@@ -286,14 +649,29 @@ class OnlineTokenRouter:
                     items = [a for p in items for a in p]
                 self.gold[fp] = sorted({int(a) for a in items})
         self.hdim = cfg.proj_dim if (cfg.proj_dim and cfg.use_hidden) else (self.d_model if cfg.use_hidden else 0)
-        self.n_scalar = N_STRUCT + N_LEX + (1 if cfg.use_query and cfg.use_hidden else 0) + (1 if cfg.use_gold else 0)
+        self.n_scalar = (N_STRUCT + N_LEX + (1 if cfg.use_query and cfg.use_hidden else 0) + (N_CTX if cfg.ctx_feats else 0)
+                         + (N_TASK if cfg.task_onehot else 0) + (1 if cfg.use_gold else 0))
         self.n_features = self.n_scalar + self.hdim * (1 + int(cfg.use_query))
         self.step = 0
+        self.total_steps: Optional[int] = None  # set by the callback (dense_tail_frac)
+        self._nograd_fwd = False  # this forward runs blocks [0, _nograd_until) forward-only (early_nograd / freeze)
+        self._nograd_until = 0
+        self.frozen_blocks = 0  # leading blocks frozen so far by freeze_schedule (set by the callback)
+        self._exit: Optional[Dict[str, Any]] = None  # this forward's dropped-token hidden states for the exit loss
         self._calls = 0
         self.w: Optional[torch.Tensor] = None
         self.XtX: Optional[torch.Tensor] = None
         self.Xty: Optional[torch.Tensor] = None
         self.n_seen = 0.0
+        # per-task routers (per_task_key_tokens > 0): task key -> ridge state / weights, and the cross-rank slot order
+        self.task_w: Dict[int, torch.Tensor] = {}
+        self.task_XtX: Dict[int, torch.Tensor] = {}
+        self.task_Xty: Dict[int, torch.Tensor] = {}
+        self.task_seen: Dict[int, float] = {}
+        self._row_task: Optional[torch.Tensor] = None  # this forward's (B,) task keys
+        self.mod_layers: List[int] = parse_mod_layers(cfg.mod_layers) if cfg.mod_layers else []
+        self._mod: Optional[Dict[str, Any]] = None  # this forward's mixture-of-depths gather
+        self._tap: Optional[Dict[str, Any]] = None  # target entry waiting for block target_layer
         self._proj: Optional[torch.Tensor] = None
         self._pending: List[Dict[str, Any]] = []
         self._current: Optional[Dict[str, Any]] = None
@@ -315,6 +693,11 @@ class OnlineTokenRouter:
         names += ["rel_in_doc", "doc_rel_idx", "log_doc_len", "in_query", "log_repeat"]
         if self.cfg.use_query and self.cfg.use_hidden:
             names.append("cos_h_q")
+        if self.cfg.ctx_feats:
+            names += ["doc_mean_cos", "doc_max_cos", "doc_mean_inq", "doc_rank_cos", "cos_m2", "cos_m1", "cos_p1",
+                      "cos_p2"]
+        if self.cfg.task_onehot:
+            names += [f"task{i}" for i in range(N_TASK)]
         if self.cfg.use_gold:
             names.append("gold")
         names += [f"h{i}" for i in range(self.hdim)]
@@ -323,11 +706,27 @@ class OnlineTokenRouter:
         return names
 
     # ------------------------------------------------------------------ schedule
+    def keep_mult(self) -> float:
+        """keep_sched: the first stage's budget multiplier at this step (1.0 without a schedule)."""
+        if not self.cfg.keep_sched:
+            return 1.0
+        a, _, b = self.cfg.keep_sched.partition(":")
+        T = max(1, int(self.total_steps or 1))
+        t = min(1.0, max(0.0, (self.step - 1) / max(1, T - 1)))
+        return float(a) + (float(b) - float(a)) * t
+
     def dense_now(self) -> bool:
         """Whether this step trains uncompressed (warmup or a periodic dense step)."""
+        if getattr(self, "_force_dense", False):
+            return True
         c = self.cfg
         if self.w is None or self.step <= c.warmup_steps:
             return True
+        if c.dense_tail_frac > 0:
+            if not self.total_steps:
+                raise RuntimeError("online router dense_tail_frac needs total_steps (OnlineRouterCallback sets it)")
+            if self.step > int(round(self.total_steps * (1.0 - c.dense_tail_frac))):
+                return True
         return c.dense_every > 0 and self.step % c.dense_every == 0
 
     # ------------------------------------------------------------------ features
@@ -419,10 +818,19 @@ class OnlineTokenRouter:
             0, key[body], torch.ones(int(body.sum()), device=input_ids.device)
         )
         rep = torch.log1p(cnt[key]) / 5.0
-        out: Dict[str, torch.Tensor] = {"body": body, "query": qm, "_edge": torch.minimum(offs["j"], offs["r"])}
+        out: Dict[str, torch.Tensor] = {"body": body, "query": qm, "_edge": torch.minimum(offs["j"], offs["r"]),
+                                        "_j": offs["j"], "_cid": chunk_ids.to(torch.long)}
         out["_s0"] = torch.cat([struct, (in_q * body).unsqueeze(-1), (rep * body).unsqueeze(-1)], dim=-1)
         if c.use_gold:
             out["_gold"] = (self._row_gold(input_ids, chunk_ids) * body).unsqueeze(-1)
+        if c.task_onehot:
+            N = min(int(c.task_onehot), int(input_ids.shape[1]))
+            pw = torch.tensor([pow(1_000_003, i, 2**31 - 1) for i in range(N)], dtype=torch.int64,
+                              device=input_ids.device)
+            slot = ((input_ids[:, :N].to(torch.int64) * pw[None, :]).sum(dim=1) % N_TASK)
+            oh = torch.zeros(B, N_TASK, device=input_ids.device)
+            oh[torch.arange(B, device=input_ids.device), slot] = 1.0
+            out["_task"] = oh[:, None, :] * body.unsqueeze(-1).to(torch.float32)
         if c.use_hidden and hidden:
             self.add_hidden(out, self._hidden(model, input_ids))
         elif not c.use_hidden:
@@ -444,12 +852,14 @@ class OnlineTokenRouter:
             q = q * torch.rsqrt(q.pow(2).mean(-1, keepdim=True) + 1e-6)
             out["q"] = q
             out["_cos"] = ((h * q[:, None, :]).mean(-1) * body).unsqueeze(-1)
+            if c.ctx_feats:
+                out["_ctx"] = _ctx_features(out["_cos"][..., 0], out["_s0"][..., N_STRUCT], out["_cid"], body)
         out["h"] = h * body.unsqueeze(-1)
         self._assemble(out)
 
     @staticmethod
     def _assemble(out: Dict[str, torch.Tensor]) -> None:
-        out["s"] = torch.cat([out[k] for k in ("_s0", "_cos", "_gold") if k in out], dim=-1)
+        out["s"] = torch.cat([out[k] for k in ("_s0", "_cos", "_ctx", "_task", "_gold") if k in out], dim=-1)
 
     def full_features(self, fp: Dict[str, torch.Tensor], rows: torch.Tensor, cols: torch.Tensor) -> torch.Tensor:
         """Materialise the (N, F) feature rows of the selected tokens."""
@@ -464,7 +874,20 @@ class OnlineTokenRouter:
     def score(self, fp: Dict[str, torch.Tensor]) -> torch.Tensor:
         """(B, T) linear score without materialising the full feature matrix."""
         assert self.w is not None
-        w = self.w.to(torch.float32)
+        sc = self._score_with(fp, self.w)
+        ms = self._mlp_score(fp)
+        if ms is not None:
+            sc = sc + ms
+        if self.task_w and self._row_task is not None:
+            # per-task routers: a row whose task already has its own fit is scored by it (else by the pooled fit)
+            for b, k in enumerate(self._row_task.tolist()):
+                wk = self.task_w.get(int(k))
+                if wk is not None:
+                    sc[b] = self._score_with({n: fp[n][b : b + 1] for n in ("s", "h", "q") if n in fp}, wk)[0]
+        return sc
+
+    def _score_with(self, fp: Dict[str, torch.Tensor], w: torch.Tensor) -> torch.Tensor:
+        w = w.to(torch.float32)
         ns, hd = self.n_scalar, self.hdim
         sc = fp["s"] @ w[:ns]
         if "h" in fp:
@@ -475,6 +898,12 @@ class OnlineTokenRouter:
             else:
                 sc = sc + fp["h"] @ wh
         return sc
+
+    def task_keys(self, input_ids: torch.Tensor) -> torch.Tensor:
+        """(B,) int64 task key per row: a polynomial hash of its first ``per_task_key_tokens`` tokens."""
+        N = min(int(self.cfg.per_task_key_tokens), int(input_ids.shape[1]))
+        pw = torch.tensor([pow(1_000_003, i, 2**31 - 1) for i in range(N)], dtype=torch.int64, device=input_ids.device)
+        return (input_ids[:, :N].to(torch.int64) * pw[None, :]).sum(dim=1)
 
     # ------------------------------------------------------------------ selection
     def select(
@@ -491,6 +920,7 @@ class OnlineTokenRouter:
         choice is made at that layer by :meth:`mid_compact`."""
         self._calls += 1
         self._ignore_index = ignore_index
+        self._row_task = self.task_keys(input_ids) if self.cfg.per_task_key_tokens > 0 else None
         # positional-block rows (CPT): documents are blocks with no markers (see structural_features)
         self._marker_free = int((getattr(model, "_pooled_soft_tokens", None) or {}).get("positional_block_size", 0)) > 0
         # trim the right pad: features / prefix pass only over the longest real row
@@ -503,6 +933,14 @@ class OnlineTokenRouter:
         full = torch.zeros_like(input_ids, dtype=torch.bool)
         if mid:
             self._mid = {"fp": fp, "ids": ids, "cid": cid, "Tr": Tr}
+            L0 = self.cfg.drop_layer
+            if model.training and self.frozen_blocks > 0:
+                self._nograd_until = min(self.frozen_blocks, L0)
+            elif model.training and (self.cfg.freeze_early or (self.cfg.early_nograd and not self.dense_now())):
+                self._nograd_until = L0
+            else:
+                self._nograd_until = 0
+            self._nograd_fwd = self._nograd_until > 0
             full[:, :Tr] = fp["body"]
             return full
         keep, entry = self._choose(model, fp, ids, cid)
@@ -515,22 +953,41 @@ class OnlineTokenRouter:
         c = self.cfg
         body = fp["body"]
         dev = ids.device
+        if self.stage_idx > 0:
+            # later pyramid stages never run select(): advance the draw per forward so exploration differs across a
+            # step's micro-batches (the root's counter advances in select)
+            self._calls += 1
         gen = torch.Generator(device=dev).manual_seed(
             (self.cfg.seed * 1_000_003 + self.step * 7919 + self.rank * 104_729 + self._calls) % (2**62)
         )
         u = torch.rand(ids.shape, generator=gen, device=dev)
         n_body = body.sum(dim=1)
         dense = self.dense_now()
+        kf = c.keep_frac
+        if c.keep_sched:
+            m_ = self.keep_mult()
+            kf = min(1.0, kf * m_) if self.stage_idx == 0 else min(1.0, kf / m_)
+            self._stat("keep_mult", m_)
+        if dense and c.dense_keep_frac < 1.0 and self.w is not None and self.step > c.warmup_steps:
+            # the periodic "dense" step routes at dense_keep_frac instead of the full context (bounded peak memory)
+            dense, kf = False, c.dense_keep_frac
+            self._stat("dense_routed", 1.0)
+        warm_rand = False
+        if dense and c.warmup_random and (self.w is None or self.step <= c.warmup_steps):
+            # warmup without a full-length pass: the normal budget at uniform scores
+            dense, warm_rand = False, True
+            self._stat("warmup_random", 1.0)
         explore = torch.zeros_like(body)
         score = None
         if self.w is not None:
             score = self.score(fp)
-            self._flop(model, 2.0 * self.n_features * float(body.sum()))
+            self._flop(model, 2.0 * self.n_features * (1 + self.cfg.mlp_hidden * int(getattr(self, "_mlp", None)
+                                                                                   is not None)) * float(body.sum()))
         if dense:
             keep = body.clone()
         else:
-            assert score is not None
-            if c.score == "random" or c.explore_frac >= 1.0:
+            assert score is not None or warm_rand
+            if warm_rand or c.score == "random" or c.explore_frac >= 1.0:
                 # random CONTROL: the same budget and allocation, uniform scores (the router is fit and
                 # logged but never chooses a token)
                 score, c_explore = u.clone(), 0.0
@@ -542,14 +999,20 @@ class OnlineTokenRouter:
                 score, c_explore = fp["_dh"] + 1e-6 * u, 0.0
             else:
                 c_explore = c.explore_frac
-            k = torch.ceil(n_body.to(torch.float32) * c.keep_frac).to(torch.long)
+            k = torch.ceil(n_body.to(torch.float32) * kf).to(torch.long)
             k_e = torch.round(k.to(torch.float32) * c_explore).to(torch.long)
             # exploration: the k_e body tokens with the smallest uniform draw
             ru = torch.where(body, u, torch.full_like(u, 2.0))
             rank_u = ru.argsort(dim=1).argsort(dim=1)
             explore = body & (rank_u < k_e[:, None])
-            keep = explore.clone()
-            kd = c.keep_frac * c.doc_share
+            # each document's first keep_first body tokens (its header / id span) are always kept
+            forced = body & (fp["_j"] < c.keep_first) if c.keep_first > 0 else torch.zeros_like(body)
+            if c.keep_first > 0:
+                self._stat("forced_frac", float(forced.sum()) / max(1.0, float(body.sum())))
+            keep = explore | forced
+            kd = 0.0 if (c.mass_target > 0 or c.keep_mode == "threshold") else kf * c.doc_share
+            if c.mass_target > 0:
+                keep = keep | self._mass_keep(score, body, cid, c.mass_target)
             if kd > 0:
                 # per-document share: each document's own top ceil(kd * |body_d|) by score
                 # (exploration tokens rank first, so they count against their document's share)
@@ -558,19 +1021,72 @@ class OnlineTokenRouter:
                 if kd >= 1.0:
                     keep = body.clone()
                 else:
-                    sc_d = torch.where(explore, torch.full_like(score, 1e30), score)
+                    sc_d = torch.where(explore | forced, torch.full_like(score, 1e30), score)
                     ds, de = self._doc_ids()
                     out = mark_doc_topk_tokens_free(cid, ids, sc_d, doc_start_id=ds, doc_end_id=de, k=kd)
                     keep = keep | (body & (out == FREE_CHUNK_ID))
-            # the rest of the budget by score over the whole row
-            left = (k - keep.sum(dim=1)).clamp(min=0)
-            sc = torch.where(body & ~keep, score, torch.full_like(score, -float("inf")))
-            rank_s = (-sc).argsort(dim=1).argsort(dim=1)
-            keep = keep | (body & ~keep & (rank_s < left[:, None]))
+            if c.min_per_doc > 0:
+                # per-document FLOOR: every document keeps at least its top min_per_doc body tokens by score (all of
+                # a shorter one), counted against the budget -- tiny documents (strmatch: ~25 tokens) are otherwise
+                # cut to their header
+                from .attention.chunked_mask import FREE_CHUNK_ID, mark_doc_topk_tokens_free
+
+                sc_f = torch.where(explore | forced, torch.full_like(score, 1e30), score)
+                ds, de = self._doc_ids()
+                out_f = mark_doc_topk_tokens_free(cid, ids, sc_f, doc_start_id=ds, doc_end_id=de,
+                                                  k=float(c.min_per_doc))
+                floor = body & (out_f == FREE_CHUNK_ID)
+                self._stat("floor_extra_frac", float((floor & ~keep).sum()) / max(1.0, float(body.sum())))
+                keep = keep | floor
+            if c.mass_target > 0:
+                # per-row cap (peak memory): exploration / forced first, then the floor, then by score
+                cap = torch.ceil(n_body.to(torch.float32) * c.max_keep_frac).to(torch.long)
+                pri = torch.where(explore | forced, torch.full_like(score, 2e30), score)
+                if c.min_per_doc > 0:
+                    pri = torch.where(floor & ~(explore | forced), torch.full_like(score, 1e30), pri)
+                pri = torch.where(keep, pri, torch.full_like(score, -float("inf")))
+                rank_c = (-pri).argsort(dim=1).argsort(dim=1)
+                capped = keep & ~(rank_c < cap[:, None])
+                self._stat("mass_capped_frac", float(capped.sum()) / max(1.0, float(body.sum())))
+                keep = keep & ~capped
+            elif c.keep_mode == "threshold":
+                # one threshold over the micro-batch: the remaining batch budget goes to the highest scores anywhere,
+                # each row capped at row_cap x its budget
+                elig = body & ~keep
+                n_left = int(k.sum()) - int(keep.sum())
+                if n_left > 0 and bool(elig.any()):
+                    # each row may add at most its room under the cap (its own best tokens); the batch then takes the
+                    # global top n_left of those, so a capped row's leftover budget goes to the next-best rows
+                    cap = torch.ceil(n_body.to(torch.float32) * kf * c.row_cap).to(torch.long)
+                    room = (cap - keep.sum(dim=1)).clamp(min=0)
+                    pri = torch.where(elig, score, torch.full_like(score, -float("inf")))
+                    rank_t = (-pri).argsort(dim=1).argsort(dim=1)
+                    allowed = elig & (rank_t < room[:, None])
+                    if bool(allowed.any()):
+                        sa = score[allowed].float()
+                        tau = torch.topk(sa, min(n_left, sa.numel())).values[-1]
+                        keep = keep | (allowed & (score.float() >= tau))
+                rf = keep.sum(dim=1).float() / n_body.clamp(min=1).float()
+                if rf.numel() > 1:
+                    self._stat("thresh_row_keep_cv", float(rf.std() / rf.mean().clamp(min=1e-6)))
+                self._stat("thresh_keep_frac", float(keep.sum()) / max(1.0, float(body.sum())))
+            else:
+                # the rest of the budget by score over the whole row
+                left = (k - keep.sum(dim=1)).clamp(min=0)
+                sc = torch.where(body & ~keep, score, torch.full_like(score, -float("inf")))
+                rank_s = (-sc).argsort(dim=1).argsort(dim=1)
+                keep = keep | (body & ~keep & (rank_s < left[:, None]))
+        if c.route_min_len > 0 and not dense:
+            # hybrid rows: rows / documents shorter than route_min_len stay dense in this step
+            short = (cid != -2).sum(dim=1) < c.route_min_len
+            keep = keep | (body & short[:, None])
+            self._stat("routed_row_frac", float((~short).float().mean()))
         # sample kept tokens for targets: every exploration token first, then random kept ones
-        pri = torch.where(keep, u + 2.0 * (~explore).to(u.dtype), torch.full_like(u, 9.0))
+        # (mixture-of-depths: every body token keeps a gradient at this layer, so the targets sample all of them)
+        pool = body if self.mod_layers else keep
+        pri = torch.where(pool, u + 2.0 * (~explore).to(u.dtype), torch.full_like(u, 9.0))
         rank_p = pri.argsort(dim=1).argsort(dim=1)
-        samp = keep & (rank_p < c.samples_per_row)
+        samp = pool & (rank_p < c.samples_per_row)
         rows, cols = samp.nonzero(as_tuple=True)
         entry: Dict[str, Any] = {
             "rows": rows,
@@ -580,6 +1096,7 @@ class OnlineTokenRouter:
             "pred": (score[rows, cols] if score is not None else None),
             "target": None,
             "dense": dense,
+            "task": (self._row_task[rows] if self._row_task is not None else None),
         }
         # diagnostics: realised keep, gold leak (does per-document kept density name gold?)
         self._stat("keep_frac", float(keep.sum()) / max(1.0, float(body.sum())))
@@ -596,9 +1113,13 @@ class OnlineTokenRouter:
         charges the full row through every block; the blocks from here on ran on the kept row only)."""
         st, self._mid = getattr(self, "_mid", None), None
         self._mid_gather = None
+        self._mod = None
+        self._tap = None
         if st is None:
             return h, block_kwargs
         fp, ids, cid, Tr = st["fp"], st["ids"], st["cid"], st["Tr"]
+        if block_kwargs.get("cu_doc_lens") is not None:
+            return self._mid_compact_packed(model, h, block_kwargs, fp, ids, cid, Tr)
         if h.shape[1] < Tr:
             raise RuntimeError(f"mid_compact: hidden width {h.shape[1]} < real width {Tr}")
         B, Tw, D = h.shape
@@ -621,26 +1142,74 @@ class OnlineTokenRouter:
         keep_all[:, :Tr] = real & (~body | keep_body)
         counts = keep_all.sum(dim=1)
         pm = int((getattr(model, "_pooled_soft_tokens", None) or {}).get("pad_multiple", 1) or 1)
-        W = int(counts.max().item())
-        W = min(Tw, ((W + pm - 1) // pm) * pm)
-        order = torch.argsort((~keep_all).to(torch.int8), dim=1, stable=True)[:, :W]
-        valid = torch.arange(W, device=h.device)[None, :] < counts[:, None]
-        h_new = torch.gather(h, 1, order[..., None].expand(B, W, D)) * valid[..., None].to(h.dtype)
-        kw = dict(block_kwargs)
         pid = block_kwargs.get("position_ids")
         if pid is None:
             pid = torch.arange(Tw, device=h.device)[None, :].expand(B, Tw)
-        pnew = torch.gather(pid, 1, order)
-        kw["position_ids"] = torch.where(valid, pnew, pid.max(dim=1, keepdim=True).values.expand_as(pnew))
-        self._mid_gather = (order, valid)
-        # targets at this layer, on the kept (gathered) columns
-        newcol = keep_all.to(torch.long).cumsum(dim=1) - 1
+        kw = dict(block_kwargs)
         rows, pos = entry["rows"], entry["pos"]
+        n_extra = 0
+        if self.cfg.merge_dropped and not entry["dense"]:
+            # one summary token per document: the mean of its dropped tokens' hidden states, slotted right after the
+            # document's last dropped token (sort key column + 0.5); the source row is h extended by the summaries
+            dropped = real & body & ~keep_body
+            nd = int(cid.max().item()) + 1 if bool((cid >= 0).any()) else 1
+            dk = (torch.arange(B, device=h.device)[:, None] * nd + cid.clamp(min=0).long())[dropped]
+            hd = h[:, :Tr][dropped].float()
+            sums = torch.zeros(B * nd, D, device=h.device, dtype=torch.float32).index_add(0, dk, hd)
+            cnt = torch.zeros(B * nd, device=h.device).index_add(0, dk, torch.ones_like(dk, dtype=torch.float32))
+            col = torch.arange(Tr, device=h.device)[None, :].expand(B, Tr)
+            last = torch.full((B * nd,), -1, device=h.device, dtype=torch.long).scatter_reduce(
+                0, dk, col[dropped], reduce="amax")
+            has = cnt > 0
+            summ = (sums / cnt.clamp(min=1)[:, None]).to(h.dtype).view(B, nd, D)
+            key_tok = torch.where(keep_all, torch.arange(Tw, device=h.device, dtype=torch.float32)[None, :].expand(B, Tw),
+                                  torch.full((B, Tw), float("inf"), device=h.device))
+            key_sum = torch.where(has, last.to(torch.float32) + 0.5, torch.full_like(last, 0, dtype=torch.float32)
+                                  + float("inf")).view(B, nd)
+            n_sum = has.view(B, nd).sum(dim=1)
+            counts = counts + n_sum
+            src = torch.cat([h, summ], dim=1)
+            pid_src = torch.cat([pid, torch.gather(pid[:, :Tr], 1, last.view(B, nd).clamp(min=0))], dim=1)
+            keys = torch.cat([key_tok, key_sum], dim=1)
+            n_extra = nd
+            self._stat("merge_tokens", float(n_sum.sum()) / B)
+            self._flop(model, 2.0 * D * float(dropped.sum()))
+        else:
+            src, pid_src = h, pid
+            keys = torch.where(keep_all, torch.zeros(B, Tw, device=h.device), torch.ones(B, Tw, device=h.device))
+        W = int(counts.max().item())
+        W = min(src.shape[1], ((W + pm - 1) // pm) * pm)
+        order = torch.argsort(keys, dim=1, stable=True)[:, :W]
+        valid = torch.arange(W, device=h.device)[None, :] < counts[:, None]
+        h_new = torch.gather(src, 1, order[..., None].expand(B, W, D)) * valid[..., None].to(h.dtype)
+        pnew = torch.gather(pid_src, 1, order)
+        kw["position_ids"] = torch.where(valid, pnew, pid.max(dim=1, keepdim=True).values.expand_as(pnew))
+        if self.mod_layers:
+            return self._mod_begin(model, h, block_kwargs, entry, real, counts, order, valid, kw["position_ids"])
+        self._mid_gather = (order, valid, n_extra)
+        # targets at this layer, on the kept (gathered) columns
+        newcol = torch.zeros(B, src.shape[1], dtype=torch.long, device=h.device)
+        newcol.scatter_(1, order, torch.arange(W, device=h.device)[None, :].expand(B, W))
         entry["ok"] = keep_all[rows, pos]
-        entry["cols"] = newcol[rows, pos].clamp(min=0)
+        entry["cols"] = newcol[rows, pos]
         if dh_all is not None:
             entry["dh"] = dh_all[rows, pos]
-        self._register_target(model, entry, h_new)
+        if self.cfg.target_layer:
+            # targets from a deeper block: on routed steps only the exploration tokens (uniform, kept) are uncensored
+            if not entry["dense"]:
+                entry["ok"] = entry["ok"] & entry["explore"]
+            self._tap = entry
+        else:
+            self._register_target(model, entry, h_new)
+        self._exit = None
+        if self.cfg.exit_loss_weight > 0 and not entry["dense"]:
+            dropped = real & body & ~keep_body
+            if bool(dropped.any()):
+                # their hidden states at the split (with grad: the exit loss trains blocks [0, L)); labels come in mid_labels
+                self._exit = {"h": h[:, :Tr][dropped], "mask": dropped, "Tr": Tr}
+                head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
+                self._flop(model, float(head) * float(dropped.sum()))
+                self._stat("exit_tokens_frac", float(dropped.sum()) / max(1.0, float(real.sum())))
         # FLOP adjustment, per row: blocks before drop_layer at the full length, the rest + head at the
         # kept length, minus the dense charge the meter applies to the (uncompacted) row
         # (blocks skipped whole this step by layer drop ran for no token: the meter already leaves them out of
@@ -652,22 +1221,325 @@ class OnlineTokenRouter:
         blocks = [b if i not in skip else None for i, b in enumerate(model.blocks.values())]
         L0 = self.cfg.drop_layer
         head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
+        headx = head * (2.0 / 3.0 if getattr(model, "_head_frozen", False) else 1.0)  # frozen head: no weight grad
         adj = 0.0
+        # early_nograd / freeze: blocks below _nograd_until ran forward-only (1/3 of forward + backward); frozen blocks
+        # at or above L0 skipped only their weight gradient (2/3)
+        fac = self._block_factors(len(blocks))
+        self._stat("early_nograd", float(self._nograd_fwd))
+        ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
         for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
             fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
             fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
-            actual = L * sum(fb[:L0]) + Lk * (sum(fk) + head)
-            adj += actual - L * (sum(fb) + head)
+            if self.stage_idx == 0:
+                actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
+                          + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
+                adj += actual - L * (sum(fb) + head)
+                # adapters: blocks below the drop at the full length, the rest at the kept length
+                adj += L * sum(ab[:L0]) + Lk * sum(ab[L0:])
+            else:
+                # a later pyramid stage: the earlier stages already charged blocks >= L0 at THIS stage's entry length L
+                adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx)
+                        - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + headx))
+                adj += (Lk - L) * sum(ab[L0:])
+        self._flop(model, adj)
+        self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
+        if self._next is not None:
+            self._next._mid = self._stash_for_next(fp, ids, cid, Tr, Tw, order, valid)
+            self._next._nograd_fwd = False
+            self._next._nograd_until = 0
+            self._next._ignore_index = getattr(self, "_ignore_index", -100)
+        return h_new, kw
+
+    def _mid_compact_packed(self, model, h, block_kwargs, fp, ids, cid, Tr):
+        """Mid-stack drop on a PACKED row (segment mode, ``cu_doc_lens``): the router chose on the unpacked documents
+        (one per row of ``ids``); gather each document's kept tokens inside the single varlen row, re-derive
+        ``cu_doc_lens`` and keep each token's within-document ``position_ids``. Single stage only."""
+        if self.stages_on() or self.mod_layers or self.cfg.merge_dropped or self.cfg.exit_loss_weight > 0:
+            raise NotImplementedError("online router on packed rows supports a single-stage drop only "
+                                      "(no stages / mod_layers / merge_dropped / exit_loss_weight)")
+        if h.shape[0] != 1:
+            raise RuntimeError(f"packed mid_compact expects one packed row, got hidden {tuple(h.shape)}")
+        dev = h.device
+        B = ids.shape[0]
+        real = cid != -2
+        lens = real.sum(dim=1)
+        Ptot = int(lens.sum())
+        if h.shape[1] < Ptot:
+            raise RuntimeError(f"packed mid_compact: packed width {h.shape[1]} < {Ptot} real tokens")
+        offs = torch.cumsum(lens, 0) - lens
+        P = offs[:, None] + torch.arange(Tr, device=dev)[None, :]
+        Pc = torch.where(real, P, torch.zeros_like(P))
+        h_unp = h[0][Pc] * real[..., None].to(h.dtype)  # (B, Tr, D) the documents' hidden states, unpacked
+        if self.cfg.use_hidden:
+            self.add_hidden(fp, h_unp)
+        if self.cfg.score == "dh" or self.cfg.target in ("dh", "mix"):
+            with torch.no_grad():
+                e0 = model.embeddings(ids)
+                if model.embed_scale is not None:
+                    e0 = e0 * model.embed_scale
+                fp["_dh"] = torch.log((h_unp.float() - e0.float()).norm(dim=-1) + 1e-12)
+            self._flop(model, 3.0 * self.d_model * float(real.sum()))
+        keep_body, entry = self._choose(model, fp, ids, cid)
+        body = fp["body"]
+        keep_all = real & (~body | keep_body)
+        counts = keep_all.sum(dim=1)
+        kidx = P[keep_all]  # row-major: documents in packed order, tokens in document order
+        W = int(kidx.numel())
+        pm = int((getattr(model, "_pooled_soft_tokens", None) or {}).get("pad_multiple", 1) or 1)
+        tail = (-W) % pm if pm > 1 else 0
+        h_new = h[:, kidx]
+        kw = dict(block_kwargs)
+        pid = block_kwargs.get("position_ids")
+        if pid is None:
+            pid = (torch.arange(h.shape[1], device=dev)[None, :])
+        pos_new = pid[:, kidx]
+        cu = block_kwargs["cu_doc_lens"]
+        dl = counts.to(cu.dtype)
+        if tail:
+            h_new = torch.cat([h_new, h_new.new_zeros(1, tail, h.shape[-1])], dim=1)
+            pos_new = torch.cat([pos_new, pos_new.new_zeros(1, tail)], dim=1)
+            dl = torch.cat([dl, dl.new_tensor([tail])])
+        kw["position_ids"] = pos_new
+        kw["cu_doc_lens"] = torch.cat([dl.new_zeros(1), torch.cumsum(dl, 0)]).to(cu.dtype)
+        self._mid_gather = ("packed", kidx, tail)
+        newcol = torch.zeros(h.shape[1], dtype=torch.long, device=dev)
+        newcol[kidx] = torch.arange(W, device=dev)
+        rows, pos = entry["rows"], entry["pos"]
+        entry["ok"] = keep_all[rows, pos]
+        entry["cols"] = newcol[P[rows, pos]]
+        entry["hrows"] = torch.zeros_like(rows)
+        self._register_target(model, entry, h_new)
+        self._exit = None
+        # FLOP adjustment per DOCUMENT (each attends within itself), same rule as the padded path
+        ld = getattr(model, "_layer_drop", None)
+        skip = ld.skipped() if (ld is not None and model.training) else frozenset()
+        if self.cfg.drop_layer in skip:
+            raise RuntimeError(f"online router drop_layer {self.cfg.drop_layer} is skipped by layer drop")
+        blocks = [b if i not in skip else None for i, b in enumerate(model.blocks.values())]
+        L0 = self.cfg.drop_layer
+        head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
+        headx = head * (2.0 / 3.0 if getattr(model, "_head_frozen", False) else 1.0)  # frozen head: no weight grad
+        fac = self._block_factors(len(blocks))
+        self._stat("early_nograd", float(self._nograd_fwd))
+        ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
+        adj = 0.0
+        for L, Lk in zip(lens.tolist(), counts.tolist()):
+            fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
+            fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
+            actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
+                      + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
+            adj += actual - L * (sum(fb) + head) + L * sum(ab[:L0]) + Lk * sum(ab[L0:])
         self._flop(model, adj)
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         return h_new, kw
 
+    def stages_on(self) -> bool:
+        return self._next is not None or self.stage_idx > 0
+
+    def _mod_begin(self, model, h, block_kwargs, entry, real, counts, order, valid, pos_c):
+        """Mixture-of-depths at the first listed block: keep the full row, remember the gather the listed blocks run
+        on, read the targets at this block over every sampled token, and charge the listed blocks at the kept length."""
+        if getattr(model, "_ffn_width", None) is not None:
+            raise NotImplementedError("online router mod_layers does not charge --ffn-width-frac yet")
+        dense = bool(entry["dense"]) or bool((counts == real.sum(dim=1)).all())
+        self._mod = None if dense else {"order": order, "valid": valid, "pos": pos_c}
+        rows, pos = entry["rows"], entry["pos"]
+        entry["ok"] = real[rows, pos]
+        entry["cols"] = pos
+        if self.cfg.target_layer:
+            self._tap = entry  # every token reaches the deeper block under mixture-of-depths
+        else:
+            self._register_target(model, entry, h)
+        self._exit = None
+        ld = getattr(model, "_layer_drop", None)
+        skip = ld.skipped() if (ld is not None and model.training) else frozenset()
+        blocks = [b if i not in skip else None for i, b in enumerate(model.blocks.values())]
+        L0, mods = self.cfg.drop_layer, [i for i in self.mod_layers if i < len(blocks)]
+        fac = self._block_factors(len(blocks))
+        self._stat("early_nograd", float(self._nograd_fwd))
+        adj = self._lora_charge(model) * float(real.sum()) if model.training else 0.0
+        ms = set(mods)
+        for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
+            if dense:
+                Lk = L
+            fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
+            for i, b in enumerate(blocks):
+                if b is None:
+                    continue
+                if i in ms:
+                    adj += fac[i] * Lk * int(b.num_flops_per_token(int(Lk))) - L * fb[i]
+                else:
+                    adj += (fac[i] - 1.0) * L * fb[i]
+        self._flop(model, adj)
+        self._stat("mod_row_frac", float(counts.sum()) / max(1.0, float(real.sum())) if not dense else 1.0)
+        return h, block_kwargs
+
+    @staticmethod
+    def _mass_keep(score: torch.Tensor, body: torch.Tensor, cid: torch.Tensor, share: float) -> torch.Tensor:
+        """(B, T) per-document minimal top-score set whose predicted mass exp(2 x score) covers ``share``."""
+        out = torch.zeros_like(body)
+        B, T = body.shape
+        for b in range(B):
+            idx = body[b].nonzero(as_tuple=True)[0]
+            if idx.numel() == 0:
+                continue
+            d = cid[b, idx].to(torch.long)
+            sc = score[b, idx].to(torch.float64)
+            nd = int(d.max()) + 1
+            mx = torch.full((nd,), -float("inf"), device=sc.device, dtype=sc.dtype).scatter_reduce(0, d, sc,
+                                                                                                    reduce="amax")
+            m = torch.exp(2.0 * (sc - mx[d]))
+            tot = torch.zeros(nd, device=sc.device, dtype=sc.dtype).index_add(0, d, m)
+            # group by document, score descending within it
+            r = (-sc).argsort().argsort().to(torch.float64)
+            order = (d.to(torch.float64) * (idx.numel() + 1) + r).argsort()
+            ms, ds = m[order], d[order]
+            cs = ms.cumsum(0)
+            start = torch.zeros(nd, device=sc.device, dtype=sc.dtype).index_add(0, ds, ms)  # per-doc totals
+            offs = torch.cumsum(start, 0) - start
+            before = cs - ms - offs[ds]  # predicted mass of the doc's higher-scored tokens
+            sel = before < (share - 1e-9) * tot[ds]  # tolerance: the offset subtraction leaves a rounding residue
+            out[b, idx[order[sel]]] = True
+        return out
+
+    @staticmethod
+    def lora_flops_per_token(model) -> float:
+        st = getattr(model, "_early_lora", None)
+        if not st:
+            return 0.0
+        if "fpt" not in st:
+            from .early_lora import early_lora_flops_per_token
+
+            st["fpt"] = early_lora_flops_per_token(model)
+        return float(st["fpt"])
+
+    def _lora_charge(self, model) -> float:
+        """Adapter FLOPs per token for this forward: forward + backward, or forward only (1/3) once frozen."""
+        return self.lora_flops_per_token(model) * (1.0 / 3.0 if self._nograd_fwd else 1.0)
+
+    def _lora_block_charges(self, model) -> List[float]:
+        """Per-block adapter FLOPs per token for this forward (blocks below _nograd_until forward-only)."""
+        st = getattr(model, "_early_lora", None)
+        if not st:
+            return [0.0] * len(model.blocks)
+        if "fpb" not in st:
+            from .early_lora import early_lora_flops_per_block
+
+            st["fpb"] = early_lora_flops_per_block(model)
+        nu = self._nograd_until
+        return [a * (1.0 / 3.0 if i < nu else 1.0) for i, a in enumerate(st["fpb"])]
+
+    def _block_extra(self, model, fac: List[float]) -> List[float]:
+        """Per-block additive FLOPs per token at the block's own length: the LoRA adapters plus the partial-MLP
+        credit (-(1 - f) x the FFN, scaled by the block's factor), so both land at the right length in every stage."""
+        n = len(model.blocks)
+        ab = self._lora_block_charges(model) if getattr(model, "_early_lora", None) else [0.0] * n
+        fw = getattr(model, "_ffn_width", None)
+        if fw is not None:
+            cr = fw.credits_per_block(n)
+            ab = [a + f * c for a, f, c in zip(ab, fac, cr)]
+        return ab
+
+    def _block_factors(self, n_blocks: int) -> List[float]:
+        """Per-block share of the forward + backward cost this forward pays: 1/3 below ``_nograd_until`` (forward
+        only), 2/3 for frozen blocks at or above the drop layer (no weight gradient), else 1."""
+        nu, L0, P = self._nograd_until, self.cfg.drop_layer, self.frozen_blocks
+        K = self.lora_blocks()
+        return [1.0 / 3.0 if i < nu else (2.0 / 3.0 if (L0 <= i < P or i < K) else 1.0) for i in range(n_blocks)]
+
+    def lora_blocks(self) -> int:
+        """Blocks [0, K) carry LoRA adapters with a frozen base (0 without early_lora)."""
+        if self.cfg.early_lora <= 0:
+            return 0
+        return int(self.cfg.early_lora_blocks or (self._root_drop_layer if self.stage_idx else self.cfg.drop_layer))
+
+    def tap_target(self, model, h: torch.Tensor, block_idx: int) -> torch.Tensor:
+        """At the input of block ``target_layer``: register this forward's pending target hook there."""
+        e, self._tap = self._tap, None
+        if e is not None and block_idx == self.cfg.target_layer and h.requires_grad:
+            self._register_target(model, e, h)
+        elif e is not None:
+            self._tap = e
+        return h
+
+    def mod_block(self, block, h: torch.Tensor, kwargs: Dict[str, Any]) -> torch.Tensor:
+        """Run one LISTED block under mixture-of-depths: on the kept tokens only (gathered at their original
+        positions), scattered back; every other token passes the residual through unchanged."""
+        m = self._mod
+        if m is None:
+            return block(h, **kwargs)
+        if kwargs.get("cu_doc_lens") is not None:
+            raise RuntimeError("online router mod_layers: packed rows (cu_doc_lens) are not supported")
+        order, valid = m["order"], m["valid"]
+        B, W = order.shape
+        D = h.shape[-1]
+        idx = order[..., None].expand(B, W, D)
+        hc = torch.gather(h, 1, idx)
+        kw = dict(kwargs)
+        kw["position_ids"] = m["pos"]
+        out = block(hc * valid[..., None].to(hc.dtype), **kw)
+        # padded slots of the gather hold dropped tokens' columns: write their own (unchanged) values back
+        return h.scatter(1, idx, torch.where(valid[..., None], out.to(h.dtype), hc))
+
+    def chain(self) -> List["OnlineTokenRouter"]:
+        """This router and its later pyramid stages, in order."""
+        out, r = [], self
+        while r is not None:
+            out.append(r)
+            r = r._next
+        return out
+
+    @staticmethod
+    def _stash_for_next(fp, ids, cid, Tr, Tw, order, valid) -> Dict[str, Any]:
+        """The next pyramid stage's feature stash: every per-token part gathered to this stage's kept row."""
+        B, W = order.shape
+
+        def g(x, fill):
+            pad = torch.full((B, Tw) + tuple(x.shape[2:]), fill, dtype=x.dtype, device=x.device)
+            pad[:, :Tr] = x
+            idx = order.to(x.device).view(B, W, *([1] * (x.dim() - 2))).expand(B, W, *x.shape[2:])
+            out = torch.gather(pad, 1, idx)
+            v = valid.to(x.device).view(B, W, *([1] * (x.dim() - 2)))
+            return torch.where(v, out, torch.full_like(out, fill))
+
+        fp2 = {}
+        for k, v in fp.items():
+            if torch.is_tensor(v) and v.dim() >= 2 and v.shape[0] == B and v.shape[1] == Tr:
+                fp2[k] = g(v, False if v.dtype == torch.bool else 0)
+        return {"fp": fp2, "ids": g(ids, 0), "cid": g(cid, -2), "Tr": W}
+
     def mid_labels(self, labels: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
-        """Apply this forward's mid-stack gather to the (input-compacted) labels."""
+        """Apply this forward's mid-stack gather(s) -- every pyramid stage in order -- to the (input-compacted) labels."""
+        for r in self.chain():
+            labels = r._own_mid_labels(labels)
+        return labels
+
+    def pop_exit(self) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
+        """``(h (N, D), labels (N,))`` of this forward's dropped tokens for the early-exit loss, or None."""
+        e, self._exit = self._exit, None
+        if e is None or "labels" not in e:
+            return None
+        return e["h"], e["labels"]
+
+    def _own_mid_labels(self, labels: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        if self._exit is not None and labels is not None:
+            # the dropped tokens' labels, read before the gather removes them
+            self._exit["labels"] = labels[:, : self._exit["Tr"]][self._exit["mask"].to(labels.device)]
         g, self._mid_gather = getattr(self, "_mid_gather", None), None
         if g is None or labels is None:
             return labels
-        order, valid = g
+        if g[0] == "packed":
+            kidx, tail = g[1], g[2]
+            lab = labels[:, kidx.to(labels.device)]
+            if tail:
+                lab = torch.cat([lab, lab.new_full((lab.shape[0], tail), int(getattr(self, "_ignore_index", -100)))], 1)
+            return lab
+        order, valid, n_extra = g
+        ign = int(getattr(self, "_ignore_index", -100))
+        if n_extra:  # merge_dropped summary slots carry no label
+            labels = torch.cat([labels, torch.full((labels.shape[0], n_extra), ign, dtype=labels.dtype,
+                                                   device=labels.device)], dim=1)
         lab = torch.gather(labels, 1, order.to(labels.device))
         return torch.where(valid.to(labels.device), lab, torch.full_like(lab, int(getattr(self, "_ignore_index", -100))))
 
@@ -712,15 +1584,18 @@ class OnlineTokenRouter:
         return h
 
     def _register_target(self, model, entry: Dict[str, Any], h: torch.Tensor) -> None:
+        if not h.requires_grad:
+            return  # a no_grad forward (diag_every): there is no backward to read targets from
         rows, cols = entry["rows"], entry["cols"]
+        hrows = entry.get("hrows", rows)  # packed rows: every sample lives in row 0 of the packed hidden state
         if self.cfg.target == "gxh":
-            entry["hsel"] = h.detach()[rows, cols].float()
+            entry["hsel"] = h.detach()[hrows, cols].float()
         self._pending.append(entry)
         n_sel = int(rows.numel())
         self._flop(model, 2.0 * self.d_model * n_sel * (2 if self.cfg.target == "gxh" else 1))
 
         def hook(g: torch.Tensor) -> None:
-            gs = g.detach()[rows, cols].float()
+            gs = g.detach()[hrows, cols].float()
             gn = torch.log(gs.norm(dim=-1) + 1e-12)
             entry["gn"] = gn
             tgt = self.cfg.target
@@ -748,22 +1623,27 @@ class OnlineTokenRouter:
         F = self.n_features
         if self.step == 0:
             self._pending = []  # forwards before the first step = the trainer's dry-run batch
-        X, y, rows_all, expl, preds, dense_e, gns = [], [], [], [], [], [], []
+        X, y, rows_all, expl, preds, dense_e, gns, tks = [], [], [], [], [], [], [], []
         for e in self._pending:
             if e["target"] is None:
                 continue
-            ok = e["ok"]
+            ok = e["ok"] & torch.isfinite(e["target"])
+            if not bool((e["ok"] == ok).all()):
+                self._stat("nonfinite_targets", float((e["ok"] & ~ok).sum()))
             if not ok.any():
                 continue
             t = e["target"][ok]
             r = e["rows"][ok]
-            # per-row centring (only the within-row ranking is fit)
+            # per-row centring (only the within-row ranking is fit); keep_mode threshold centres over the batch so the
+            # scores also carry the across-row difficulty
             nb = int(r.max()) + 1
             s = torch.zeros(nb, device=t.device).index_add_(0, r, t)
             n = torch.zeros(nb, device=t.device).index_add_(0, r, torch.ones_like(t))
-            t = t - (s / n.clamp(min=1))[r]
+            t = t - t.mean() if self.cfg.keep_mode == "threshold" else t - (s / n.clamp(min=1))[r]
             X.append(e["feats"][ok])
             y.append(t)
+            if e.get("task") is not None:
+                tks.append(e["task"][ok])
             rows_all.append(r + 10_000 * len(rows_all))
             expl.append(e["explore"][ok])
             if e["pred"] is not None:
@@ -845,20 +1725,135 @@ class OnlineTokenRouter:
         self._stat("fit_samples", float(cnt.item()))
         if self.n_seen > 0:
             A = self.XtX.clone()
-            lam = self.cfg.ridge * float(torch.diagonal(A).mean().clamp(min=1e-12))
-            A.diagonal().add_(lam)
+            dg = torch.diagonal(A)
+            if self.cfg.ridge_groups:
+                ns, hd = self.n_scalar, self.hdim
+                lam_v = torch.empty_like(dg)
+                for lo, hi in ((0, ns), (ns, ns + hd), (ns + hd, F)):
+                    if hi > lo:
+                        lam_v[lo:hi] = self.cfg.ridge * dg[lo:hi].mean().clamp(min=1e-12)
+                A.diagonal().add_(lam_v)
+            else:
+                lam = self.cfg.ridge * float(dg.mean().clamp(min=1e-12))
+                A.diagonal().add_(lam)
             try:
                 Lc = torch.linalg.cholesky(A)
-                self.w = torch.cholesky_solve(self.Xty[:, None], Lc).squeeze(-1).to(torch.float32)
+                w_new = torch.cholesky_solve(self.Xty[:, None], Lc).squeeze(-1).to(torch.float32)
+                if bool(torch.isfinite(w_new).all()):
+                    self.w = w_new
+                else:  # a non-finite fit (poisoned statistics) never reaches the scorer
+                    log.warning("[online-router] non-finite ridge solution at step %d; keeping previous weights", step)
+                    self._stat("nonfinite_fit", 1.0)
             except RuntimeError as exc:  # pragma: no cover - numerically singular
                 log.warning("[online-router] ridge solve failed (%s); keeping previous weights", exc)
             if model is not None:
                 self._flop(model, F**3 / 3.0 + 4.0 * F * F)
+        if self.cfg.per_task_key_tokens > 0:
+            self._fit_per_task(model, Xc, yc, torch.cat(tks).to(dev) if len(tks) == len(X) and tks else None, dev)
+        if self.cfg.mlp_hidden > 0 and self.w is not None:
+            self._train_mlp(model, Xc, yc, dev)
         self.step = int(step)
+
+    def _train_mlp(self, model, Xc: torch.Tensor, yc: torch.Tensor, dev) -> None:
+        """mlp_hidden: a few Adam steps of the residual MLP on this step's (row-centred) targets minus the ridge's
+        prediction. Every rank runs the same number of steps (gradients all-reduced), samples or not."""
+        import torch.distributed as dist
+
+        c, F, H = self.cfg, self.n_features, self.cfg.mlp_hidden
+        if getattr(self, "_mlp", None) is None:
+            g = torch.Generator().manual_seed(c.seed * 7919 + 17 + self.stage_idx)
+            ps = [(torch.randn(F, H, generator=g) / math.sqrt(F)).to(dev), torch.zeros(H, device=dev),
+                  torch.zeros(H, device=dev), torch.zeros(1, device=dev)]
+            ps = [p.requires_grad_(True) for p in ps]
+            self._mlp = {"p": ps, "opt": torch.optim.Adam(ps, lr=c.mlp_lr)}
+        W1, b1, w2, b2 = self._mlp["p"]
+        X = Xc.to(dev, torch.float32)
+        r = (yc.to(dev, torch.float64) - Xc.to(dev, torch.float64) @ self.w.to(dev, torch.float64)).to(torch.float32)
+        n = torch.tensor([float(X.shape[0])], device=dev)
+        ddp = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
+        if ddp:
+            dist.all_reduce(n)
+        N = float(n.item())
+        if N <= 0:
+            return
+        losses = []
+        with torch.enable_grad():
+            for _ in range(c.mlp_steps):
+                self._mlp["opt"].zero_grad(set_to_none=False)
+                pred = torch.relu(X @ W1 + b1) @ w2 + b2
+                loss = ((pred - r) ** 2).sum()
+                loss.backward()
+                for p in self._mlp["p"]:
+                    if p.grad is None:
+                        p.grad = torch.zeros_like(p)
+                    if ddp:
+                        dist.all_reduce(p.grad)
+                    p.grad.div_(N)
+                self._mlp["opt"].step()
+                losses.append(float(loss.detach()) / max(1.0, float(X.shape[0])))
+        self._stat("mlp_resid_mse", losses[-1])
+        self._stat("mlp_resid_var", float(r.var()) if r.numel() > 1 else float("nan"))
+        if model is not None:
+            self._flop(model, 6.0 * F * H * X.shape[0] * c.mlp_steps)
+
+    def _mlp_score(self, fp: Dict[str, torch.Tensor]) -> Optional[torch.Tensor]:
+        """(B, T) residual MLP score, or None before it exists."""
+        st = getattr(self, "_mlp", None)
+        if st is None:
+            return None
+        W1, b1, w2, b2 = [p.detach() for p in st["p"]]
+        ns, hd = self.n_scalar, self.hdim
+        pre = fp["s"] @ W1[:ns]
+        if "h" in fp:
+            pre = pre + fp["h"] @ W1[ns : ns + hd]
+            if "q" in fp:
+                pre = pre + (fp["h"] * fp["q"][:, None, :]) @ W1[ns + hd : ns + 2 * hd]
+        return torch.relu(pre + b1) @ w2 + b2
+
+    def _fit_per_task(self, model, Xc: torch.Tensor, yc: torch.Tensor, tk: Optional[torch.Tensor], dev) -> None:
+        """One ridge fit per task key (same decay / ridge as the pooled fit; a task's statistics decay only on the
+        steps it is present). Every rank walks the same sorted union of keys, so the all-reduces line up."""
+        import torch.distributed as dist
+
+        F = self.n_features
+        local = sorted({int(k) for k in tk.tolist()}) if tk is not None and tk.numel() else []
+        if dist.is_available() and dist.is_initialized():
+            gathered: List[Any] = [None] * dist.get_world_size()
+            dist.all_gather_object(gathered, local)
+            keys = sorted({k for g in gathered for k in (g or [])})
+        else:
+            keys = local
+        for k in keys:
+            m = (tk == k) if tk is not None else torch.zeros(Xc.shape[0], dtype=torch.bool, device=dev)
+            Xk, yk = Xc[m], yc[m]
+            G, b = Xk.T @ Xk, Xk.T @ yk
+            cnt = torch.tensor([float(Xk.shape[0])], dtype=torch.float64, device=dev)
+            if dist.is_available() and dist.is_initialized():
+                dist.all_reduce(G)
+                dist.all_reduce(b)
+                dist.all_reduce(cnt)
+            if k in self.task_XtX:
+                self.task_XtX[k] = self.cfg.decay * self.task_XtX[k] + G
+                self.task_Xty[k] = self.cfg.decay * self.task_Xty[k] + b
+                self.task_seen[k] = self.cfg.decay * self.task_seen[k] + float(cnt.item())
+            else:
+                self.task_XtX[k], self.task_Xty[k], self.task_seen[k] = G, b, float(cnt.item())
+            A = self.task_XtX[k].clone()
+            lam = self.cfg.ridge * float(torch.diagonal(A).mean().clamp(min=1e-12))
+            A.diagonal().add_(lam)
+            try:
+                Lc = torch.linalg.cholesky(A)
+                self.task_w[k] = torch.cholesky_solve(self.task_Xty[k][:, None], Lc).squeeze(-1).to(torch.float32)
+            except RuntimeError as exc:  # pragma: no cover - numerically singular
+                log.warning("[online-router] task %d ridge solve failed (%s); keeping its previous weights", k, exc)
+            if model is not None:
+                self._flop(model, 2.0 * F * F * Xk.shape[0] + 2.0 * F * Xk.shape[0] + F**3 / 3.0 + 4.0 * F * F)
+        self._stat("task_routers", float(len(self.task_w)))
 
     def metrics(self) -> Dict[str, float]:
         """Means of the per-forward diagnostics since the last call (then reset)."""
-        out = {f"online_router/{k}": sum(v) / len(v) for k, v in self._stats.items() if v}
+        pre = "online_router/" if self.stage_idx == 0 else f"online_router/s{self.stage_idx}_"
+        out = {f"{pre}{k}": sum(v) / len(v) for k, v in self._stats.items() if v}
         self._stats = {}
         if self.w is not None:
             w = self.w
