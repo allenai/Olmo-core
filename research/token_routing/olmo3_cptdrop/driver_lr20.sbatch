@@ -301,10 +301,19 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
         SEQ=$((T * 1024)); GBT=$((524288 / SEQ)); [ "$GBT" -ge 1 ] || GBT=1
         [ -f "$ROOT/data/probe${T}k_ee/metadata.json" ] || "$PY" "$CODE/research/token_routing/olmo3_cptdrop/probe_shard.py" \
           --src "$ROOT/data/train32k_ee" --out "$ROOT/data/probe${T}k_ee" --row-len "$SEQ" --rows 16 || exit 98
-        for A in D K32; do
+        for A in ${MAXT_ARMS:-D K32}; do
           [ -n "${dead[$A]:-}" ] && continue
           name="o3cd-MAXT-$A-${T}k"; rm -rf -- "$ROOT/runs/$name" "$ROOT/work/$name"
-          if [ "$A" = D ]; then set -- ARM=D; else set -- ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 "OTR_EXTRA=$K32X"; fi
+          # D = dense; K32 = whole-model LoRA via the online-router path; K32d = the same LoRA on the plain dense arm
+          # (--lora-rank modifier); *off = activation checkpointing with block inputs in host memory (full_offload)
+          case "$A" in
+            D) set -- ARM=D ;;
+            Doff) set -- ARM=D AC=full_offload ;;
+            K32) set -- ARM=OTR OTR_KEEP=1.0 OTR_L=7 OTR_DENSE=0 "OTR_EXTRA=$K32X" ;;
+            K32d) set -- ARM=D "EXTRA=--lora-rank 64 --lora-scale 32" ;;
+            K32doff) set -- ARM=D AC=full_offload "EXTRA=--lora-rank 64 --lora-scale 32" ;;
+            *) log "MAXT: unknown arm $A"; continue ;;
+          esac
           run "$name" "$@" CTX=${T}k DATA_OVERRIDE=probe${T}k_ee MAX_TOKENS=$((3 * GBT * SEQ)) SMOKE=1 NOWANDB=1 EXPECTED_MIN=20
           rc=$?; L="$ROOT/logs/$name.log"
           pk=$(grep -oE "GPU active mem \(GiB\)=[0-9.]+" "$L" | grep -oE "[0-9.]+$" | sort -n | tail -1)
