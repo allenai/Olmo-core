@@ -94,6 +94,31 @@ Further checks:
 - **Short guard:** level with dense throughout ⚠ (256 rows).
 - **64k PF:** the dense-64k meter files are partial counts, so 64k dense PF is taken as K32 PF / 0.696.
 
+## Max trainable context per GPU (memory probe)
+
+8 x H200, FSDP over 8 ranks, micro-batch 1 row, full activation checkpointing, fused-linear CE, 3 real steps
+(`--skip-dry-run`; the dry run leaves a T-proportional allocation resident). Synthetic rows (joined train32k documents),
+memory only. Cubbins job 4112505, driver stage MAXT.
+
+| arm | peak active GiB @ 96k / 128k / 160k / 192k / 224k | fit (reserved) | max T at 78 GiB reserved (H100-class) | max T at 138 GiB (H200) |
+|---|---|---|---|---|
+| dense | 70.4 / 89.6 / 108.7 / 127.9 / OOM | 18.1 + 20.1 per 32k | ~95k | ~190k |
+| K32 (router path) | 60.9 / 78.9 / 96.9 / 114.9 / OOM | 7.5 + 20.3 | ~111k | ~206k |
+| K32 (plain dense path, `--lora-rank`) | 59.8 / 77.5 / 95.2 / 112.9 / OOM | 4.4 + 20.7 | ~114k | ~206k |
+| dense + offload | 62.1 / 73.8 / 85.5 / 97.2 / 108.9 (256k: 120.5) | 27.7 + 12.7 | ~126k | ~277k |
+| K32 + offload | 48.2 / 58.4 / 68.6 / 78.9 / 89.1 | 21.0 + 11.6 | ~157k | ~323k |
+
+- **LoRA alone barely moves max T:** +8% on H200, +17% on 80 GB. It removes ~12 GiB of fixed state (grads and Adam state
+  of frozen weights), but max T is set by the per-token activation slope, which LoRA leaves unchanged.
+- **Offload is an implementation fix that helps both arms:** AC mode `full_offload`, `src/olmo_core/nn/offload_checkpoint.py`,
+  holds each block's input in pinned host memory. It cuts the slope by ~7.5 GiB per 32k (the stored bf16 block inputs),
+  adds ~10-14 GiB fixed, gives +46% max T for dense on H200 and +70% combined with K32, and costs ~3-4% throughput.
+  Training is bit-identical: step losses of dense vs dense+offload and K32 vs K32+offload match to all printed digits.
+- **The router path costs little:** K32 via the router path costs ~1.5 GiB more than via the plain dense path; same model
+  (dev CE 1.6849 vs 1.6848 at 48 steps).
+- **FLOPs ≠ wall-clock at long T:** K32 is 0.70x dense FLOPs, but only ~3% faster per token at 128-192k, where attention
+  (untouched by LoRA) dominates.
+
 ## What lost (best m in each family)
 
 | family | example | result |
