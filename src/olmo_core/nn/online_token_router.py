@@ -124,6 +124,11 @@ class OnlineRouterConfig:
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
     (:func:`freeze_and_release`, run by the callback); afterwards it behaves as ``freeze_early``. 0 = off."""
+    later_mass_target: float = 0.0
+    """Pyramid stages after the first use the adaptive mass keep (``mass_target`` semantics: each document's fewest
+    top tokens covering this share of its predicted gradient mass among the survivors), capped per row at
+    ``later_max_keep_frac`` of the tokens entering the stage; the first stage keeps its fixed budget. 0 = off."""
+    later_max_keep_frac: float = 1.0
     ctx_feats: bool = False
     """Document-context scalar features (2026-10-26): per token, its document's mean and max of the query-match
     score ``cos_h_q`` and mean in-query flag, the token's within-document rank of ``cos_h_q``, and ``cos_h_q`` of its
@@ -328,6 +333,10 @@ class OnlineRouterConfig:
             if not self.mod_layers and self.explore_frac <= 0:
                 raise ValueError("online router target_layer with the drop fits on the exploration tokens: "
                                  "set explore_frac > 0")
+        if self.later_mass_target and not (0.0 < self.later_mass_target <= 1.0 and self.stages
+                                           and 0.0 < self.later_max_keep_frac <= 1.0 and self.keep_mode == "topk"):
+            raise ValueError("online router later_mass_target needs stages, a share in (0, 1], "
+                             "later_max_keep_frac in (0, 1] and keep_mode topk")
         if self.ctx_feats and not (self.use_hidden and self.use_query):
             raise ValueError("online router ctx_feats needs use_hidden and use_query (they derive from cos_h_q)")
         if self.task_onehot < 0:
@@ -590,12 +599,15 @@ class OnlineTokenRouter:
 
             st = parse_stages(cfg.stages)
             (l0, k0), rest = st[0], st[1:]
-            cfg = dataclasses.replace(cfg, stages="", drop_layer=l0, keep_frac=k0)
+            lmt, lmk = cfg.later_mass_target, cfg.later_max_keep_frac
+            cfg = dataclasses.replace(cfg, stages="", drop_layer=l0, keep_frac=k0, later_mass_target=0.0)
             prev_k, prev = k0, self
             for i, (l, k) in enumerate(rest, start=1):
                 # later stages: keep ``k`` of the ORIGINAL body = k / prev_k of the tokens entering; their own fit
                 c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False,
                                         seed=cfg.seed + 1009 * i, keep_first=0)
+                if lmt > 0:
+                    c = dataclasses.replace(c, mass_target=lmt, max_keep_frac=lmk)
                 nxt = OnlineTokenRouter(c, doc_start_id=doc_start_id, doc_end_id=doc_end_id, eos_id=eos_id,
                                         d_model=d_model, gold_table=None, rank=rank)
                 nxt.stage_idx = i

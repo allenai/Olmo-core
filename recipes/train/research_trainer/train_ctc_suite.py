@@ -1960,6 +1960,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora", type=int, default=0,
                     help="online router: LOW-RANK early stack -- blocks [0, drop_layer) + embeddings frozen from step 0, "
                     "every linear in those blocks gets a rank-R LoRA adapter (no base grads / Adam state). 0 = off")
+    ap.add_argument("--st-otr-later-mass-target", type=float, default=0.0,
+                    help="online router stages: later stages keep each document's top tokens covering this share of "
+                    "their predicted gradient mass among survivors (adaptive budget), capped per row at "
+                    "--st-otr-later-max-keep-frac of the stage's input. 0 = fixed budgets")
+    ap.add_argument("--st-otr-later-max-keep-frac", type=float, default=1.0,
+                    help="--st-otr-later-mass-target: per-row cap (share of the tokens entering the stage)")
     ap.add_argument("--st-otr-ctx-feats", action="store_true",
                     help="online router: document-context features (doc mean / max of cos_h_q, doc in-query rate, "
                     "within-doc cos rank, +-1 / +-2 neighbour cos)")

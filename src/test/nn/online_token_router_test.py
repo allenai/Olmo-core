@@ -1540,3 +1540,12 @@ def test_ctx_and_task_features_widen_the_fit_consistently():
     assert e["feats"].shape[1] == r.n_features
     with pytest.raises(ValueError):
         _router(use_hidden=False, ctx_feats=True)
+
+
+def test_later_mass_target_applies_to_later_stages_only():
+    r = _router(drop_layer=2, stages="2:0.2,3:0.07", later_mass_target=0.6, later_max_keep_frac=0.5)
+    s = r.chain()
+    assert s[0].cfg.mass_target == 0.0 and s[0].cfg.keep_frac == pytest.approx(0.2)
+    assert s[1].cfg.mass_target == pytest.approx(0.6) and s[1].cfg.max_keep_frac == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, later_mass_target=0.6)  # needs stages
