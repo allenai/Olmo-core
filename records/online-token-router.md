@@ -1249,3 +1249,8 @@ Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not s
 - **Workaround.** Relaunch into the same dir.
 - **To debug.** Capture every rank's log to see the first failing rank. The suspect is the final save / teardown in a
   process that already ran mid-run saves (async bookkeeping, e.g. old-checkpoint cleanup, on the gloo group).
+- **Hypothesis (CPT, 2026-10-26).** Every crashed run's final step was a multiple of `--save-interval` (120 / 240 /
+  480 with SAVE 60), so the interval save and the final checkpoint save fire on the same step. 48-step runs, with no
+  mid-run save before the end, never crashed. Two SAVE-60 runs ending on a multiple survived (K32-480, topk-120),
+  consistent with a race between the two saves (the post_train save against the interval save's async upload /
+  barrier) rather than a deterministic failure. CPT is testing a SAVE that does not divide the step count.
