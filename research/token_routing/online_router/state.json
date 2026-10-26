@@ -4170,23 +4170,43 @@
    "task": "oolong"
   },
   "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05-evcontradiction": {
-   "ex": "01M5VM9HFJQG9S1FNGENFGE4SD",
+   "ex": "01M5VM91JFQHZSBQ4M0RD7WJXS",
    "train_run": "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05",
    "task": "contradiction"
   },
   "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05-evnq": {
-   "ex": "01M5VMAGVND66SS4FZVGZJX3T8",
+   "ex": "01M5VMA3EKFDJCYCEQ6JAFJT7Y",
    "train_run": "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05",
    "task": "nq"
   },
   "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05-evoutlier": {
-   "ex": "01M5VMBP499DPNKJTD9NVKHTYW",
+   "ex": "01M5VMB4P571E613R1N6H0RRFJ",
    "train_run": "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05",
    "task": "outlier"
   },
   "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05-evoolong": {
-   "ex": "01M5VMCPPK1A5GVF8BSHMH881X",
+   "ex": "01M5VMC6F5AFHZ9CFNRWDCSHYV",
    "train_run": "f8k-mt4-lora64K32to-s1464-tdb-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05-evcontradiction": {
+   "ex": "01M5VMDMHMQS6ASFMNH8ZTFBX3",
+   "train_run": "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05-evnq": {
+   "ex": "01M5VMEM9PTSYT2TQ23TKE5PBB",
+   "train_run": "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05-evoutlier": {
+   "ex": "01M5VMFHD47R9KG2MN35DAE9ZM",
+   "train_run": "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05-evoolong": {
+   "ex": "01M5VMGAAVW2544JJ9X2VZVK40",
+   "train_run": "f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05",
    "task": "oolong"
   }
  },
