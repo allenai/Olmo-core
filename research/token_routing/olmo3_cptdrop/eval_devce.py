@@ -362,8 +362,11 @@ def reinstall_early_lora(ckpt: str, model) -> Optional[dict]:
         if r is None or sc is None:
             raise SystemExit(f"{ckpt}: checkpoint has {len(lora)} lora_A keys but neither config.json nor "
                              "provenance.json records the adapter rank / scale; refusing to score it as the base")
-        n_blocks = 1 + max(int(k.split(".")[1]) for k in lora if k.startswith("blocks."))
-        block = {"n_blocks": n_blocks, "rank": int(r.group(1)), "scale": float(sc.group(1))}
+        idx = [int(k.split(".")[1]) for k in lora if k.startswith("blocks.")]
+        # adapters may start above block 0 (--st-otr-early-lora-start B: frozen adapter-less bottom stack)
+        block = {"n_blocks": 1 + max(idx), "rank": int(r.group(1)), "scale": float(sc.group(1))}
+        if min(idx) > 0:
+            block["start"] = min(idx)
         log(f"early_lora block missing from config.json; rebuilt from checkpoint keys + provenance: {block}")
     from olmo_core.nn.early_lora import enable_from_config_block
 
