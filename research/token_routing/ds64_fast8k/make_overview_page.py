@@ -86,6 +86,12 @@ MEM_STD_FIT = {"Dense": (31.3, 0.386), "Router keep 10%": (34.0, 0.255), "Recipe
                "Whole-model LoRA + two-stage": (13.4, 0.248)}
 MEM_FLAGS_FIT = {"Dense": (32.7, 0.28), "Router keep 10%": (31.8, 0.17), "Recipe: two-stage + adapters 0–6": (16.6, 0.21),
                  "Whole-model LoRA + two-stage": (14.6, 0.16)}
+# early-block parameter-gradient share over training, three tracks (records/grad-composition.md tables; mt11 rows
+# 32-42/task, CPT 48 rows x 32k)
+EARLY_SHARE = {"SFT 4-task (LR 5e-6)": [(0, 0.45), (31, 0.31), (61, 0.28), (122, 0.25), (366, 0.23)],
+               "SFT 11-task (LR 2e-6)": [(0, 0.45), (165, 0.39), (330, 0.39), (495, 0.34)],
+               "CPT OLMo 3 7B (32k)": [(0, 0.42), (12, 0.20), (120, 0.17), (480, 0.16)]}
+CPT_CTX = {"base": [(0, 0.99), (8, 0.94), (16, 0.83), (24, 0.79)], "after CPT (12-480 steps)": [(0, 0.94), (8, 0.78), (16, 0.42), (24, 0.21)]}
 # ---- max train length at 80 GB, SFT 4B, 2 x A100, FSDP-2, full AC (records/online-token-router.md; linear
 # extrapolation from 3-step probes, one sample each) ----
 MAXT = [("Dense", 165), ("Router, no full-context steps", 250), ("Recipe (adapters 0–6 + two-stage)", 300),
@@ -235,6 +241,23 @@ a { color: var(--c2); }
 </section>
 
 <section>
+  <h2>Where the gradient lives, and how that shifts during training</h2>
+  <p class="note">From the gradient-composition probe: one full forward + backward of the answer loss per held-out row on frozen checkpoints along the dense fine-tuning curve (Qwen3.5-4B, 4-task rows, 64 per task ⚠ below 500; differences under ≈±0.03 are noise). Full interactive version: <a href="https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ">gradient composition</a>.</p>
+  <div class="figs">
+    <figure><h3>Share of the parameter gradient in each block</h3><div class="chart"><canvas id="gcpg" aria-label="parameter gradient by block"></canvas></div>
+      <figcaption>‖g‖² share per block (32 blocks + LM head = 1), mean of per-row gradients. At the base the gradient is front-loaded (block 0 alone 0.16); training moves it toward the middle blocks and the LM head.</figcaption></figure>
+    <figure><h3>Blocks 0–6 share of the parameter gradient over training</h3><div class="chart"><canvas id="gcearly" aria-label="early block share over training"></canvas></div>
+      <figcaption>Most of the drop happens in the first ~30 SFT steps (12 in CPT). This is why freezing the early blocks from step 0 hurts but freezing after a warmup costs little, and why adapters (which keep them learning cheaply) work.</figcaption></figure>
+    <figure><h3>Share of each block's hidden-state gradient on document tokens</h3><div class="chart"><canvas id="gcdoc" aria-label="document share by block"></canvas></div>
+      <figcaption>‖dL/dh_b‖² on document body tokens (vs query, prompt, markers, answer). After even 31 steps documents dominate the early-mid blocks (0.54 at block 7) and fade with depth (0.11 at block 24 after 366 steps): the case for splitting near block 7 and letting documents leave later.</figcaption></figure>
+    <figure><h3>How well block 7's token ranking predicts each later block</h3><div class="chart"><canvas id="gcx7" aria-label="spearman with block 7"></canvas></div>
+      <figcaption>Spearman of body-token ‖dL/dh‖ between block 7 and block b. With training the late blocks decorrelate (block 24: 0.57 → 0.34), so one keep decision at block 7 goes stale: the case for rescoring at block 16 (two-stage keep).</figcaption></figure>
+    <figure><h3>CPT: how much of a token's gradient comes from serving as context</h3><div class="chart"><canvas id="gcctx" aria-label="CPT context share"></canvas></div>
+      <figcaption>OLMo 3 7B, 48 rows × 32k ⚠. Share of each block's hidden-state gradient a token receives as keys/values for later tokens (vs its own label). Early blocks learn almost entirely as context, so dropping tokens early removes their learning signal.</figcaption></figure>
+  </div>
+</section>
+
+<section>
   <h2>What failed (and the number that decided it)</h2>
   <div class="tbl"><table>
     <tr><th>idea</th><th>track</th><th>result</th></tr>
@@ -350,7 +373,19 @@ function multiples(hostId, sets, tasks, prefix) {
     const ch = Chart.getChart(id); if (ch) { ch.options.plugins.legend.display = j === 0; ch.update(); }
   });
 }
-try { draw(); multiples("pt4f", D.f4fresh, ["contradiction","nq","outlier","oolong"], "pt4f");
+function drawGC() {
+  if (!D.gc) return;
+  const C = D.gc.ckpts, cols = ["--c6", "--c5", "--c4", "--c2", "--c1"];
+  const blk = (f, n) => C.map((c, i) => ({ label: c.name, col: cols[i], pts: c[f].slice(0, n).map((v, b) => ({ x: b, y: v })) }));
+  plot("gcpg", blk("pgrad_share", 32), "share of ‖g‖²", { xlin: true, xlab: "block", dp: 3 });
+  plot("gcdoc", blk("doc_share_g2", 33), "document share of ‖dL/dh‖²", { xlin: true, xlab: "block (32 = final output)", dp: 2 });
+  plot("gcx7", blk("spearman_b7", 33).map(s => ({ ...s, pts: s.pts.filter(p => p.x >= 7) })), "Spearman with block 7", { xlin: true, xlab: "block", dp: 2 });
+  plot("gcearly", Object.entries(D.early).map(([k, v], i) => ({ label: k, col: COL[i + 1], pts: v.map(p => ({ x: p[0] + 1, y: p[1], note: p[0] ? p[0] + " steps" : "base" })) })),
+       "blocks 0–6 share", { xlab: "training steps + 1 (log; 1 = base)", dp: 2 });
+  plot("gcctx", Object.entries(D.cptctx).map(([k, v], i) => ({ label: k, col: i ? "--c1" : "--c6", pts: v.map(p => ({ x: p[0], y: p[1] })) })),
+       "context share of gradient", { xlin: true, xlab: "block", dp: 2 });
+}
+try { draw(); drawGC(); multiples("pt4f", D.f4fresh, ["contradiction","nq","outlier","oolong"], "pt4f");
       multiples("pt4o", D.f4orig, ["contradiction","nq","outlier","oolong"], "pt4o");
       if (D.m64) {
         const M = [["Dense, LR 5e-6", "dense|5e-06", true], ["Dense, LR 2e-6", "dense|2e-06", false], ["Router keep 10%, LR 5e-6", "otr10M7|5e-06", false], ["Router keep 10%, LR 2e-6", "otr10M7|2e-06", false], ["Recipe: adapters + two-stage + floor", "lora64r20to7f16|5e-06", false]];
@@ -486,6 +521,7 @@ def main():
     ap.add_argument("--points", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--updated", default="")
+    ap.add_argument("--gradcomp", default=__file__.rsplit("/", 1)[0] + "/gradcomp_summary.json")
     ap.add_argument("--m64", default="/accounts/projects/berkeleynlp/prasann/projects/OLMo-core/.claude/worktrees/mt11-64k/research/token_routing/mt11_64k/results/points.json")
     a = ap.parse_args()
     S = series(json.load(open(a.points)))
@@ -513,6 +549,12 @@ def main():
             "f4orig": f4orig, "f11": f11, "m64": m64_data(a.m64),
             "cptlen": {"32k": [(120, -0.0034), (240, -0.0023), (480, -0.0012)], "64k": [(120, -0.0049), (240, -0.0033), (480, -0.0020)]}, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT, "memstd": MEM_STD, "memflags": MEM_FLAGS, "memstdfit": MEM_STD_FIT, "memflagsfit": MEM_FLAGS_FIT}
     data["bylen"] = by_length(data["m64"])
+    try:
+        data["gc"] = json.load(open(a.gradcomp))
+    except Exception:
+        data["gc"] = None
+    data["early"] = EARLY_SHARE
+    data["cptctx"] = CPT_CTX
     html = PAGE.replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
     for k in ("f4fresh", "f4orig", "f11"):
