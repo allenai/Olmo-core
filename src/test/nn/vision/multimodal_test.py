@@ -516,6 +516,73 @@ def test_packed_examples_are_isolated(backend):
     torch.testing.assert_close(lp[na : na + nb], lb, atol=1e-4, rtol=1e-4)
 
 
+@pytest.mark.parametrize("backend", ["torch", "flex"])
+def test_documents_sharing_crops_match_separate_examples(backend, monkeypatch):
+    """Two documents over one image's crops (``document_ids``, one crop copy) give the logits and
+    gradients of the two documents as separate examples, each with its own copy of the crops,
+    while the vision encoder sees the crops once."""
+    import numpy as np
+
+    from olmo_core.data.multimodal.collator import MultimodalCollatorConfig
+    from olmo_core.data.multimodal.packing import pack_examples
+    from olmo_core.nn.attention import AttentionBackendName
+
+    torch.manual_seed(0)
+    vis_cfg = _tiny_vision_cfg()
+    cfg = MultimodalLMConfig(
+        lm=TransformerConfig.olmo2_1M(
+            vocab_size=_LM_VOCAB, attn_backend=AttentionBackendName(backend)
+        ),
+        vision=vis_cfg,
+        connector=VisionConnectorConfig.from_vision_encoder(
+            vis_cfg, output_dim=_LM_D_MODEL, mlp_hidden_size=32
+        ),
+        image_patch_token_id=_IMAGE_PATCH_TOKEN,
+        vit_layers=(-1,),
+    )
+    model = cfg.build(init_device="cpu").eval()
+    coll = MultimodalCollatorConfig(pad_token_id=0).build()
+    encoded = []
+    vit_forward = model._vit_forward_features
+    monkeypatch.setattr(
+        model,
+        "_vit_forward_features",
+        lambda crops: encoded.append(len(crops)) or vit_forward(crops),  # type: ignore[func-returns-value]
+    )
+
+    a = _packing_example(1, n_text=6, n_crops=2)
+    b = _packing_example(2, n_text=4, n_crops=2)
+    b["images"] = a["images"].copy()  # the same image
+    shared = {
+        key: np.concatenate([a[key], b[key]])
+        for key in ("input_ids", "labels", "loss_masks", "token_type_ids")
+    }
+    shared["position_ids"] = np.concatenate([a["position_ids"], b["position_ids"]])
+    shared["images"] = a["images"]
+    shared["pooled_patches_idx"] = np.concatenate(
+        [a["pooled_patches_idx"], b["pooled_patches_idx"]]
+    )
+    shared["document_ids"] = np.repeat([0, 1], [len(a["input_ids"]), len(b["input_ids"])])
+
+    def run(example_list):
+        batch = coll([pack_examples(example_list)])
+        kw = {k: v for k, v in batch.items() if k not in ("input_ids", "labels", "loss_masks")}
+        model.zero_grad()
+        logits = model(batch["input_ids"], **kw)[0]
+        logits.square().mean().backward()
+        grads = {n: p.grad.clone() for n, p in model.vision.named_parameters()}
+        return logits.detach(), grads
+
+    separate, separate_grads = run([a, b])
+    assert encoded == [4]
+    encoded.clear()
+    documents, document_grads = run([shared])
+    assert encoded == [2]
+    torch.testing.assert_close(documents, separate, atol=1e-5, rtol=1e-5)
+    for name, grad in separate_grads.items():
+        torch.testing.assert_close(document_grads[name], grad, atol=1e-6, rtol=1e-4, msg=name)
+
+
 # ---------------------------------------------------------------------------
 # Crop compaction: only the crops the pooled indices refer to reach the encoder
 # ---------------------------------------------------------------------------

@@ -120,3 +120,133 @@ def test_length_index_and_fingerprint(tmp_path):
     assert replay.fingerprint != other.fingerprint
     with pytest.raises(RuntimeError, match="expected 8"):
         _replay(tmp_path, {"input_ids": np.arange(6)}).get(0)
+
+
+class _InterleavedSource(_ListSource):
+    """Two children concatenated, with ``locate`` as the ladder's interleaved source has."""
+
+    def __init__(self, first, second, work_dir, sequence_length: int):
+        super().__init__([*first, *second], work_dir, sequence_length)
+        self.n_first = len(first)
+
+    def locate(self, idx: int):
+        return (0, idx) if idx < self.n_first else (1, idx - self.n_first)
+
+
+@dataclass
+class _InterleavedSourceConfig(InstanceSourceConfig):
+    first: list[dict[str, Any]] = field(default_factory=list)
+    second: list[dict[str, Any]] = field(default_factory=list)
+    sequence_length: int = 16
+
+    def build(self, work_dir):
+        return _InterleavedSource(self.first, self.second, work_dir, self.sequence_length)
+
+
+def _reference_document_lengths(input_ids, label_mask, eos_token_id, chunk):
+    """scaling-ladders ``hero_mt_lc_256k._document_lengths``, verbatim but for numpy."""
+    n = input_ids.shape[0]
+    is_eos = input_ids == eos_token_id
+    ends = np.zeros(n + 1, dtype=bool)
+    ends[1:] = is_eos
+    if chunk is not None:
+        ends[np.arange(chunk, n, chunk)] = True
+    ends[0] = ends[n] = True
+    if label_mask is not None:
+        pad = is_eos & ~label_mask.astype(bool)
+        inside_pad_run = np.zeros(n + 1, dtype=bool)
+        inside_pad_run[1:n] = pad[:-1] & pad[1:]
+        if chunk is not None:
+            inside_pad_run[np.arange(chunk, n, chunk)] = False
+        ends &= ~inside_pad_run
+    boundaries = np.flatnonzero(ends)
+    return np.diff(boundaries)
+
+
+@pytest.mark.parametrize("chunked", [True, False])
+def test_document_masking_matches_the_text_stages_segments(tmp_path, chunked):
+    # EOS mid-document, a PAD run (fed as EOS, not a target) that crosses the 8-token chunk edge,
+    # and a document straddling that edge.
+    tokens = np.array([5, 6, EOS, 7, 8, 9, PAD, PAD, PAD, 10, 11, EOS, 12, 13, PAD, PAD])
+    mask = tokens != PAD
+    mt, lc = [{"input_ids": tokens, "label_mask": mask}], [
+        {"input_ids": tokens, "label_mask": mask}
+    ]
+    replay = ComposableTextReplayConfig(
+        source=_InterleavedSourceConfig(first=mt, second=lc),
+        work_dir=str(tmp_path),
+        pad_token_id=PAD,
+        eos_token_id=EOS,
+        document_masking=True,
+        chunked_source=0,
+        chunk_length=8,
+    ).build()
+    example = replay.get(0 if chunked else 1)
+    fed = np.where(tokens == PAD, EOS, tokens)
+    expected = _reference_document_lengths(fed, mask, EOS, 8 if chunked else None)
+    ids = example["document_ids"]
+    assert np.all(np.diff(ids) >= 0) and ids[0] == 0
+    np.testing.assert_array_equal(np.bincount(ids), expected)
+
+
+def _reference_cap_segments(lengths, max_segments):
+    """scaling-ladders ``hero_mt_lc_256k._cap_segments`` (#89, 274e8b59), verbatim but for numpy."""
+    if len(lengths) <= max_segments:
+        return lengths
+    values = lengths.tolist()
+    while len(values) > max_segments:
+        excess = len(values) - max_segments
+        pair_sums = np.add(values[:-1], values[1:])
+        merge_at = np.zeros(len(values), dtype=bool)
+        taken = np.zeros(len(values), dtype=bool)
+        merged = 0
+        for i in np.argsort(pair_sums, kind="stable"):
+            if merged == excess:
+                break
+            if taken[i] or taken[i + 1]:
+                continue
+            taken[i] = taken[i + 1] = True
+            merge_at[i] = True
+            merged += 1
+        out, carry = [], 0
+        for i, value in enumerate(values):
+            if merge_at[i]:
+                carry += value
+            else:
+                out.append(value + carry)
+                carry = 0
+        values = out
+    return np.asarray(values)
+
+
+@pytest.mark.parametrize("max_segments", [2, 3, 5, 7, None])
+def test_document_masking_caps_segments_as_the_text_stage(tmp_path, max_segments):
+    # Uneven short documents (the shape over the cap: many short EOS-separated segments).
+    tokens = np.array([5, EOS, 6, 7, EOS, EOS, 8, 9, 10, EOS, 11, EOS, EOS, 12, 13, EOS])
+    replay = ComposableTextReplayConfig(
+        source=_ListSourceConfig(instances=[{"input_ids": tokens}], sequence_length=16),
+        work_dir=str(tmp_path),
+        pad_token_id=PAD,
+        eos_token_id=EOS,
+        document_masking=True,
+        max_document_segments=max_segments,
+    ).build()
+    ids = replay.get(0)["document_ids"]
+    expected = _reference_document_lengths(tokens, None, EOS, None)
+    if max_segments is not None:
+        expected = _reference_cap_segments(expected, max_segments)
+        assert len(np.bincount(ids)) <= max_segments
+    np.testing.assert_array_equal(np.bincount(ids), expected)
+    assert len(ids) == len(tokens)
+
+
+def test_document_masking_is_off_by_default(tmp_path):
+    example = _replay(tmp_path, {"input_ids": np.arange(1, 9)}).get(0)
+    assert "document_ids" not in example
+
+
+def test_document_masking_needs_eos(tmp_path):
+    with pytest.raises(OLMoConfigurationError, match="eos_token_id"):
+        ComposableTextReplayConfig(
+            source=_ListSourceConfig(instances=[]), work_dir=str(tmp_path), document_masking=True
+        ).build()

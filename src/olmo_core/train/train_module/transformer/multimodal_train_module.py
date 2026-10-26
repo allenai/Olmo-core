@@ -795,6 +795,7 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         freeze_params: Optional[List[str]] = None,
         vision_activation_checkpointing: bool = False,
         connector_activation_checkpointing: bool = False,
+        compile_vision: bool = False,
         response_logits_only: bool = False,
         diagnostics_interval: Optional[int] = None,
         train_embedding_rows: Optional[List[int]] = None,
@@ -861,6 +862,16 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         if connector_activation_checkpointing:
             model.connector.apply_activation_checkpointing()
             log.info("Applied activation checkpointing to the vision connector")
+        if compile_vision:
+            if not kwargs.get("compile_model"):
+                raise OLMoConfigurationError("compile_vision requires compile_model")
+            # The language model's ``apply_compile`` (from ``compile_model``) leaves the vision
+            # encoder eager; compile its blocks here, after activation checkpointing. In place
+            # (``Module.compile``), so parameter and optimizer-state names stay those checkpoints
+            # hold; wrapping in ``torch.compile`` would add ``_orig_mod`` to them.
+            for block in model.vision.blocks:
+                block.compile()
+            log.info("Compiled the vision encoder blocks")
         self.response_logits_only = response_logits_only
         self.loss_group_weights = _validate_loss_group_weights(loss_group_weights)
         self.diagnostics_interval = diagnostics_interval
@@ -1840,6 +1851,8 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     freeze_params: Optional[List[str]] = None
     vision_activation_checkpointing: bool = False
     connector_activation_checkpointing: bool = False
+    compile_vision: bool = False
+    """Also compile the vision encoder's blocks (requires ``compile_model``)."""
     response_logits_only: bool = False
     diagnostics_interval: Optional[int] = None
     train_embedding_rows: Optional[List[int]] = None
