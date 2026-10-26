@@ -128,6 +128,18 @@ before quoting it alone.
 On 8 GPUs the per-step times were about equal (~20 s): with fewer GPUs per step the compute share grows and part of the
 FLOP saving shows up as time.
 
+## The adopted universal recipe at f4 (2026-10-25, requested by the LR-sweep session)
+
+`lora64r20to7f16` (launch_otr.py, verbatim): LoRA r64 (scale 32) on blocks 0-6, two-stage router keeping 20% after
+block 7 and 7% after block 16, per-document floor 16 tokens, no full-context steps, no freeze, LR 5e-6, 4 GPUs.
+1,695.8 PF = 0.365x dense-equivalent (between dense f16 and f8). Matched-FLOP delta vs the better-LR dense curve, mean
+over rungs: nq +0.003, hotpotqa +0.022, qdmatch_nq +0.016, outlier +0.063, oolong +0.023, contradiction +0.068 (+0.119 at
+64k), xabsence +0.110, reorder (2k) +0.017, strmatch +0.020; task-average **+0.038, ahead 9/9** (grouping eval re-running
+after an NCCL timeout; its 2k/8k put it near +0.006). Beats otr10M7 at f4 (+0.025 / +0.032 over two seeds) at less
+compute, and turns strmatch from -0.017 into +0.020. Peak GPU memory 37.2 / 44.2 GiB active / reserved vs dense 48.7 /
+52.8 (-24% / -16%); otr10M7 matched dense (its full-context step every 8). Single seed. Eval log confirms the LoRA
+adapters were rebuilt from the checkpoint (eval commit contains 984825862).
+
 ## Traps hit
 
 - Urgent Beaker jobs were preempted right after their 1 h minRuntime and restarted from scratch (no resume point

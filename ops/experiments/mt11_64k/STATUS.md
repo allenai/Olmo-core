@@ -1,7 +1,7 @@
 ---
 experiment: mt11_64k
 title: Long-context, large-data 11-task CTC mix (rows to 64k, ~64M tokens/task) -- dense vs the mid-stack online token router at matched FLOPs
-status: complete
+status: active
 updated: 2026-10-25
 branch: prasann/mt11-64k (pushed; based on prasann/flopdrop_clean 177c76b05; worktree .claude/worktrees/mt11-64k)
 launcher: research/token_routing/mt11_64k/launch_mt11_64k.py (state.json beside it)
@@ -11,7 +11,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/m64-q35-4b
-next_step: Complete for otr10M7: all 15 finished training runs evaluated on all 10 tasks and recorded (record records/mt11-64k-online-router.md, artifact current). Possible follow-ups for Prasann to choose: otr10M8 on this mix; seed-1 replicates at f2/f1 (the f1 outlier +0.125 is single-seed); a wall-clock-oriented configuration.
+next_step: Universal recipe (lora64r20to7f16) f4 done: +0.038 at 0.365x FLOPs, 9/9 tasks, -24% peak memory (single seed). Pending: its grouping eval relaunch (01M5V9STM3FTH5TS1EKBH7F5NR) -> collect_m64.py --record, send the grouping number to local_a8068d93, republish the page. Possible next: a second seed of the recipe at f4; the recipe at f2/f1.
 ---
 
 # mt11_64k
@@ -81,6 +81,18 @@ mid-stack online router matched dense at equal FLOPs on 4 tasks but failed strma
 | scale-up LR 5e-6: otr10M7-f2, dense-f2 (4 GPUs: 01M5NFTSY0MJBQNXPNB9HDBERV, 01M5NFVJS7Y4D046KXFE9AFE81); dense-f1, otr10M7-f1 (8 GPUs: 01M5MZYWVPS7TXCFSGKNEQH0V6, 01M5N00AE88VBBGQRQ28F87N6S) | pending (minRuntime capped at Beaker's 8h; resume every 50 steps) |
 | m64-otr10M7-f4-lr2e-06 | 01M5KV36S0MTH0VRZT2WK32QKB: preempted twice at ~1h (step ~100 / ~200), restarted from scratch (no resume point before step 300), cancelled; RELAUNCHED 01M5M8NDSDPCS9YNWBQED7NNJE (minRuntime 3h, resume every 50 steps): FAILED at step 2, NaN grad norm already at step 1 on node 01JRYCX2HZQ2QE60PMHBB7ZM8J (same batch gives CE 0.9751 / grad norm 26.82 on other nodes = bad node); RELAUNCHED 01M5MEB6K9S3H6MQCS9FPPQ4G4: DONE 14:50, 1,872.4 PF (0.405x dense-equivalent); 10 evals launched |
 | m64-dense-f{8,4,2,1}-lr{2e-06,5e-06} (f4/f2/f1 CANCELLED pending, small-first) | 01M5KQZ52Z5MQ3W6N86NKYVW4M, 01M5KR0BQXMHGHHKXQ6QWZGJJR, 01M5KR1S0JRQ8MJ8C2SV7P3H4P, 01M5KR3V9W8Y669X20SJT0RT1P, 01M5KR60YGENAF5XM27F0FV9PM, 01M5KR6VCQNA4ZRWYNPHQAEQF5, 01M5KR7W5JAD0GYBXK9J1FKKBD, 01M5KR95YM906V56JZK1HVNK4Q | pending |
+
+## Universal recipe f4 RESULT (2026-10-25): m64-lora64r20to7f16-f4-lr5e-06, 1,695.8 PF = 0.365x dense-equivalent,
+interpolated between dense f16 and f8. vs better-LR dense (seed-averaged where replicated), mean over rungs:
+nq +0.003, hotpotqa +0.022, qdmatch +0.016, outlier +0.063, oolong +0.023, contradiction +0.068 (8k->64k +0.041 ->
++0.119), xabsence +0.110, reorder(2k) +0.017, strmatch +0.020 (otr10M7 had -0.017) -> task-average +0.038, ahead 9/9.
+grouping: first eval died at 16k from an NCCL allgather timeout (2k 0.762 / 8k 0.395, ~+0.006 by hand); relaunched
+2k/8k/16k 01M5V9STM3FTH5TS1EKBH7F5NR. Peak memory (4 GPUs): 37.22 / 44.22 GiB active/reserved vs dense 48.67 / 52.78
+(-24% / -16%). LoRA adapters confirmed loaded in eval ("[early-lora] adapters re-installed from config.json").
+Single seed. Reported to the LR-sweep session (local_a8068d93) on 2026-10-25.
+
+## Universal-recipe request (2026-10-25): router branch claude/online-router-1bc01a (tip 7c2eeebe8, >= 5e1202e4b and
+984825862) merged into prasann/mt11-64k (31e9a124b); arm lora64r20to7f16 imported verbatim from launch_otr.py.
 
 ## FINAL (2026-10-25): router otr10M7 LR 5e-6 vs better-LR dense at matched FLOPs, task-average / tasks ahead:
 f4 seed0 +0.032 9/10, f4 seed1 +0.025 8/10, f2 +0.031 8/10, f1 +0.028 8/10 (all interpolated, none extrapolated).
