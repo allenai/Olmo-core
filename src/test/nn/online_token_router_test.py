@@ -1640,3 +1640,29 @@ def test_diag_scores_routed_and_full_context_and_restores_router_state():
     assert out["online_router/diag_ce_routed"] != out["online_router/diag_ce_full"]  # routing changed the forward
     assert (len(router._pending), router._calls, {k: list(v) for k, v in router._stats.items()}) == before
     assert not router.dense_now() and not getattr(router, "_force_dense", False)
+
+
+def test_router_charges_a_frozen_head_at_two_thirds_cpu():
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, install_early_lora
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, keep_frac=1.0, explore_frac=0.0, early_lora=4,
+                               early_lora_blocks=4)
+    install_early_lora(model, 4, 4, scale=8.0, freeze_head=True)
+    blocks = list(model.blocks.values())
+    ids, cid, labels = _row(B=1)
+    flops = []
+    orig = router._flop
+    router._flop = lambda m, v: (flops.append(float(v)), orig(m, v))
+    for step in (1, 2):
+        model.zero_grad(set_to_none=True)
+        router.begin_step(step, model=model)
+        flops.clear()
+        router.metrics()
+        model(ids, labels=labels).loss.backward()
+    real = int((ids != PH).sum())
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    ab = early_lora_flops_per_block(model)
+    expect = (real * (2 / 3) * sum(f(b, real) for b in blocks) + real * (2 / 3) * head + real * sum(ab)
+              - real * (sum(f(b, real) for b in blocks) + head))
+    assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
