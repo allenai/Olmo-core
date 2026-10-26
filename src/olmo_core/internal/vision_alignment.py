@@ -118,6 +118,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "train_module.rank_microbatch_size": "4 x seq (joint 2 x seq): vision tower cost per sequence",
     "train_module.trim_microbatch_image_padding": "multimodal microbatch image padding trim",
     "train_module.balance_vit_crops": "vision encoder crops shared among ranks (mixed mid-training)",
+    "train_module.compile_vision": "off: compiling the vision encoder's blocks measured slower (mixed mid-training)",
     "train_module.freeze_params": "phase policy: what trains",
     "train_module.train_embedding_rows": "image token rows are the only trainable embeddings",
     "train_module.vision_activation_checkpointing": "vision tower memory",
@@ -467,10 +468,17 @@ def _uses_document_mode(lm: Any) -> bool:
 def _sample_one_annotation(sources: dict[str, Any]) -> None:
     """Keep one sampled annotation per example in sources that would otherwise pack each of an
     image's annotations as a sibling branch, which document boundaries cannot isolate."""
+    _set_annotation_sampling(sources, "one")
+
+
+def _set_annotation_sampling(sources: dict[str, Any], sampling: str) -> None:
+    """Set ``annotation_sampling`` (``"one"`` or ``"documents"``) in every source that has
+    it: the multi-annotation sources, whose sibling branches document boundaries cannot
+    isolate."""
     for source in sources.values():
         config = getattr(source, "dataset", source)  # unwrap MultimodalSourceConfig
         if hasattr(config, "annotation_sampling"):
-            config.annotation_sampling = "one"
+            config.annotation_sampling = sampling
 
 
 def _check_text_lm_matches_checkpoint(lm: OLMoDDPModelConfig, checkpoint: str) -> None:

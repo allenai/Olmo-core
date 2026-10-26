@@ -19,6 +19,10 @@ Cross-example isolation reuses the same machinery as intra-example branch isolat
 * image crops are concatenated along the crop axis and each example's
   ``pooled_patches_idx`` is offset by the running crop-patch count so the connector still
   gathers the right patches.
+* an example that holds several documents sharing one image's crops (a per-token
+  ``document_ids`` array, from ``annotation_sampling="documents"``) gets a packed
+  ``document_ids`` vector numbering every document of the pack; the model isolates by it
+  instead of ``example_ids``. Without such an example the pack carries no ``document_ids``.
 
 Examples are never split, so the ``#<im_patch> == #pooled-features`` invariant is preserved
 per example (and hence for the pack).
@@ -204,6 +208,21 @@ def pack_examples(
         [np.full(len(ex["input_ids"]), i, dtype=np.int64) for i, ex in enumerate(examples)],
         axis=0,
     )
+
+    if any("document_ids" in ex for ex in examples):
+        # Number the pack's documents: an example's own documents, or the example as one.
+        document_parts = []
+        next_document = 0
+        for ex in examples:
+            n = len(ex["input_ids"])
+            if "document_ids" in ex and n:
+                ids = np.asarray(ex["document_ids"], dtype=np.int64) + next_document
+                next_document = int(ids.max()) + 1
+            else:
+                ids = np.full(n, next_document, dtype=np.int64)
+                next_document += 1
+            document_parts.append(ids)
+        out["document_ids"] = np.concatenate(document_parts, axis=0)
 
     if any("_source_name" in ex for ex in examples):
         out["pack_source_names"] = [ex.get("_source_name", "?") for ex in examples]
