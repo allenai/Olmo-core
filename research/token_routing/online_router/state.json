@@ -4113,6 +4113,16 @@
    "ex": "01M5VKNS32489RH27KJVTX8C67",
    "train_run": "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05",
    "task": "oolong"
+  },
+  "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05-evoutlier": {
+   "ex": "01M5VKVGKZ2S8J0EP1CXQ19ZC2",
+   "train_run": "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05-evoolong": {
+   "ex": "01M5VKWKXR0KN7WMN5APJVH27H",
+   "train_run": "f8k-mt4-lora64K32th-s1464-tdb-lr1e-05",
+   "task": "oolong"
   }
  },
  "failed_evals": {
