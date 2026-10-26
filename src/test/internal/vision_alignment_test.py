@@ -1,4 +1,5 @@
 import json
+import os
 from unittest.mock import Mock
 
 import pytest
@@ -7,7 +8,12 @@ from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.internal import vision_alignment
 from olmo_core.internal.experiment import CliContext, SubCmd
 from olmo_core.internal.vision_alignment import VisionAlignmentExperimentConfig
+from olmo_core.internal.vision_alignment_data import ALIGNMENT_MEAN_LOSS_WEIGHTS
 from olmo_core.nn.transformer import OLMoDDPModelConfig
+
+OUR_HUB_CACHE = "/weka/oe-training-default/jasonr/hf-home/hub"
+OUR_DATASETS_CACHE = "/weka/oe-training-default/jasonr/hf-home/datasets"
+RUSTINS_DATASETS_CACHE = "/weka/oe-training-default/rustin/hf-cache/datasets"
 
 
 @pytest.mark.parametrize("weight", [0.0, 0.025])
@@ -93,7 +99,9 @@ def test_launch_uses_standard_experiment_command_and_preset(monkeypatch, phase):
         cluster="ai2/holmes",
         overrides=[f"--recipe.phase={phase}"],
     )
-    launch = vision_alignment._build_launch(cli, work_dir="/tmp/alignment-data-cache")
+    launch = vision_alignment._build_launch(
+        cli, work_dir="/tmp/alignment-data-cache", hf_datasets_cache_dir=OUR_DATASETS_CACHE
+    )
     assert launch is not None
     assert launch.cmd == [cli.script, "train", cli.run_name, cli.cluster, *cli.overrides]
     assert launch.num_nodes == 2 and launch.num_gpus == 8
@@ -109,6 +117,7 @@ def test_launch_uses_standard_experiment_command_and_preset(monkeypatch, phase):
         env["OLMO_CORE_DATA_VERIFICATION_CACHE_DIR"]
         == "/tmp/alignment-data-cache/data-verification"
     )
+    assert env["HF_DATASETS_CACHE"] == OUR_DATASETS_CACHE
     assert "OLMO_CORE_FS_CACHE_DIR" not in env
     assert launch.priority == "urgent"
     assert launch.min_runtime == "8h"
@@ -122,6 +131,170 @@ def test_launch_uses_standard_experiment_command_and_preset(monkeypatch, phase):
     assert build_launch.call_args.kwargs["step_timeout"] is None
     assert build_launch.call_args.kwargs["step_soft_timeout"] is None
     assert launch.step_timeout is launch.step_soft_timeout is None
+
+
+@pytest.mark.parametrize(
+    "hub,expected",
+    [
+        (OUR_HUB_CACHE, OUR_DATASETS_CACHE),
+        ("/weka/oe-training-default/rustin/hf-cache/hub", RUSTINS_DATASETS_CACHE),
+        ("/scratch/hf-cache", "/scratch/hf-cache/datasets"),
+        ("/scratch/hf-home/hub/", "/scratch/hf-home/datasets"),
+        (None, None),
+    ],
+)
+def test_hf_datasets_cache_is_the_hub_caches_sibling(hub, expected):
+    assert vision_alignment.default_hf_datasets_cache_dir(hub) == expected
+
+
+def test_hf_datasets_cache_dir_derives_from_the_recipe_hub_cache(alignment_recipe):
+    """The recipe's ``datasets`` cache follows its Hub cache, an explicit value wins, an explicit
+    ``null`` leaves the library default, and the field changes nothing else in the config."""
+    default = alignment_recipe.build()
+    assert default.recipe.hf_datasets_cache_dir == RUSTINS_DATASETS_CACHE
+    ours = alignment_recipe.build(overrides=[f"--recipe.hf_cache_dir={OUR_HUB_CACHE}"])
+    assert ours.recipe.hf_datasets_cache_dir == OUR_DATASETS_CACHE
+    explicit = alignment_recipe.build(
+        overrides=[
+            f"--recipe.hf_cache_dir={OUR_HUB_CACHE}",
+            "--recipe.hf_datasets_cache_dir=/scratch/arrow",
+        ]
+    )
+    assert explicit.recipe.hf_datasets_cache_dir == "/scratch/arrow"
+    disabled = alignment_recipe.build(overrides=["--recipe.hf_datasets_cache_dir=null"])
+    assert disabled.recipe.hf_datasets_cache_dir is None
+    no_hub = alignment_recipe.build(overrides=["--recipe.hf_cache_dir=null"])
+    assert no_hub.recipe.hf_datasets_cache_dir is None
+
+    # Model, train module, data loader, dataset and trainer are untouched: the resolved dumps
+    # differ only by the recipe field (``as_config_dict`` omits the ``None`` of the disabled one).
+    default_dump, disabled_dump = default.as_config_dict(), disabled.as_config_dict()
+    assert default_dump["recipe"].pop("hf_datasets_cache_dir") == RUSTINS_DATASETS_CACHE
+    assert "hf_datasets_cache_dir" not in disabled_dump["recipe"]
+    assert default_dump == disabled_dump
+    for config in (default, ours, explicit, disabled):
+        assert VisionAlignmentExperimentConfig.from_dict(config.as_config_dict()) == config
+
+
+def test_launched_alignment_carries_the_recipe_hf_datasets_cache(alignment_recipe, monkeypatch):
+    from gantry.api import GitRepoState
+
+    from olmo_core.launch.beaker import BeakerLaunchConfig
+
+    monkeypatch.setattr(
+        vision_alignment,
+        "build_launch_config",
+        lambda **kwargs: BeakerLaunchConfig(
+            name=kwargs["name"],
+            cmd=kwargs["cmd"],
+            clusters=[kwargs["cluster"]],
+            workspace=kwargs["workspace"],
+            num_nodes=kwargs["num_nodes"],
+            git=GitRepoState(
+                repo="allenai/OLMo-core",
+                repo_url="https://github.com/allenai/OLMo-core",
+                ref="a" * 40,
+                branch="vision",
+            ),
+        ),
+    )
+
+    def build(*overrides):
+        return vision_alignment.build_config(
+            CliContext(
+                script="src/scripts/train/Vision-Align.py",
+                cmd=SubCmd.launch,
+                run_name="alignment-bridge",
+                cluster="ai2/holmes",
+                overrides=[
+                    "--recipe.phase=bridge",
+                    f"--recipe.pretraining_checkpoint={alignment_recipe.base}",
+                    f"--recipe.artifact_root={alignment_recipe.base.parent}/artifacts",
+                    f"--recipe.output_root={alignment_recipe.base.parent}/runs",
+                    f"--recipe.work_dir={alignment_recipe.base.parent}/cache",
+                    *(
+                        f"--dataset.mean_loss_weight.{name}={mean}"
+                        for name, mean in ALIGNMENT_MEAN_LOSS_WEIGHTS["bridge"].items()
+                    ),
+                    *overrides,
+                ],
+            )
+        )
+
+    def env_of(config):
+        env = {entry.name: entry.value for entry in config.launch.env_vars}
+        assert len(env) == len(config.launch.env_vars)
+        return env
+
+    ours = env_of(build(f"--recipe.hf_cache_dir={OUR_HUB_CACHE}"))
+    assert ours.pop("HF_DATASETS_CACHE") == OUR_DATASETS_CACHE
+    explicit = env_of(
+        build(f"--recipe.hf_cache_dir={OUR_HUB_CACHE}", "--recipe.hf_datasets_cache_dir=/arrow")
+    )
+    assert explicit.pop("HF_DATASETS_CACHE") == "/arrow"
+    disabled = env_of(build("--recipe.hf_datasets_cache_dir=null"))
+    assert "HF_DATASETS_CACHE" not in disabled
+    # Every other entry is the same in all three.
+    assert ours == explicit == disabled
+    assert ours["PYTHONPATH"] == "/gantry-runtime/src"
+
+
+def test_set_hf_datasets_cache_replaces_only_its_own_entry():
+    from gantry.api import GitRepoState
+
+    from olmo_core.launch.beaker import BeakerEnvVar, BeakerLaunchConfig
+
+    original = [
+        BeakerEnvVar(name="OTHER", value="kept"),
+        BeakerEnvVar(name="HF_DATASETS_CACHE", value="/local/disk"),
+        BeakerEnvVar(name="LAST", value="kept too"),
+    ]
+    launch = BeakerLaunchConfig(
+        name="ladders-mixed",
+        cmd=["train"],
+        env_vars=original,
+        git=GitRepoState(
+            repo="allenai/scaling-ladders",
+            repo_url="https://github.com/allenai/scaling-ladders",
+            ref="a" * 40,
+            branch="main",
+        ),
+    )
+    vision_alignment.set_hf_datasets_cache(launch, None)
+    assert launch.env_vars is original
+    vision_alignment.set_hf_datasets_cache(launch, OUR_DATASETS_CACHE)
+    assert [(entry.name, entry.value) for entry in launch.env_vars] == [
+        ("OTHER", "kept"),
+        ("LAST", "kept too"),
+        ("HF_DATASETS_CACHE", OUR_DATASETS_CACHE),
+    ]
+    # The builder's own list (shared through a shallow ``replace``) is not mutated.
+    assert [entry.value for entry in original] == ["kept", "/local/disk", "kept too"]
+
+
+def test_training_exports_the_recipe_hf_datasets_cache(alignment_recipe, monkeypatch):
+    """A job whose launch predates the launch variable still honours the recipe; the launch
+    environment, when present, wins; ``None`` leaves the environment alone."""
+    config = alignment_recipe.build(overrides=[f"--recipe.hf_cache_dir={OUR_HUB_CACHE}"])
+    seen = []
+
+    def stop(seed):
+        seen.append(os.environ.get("HF_DATASETS_CACHE"))
+        raise RuntimeError("stop before building the model")
+
+    monkeypatch.setattr(vision_alignment, "seed_all", stop)
+    monkeypatch.delenv("HF_DATASETS_CACHE", raising=False)
+    with pytest.raises(RuntimeError, match="stop before"):
+        vision_alignment.train(config)
+    monkeypatch.setenv("HF_DATASETS_CACHE", "/from/the/launch")
+    with pytest.raises(RuntimeError, match="stop before"):
+        vision_alignment.train(config)
+    monkeypatch.delenv("HF_DATASETS_CACHE")
+    config.recipe.hf_datasets_cache_dir = None
+    with pytest.raises(RuntimeError, match="stop before"):
+        vision_alignment.train(config)
+    assert seen == [OUR_DATASETS_CACHE, "/from/the/launch", None]
+    assert "HF_DATASETS_CACHE" not in os.environ
 
 
 def test_local_config_does_not_construct_beaker_launch(monkeypatch):

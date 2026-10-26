@@ -26,6 +26,7 @@ per example (and hence for the pack).
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
@@ -354,6 +355,11 @@ def iter_packs(
 # ---------------------------------------------------------------------------
 
 
+# The DP table of :func:`select_subset_2d_knapsack`, kept by each thread that packs (about
+# 400 MB at a 65K sequence's buffer).
+_knapsack_tables = threading.local()
+
+
 def select_subset_2d_knapsack(
     t_values: Sequence[int],
     i_values: Sequence[int],
@@ -361,7 +367,7 @@ def select_subset_2d_knapsack(
     max_i: int,
     obj_vals: Sequence[float],
 ) -> List[int]:
-    """Vectorized 2D knapsack dynamic-program solver (verbatim mm_olmo port).
+    """Vectorized 2D knapsack dynamic-program solver (mm_olmo's, with its table reused).
 
     Selects the subset of items maximizing ``sum(obj_vals)`` subject to
     ``sum(t_values) <= max_t`` and ``sum(i_values) <= max_i``.
@@ -370,8 +376,13 @@ def select_subset_2d_knapsack(
     """
     M = len(t_values)
 
-    # DP table with quantized dimensions.
-    dp = np.zeros((M + 1, max_t + 1, max_i + 1), dtype=np.float32)
+    # DP table with quantized dimensions, reused across calls: row 0 stays zero and every later
+    # row is overwritten before it is read. A fresh table each time (400 MB for 384 examples
+    # of a 65K sequence with 512 crops) is mostly page faults.
+    shape = (M + 1, max_t + 1, max_i + 1)
+    dp = getattr(_knapsack_tables, "dp", None)
+    if dp is None or dp.shape != shape:
+        dp = _knapsack_tables.dp = np.zeros(shape, dtype=np.float32)
 
     for item in range(1, M + 1):
         t_val_q = t_values[item - 1]
