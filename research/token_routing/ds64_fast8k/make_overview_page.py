@@ -131,7 +131,7 @@ a { color: var(--c2); }
   <ul>
     <li><b>SFT, 4-task mix:</b> dense needs about <b>3×</b> the training FLOPs to match the cheap methods on fresh data (3,904 rows/task), and <b>≈2.2×</b> or more at 7,808 rows/task where dense nears its ceiling. On the original pool, dense needs ≈3.5–3.9× to match the recipe and ≈4.4× for whole-model LoRA + two-stage keep.</li>
     <li><b>SFT, 11-task mix:</b> ≈1.7× for the recipe; whole-model LoRA + two-stage scores 0.762 against dense's 0.697 at the same 232 PF (2 seeds), ≈2.4×. Gains concentrate on xabsence, contradiction and outlier; four retrieval tasks are near dense's ceiling; grouping is the one task the router loses.</li>
-    <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. The recipe's 64k run is being collected.</li>
+    <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. <b>The recipe at 64k (1/4 epoch, one seed): +0.038 task-average at 0.365× dense FLOPs, ahead on all 9 scored tasks, 24% less peak active memory</b> (37.2 vs 48.7 GiB); its gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k).</li>
     <li><b>The recipe:</b> rank-64 LoRA adapters on blocks 0–6 (frozen base), an online gradient-norm router that keeps 20% of tokens from block 7 and rescores to 7% at block 16, no full-context steps, LR 5e-6, plus a 16-token floor per document on the 11-task mix. Whole-model LoRA (all 32 blocks, LR 1e-5) is cheaper still at the same quality.</li>
     <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and a larger edge at 64k.</li>
     <li><b>Max train length at 80 GB (SFT):</b> ≈1.8× dense for the recipe and ≈2.4× for whole-model LoRA (extrapolated from short probes).</li>
@@ -180,7 +180,7 @@ a { color: var(--c2); }
     <figure><h3>64k rung only</h3><div class="chart"><canvas id="m64r64" aria-label="64k rung"></canvas></div>
       <figcaption>Mean over the 6 tasks with a 64k rung (nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction).</figcaption></figure>
   </div>
-  <p class="note">The recipe (adapters + two-stage keep + floor) has trained at 1/4 epoch; its scores are being collected and will be added.</p>
+  <p class="note">The recipe (adapters + two-stage keep + floor, 1/4 epoch, one seed) is +0.038 over dense at matched FLOPs, ahead on all 9 scored tasks (grouping 16k pending a re-run after an NCCL timeout), with 37.2 vs 48.7 GiB peak active memory on 4 H100s.</p>
   <div class="figs small" id="pt64" style="margin-top:12px"></div>
 </section>
 
@@ -316,7 +316,7 @@ function multiples(hostId, sets, tasks, prefix) {
 try { draw(); multiples("pt4f", D.f4fresh, ["contradiction","nq","outlier","oolong"], "pt4f");
       multiples("pt4o", D.f4orig, ["contradiction","nq","outlier","oolong"], "pt4o");
       if (D.m64) {
-        const M = [["Dense, LR 5e-6", "dense|5e-06", true], ["Dense, LR 2e-6", "dense|2e-06", false], ["Router keep 10%, LR 5e-6", "otr10M7|5e-06", false], ["Router keep 10%, LR 2e-6", "otr10M7|2e-06", false]];
+        const M = [["Dense, LR 5e-6", "dense|5e-06", true], ["Dense, LR 2e-6", "dense|2e-06", false], ["Router keep 10%, LR 5e-6", "otr10M7|5e-06", false], ["Router keep 10%, LR 2e-6", "otr10M7|2e-06", false], ["Recipe: adapters + two-stage + floor", "lora64r20to7f16|5e-06", false]];
         const sets = M.filter(m => D.m64[m[1]]).map(m => ({ label: m[0], dense: m[2], p: D.m64[m[1]] }));
         plot("m64avg", sets.map((s, i) => ({ label: s.label, dense: s.dense, dash: i % 2 ? [5, 4] : [], pts: s.p.map(p => ({ x: p.x, y: p.y, note: p.budget + (p.n > 1 ? ", " + p.n + " seeds" : "") })) })), "task average (2k–64k)");
         plot("m64r64", sets.map((s, i) => ({ label: s.label, dense: s.dense, dash: i % 2 ? [5, 4] : [], pts: s.p.filter(p => p.rung["64k"] != null).map(p => ({ x: p.x, y: p.rung["64k"], note: p.budget })) })), "mean @64k");
@@ -329,11 +329,11 @@ try { draw(); multiples("pt4f", D.f4fresh, ["contradiction","nq","outlier","oolo
       }
       if (D.bylen) {
         const R = ["2k","8k","16k","32k","64k"], X = { "2k": 2, "8k": 8, "16k": 16, "32k": 32, "64k": 64 };
-        const B = Object.keys(D.bylen).sort((a, b) => parseInt(b.slice(1)) - parseInt(a.slice(1)));
-        const lab = { f4: "1/4 epoch", f2: "1/2 epoch", f1: "1 epoch" };
-        plot("lenD", B.map((b, i) => ({ label: "router, " + (lab[b] || b), col: COL[i + 1], pts: R.filter(r => D.bylen[b][r]).map(r => ({ x: X[r], y: D.bylen[b][r].delta })) })),
+        const B = Object.keys(D.bylen).sort();
+        const lab = k => { const [a, b] = k.split("|"); return a + ", " + ({ f4: "1/4 epoch", f2: "1/2 epoch", f1: "1 epoch" }[b] || b); };
+        plot("lenD", B.map((b, i) => ({ label: lab(b), col: COL[i + 1], dash: b.startsWith("router") ? [5, 4] : [], pts: R.filter(r => D.bylen[b][r]).map(r => ({ x: X[r], y: D.bylen[b][r].delta })) })),
              "Δ score vs dense at matched FLOPs", { xlab: "eval length (thousand tokens, log)" });
-        plot("lenF", B.map((b, i) => ({ label: "router, " + (lab[b] || b), col: COL[i + 1], pts: R.filter(r => D.bylen[b][r] && D.bylen[b][r].ftm).map(r => ({ x: X[r], y: Math.abs(D.bylen[b][r].ftm), note: D.bylen[b][r].ftm < 0 ? "lower bound" : "" })) })),
+        plot("lenF", B.map((b, i) => ({ label: lab(b), col: COL[i + 1], dash: b.startsWith("router") ? [5, 4] : [], pts: R.filter(r => D.bylen[b][r] && D.bylen[b][r].ftm).map(r => ({ x: X[r], y: Math.abs(D.bylen[b][r].ftm), note: D.bylen[b][r].ftm < 0 ? "lower bound" : "" })) })),
              "dense FLOPs to match (×)", { xlab: "eval length (thousand tokens, log)", dp: 2 });
         ["lenD","lenF"].forEach(id => { const ch = Chart.getChart(id); if (ch) { ch.options.scales.x.ticks.callback = v => [2,4,8,16,32,64].includes(v) ? v + "k" : ""; ch.update(); } });
       }
@@ -390,35 +390,37 @@ def m64_data(path):
 
 def by_length(m64):
     """Router vs dense (LR 5e-6) per eval rung: matched-FLOP delta and dense-FLOPs-to-match, per router budget."""
-    if not m64 or "dense|5e-06" not in m64 or "otr10M7|5e-06" not in m64:
+    if not m64 or "dense|5e-06" not in m64:
         return None
     import math
     dense = m64["dense|5e-06"]
     out = {}
-    for rp in m64["otr10M7|5e-06"]:
-        row = {}
-        for r in M64_RUNGS:
-            dc = [(p["x"], p["rung6"][r]) for p in dense if r in p["rung6"]]
-            if r not in rp["rung6"] or len(dc) < 2:
-                continue
-            y = rp["rung6"][r]
-            # matched-FLOP delta: dense interpolated in log PF at the router's PF
-            lx = math.log(rp["x"])
-            seg = next(((a, b) for a, b in zip(dc, dc[1:]) if math.log(a[0]) <= lx <= math.log(b[0])), None)
-            if seg is None:
-                continue
-            (x0, y0), (x1, y1) = seg
-            dmatch = y0 + (y1 - y0) * (lx - math.log(x0)) / (math.log(x1) - math.log(x0))
-            # FLOPs to match: first dense segment whose score brackets y
-            ftm = None
-            for (x0, y0), (x1, y1) in zip(dc, dc[1:]):
-                if min(y0, y1) <= y <= max(y0, y1) and y1 != y0:
-                    ftm = x0 * (x1 / x0) ** ((y - y0) / (y1 - y0)) / rp["x"]
-                    break
-            if ftm is None and y > max(v for _, v in dc):
-                ftm = -max(x for x, _ in dc) / rp["x"]  # negative = lower bound (above dense's best point)
-            row[r] = {"delta": round(y - dmatch, 4), "ftm": None if ftm is None else round(ftm, 2)}
-        out[rp["budget"]] = row
+    arms = [("router", "otr10M7|5e-06"), ("recipe", "lora64r20to7f16|5e-06")]
+    for name, key in arms:
+      for rp in m64.get(key, []):
+          row = {}
+          for r in M64_RUNGS:
+              dc = [(p["x"], p["rung6"][r]) for p in dense if r in p["rung6"]]
+              if r not in rp["rung6"] or len(dc) < 2:
+                  continue
+              y = rp["rung6"][r]
+              # matched-FLOP delta: dense interpolated in log PF at the router's PF
+              lx = math.log(rp["x"])
+              seg = next(((a, b) for a, b in zip(dc, dc[1:]) if math.log(a[0]) <= lx <= math.log(b[0])), None)
+              if seg is None:
+                  continue
+              (x0, y0), (x1, y1) = seg
+              dmatch = y0 + (y1 - y0) * (lx - math.log(x0)) / (math.log(x1) - math.log(x0))
+              # FLOPs to match: first dense segment whose score brackets y
+              ftm = None
+              for (x0, y0), (x1, y1) in zip(dc, dc[1:]):
+                  if min(y0, y1) <= y <= max(y0, y1) and y1 != y0:
+                      ftm = x0 * (x1 / x0) ** ((y - y0) / (y1 - y0)) / rp["x"]
+                      break
+              if ftm is None and y > max(v for _, v in dc):
+                  ftm = -max(x for x, _ in dc) / rp["x"]  # negative = lower bound (above dense's best point)
+              row[r] = {"delta": round(y - dmatch, 4), "ftm": None if ftm is None else round(ftm, 2)}
+          out[f'{name}|{rp["budget"]}'] = row
     return out
 
 
