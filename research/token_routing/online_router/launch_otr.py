@@ -93,6 +93,9 @@ ARMS = {
     "lora64K32r20to7f16": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-min-per-doc 16"),
     # partial MLP on the LoRA-all recipe (mt4, no floor): v2 topk vs random (2026-10-25)
     "lora64K32r20to7": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32"),
+    # overnight hill-climb on the LoRA-all recipe (2026-10-26)
+    "lora64K32r20to7pt": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --st-otr-per-task-key-tokens 11"),
+    "lora64K32r20to12": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,12:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32"),
     "lora64K32r20to7tk50": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --ffn-width-frac 0.5 --ffn-width-mode topk"),
     "lora64K32r20to7tk75": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --ffn-width-frac 0.75 --ffn-width-mode topk"),
     "lora64K32r20to7fw75a": otr(0.1, drop=7, dense_every=0, extra="--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-blocks 32 --ffn-width-frac 0.75"),
