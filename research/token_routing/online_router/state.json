@@ -856,14 +856,6 @@
    "lr": 1e-05,
    "mix": "mt4",
    "seed": 0
-  },
-  "f8k-mt4-lora64K32dg-s1464-tdb-lr1e-05": {
-   "ex": "01M5VKNMKHB4G3MHH8TXP0CNCW",
-   "arm": "lora64K32dg",
-   "budget": "s1464",
-   "lr": 1e-05,
-   "mix": "mt4",
-   "seed": 0
   }
  },
  "evals": {
@@ -4111,6 +4103,16 @@
    "ex": "01M5VKD80ANXQJ5SBFNDKA2967",
    "train_run": "f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05",
    "task": "contradiction"
+  },
+  "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05-evoutlier": {
+   "ex": "01M5VKMZ5C776E6GWHFXEQYWV2",
+   "train_run": "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05-evoolong": {
+   "ex": "01M5VKNS32489RH27KJVTX8C67",
+   "train_run": "f8k-mt4-lora64K32r20to7sd1-s1464-tdb-lr1e-05",
+   "task": "oolong"
   }
  },
  "failed_evals": {
