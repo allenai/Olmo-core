@@ -308,6 +308,11 @@ ARM_EXTRA.update({
     "lora64r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                         "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
                         "--st-otr-stages 7:0.2,12:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32"),
+    # review control: whole-model LoRA + two-stage with RANDOM token choice (same budgets / allocation / drop points)
+    "lora64all32rnd20to7": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                            "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                            "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                            "--st-otr-early-lora-blocks 32 --st-otr-score random"),
     "otr10M7de4": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.1 "
                    "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 4 --st-otr-drop-layer 7"),
     # no full-context steps (peak memory = routed steps), optionally + early-exit LM loss on dropped tokens
@@ -333,6 +338,8 @@ _SK8 = "--train-skip-layers 16,17,18,20,21,22,24,25"
 _LDL = "--layer-drop-p 0.2 --layer-drop-schedule linear --layer-drop-exclude-first 4 --layer-drop-exclude-last 2"
 #: dense + a train-time modifier (variant full with extra flags)
 DENSE_EXTRA = {
+    # review controls (2026-10-26): dense + whole-model LoRA, no router (is the LoRA-all gain LoRA or routing?)
+    "denselora64all": "--lora-rank 64 --lora-blocks 0 --lora-scale 32",
     "denseffn50": "--ffn-width-frac 0.5",
     "denseffn25": "--ffn-width-frac 0.25","dense-sk3": _SK3, "dense-sk8": _SK8, "dense-ldl20": _LDL}
 for _r in ("tier67a50m32", "tier67flm16", "gbflk64p8"):
