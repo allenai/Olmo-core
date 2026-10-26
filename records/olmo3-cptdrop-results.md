@@ -5,10 +5,10 @@ updated: 2026-10-25
 experiment: olmo3_cptdrop
 area: token_routing
 kind: result
-status: current (K32 at 960 steps pending)
+status: current
 superseded_by:
 artifact: https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
-summary: OLMo 3 7B stage-2 → 32k/64k CPT on Longmino. Every token-drop / router / MoD / partial-MLP / backprop-stop arm loses to dense; whole-model LoRA r64 (frozen base) beats dense at 0.70x FLOPs/step and 29% less memory, m 1.7–3.9 by budget, edge ~1.5x larger at 64k.
+summary: OLMo 3 7B stage-2 → 32k/64k CPT on Longmino. Every token-drop / router / MoD / partial-MLP / backprop-stop arm loses to dense; whole-model LoRA r64 (frozen base) beats dense at 0.70x FLOPs/step and 29% less memory up to ~480 steps (m peaks 3.9, edge ~1.5x larger at 64k) but falls behind at 960 steps (m 1.1).
 ---
 # Result — OLMo 3 7B long-context CPT: what saves FLOPs
 
@@ -21,9 +21,10 @@ Code: `research/token_routing/olmo3_cptdrop/`. Every number below is in the ops 
   every linear in all 32 blocks, at LR 1e-5 to 2e-5, 16 rows/step, no token dropping.
   - Cost: 0.700x dense FLOPs/step (measured by the FLOP meter); peak 25.0 vs 35.2 GiB per GPU.
   - Quality: below dense at the same step count at every budget tested, at 32k and 64k.
-- **The win is real but modest:** FLOPs-to-match (m) peaks at about 3.9x near 48–120 steps and decays to about 1.8x at
-  480 steps. That is well short of the 10–20x target. At large budgets most of the value is the cheaper step and the
-  lower memory.
+- **The win is real but modest, and it ends:** FLOPs-to-match (m) peaks at about 3.9x near 48–120 steps, decays to about
+  1.8x at 480 steps and to 1.1x at 960 steps, where K32 is BEHIND dense at the same step count (+0.0012 ± 0.0001; far
+  bin +0.0035). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure. That
+  is well short of the 10–20x target. K32 suits short CPT budgets; for long ones, full CPT wins.
 - **The edge grows with context length:** at 64k it is about 1.5x the 32k gap at every budget.
 - **Everything that removes work per token loses, alone or stacked on K32:**
   - token drops, slots and routers;
@@ -77,16 +78,17 @@ Further checks:
 
 ## K32 budget curve
 
-| steps | 12 | 24 | 48 | 120 | 240 | 480 |
-|---|---|---|---|---|---|---|
-| 32k CE | 1.6926 | 1.6880 | 1.6849 | 1.6819 | 1.6804 | 1.6788 |
-| 32k Δ vs dense | −0.0046 | −0.0032 | −0.0031 | −0.0034 | −0.0023 | −0.0012 |
-| 32k m | 1.65 | 2.75 | 3.9 | 3.45 | 2.5 | ~1.8 |
-| 64k Δ vs dense (dev64k_512, 512 rows) | | | | −0.0049 | −0.0033 | −0.0020 |
-| 64k m | | | | ~3.4 | ~2.7 | >1.44 (bound) |
+| steps | 12 | 24 | 48 | 120 | 240 | 480 | 960 |
+|---|---|---|---|---|---|---|---|
+| 32k CE | 1.6926 | 1.6880 | 1.6849 | 1.6819 | 1.6804 | 1.6788 | 1.6774 |
+| 32k Δ vs dense | −0.0046 | −0.0032 | −0.0031 | −0.0034 | −0.0023 | −0.0012 | **+0.0012** |
+| 32k m | 1.65 | 2.75 | 3.9 | 3.45 | 2.5 | ~1.8 | 1.12 |
+| 64k Δ vs dense (dev64k_512, 512 rows) | | | | −0.0049 | −0.0033 | −0.0020 | |
+| 64k m | | | | ~3.4 | ~2.7 | >1.44 (bound) | |
 
-- **Context gain** (CE with an 8k window minus CE with full 32k, on each row's last 4k): K32 matches dense.
-  - K32 at 12/24/48/120 steps: 0.0681 / 0.0700 / 0.0725 / 0.0739. Dense: 0.0671 / 0.0700 / 0.0726 / 0.0750. Per-run SE ±0.0036.
+- **Context gain** (CE with an 8k window minus CE with full 32k, on each row's last 4k): K32 matches dense up to 120 steps
+  and lags slightly at 960.
+  - K32 at 12/24/48/120/960 steps: 0.0681 / 0.0700 / 0.0725 / 0.0739 / 0.0771. Dense: 0.0671 / 0.0700 / 0.0726 / 0.0750 / 0.0788. Per-run SE ±0.0036.
 - **Short guard:** level with dense throughout ⚠ (256 rows).
 - **64k PF:** the dense-64k meter files are partial counts, so 64k dense PF is taken as K32 PF / 0.696.
 
