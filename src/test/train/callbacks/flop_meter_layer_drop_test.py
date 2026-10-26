@@ -118,3 +118,15 @@ def test_dry_run_flop_adjustments_are_not_charged_to_step_one():
     cb.pre_step({"input_ids": torch.ones(2, 256, dtype=torch.long)})
     cb.post_step()
     assert metrics["flop_meter/actual_pflops"] == pytest.approx(2 * 256 * m.num_flops_per_token(256) / 1e15)
+
+
+def test_lora_frozen_head_is_charged_at_two_thirds():
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, install_early_lora, lora_flop_adjust_per_token
+
+    m, cb, metrics = _setup(per_example=False)
+    install_early_lora(m, 4, 4, scale=8.0, freeze_head=True)
+    assert not any(p.requires_grad for p in m.lm_head.parameters())
+    cb.post_step()
+    head = m.lm_head.num_flops_per_token(256)
+    want = 2 * 256 * (m.num_flops_per_token(256) + lora_flop_adjust_per_token(m, 256) - head / 3)
+    assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)

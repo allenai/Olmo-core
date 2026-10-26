@@ -301,6 +301,10 @@ class FlopMeterCallback(Callback):
             # partial-MLP without a mid-stack router: every partial FFN ran at its fraction on every real token (the
             # mid-stack router charges this credit itself, per document and at each block's length)
             actual += tokens * sum(fw.credits_per_block(len(m.blocks)))
+        head_pos = tokens if self._supervised_this_step is None else self._supervised_this_step
+        if getattr(m, "_head_frozen", False) and otr is None:
+            # frozen LM head without the router (which charges it itself): no weight gradient at the positions it ran
+            actual -= (1.0 / 3.0) * float(m.lm_head.num_flops_per_token(self.seq_len)) * head_pos
         if self._supervised_this_step is not None:
             if otr is not None:
                 raise ValueError("FlopMeter: --sparse-loss-positions with the online router is not priced (the router "

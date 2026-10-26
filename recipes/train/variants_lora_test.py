@@ -22,3 +22,17 @@ def test_lora_modifier_installs_exports_and_validates():
     assert v.export_config(o) == {"early_lora": {"n_blocks": 4, "rank": 4, "scale": 8.0, "start": 1}}
     with pytest.raises(ValueError):
         v.validate(V.LoRAOptions(lora_rank=4, lora_blocks=2, lora_start=2))
+
+
+def test_lora_modifier_freeze_head():
+    from olmo_core.config import DType
+    from olmo_core.nn.transformer import TransformerConfig
+
+    import variants as V
+
+    v = V.VARIANTS["lora"]
+    o = V.LoRAOptions(lora_rank=4, lora_freeze_head=True)
+    m = TransformerConfig.olmo2_190M(vocab_size=1000, n_layers=2, fused_ops=False, dtype=DType.float32).build(
+        init_device="cpu")
+    v.post_build_model(m, o, None)
+    assert m._head_frozen and not any(p.requires_grad for p in m.lm_head.parameters())

@@ -56,7 +56,7 @@ def _lora_reset_parameters(self: nn.Linear) -> None:
 
 
 def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0, freeze_embeddings: bool = True,
-                       check_calls: bool = True, start: int = 0) -> List[nn.Linear]:
+                       check_calls: bool = True, start: int = 0, freeze_head: bool = False) -> List[nn.Linear]:
     """Freeze blocks [0, n_blocks) (and the embeddings) and give every ``nn.Linear`` in blocks [start, n_blocks) a
     rank-``rank`` adapter; blocks [0, start) stay frozen with no adapter (the frozen forward-only bottom stack of
     ``--st-otr-freeze-early --st-otr-early-lora-start B``). Returns the adapted modules (``model._early_lora``)."""
@@ -66,6 +66,11 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
     if freeze_embeddings:
         for p in model.embeddings.parameters():
             p.requires_grad_(False)
+    if freeze_head:
+        # frozen LM head (final norm + vocabulary projection): no weight gradient or Adam state; charged at 2/3
+        for p in model.lm_head.parameters():
+            p.requires_grad_(False)
+        model._head_frozen = True
     mods: List[nn.Linear] = []
     for i, block in enumerate(model.blocks.values()):
         if i >= n_blocks:
@@ -92,7 +97,7 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
     if not mods:
         raise RuntimeError(f"early LoRA: no nn.Linear found in blocks [0, {n_blocks})")
     model._early_lora = {"modules": mods, "n_blocks": int(n_blocks), "rank": int(rank), "scale": float(scale),
-                         "start": int(start), "checked": not check_calls}
+                         "start": int(start), "freeze_head": bool(freeze_head), "checked": not check_calls}
 
     def _check(module, args, output):
         st = module._early_lora

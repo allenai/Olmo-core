@@ -1221,6 +1221,7 @@ class OnlineTokenRouter:
         blocks = [b if i not in skip else None for i, b in enumerate(model.blocks.values())]
         L0 = self.cfg.drop_layer
         head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
+        headx = head * (2.0 / 3.0 if getattr(model, "_head_frozen", False) else 1.0)  # frozen head: no weight grad
         adj = 0.0
         # early_nograd / freeze: blocks below _nograd_until ran forward-only (1/3 of forward + backward); frozen blocks
         # at or above L0 skipped only their weight gradient (2/3)
@@ -1232,14 +1233,14 @@ class OnlineTokenRouter:
             fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
             if self.stage_idx == 0:
                 actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
-                          + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + head))
+                          + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
                 adj += actual - L * (sum(fb) + head)
                 # adapters: blocks below the drop at the full length, the rest at the kept length
                 adj += L * sum(ab[:L0]) + Lk * sum(ab[L0:])
             else:
                 # a later pyramid stage: the earlier stages already charged blocks >= L0 at THIS stage's entry length L
-                adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + head)
-                        - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + head))
+                adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx)
+                        - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + headx))
                 adj += (Lk - L) * sum(ab[L0:])
         self._flop(model, adj)
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
@@ -1318,6 +1319,7 @@ class OnlineTokenRouter:
         blocks = [b if i not in skip else None for i, b in enumerate(model.blocks.values())]
         L0 = self.cfg.drop_layer
         head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
+        headx = head * (2.0 / 3.0 if getattr(model, "_head_frozen", False) else 1.0)  # frozen head: no weight grad
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
         ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
@@ -1326,7 +1328,7 @@ class OnlineTokenRouter:
             fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
             fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
             actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
-                      + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + head))
+                      + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
             adj += actual - L * (sum(fb) + head) + L * sum(ab[:L0]) + Lk * sum(ab[L0:])
         self._flop(model, adj)
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))

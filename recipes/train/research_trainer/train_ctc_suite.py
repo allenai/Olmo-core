@@ -1564,6 +1564,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--lora-start", type=int, default=0,
                     help="--lora-rank: adapters from block B; [0, B) frozen with no adapter, so no backward below B")
     ap.add_argument("--lora-scale", type=float, default=32.0, help="--lora-rank: adapter output scale")
+    ap.add_argument("--lora-freeze-head", action="store_true",
+                    help="--lora-rank: also freeze the LM head (final norm + vocab projection): no weight gradient / "
+                    "Adam state; charged at 2/3")
     ap.add_argument("--gdn-segment-tokens", type=int, default=0,
                     help="GatedDeltaNet training forward over segments of this many tokens (multiple of 64) carrying "
                     "the recurrent state: backward rebuilds one segment's chunk states at a time (exact). 0 = off")
@@ -2000,6 +2003,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-route-min-len", type=int, default=0,
                     help="online router: route only rows (packed: documents) with >= this many tokens; shorter ones "
                     "run dense in the same step (hybrid short-window + routed long-row batches). 0 = route all")
+    ap.add_argument("--st-otr-early-lora-freeze-head", action="store_true",
+                    help="early LoRA: also freeze the LM head (no weight gradient / Adam state; charged at 2/3)")
     ap.add_argument("--st-otr-early-lora-start", type=int, default=0,
                     help="early LoRA adapters only on blocks [B, K); [0, B) frozen with no adapter. With "
                     "--st-otr-freeze-early and B = --st-otr-drop-layer, [0, B) runs forward-only (no backward below B)")

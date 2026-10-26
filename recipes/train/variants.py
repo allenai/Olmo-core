@@ -230,6 +230,7 @@ class LoRAOptions(VariantOptions):
     lora_blocks: int = 0
     lora_start: int = 0
     lora_scale: float = 32.0
+    lora_freeze_head: bool = False
 
     @property
     def active(self) -> bool:
@@ -336,6 +337,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_early_lora_scale: float = 32.0
     st_otr_early_lora_blocks: int = 0
     st_otr_early_lora_start: int = 0
+    st_otr_early_lora_freeze_head: bool = False
     st_otr_route_min_len: int = 0
     st_otr_warmup_random: bool = False
     st_otr_keep_mode: str = "topk"
@@ -954,7 +956,8 @@ class LoRA(Variant):
         from olmo_core.nn.early_lora import install_early_lora
 
         K = self._K(o, model)
-        mods = install_early_lora(model, K, o.lora_rank, o.lora_scale, start=o.lora_start)
+        mods = install_early_lora(model, K, o.lora_rank, o.lora_scale, start=o.lora_start,
+                                  freeze_head=o.lora_freeze_head)
         o.lora_blocks = K  # recorded for the export
         print(f"[variants] lora: base of blocks [0, {K}) + embeddings frozen, rank-{o.lora_rank} adapters on "
               f"[{o.lora_start}, {K}) ({len(mods)} linears, scale {o.lora_scale})", flush=True)
@@ -1404,7 +1407,8 @@ class SoftToken(Variant):
             r = model._online_token_router
             K = o.st_otr_early_lora_blocks or r.cfg.drop_layer
             B0 = o.st_otr_early_lora_start
-            mods = install_early_lora(model, K, o.st_otr_early_lora, o.st_otr_early_lora_scale, start=B0)
+            mods = install_early_lora(model, K, o.st_otr_early_lora, o.st_otr_early_lora_scale, start=B0,
+                                      freeze_head=o.st_otr_early_lora_freeze_head)
             print(f"[variants] online router early LoRA: blocks [0, {K}) + embeddings frozen, adapters on [{B0}, {K}), "
                   f"{len(mods)} linears get rank-{o.st_otr_early_lora} adapters (scale {o.st_otr_early_lora_scale})",
                   flush=True)
