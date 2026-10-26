@@ -17,7 +17,12 @@ class _Block(nn.Module):
 
 
 def _grads(model: nn.Module):
-    return {n: p.grad.detach().clone() for n, p in model.named_parameters() if p.grad is not None}
+    # named_parameters keeps the wrapper prefix (as torch's checkpoint_wrapper); state_dict strips it
+    return {
+        n.replace("_checkpoint_wrapped_module.", ""): p.grad.detach().clone()
+        for n, p in model.named_parameters()
+        if p.grad is not None
+    }
 
 
 def _run(device: str, input_requires_grad: bool):
