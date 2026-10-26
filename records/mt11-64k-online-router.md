@@ -8,7 +8,7 @@ kind: result
 status: complete for otr10M7 (two seeds at 1/4 epoch, one at 1/2 and full epoch; otr10M8 not run)
 superseded_by: 
 artifact: https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n
-summary: 11-task 64k mix (662M tokens) - the otr10M7 online router (0.40x dense FLOPs/step) beats the better-LR dense curve at matched FLOPs and LR 5e-6 by +0.025 to +0.032 (task-average) at every budget (1/4, 1/2, full epoch; 2 seeds at 1/4), ahead on 8-9/10 tasks; largest xabsence +0.10-0.12, outlier +0.04-0.13, contradiction +0.03-0.06. Same data it trails dense by ~0.03. Wall-clock 0.79-0.82x on 4 GPUs, ~1x on 8. eval_size 500/cell.
+summary: 11-task 64k mix (662M tokens) - online routers beat dense at matched FLOPs and LR 5e-6. The adopted universal recipe (LoRA r64 early stack + two-stage router 7:0.2,16:0.07, floor 16, de0) at 0.365x FLOPs: +0.037 task-average, ahead 10/10, -24% peak memory (1 seed). otr10M7 (0.40x): +0.026 to +0.032 at every budget (1/4..full epoch, 2 seeds at 1/4); same data -0.03 vs dense; loses at LR 2e-6. eval_size 500/cell.
 ---
 
 # The mid-stack online token router at 64k, 11 tasks, ~64M tokens per task
@@ -107,7 +107,7 @@ a small, consistent loss.
 
 ## More data: 1/2 and full epoch (LR 5e-6; router and dense on 4 GPUs)
 
-Router minus the better-LR dense curve (seed-averaged where replicated), interpolated in log PF, mean over rungs:
+Router minus the better-LR dense curve (seeds averaged within each LR, then the better LR; collect_m64.py), interpolated in log PF, mean over rungs:
 
 | router run | PF | nq | hotpotqa | qdmatch | outlier | oolong | contra | xabsence | reorder | strmatch | grouping | task-avg | ahead |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -133,9 +133,9 @@ FLOP saving shows up as time.
 `lora64r20to7f16` (launch_otr.py, verbatim): LoRA r64 (scale 32) on blocks 0-6, two-stage router keeping 20% after
 block 7 and 7% after block 16, per-document floor 16 tokens, no full-context steps, no freeze, LR 5e-6, 4 GPUs.
 1,695.8 PF = 0.365x dense-equivalent (between dense f16 and f8). Matched-FLOP delta vs the better-LR dense curve, mean
-over rungs: nq +0.003, hotpotqa +0.022, qdmatch_nq +0.016, outlier +0.063, oolong +0.023, contradiction +0.068 (+0.119 at
-64k), xabsence +0.110, reorder (2k) +0.017, strmatch +0.020; task-average **+0.038, ahead 9/9** (grouping eval re-running
-after an NCCL timeout; its 2k/8k put it near +0.006). Beats otr10M7 at f4 (+0.025 / +0.032 over two seeds) at less
+over rungs: nq +0.004, hotpotqa +0.022, qdmatch_nq +0.017, outlier +0.063, oolong +0.023, contradiction +0.069 (+0.119 at
+64k), xabsence +0.111, reorder (2k) +0.018, strmatch +0.020, grouping +0.027 (2k/8k/16k; 16k scored on 1 GPU because
+the 2-GPU eval hit an NCCL allgather timeout there twice); task-average **+0.037, ahead 10/10**. Beats otr10M7 at f4 (+0.025 / +0.032 over two seeds) at less
 compute, and turns strmatch from -0.017 into +0.020. Peak GPU memory 37.2 / 44.2 GiB active / reserved vs dense 48.7 /
 52.8 (-24% / -16%); otr10M7 matched dense (its full-context step every 8). Single seed. Eval log confirms the LoRA
 adapters were rebuilt from the checkpoint (eval commit contains 984825862).

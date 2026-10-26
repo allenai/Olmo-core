@@ -11,7 +11,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/m64-q35-4b
-next_step: Universal recipe (lora64r20to7f16) f4 done: +0.038 at 0.365x FLOPs, 9/9 tasks, -24% peak memory (single seed). Pending: its grouping eval relaunch (01M5V9STM3FTH5TS1EKBH7F5NR) -> collect_m64.py --record, send the grouping number to local_a8068d93, republish the page. Possible next: a second seed of the recipe at f4; the recipe at f2/f1.
+next_step: Universal recipe f4 complete (+0.037, 10/10, 0.365x FLOPs, -24% memory; single seed), reported to local_a8068d93. Possible next (Prasann/LR-sweep session to choose): a second seed of the recipe at f4; the recipe at f2/f1; otr10M8.
 ---
 
 # mt11_64k
@@ -81,6 +81,11 @@ mid-stack online router matched dense at equal FLOPs on 4 tasks but failed strma
 | scale-up LR 5e-6: otr10M7-f2, dense-f2 (4 GPUs: 01M5NFTSY0MJBQNXPNB9HDBERV, 01M5NFVJS7Y4D046KXFE9AFE81); dense-f1, otr10M7-f1 (8 GPUs: 01M5MZYWVPS7TXCFSGKNEQH0V6, 01M5N00AE88VBBGQRQ28F87N6S) | pending (minRuntime capped at Beaker's 8h; resume every 50 steps) |
 | m64-otr10M7-f4-lr2e-06 | 01M5KV36S0MTH0VRZT2WK32QKB: preempted twice at ~1h (step ~100 / ~200), restarted from scratch (no resume point before step 300), cancelled; RELAUNCHED 01M5M8NDSDPCS9YNWBQED7NNJE (minRuntime 3h, resume every 50 steps): FAILED at step 2, NaN grad norm already at step 1 on node 01JRYCX2HZQ2QE60PMHBB7ZM8J (same batch gives CE 0.9751 / grad norm 26.82 on other nodes = bad node); RELAUNCHED 01M5MEB6K9S3H6MQCS9FPPQ4G4: DONE 14:50, 1,872.4 PF (0.405x dense-equivalent); 10 evals launched |
 | m64-dense-f{8,4,2,1}-lr{2e-06,5e-06} (f4/f2/f1 CANCELLED pending, small-first) | 01M5KQZ52Z5MQ3W6N86NKYVW4M, 01M5KR0BQXMHGHHKXQ6QWZGJJR, 01M5KR1S0JRQ8MJ8C2SV7P3H4P, 01M5KR3V9W8Y669X20SJT0RT1P, 01M5KR60YGENAF5XM27F0FV9PM, 01M5KR6VCQNA4ZRWYNPHQAEQF5, 01M5KR7W5JAD0GYBXK9J1FKKBD, 01M5KR95YM906V56JZK1HVNK4Q | pending |
+
+## Universal recipe f4 FINAL (2026-10-26): all 10 tasks in. vs better-LR dense (seeds averaged within LR; collector fixed,
+it used to take the max over seeds): nq +0.004, hotpotqa +0.022, qdmatch +0.017, outlier +0.063, oolong +0.023,
+contradiction +0.069, xabsence +0.111, reorder(2k) +0.018, strmatch +0.020, grouping +0.027 (16k on 1 GPU: 0.199)
+-> task-average +0.037, ahead 10/10, at 0.365x FLOPs, -24% peak active memory. Single seed.
 
 ## Universal recipe f4 RESULT (2026-10-25): m64-lora64r20to7f16-f4-lr5e-06, 1,695.8 PF = 0.365x dense-equivalent,
 interpolated between dense f16 and f8. vs better-LR dense (seed-averaged where replicated), mean over rungs:
@@ -154,6 +159,12 @@ mean over each task's rungs (contradiction, grouping, reorder partial -- evals s
 See `next_step`.
 
 ## Open issues / traps
+- 2026-10-26 ~05:45: all 25 long suite-row files (r16k/r32k/r64k) vanished from weka `_eval_bundle/ctc_suite_rows`,
+  CONFIRMED (LR-sweep session): it re-ran ds64_fast8k/stage_suite_rows_beaker.sh at ~05:40 to stage rerank rows, and the
+  script's whole-directory mv-swap dropped them; that script is now add-only on prasann/flopdrop_clean.
+  Restored add-only and hash-verified 25/25 by stage_long_rows_beaker.sh (01M5VCDPHMFWK505KTB094ZJJF). A long-rung eval
+  launched while they were missing fails with exit 3 (no silent wrong score). If it recurs: re-run that script.
+- The universal recipe's grouping 16k times out (NCCL allgather > 10 min) on 2 GPUs, twice; it runs on 1 GPU instead.
 - Beaker node 01JRYCX2HZQ2QE60PMHBB7ZM8J produced NaN gradients at step 1 (CE matched other nodes exactly). If a run
   NaNs at step 1-2, compare its step-1 `optim/total grad norm` with 26.82 before suspecting the code.
 - reorder 8k/16k score 0.000 for dense f8 (parse_rate 0.072 / 0.0; 2k 0.172, parse 0.97). Checked the raw generations

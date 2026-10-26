@@ -105,14 +105,19 @@ def matched(train, scores):
         by.setdefault((s["task"], s["rung"]), []).append(s)
     out = []
     for (task, rung), rows in sorted(by.items()):
-        dense = {}  # budget -> (pf, best score, lr)
+        # dense reference: average the seeds of each (budget, LR), THEN take the better LR per budget. (Taking the max
+        # over seeds instead -- the first version -- picks the luckier of two noisy draws and biases dense upward.)
+        by_cfg = {}
         for s in rows:
             t = next((t for t in train if t["run"] == s["train_run"]), None)
             if not t or t["arm"] != "dense" or not t["pf"]:
                 continue
-            cur = dense.get(t["budget"])
-            if cur is None or s["value"] > cur[1]:
-                dense[t["budget"]] = (t["pf"], s["value"], t["lr"])
+            by_cfg.setdefault((t["budget"], t["lr"]), []).append((t["pf"], s["value"]))
+        dense = {}  # budget -> (pf, seed-mean score of the better LR, lr)
+        for (budget, lr), v in by_cfg.items():
+            pf_, val = sum(p for p, _ in v) / len(v), sum(x for _, x in v) / len(v)
+            if budget not in dense or val > dense[budget][1]:
+                dense[budget] = (pf_, val, lr)
         curve = [(p, v) for p, v, _ in dense.values()]
         for s in rows:
             t = next((t for t in train if t["run"] == s["train_run"]), None)
