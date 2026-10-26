@@ -71,6 +71,15 @@ CPT32 = {
 CPT64 = {"Dense": [(3799, 1.7210), (7598, 1.7170), (15195, 1.7134)],
          "Whole-model LoRA (rank 64, all 32 blocks)": [(2644, 1.7161), (5288, 1.7137), (10576, 1.7114)]}
 CPT_M = [(12, 1.65), (24, 2.75), (48, 3.9), (120, 3.45), (240, 2.5), (480, 1.8), (960, 1.12)]
+# ---- peak memory per GPU vs row length, SFT 4B, 2 x A100-80GB, FSDP-2, full AC, steady routed step (router record,
+# "B' round 0/2" memprobe tables). Standard flags: fixed + transient at 32k/64k/128k. All memory flags (routed warmup,
+# --skip-dry-run, chunked FFN 8192, GDN segments 16384): measured peaks. ----
+MEM_STD = {"Dense": [(32, 43.7), (64, 56.0)], "Router keep 10%": [(32, 42.1), (64, 50.3), (128, 66.7)],
+           "Recipe: two-stage + adapters 0–6": [(32, 36.4), (64, 44.4), (128, 60.2)],
+           "Whole-model LoRA + two-stage": [(32, 23.3), (64, 29.3), (128, 45.2)]}
+MEM_FLAGS = {"Dense": [(128, 68.3), (160, 77.5)], "Router keep 10%": [(192, 64.3), (224, 69.9)],
+             "Recipe: two-stage + adapters 0–6": [(128, 56.6), (196, 70.3), (262, 71.6)],
+             "Whole-model LoRA + two-stage": [(262, 56.5), (393, 77.4)]}
 # ---- max train length at 80 GB, SFT 4B, 2 x A100, FSDP-2, full AC (records/online-token-router.md; linear
 # extrapolation from 3-step probes, one sample each) ----
 MAXT = [("Dense", 165), ("Router, no full-context steps", 250), ("Recipe (adapters 0–6 + two-stage)", 300),
@@ -167,6 +176,10 @@ a { color: var(--c2); }
   <div class="figs">
     <figure><h3>Mean over 9 tasks @8k vs training FLOPs</h3><div class="chart"><canvas id="f11" aria-label="11-task Pareto"></canvas></div>
       <figcaption>720 rows/task unless noted; the recipe also at 240/480/960. Mean over nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction, xabsence, strmatch, grouping at 8k (reorder and rerank excluded: no working grader). Dense below 240 rows/task = 240-row runs cut at 32 and 64 steps.</figcaption></figure>
+    <figure><h3>Peak memory vs row length (standard settings)</h3><div class="chart"><canvas id="memstd" aria-label="memory vs length standard"></canvas></div>
+      <figcaption>Peak GPU memory per GPU at the steady (routed) training step vs tokens per row. Qwen3.5-4B, 2× A100-80GB, FSDP-2, full checkpointing. The slope is memory per token: dense 0.39 GiB per 1k tokens, routed arms ≈0.25. Dense out of memory at 128k; dashed line = 79.25 GiB usable.</figcaption></figure>
+    <figure><h3>Peak memory vs row length (all memory optimizations)</h3><div class="chart"><canvas id="memflags" aria-label="memory vs length optimized"></canvas></div>
+      <figcaption>Same probe with routed warmup, no dry run, chunked FFN recompute and segmented GDN. Slopes: dense 0.28, router 0.17, whole-model LoRA 0.16 GiB per 1k tokens. Points are measured; two-stage without adapters and a 20% router are being measured.</figcaption></figure>
     <figure><h3>Max train length at 80 GB</h3><div class="chart"><canvas id="maxt" aria-label="max train length"></canvas></div>
       <figcaption>Qwen3.5-4B SFT, 2× A100-80GB, FSDP-2, full activation checkpointing, chunked FFN + segmented GDN. Linear extrapolation from 3-step probes, one sample each (router session record).</figcaption></figure>
   </div>
@@ -300,6 +313,10 @@ function draw() {
     options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } },
       scales: { x: { title: { display: true, text: "max train length (thousand tokens)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } },
                 y: { ticks: { color: css("--fg"), font: { size: 10 } }, grid: { display: false } } } } });
+  const memSets = M => Object.entries(M).map(([k, v], i) => ({ label: k, dense: i === 0, pts: v.map(p => ({ x: p[0], y: p[1] })) }));
+  const cap = M => ({ label: "80 GB GPU (usable)", col: "--c6", dash: [6, 4], pts: [{ x: 32, y: 79.25 }, { x: 400, y: 79.25 }] });
+  plot("memstd", memSets(D.memstd).concat([cap()]), "peak GiB per GPU", { xlin: true, xlab: "tokens per row (thousands)", dp: 1 });
+  plot("memflags", memSets(D.memflags).concat([cap()]), "peak GiB per GPU", { xlin: true, xlab: "tokens per row (thousands)", dp: 1 });
   plot("cpt32", Object.entries(D.cpt32).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
   plot("cpt64", Object.entries(D.cpt64).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
   plot("cptm", [{ label: "whole-model LoRA, 32k", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1" }], "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
@@ -474,7 +491,7 @@ def main():
            {"label": "Router keep 10% + floor", "dense": False, "p": pick(S, "mt11", "s", "otr10M7de0f16")}]
     data = {"f4fresh": [{"label": l, "dense": dn, "p": pick(S, "mt4", "f", arm)} for l, arm, dn in f4fresh],
             "f4orig": f4orig, "f11": f11, "m64": m64_data(a.m64),
-            "cptlen": {"32k": [(120, -0.0034), (240, -0.0023), (480, -0.0012)], "64k": [(120, -0.0049), (240, -0.0033), (480, -0.0020)]}, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT}
+            "cptlen": {"32k": [(120, -0.0034), (240, -0.0023), (480, -0.0012)], "64k": [(120, -0.0049), (240, -0.0033), (480, -0.0020)]}, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT, "memstd": MEM_STD, "memflags": MEM_FLAGS}
     data["bylen"] = by_length(data["m64"])
     html = PAGE.replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
