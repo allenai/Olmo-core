@@ -60,6 +60,9 @@ def test_parse_yarn():
 def test_bins():
     assert [b[0] for b in ev.bins_for(32768)] == ["0k-4k", "4k-8k", "8k-16k", "16k-32k"]
     assert ev.bins_for(4096) == [("0k-4k", 0, 4096)]
+    # long rows: the bins must reach the end of the row (overall CE is summed from them)
+    assert [b[0] for b in ev.bins_for(131072)][-2:] == ["32k-64k", "64k-128k"]
+    assert ev.bins_for(131072)[-1][2] == 131072
 
 
 def _write_shard(d, rows, masks, tok="allenai/dolma2-tokenizer"):

@@ -54,7 +54,10 @@ OLMO3_TOKENIZER = "allenai/dolma2-tokenizer"
 #: YaRN parameters other than the factor: the released stage-3 config.json (and olmo3_configs.py).
 YARN_KW = dict(beta_fast=32, beta_slow=1, old_context_len=8192)
 #: Target-position bin edges; a bin is kept only if it starts inside the row.
-BIN_EDGES = (0, 4096, 8192, 16384, 32768)
+# Bins must cover the whole row: overall CE is summed from them, so an edge list that stopped at 32k scored only
+# the first 32k targets of every 64k / 128k row (2026-10-26 bug; every pre-fix dev64k / dev128k number is
+# first-32k-only CE). bins_for() clips to the row length.
+BIN_EDGES = (0, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288)
 #: Logit rows per fp32 CE chunk (4096 x 100352 x 4 B = 1.6 GB).
 CE_CHUNK = 4096
 
