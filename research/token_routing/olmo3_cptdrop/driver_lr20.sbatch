@@ -298,7 +298,7 @@ for st in ${STAGES:-DC SB IRS IFS EV SEED IR HO D480 EV CTX}; do
       K32X="--st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32"
       declare -A dead
       for T in ${MAXT_TS:-96 128 160 192 224 256}; do
-        SEQ=$((T * 1024)); GBT=$((524288 / SEQ)); [ "$GBT" -ge 1 ] || GBT=1
+        SEQ=$((T * 1024)); GBT=$((524288 / SEQ)); [ "$GBT" -ge 8 ] || GBT=8
         [ -f "$ROOT/data/probe${T}k_ee/metadata.json" ] || "$PY" "$CODE/research/token_routing/olmo3_cptdrop/probe_shard.py" \
           --src "$ROOT/data/train32k_ee" --out "$ROOT/data/probe${T}k_ee" --row-len "$SEQ" --rows 16 || exit 98
         for A in ${MAXT_ARMS:-D K32}; do

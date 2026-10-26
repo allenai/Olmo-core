@@ -100,9 +100,10 @@ if [ "${CTX:-32k}" = "64k" ]; then
   case "$ARM" in D|IRAND|IFL|OTR) DATA=train64k_ee; SEQ=65536; GB=8; YARN=8 ;; *) echo "FATAL: CTX=64k not wired for ARM=$ARM"; exit 2 ;; esac
 elif [ "${CTX:-32k}" != "32k" ]; then
   # CTX=<N>k (e.g. 128k, 256k): rows of N*1024 tokens from train<N>k_ee (or DATA_OVERRIDE, e.g. probe<N>k_ee),
-  # 524,288 tokens/step when it divides (else 1 row/step), YaRN = SEQ / 8192 on the full-attention layers.
+  # 524,288 tokens/step when that is >= one row per rank, else one row per rank (8 x 128k = 1.05M tokens/step; the
+  # token budget MAX_TOKENS is unchanged, so there are fewer optimizer steps), YaRN = SEQ / 8192 on the full layers.
   case "$ARM" in D|OTR) ;; *) echo "FATAL: CTX=$CTX not wired for ARM=$ARM"; exit 2 ;; esac
-  SEQ=$(( ${CTX%k} * 1024 )); DATA=train${CTX}_ee; GB=$(( 524288 / SEQ )); [ "$GB" -ge 1 ] || GB=1; YARN=$(( SEQ / 8192 ))
+  SEQ=$(( ${CTX%k} * 1024 )); DATA=train${CTX}_ee; GB=$(( 524288 / SEQ )); [ "$GB" -ge "$NGPU" ] || GB=$NGPU; YARN=$(( SEQ / 8192 ))
 fi
 DATA="${DATA_OVERRIDE:-$DATA}"   # e.g. phase 2 of a two-phase arm on the head shard (disjoint from mix4k_r0's tail rows)
 # GB_OVERRIDE: rows per optimizer step (dense small-batch control). MAX_STEPS_TOTAL stays in 524,288-token units,
