@@ -1627,7 +1627,9 @@ class OnlineTokenRouter:
         for e in self._pending:
             if e["target"] is None:
                 continue
-            ok = e["ok"]
+            ok = e["ok"] & torch.isfinite(e["target"])
+            if not bool((e["ok"] == ok).all()):
+                self._stat("nonfinite_targets", float((e["ok"] & ~ok).sum()))
             if not ok.any():
                 continue
             t = e["target"][ok]
@@ -1736,7 +1738,12 @@ class OnlineTokenRouter:
                 A.diagonal().add_(lam)
             try:
                 Lc = torch.linalg.cholesky(A)
-                self.w = torch.cholesky_solve(self.Xty[:, None], Lc).squeeze(-1).to(torch.float32)
+                w_new = torch.cholesky_solve(self.Xty[:, None], Lc).squeeze(-1).to(torch.float32)
+                if bool(torch.isfinite(w_new).all()):
+                    self.w = w_new
+                else:  # a non-finite fit (poisoned statistics) never reaches the scorer
+                    log.warning("[online-router] non-finite ridge solution at step %d; keeping previous weights", step)
+                    self._stat("nonfinite_fit", 1.0)
             except RuntimeError as exc:  # pragma: no cover - numerically singular
                 log.warning("[online-router] ridge solve failed (%s); keeping previous weights", exc)
             if model is not None:

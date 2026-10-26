@@ -1666,3 +1666,22 @@ def test_router_charges_a_frozen_head_at_two_thirds_cpu():
     expect = (real * (2 / 3) * sum(f(b, real) for b in blocks) + real * (2 / 3) * head + real * sum(ab)
               - real * (sum(f(b, real) for b in blocks) + head))
     assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+
+
+def test_nonfinite_targets_are_dropped_from_the_fit():
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=1)
+    r = _router(use_hidden=False, doc_share=0.0)
+    r.begin_step(1, model=m)
+    r.select(m, ids, cid, labels)
+    e = r._current
+    e["ok"] = torch.ones_like(e["rows"], dtype=torch.bool)
+    t = torch.randn(e["rows"].shape)
+    t[0] = float("nan")
+    t[1] = float("inf")
+    e["target"] = t
+    r._pending.append(e)
+    r._current = None
+    r.begin_step(2, model=m)
+    assert r.w is not None and bool(torch.isfinite(r.w).all())
