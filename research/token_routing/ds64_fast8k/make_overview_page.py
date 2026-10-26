@@ -35,13 +35,15 @@ def series(d):
         else:
             continue
         arm = re.sub(r"sd\d+$", "", r["arm"])
+        tasks = [t for t, _ in MT4[::2]] if r["mix"] == "mt4" else MT11
         agg[(r["mix"], pool, arm, f"{r['lr']:.0e}", r["rows"], r.get("max_steps") or 0)].append(
-            (r["pf"], y, c[("outlier", "8k")]))
+            (r["pf"], y, c[("outlier", "8k")], {t: c[(t, "8k")] for t in tasks}))
     out = collections.defaultdict(list)
     for (mix, pool, arm, lr, rows, steps), v in agg.items():
         n = len(v)
+        tc = {t: round(sum(a[3][t] for a in v) / n, 4) for t in v[0][3]}
         out[(mix, pool, arm, lr)].append((round(sum(a[0] for a in v) / n, 1), round(sum(a[1] for a in v) / n, 4),
-                                          round(sum(a[2] for a in v) / n, 4), n, rows, steps))
+                                          round(sum(a[2] for a in v) / n, 4), n, rows, steps, tc))
     return {k: sorted(v) for k, v in out.items()}
 
 
@@ -49,7 +51,7 @@ def pick(S, mix, pool, arm, lr="5e-06", exclude_partial=False):
     pts = S.get((mix, pool, arm, lr), [])
     if exclude_partial:
         pts = [p for p in pts if not p[5]]
-    return [{"x": p[0], "y": p[1], "o": p[2], "n": p[3], "rows": p[4], "steps": p[5]} for p in pts]
+    return [{"x": p[0], "y": p[1], "o": p[2], "n": p[3], "rows": p[4], "steps": p[5], "t": p[6]} for p in pts]
 
 
 # ---- CPT (OLMo 3 7B, dev CE, lower is better). Source: records/olmo3-cptdrop-results.md + CPT session reports ----
@@ -103,6 +105,8 @@ ul { margin: 0; padding-left: 20px; }
 figure { margin: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 12px 8px; min-width: 0; }
 figcaption { font-size: .82rem; color: var(--muted); margin-top: 6px; }
 .chart { position: relative; height: 300px; }
+.figs.small { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.figs.small .chart { height: 210px; }
 .tbl { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: .86rem; background: var(--surface); }
 th, td { border-bottom: 1px solid var(--rule); padding: 5px 8px; text-align: left; vertical-align: top; }
@@ -151,6 +155,13 @@ a { color: var(--c2); }
 </section>
 
 <section>
+  <h2>Per task: 4-task mix @8k</h2>
+  <p class="note">Same runs and colours as above, one panel per task (8k rung, eval_size 500 each, no-cot). Fresh data on the top row, original pool below.</p>
+  <div class="figs small" id="pt4f"></div>
+  <div class="figs small" id="pt4o" style="margin-top:12px"></div>
+</section>
+
+<section>
   <h2>SFT: 11-task mix</h2>
   <div class="figs">
     <figure><h3>Mean over 9 tasks @8k vs training FLOPs</h3><div class="chart"><canvas id="f11" aria-label="11-task Pareto"></canvas></div>
@@ -158,6 +169,12 @@ a { color: var(--c2); }
     <figure><h3>Max train length at 80 GB</h3><div class="chart"><canvas id="maxt" aria-label="max train length"></canvas></div>
       <figcaption>Qwen3.5-4B SFT, 2× A100-80GB, FSDP-2, full activation checkpointing, chunked FFN + segmented GDN. Linear extrapolation from 3-step probes, one sample each (router session record).</figcaption></figure>
   </div>
+</section>
+
+<section>
+  <h2>Per task: 11-task mix @8k</h2>
+  <p class="note">Each panel = one task at 8k, same runs and colours as the 11-task plot. Reorder and rerank are not shown (no working grader yet; fixes in progress).</p>
+  <div class="figs small" id="pt11"></div>
 </section>
 
 <section>
@@ -261,7 +278,19 @@ function draw() {
   plot("cpt64", Object.entries(D.cpt64).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
   plot("cptm", [{ label: "whole-model LoRA, 32k", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1" }], "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
 }
-try { draw(); } catch (e) { console.error(e); }
+function multiples(hostId, sets, tasks, prefix) {
+  const host = document.getElementById(hostId); if (!host) return;
+  tasks.forEach((t, j) => {
+    const id = `${prefix}${j}`;
+    host.insertAdjacentHTML("beforeend", `<figure><h3>${t}${prefix === "pt4o" ? " (original pool)" : ""}</h3><div class="chart"><canvas id="${id}" aria-label="${t} at 8k"></canvas></div></figure>`);
+    plot(id, sets.map(s => ({ label: s.label, dense: s.dense, pts: s.p.map(p => ({ x: p.x, y: p.t[t], note: p.rows + " rows/task" })) })), `${t}@8k`);
+    const ch = Chart.getChart(id); if (ch) { ch.options.plugins.legend.display = j === 0; ch.update(); }
+  });
+}
+try { draw(); multiples("pt4f", D.f4fresh, ["contradiction","nq","outlier","oolong"], "pt4f");
+      multiples("pt4o", D.f4orig, ["contradiction","nq","outlier","oolong"], "pt4o");
+      multiples("pt11", D.f11, ["xabsence","contradiction","outlier","strmatch","grouping","hotpotqa","nq","qdmatch_nq","oolong"], "pt11"); }
+catch (e) { console.error(e); }
 </script>
 """
 
