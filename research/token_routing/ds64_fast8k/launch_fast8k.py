@@ -29,7 +29,8 @@ can do the task but its compaction throws away the answer", which an f1 number a
     python research/token_routing/ds64_fast8k/launch_fast8k.py eval        # 8k + 2k rungs, 500 rows each
     python research/token_routing/ds64_fast8k/launch_fast8k.py parity      # eval-time CE parity, the primary signal
 
-mt11 runs (``--task mt11``) are scored on Beaker per task (10 jobs; rerank has no suite rows) on the
+mt11 runs (``--task mt11``) are scored on Beaker per task (10 jobs; rerank's suite rows are opt-in with
+``--eval-rerank`` until staged, see RERANK_SUITE_ROWS_STAGED) on the
 CTC-suite r8k + r2k rows staged on weka (stage_suite_rows_beaker.sh), query position ``both`` (the setA
 shards' layout) and ctc-spec grading -- the same eval the Lambda path (run_eval_lambda.sbatch,
 EVAL_ROWS=suite) runs. mt4 runs keep the ds64 files at query position ``after``. Preview the submit
@@ -528,9 +529,13 @@ RUNGS = {"outlier": {"8k": f"{W}/outlier_lengthmix/eval_rungs/outlier/rung_8192.
              "8k": f"{W}/_eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx8192_spliteval.jsonl",
              "2k": f"{W}/_eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx2048_spliteval.jsonl"}}
 TASK_KEY = {"nq": "nq", "outlier": "outlier", "oolong": "oolong", "contradiction": "contra"}
-#: mt11: tasks scored on the CTC-suite rows (run_q4b_beaker_multirung_eval.py --suite-rows); rerank has none
+#: mt11: tasks scored on the CTC-suite rows (run_q4b_beaker_multirung_eval.py --suite-rows)
 SUITE_EVAL_TASKS = ["nq", "hotpotqa", "qdmatch_nq", "outlier", "oolong", "contradiction", "xabsence",
                     "reorder", "strmatch", "grouping"]
+#: rerank's suite rows (2026-10-25, ctc-graded ce_pos_recall) join SUITE_EVAL_TASKS once they are staged
+#: on weka (stage_suite_rows_beaker.sh, whose fetch now includes rerank). Until then a rerank eval job
+#: fails at REQUIRE_EVAL_SIZE, so it is opt-in: --eval-rerank (or flip this after staging).
+RERANK_SUITE_ROWS_STAGED = False
 SUITE_ROW_RUNS = {"mt11"}
 #: batched greedy decode, as run_eval_lambda.sbatch (validated vs bs=1: contradiction@8k f1 0.641 vs 0.639)
 SUITE_EVAL_ENV = ["LADDER_GEN_BATCH=32", "LADDER_GEN_BATCH_TOKENS=196608"]
@@ -577,9 +582,13 @@ def do_eval(args):
             continue
         # A multi-task (mt4/mt11) checkpoint is scored once PER TASK, as `<run>-ev<task>`.
         # mt11 trains on setA rows (IID with the CTC suite, query position both): score it on the suite
-        # rows, every task but rerank (no suite rows).
+        # rows (rerank only with --eval-rerank / RERANK_SUITE_ROWS_STAGED: its rows must be staged first).
         suite = r["task"] in SUITE_ROW_RUNS
         tasks = SUITE_EVAL_TASKS if suite else MT_TASKS.get(r["task"], [r["task"]])
+        if suite and (RERANK_SUITE_ROWS_STAGED or args.eval_rerank):
+            tasks = tasks + ["rerank"]
+        if args.eval_tasks:
+            tasks = [t for t in tasks if t in args.eval_tasks.split(",")]
         for task in tasks:
             ename = f"{name}-ev{task}" if r["task"] in MT_TASKS else name
             if ename != name and st["evals"].get(ename, {}).get("ex") and not args.force and not dry:
@@ -699,6 +708,11 @@ def main():
     ap.add_argument("--parity-rows", default=PARITY_ROWS)
     ap.add_argument("--parity-gen-rows", default=PARITY_GEN_ROWS)
     ap.add_argument("--force", action="store_true", help="relaunch even if state.json has it")
+    ap.add_argument("--eval-rerank", action="store_true",
+                    help="eval (mt11): also score rerank on its suite rows (needs them staged on weka: "
+                    "stage_suite_rows_beaker.sh); default once RERANK_SUITE_ROWS_STAGED is True")
+    ap.add_argument("--eval-tasks", default="",
+                    help="eval: comma list restricting which per-task eval jobs are launched (e.g. rerank)")
     ap.add_argument("--eval-dry-run", action="store_true",
                     help="eval: build each job with the launcher's --dry-run (nothing submitted, state.json "
                     "untouched; a run not in state.json is previewed as a --task run)")

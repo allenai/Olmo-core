@@ -71,13 +71,16 @@ VARIANTS = ["dense", "landmark", "compressive", "docchunk"]
 SUITE_TASKS = ["hotpotqa", "qdmatch_nq", "xabsence", "reorder", "strmatch", "grouping"]
 #: --suite-rows: launcher task -> (ladder task, suite subset, {rung label: file tokens}, ctc-grade the
 #: base task). Contradiction reads ``contradiction_iid`` (its r2k rung is rung_2560, olmo-eval's alias);
-#: nq / outlier / oolong / contradiction are graded by the ctc spec (ladder --ctc-grade) as olmo-eval does.
+#: nq / outlier / oolong / contradiction / rerank are graded by the ctc spec (ladder --ctc-grade) as olmo-eval does.
 SUITE_ROWS = {
     **{t: (t, t, {"8k": 8192, "2k": 2048}, False) for t in SUITE_TASKS},
     "nq": ("nq", "nq", {"8k": 8192, "2k": 2048}, True),
     "outlier": ("outlier", "outlier", {"8k": 8192, "2k": 2048}, True),
     "oolong": ("oolong", "oolong", {"8k": 8192, "2k": 2048}, True),
     "contra": ("contradiction", "contradiction_iid", {"8k": 8192, "2k": 2560}, True),
+    # 2026-10-25: rerank's suite rows (HF subset "rerank"), ctc-graded (ce_pos_recall). They must be
+    # staged first: stage_suite_rows_beaker.sh (fetch_suite_eval_rows.py now includes rerank).
+    "rerank": ("rerank", "rerank", {"8k": 8192, "2k": 2048}, True),
 }
 #: rows staged by stage_suite_rows_beaker.sh (verified against ds64_fast8k/suite_rows_MANIFEST.json)
 SUITE_ROWS_ROOT = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/_eval_bundle/ctc_suite_rows"
@@ -353,7 +356,7 @@ def main():
         action="store_true",
         help="docchunk only: score on the CTC-suite eval rows (r8k + r2k, 500 each) staged on weka "
         f"({sorted(SUITE_ROWS)}; contra = contradiction_iid), with the ctc-spec grading olmo-eval uses "
-        "(LADDER_CTC_GRADE for nq/outlier/oolong/contra). Sets --dc-rung-files/--dc-rungs per task. "
+        "(LADDER_CTC_GRADE for nq/outlier/oolong/contra/rerank). Sets --dc-rung-files/--dc-rungs per task. "
         "Use --query-position both for setA / mt11-trained checkpoints.",
     )
     ap.add_argument("--suite-rows-root", default=SUITE_ROWS_ROOT, help="<subset>/rung_<tokens>.jsonl tree")
