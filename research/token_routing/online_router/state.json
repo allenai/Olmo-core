@@ -832,6 +832,30 @@
    "lr": 1e-05,
    "mix": "mt4",
    "seed": 0
+  },
+  "f8k-mt4-lora64K32mlp-s1464-tdb-lr1e-05": {
+   "ex": "01M5VJFNQBM4BP1XJYK4F5J9RG",
+   "arm": "lora64K32mlp",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32mlpr20at5-s1464-tdb-lr1e-05": {
+   "ex": "01M5VJGEE868SYT9F1EZFTSSGJ",
+   "arm": "lora64K32mlpr20at5",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
+  },
+  "f8k-mt4-lora64K32rg-s1464-tdb-lr1e-05": {
+   "ex": "01M5VK37YWDFCPT2GSGFRYQXE3",
+   "arm": "lora64K32rg",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 0
   }
  },
  "evals": {
@@ -4064,6 +4088,11 @@
    "ex": "01M5V2GXAESQSVGEKES25DP9T5",
    "train_run": "f8k-mt4-lora64K32r20to7-s1464-tdb-lr1e-05",
    "task": "oolong"
+  },
+  "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05-evcontradiction": {
+   "ex": "01M5VK9A4AH1N30H6MB38RPSTW",
+   "train_run": "f8k-mt4-lora64K32r20to7pt-s1464-tdb-lr1e-05",
+   "task": "contradiction"
   }
  },
  "failed_evals": {
@@ -5156,6 +5185,42 @@
    "commit": "6f274e339",
    "dir": "OLMo-core-otr20",
    "lr": "1e-05"
+  },
+  "f8k-mt4s1464-lora64K32th-s1-lro-lr1e-05-lam": {
+   "slurm": 114820,
+   "arm": "lora64K32th",
+   "seed": 1,
+   "commit": "2668bd512",
+   "dir": "OLMo-core-otr21",
+   "lr": "1e-05",
+   "node": "lambda-hyperplane01"
+  },
+  "f8k-mt4s1464-lora64K32cx-s1-lro-lr1e-05-lam": {
+   "slurm": 114821,
+   "arm": "lora64K32cx",
+   "seed": 1,
+   "commit": "2668bd512",
+   "dir": "OLMo-core-otr21",
+   "lr": "1e-05",
+   "node": "lambda-hyperplane01"
+  },
+  "f8k-mt4s1464-lora64K32mlp-s1-lro-lr1e-05-lam": {
+   "slurm": 114822,
+   "arm": "lora64K32mlp",
+   "seed": 1,
+   "commit": "2668bd512",
+   "dir": "OLMo-core-otr21",
+   "lr": "1e-05",
+   "node": "lambda-hyperplane01"
+  },
+  "f8k-mt4s1464-lora64K32ks-s1-lro-lr1e-05-lam": {
+   "slurm": 114823,
+   "arm": "lora64K32ks",
+   "seed": 1,
+   "commit": "2668bd512",
+   "dir": "OLMo-core-otr21",
+   "lr": "1e-05",
+   "node": "lambda-hyperplane01"
   }
  }
 }
