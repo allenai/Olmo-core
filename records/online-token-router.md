@@ -1253,4 +1253,12 @@ Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not s
   480 with SAVE 60), so the interval save and the final checkpoint save fire on the same step. 48-step runs, with no
   mid-run save before the end, never crashed. Two SAVE-60 runs ending on a multiple survived (K32-480, topk-120),
   consistent with a race between the two saves (the post_train save against the interval save's async upload /
-  barrier) rather than a deterministic failure. CPT is testing a SAVE that does not divide the step count.
+  barrier) rather than a deterministic failure.
+- **Test (CPT, 2026-10-26).** K32 frozen-head seed 1, 120 steps, SAVE 70 (interval save at 70, final at 120) finished
+  cleanly through train, export and eval. Tally:
+  - ending on a multiple of SAVE: 7 crashed, 2 survived;
+  - not on a multiple: 0 of 1 crashed;
+  - no mid-run save: 0 of ~20 crashed.
+
+  This is consistent with the hypothesis, but rests on one run. The SAVE-60 control (K32fh-960) is pending.
+  **Practical workaround: pick SAVE so it does not divide the final step**, or relaunch into the same dir.
