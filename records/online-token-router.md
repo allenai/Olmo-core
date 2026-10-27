@@ -1256,9 +1256,9 @@ Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not s
   barrier) rather than a deterministic failure.
 - **Test (CPT, 2026-10-26).** K32 frozen-head seed 1, 120 steps, SAVE 70 (interval save at 70, final at 120) finished
   cleanly through train, export and eval. Tally:
-  - ending on a multiple of SAVE: 7 crashed, 2 survived;
+  - ending on a multiple of SAVE: 8 of 10 crashed, including the SAVE-60 control K32fh-960 (gloo reset on rank 3);
   - not on a multiple: 0 of 1 crashed;
   - no mid-run save: 0 of ~20 crashed.
 
-  This is consistent with the hypothesis, but rests on one run. The SAVE-60 control (K32fh-960) is pending.
+  The non-multiple side is still small-n, but the pattern holds.
   **Practical workaround: pick SAVE so it does not divide the final step**, or relaunch into the same dir.
