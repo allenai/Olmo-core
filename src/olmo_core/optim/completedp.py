@@ -37,8 +37,10 @@ class CompletedPOptimConfig(Config):
     depth settings are read from the model.
 
     The optimizer's ``lr``, ``eps``, ``weight_decay`` and ``betas`` (or a group override's) are the
-    base values, tuned at the base width, depth, batch size and training duration. With
-    ``r = fan_in / base_width`` for a matrix, ``m_N = d_model / base_width``,
+    base values, tuned on the base model at the base batch size and training duration. With
+    ``r = fan_in / base_fan_in`` for a matrix (its fan-in over the same matrix's fan-in in the base
+    model, see :class:`~olmo_core.nn.transformer.completedp.CompletedPConfig`),
+    ``m_N = d_model / base_width``,
     ``m_L = n_layers / base_depth`` and ``s = sqrt(m_B / m_D)``, where ``m_B`` and ``m_D`` are the
     batch-size and training-token ratios, each parameter group gets:
 
@@ -140,9 +142,7 @@ def completedp_multipliers(
     hidden_eps = m_l**-alpha / m_n
     multipliers: Dict[str, Dict[str, float]] = {}
     for name, param in named_completedp_params(model).items():
-        r = 1.0
-        if param.fan_in is not None:
-            r = model_config.width_ratio(param.fan_in)
+        r = 1.0 if param.fan_in is None else param.width_ratio
 
         if param.role in (CompletedPRole.input_embedding, CompletedPRole.input_vector):
             lr, eps, weight_decay = 1.0, 1 / m_n, 1.0
