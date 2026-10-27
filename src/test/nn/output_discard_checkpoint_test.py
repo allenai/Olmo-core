@@ -4,9 +4,9 @@ from typing import Any
 import pytest
 import torch
 
+from olmo_core.nn import OutputDiscardCheckpoint
 from olmo_core.nn import output_discard_checkpoint as odc_module
 from olmo_core.nn.feed_forward import FeedForward
-from olmo_core.nn.output_discard_checkpoint import OutputDiscardCheckpoint
 
 
 def test_output_discard_checkpoint_discards_and_restores_storage():
@@ -38,129 +38,63 @@ def test_output_discard_checkpoint_discards_and_restores_storage():
     assert add_bias.grad is not None
 
 
-def test_output_discard_checkpoint_allows_backward_through_linear_chain():
-    torch.manual_seed(7)
-
-    submodule_ref = torch.nn.Sequential(
-        torch.nn.Linear(512, 1024),
-        torch.nn.GELU(),
-        torch.nn.Linear(1024, 512),
-    )
-    next_layer_ref = torch.nn.Linear(512, 256)
-
-    submodule_ckpt = copy.deepcopy(submodule_ref)
-    next_layer_ckpt = copy.deepcopy(next_layer_ref)
-
-    x_ref = torch.randn(8, 512, requires_grad=True)
-    x_ckpt = x_ref.detach().clone().requires_grad_(True)
-
-    # Baseline.
-    y_ref = submodule_ref(x_ref)
-    z_ref = next_layer_ref(y_ref)
-    loss_ref = z_ref.square().mean()
-    loss_ref.backward()
-
-    # Output-discard path.
-    ckpt = OutputDiscardCheckpoint()
-    y_ckpt = ckpt.checkpoint(submodule_ckpt, x_ckpt)
-    z_ckpt = next_layer_ckpt(y_ckpt)
-    ckpt.discard_output_and_register_recompute(z_ckpt)
-    loss_ckpt = z_ckpt.square().mean()
-    loss_ckpt.backward()
-
-    assert x_ref.grad is not None
-    assert x_ckpt.grad is not None
-    torch.testing.assert_close(x_ckpt.grad, x_ref.grad, atol=1e-6, rtol=1e-6)
-
-    for p_ref, p_ckpt in zip(submodule_ref.parameters(), submodule_ckpt.parameters()):
-        assert p_ref.grad is not None
-        assert p_ckpt.grad is not None
-        torch.testing.assert_close(p_ckpt.grad, p_ref.grad, atol=1e-6, rtol=1e-6)
-
-    for p_ref, p_ckpt in zip(next_layer_ref.parameters(), next_layer_ckpt.parameters()):
-        assert p_ref.grad is not None
-        assert p_ckpt.grad is not None
-        torch.testing.assert_close(p_ckpt.grad, p_ref.grad, atol=1e-6, rtol=1e-6)
-
-
-def test_output_discard_checkpoint_3d_linear_downstream():
-    """
-    Regression test: when the downstream consumer is a Linear with a 3D input,
-    autograd saves a 2D-reshape view of the discarded tensor (the saved op is
-    ``MmBackward`` under an ``UnsafeViewBackward``). The Python fallback must
-    refill storage in a way that view sees -- i.e. mutate the existing
-    ``StorageImpl`` in place rather than swap a new one in.
-    """
-    torch.manual_seed(3)
-
-    submodule_ref = torch.nn.Sequential(
-        torch.nn.Linear(64, 256, bias=False),
-        torch.nn.SiLU(),
-    )
-    next_layer_ref = torch.nn.Linear(256, 64, bias=False)
+@pytest.mark.parametrize("case", ["linear-chain", "3d-view", "python-fallback"])
+def test_output_discard_checkpoint_linear_backward(case, monkeypatch):
+    """Discarded outputs retain gradient parity, including saved views and Python restoration."""
+    if case == "3d-view":
+        # Linear saves a 2D view of its 3D input. Restoration must mutate the existing
+        # StorageImpl in place so that the saved view sees the restored bytes.
+        torch.manual_seed(3)
+        submodule_ref = torch.nn.Sequential(
+            torch.nn.Linear(64, 256, bias=False),
+            torch.nn.SiLU(),
+        )
+        next_layer_ref = torch.nn.Linear(256, 64, bias=False)
+        x_ref = torch.randn(2, 8, 64, requires_grad=True)
+    else:
+        if case == "python-fallback":
+            # Exercise the fallback even when a working C++ toolchain is available.
+            monkeypatch.setattr(odc_module._SHARED_STORAGE_LOADER, "_load", lambda: None)
+            torch.manual_seed(13)
+            batch_size, width = 4, 256
+        else:
+            torch.manual_seed(7)
+            batch_size, width = 8, 512
+        submodule_ref = torch.nn.Sequential(
+            torch.nn.Linear(width, 2 * width),
+            torch.nn.GELU(),
+            torch.nn.Linear(2 * width, width),
+        )
+        next_layer_ref = torch.nn.Linear(width, width // 2)
+        x_ref = torch.randn(batch_size, width, requires_grad=True)
 
     submodule_ckpt = copy.deepcopy(submodule_ref)
     next_layer_ckpt = copy.deepcopy(next_layer_ref)
-
-    x_ref = torch.randn(2, 8, 64, requires_grad=True)  # 3D input
     x_ckpt = x_ref.detach().clone().requires_grad_(True)
 
     z_ref = next_layer_ref(submodule_ref(x_ref))
     z_ref.square().mean().backward()
 
     ckpt = OutputDiscardCheckpoint()
-    h_ckpt = ckpt.checkpoint(submodule_ckpt, x_ckpt)
-    z_ckpt = next_layer_ckpt(h_ckpt)
-    ckpt.discard_output_and_register_recompute(z_ckpt)
-    assert h_ckpt.untyped_storage().nbytes() == 0
-    z_ckpt.square().mean().backward()
-
-    assert h_ckpt.untyped_storage().nbytes() > 0
-    torch.testing.assert_close(x_ckpt.grad, x_ref.grad, atol=1e-6, rtol=1e-6)
-    for p_ref, p_ckpt in zip(submodule_ref.parameters(), submodule_ckpt.parameters()):
-        torch.testing.assert_close(p_ckpt.grad, p_ref.grad, atol=1e-6, rtol=1e-6)
-    for p_ref, p_ckpt in zip(next_layer_ref.parameters(), next_layer_ckpt.parameters()):
-        torch.testing.assert_close(p_ckpt.grad, p_ref.grad, atol=1e-6, rtol=1e-6)
-
-
-def test_output_discard_checkpoint_python_fallback(monkeypatch):
-    """
-    Force the Python fallback for share_storage and verify the checkpoint still
-    produces correct grads and restored storage. Exercises the path used on
-    machines without a working C++ toolchain even when one is available in CI.
-    """
-    monkeypatch.setattr(odc_module._SHARED_STORAGE_LOADER, "_load", lambda: None)
-
-    torch.manual_seed(13)
-
-    submodule_ref = torch.nn.Sequential(
-        torch.nn.Linear(256, 512),
-        torch.nn.GELU(),
-        torch.nn.Linear(512, 256),
-    )
-    next_layer_ref = torch.nn.Linear(256, 128)
-
-    submodule_ckpt = copy.deepcopy(submodule_ref)
-    next_layer_ckpt = copy.deepcopy(next_layer_ref)
-
-    x_ref = torch.randn(4, 256, requires_grad=True)
-    x_ckpt = x_ref.detach().clone().requires_grad_(True)
-
-    y_ref = submodule_ref(x_ref)
-    z_ref = next_layer_ref(y_ref)
-    z_ref.square().mean().backward()
-
-    ckpt = OutputDiscardCheckpoint()
     y_ckpt = ckpt.checkpoint(submodule_ckpt, x_ckpt)
     z_ckpt = next_layer_ckpt(y_ckpt)
+    torch.testing.assert_close(z_ckpt, z_ref)
     ckpt.discard_output_and_register_recompute(z_ckpt)
     assert y_ckpt.untyped_storage().nbytes() == 0
     z_ckpt.square().mean().backward()
 
     assert y_ckpt.untyped_storage().nbytes() > 0
+    assert x_ref.grad is not None
+    assert x_ckpt.grad is not None
     torch.testing.assert_close(x_ckpt.grad, x_ref.grad, atol=1e-6, rtol=1e-6)
-    for p_ref, p_ckpt in zip(submodule_ref.parameters(), submodule_ckpt.parameters()):
-        torch.testing.assert_close(p_ckpt.grad, p_ref.grad, atol=1e-6, rtol=1e-6)
+    for module_ref, module_ckpt in (
+        (submodule_ref, submodule_ckpt),
+        (next_layer_ref, next_layer_ckpt),
+    ):
+        for p_ref, p_ckpt in zip(module_ref.parameters(), module_ckpt.parameters()):
+            assert p_ref.grad is not None
+            assert p_ckpt.grad is not None
+            torch.testing.assert_close(p_ckpt.grad, p_ref.grad, atol=1e-6, rtol=1e-6)
 
 
 def test_share_storage_cpp_extension_rebinds_in_place():

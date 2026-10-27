@@ -64,9 +64,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve serialized tokenizer behavior during HF export, including source BOS settings when the training config leaves BOS unspecified.
 - Preserve FP32 router probabilities and accumulation when combining BF16 experts in the HF reference model.
 - Avoid graph breaks from no-op profiling decorators, including compiled router load-balancing collectives.
+
+- Fixed tensor-parallel cross-entropy loss returning a rank-local partial sum instead of the replicated global loss. Mean reduction now uses the global valid-token count, including when ignored tokens are unevenly distributed across shards. The corrected reference-loss assertion covers sum, mean, and unreduced losses, with and without normalization and z-loss.
+
 - `dispatch_flash_attn_4` passed `cu_seqlens_q`, `cu_seqlens_k`, `max_seqlen_q` and `max_seqlen_k` positionally. flash-attn 4 inserted a `qv` parameter at position 3 (present from ~`4.0.0b19` onward), which shifts every following argument by one, so `max_seqlen_q` — an `int` — lands where `cu_seqlens_k` is expected and the call fails with `AttributeError: 'int' object has no attribute 'shape'`. These are now passed by keyword; the parameter names are unchanged across flash-attn 4 releases, so this is correct against both old and new versions. Only reachable on Blackwell, where `has_flash_attn_4()` returns True.
 
 ### Changed
+
+- Shared DDP test block construction, mesh setup, initialization, and routing helpers across no-EP, no-sync, and parity suites, preserving their distinct defaults and FP8 overrides.
+
+- Consolidated synchronous and rowwise EP/no-EP parity tests into one parameterized suite, sharing block/router setup and preserving backend-specific dtypes, tolerances, GPU requirements, and zero-drop checks.
+
+- Consolidated output-discard checkpoint tests: removed duplicate generic tests under MoE v2 and parameterized linear-chain coverage while retaining 3D-view, Python-fallback, native-storage, and router-specific checks.
 
 - Migrated training recipes and examples from scheduler `warmup_steps` to `warmup`, preserving values and scheduler units. Legacy `warmup_steps`, `decay_steps`, and `schedulers_max_steps` config inputs remain supported, with regression coverage for equivalent step- and token-based schedules.
 
