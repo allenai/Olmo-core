@@ -32,13 +32,25 @@ def recorded():
             {r.get("eval_job_id") for r in rows if r.get("eval_job_id")})
 
 
+def finalized(ex):
+    try:
+        out = subprocess.run([BEAKER, "experiment", "get", ex, "--format", "json"], capture_output=True, text=True,
+                             timeout=120).stdout
+        j = json.loads(out)
+        j = j[0] if isinstance(j, list) else j
+        return bool(j["jobs"][-1]["status"].get("finalized"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--suffix", nargs="+", default=["-tdc", "-tdp", "-tde"])
     ap.add_argument("--experiment", default="tokdrop_lr")
+    ap.add_argument("--state", default=os.path.join(HERE, "state.json"), help="launch_fast8k state.json to read")
     a = ap.parse_args()
-    st = json.load(open(os.path.join(HERE, "state.json")))
+    st = json.load(open(a.state))
     have, done_jobs = recorded()
     rows, fetched, empty = [], 0, 0
     for ename, e in st.get("evals", {}).items():
@@ -48,8 +60,16 @@ def main():
         task = KEY_TASK.get(e.get("task", ""), e.get("task", ""))
         if ex in done_jobs:  # this job's log was already parsed (all its lines were recorded then)
             continue
+        # only FINALIZED jobs: a running multirung job has printed its 8k line but not its 2k line yet, and a job
+        # with any recorded row is never re-read (done_jobs), so recording it early loses the later rungs for good
+        if not finalized(ex):
+            continue
         log = subprocess.run([BEAKER, "experiment", "logs", ex], capture_output=True, text=True, timeout=300).stdout
         fetched += 1
+        # a LoRA checkpoint scored without the adapter hook silently scores the plain base model
+        if "lora" in run and "adapters re-installed" not in log:
+            print(f"!!! {ename} ({ex}): LoRA run but no 'adapters re-installed' line -- NOT recorded")
+            continue
         found = 0
         for m in LINE.finditer(log):
             t, rung, metric, v, n = m.groups()

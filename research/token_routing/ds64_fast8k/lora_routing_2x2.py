@@ -228,6 +228,14 @@ def main():
                 row[f"attr_{tag}"] = dict(lora_no_route=round(dB - dA, 4), lora_with_route=round(dD - dC, 4),
                                           route_no_lora=round(dC - dA, 4), route_with_lora=round(dD - dB, 4),
                                           interaction=round(dD - dC - dB + dA, 4), total=round(dD - dA, 4))
+                # the same in log2 of the dense-FLOP multiplier ("x dense"), which composes multiplicatively;
+                # None when a cell is above dense's best point (its multiplier is only a lower bound)
+                lx = {k: (math.log2(cs[k][f"x_{tag}"]) if cs[k][f"x_{tag}"] else None) for k in "ABCD"}
+                if all(v is not None for v in lx.values()):
+                    row[f"attr_log2x_{tag}"] = dict(
+                        lora_no_route=round(lx["B"] - lx["A"], 3), lora_with_route=round(lx["D"] - lx["C"], 3),
+                        route_no_lora=round(lx["C"] - lx["A"], 3), route_with_lora=round(lx["D"] - lx["B"], 3),
+                        interaction=round(lx["D"] - lx["C"] - lx["B"] + lx["A"], 3), total=round(lx["D"] - lx["A"], 3))
             # matched DATA (same rows): raw score differences and PF ratios
             row["matched_data"] = dict(
                 lora_no_route=round(cs["B"]["y"] - cs["A"]["y"], 4), lora_with_route=round(cs["D"]["y"] - cs["C"]["y"], 4),
@@ -245,7 +253,8 @@ def main():
                   f"d={e['d_best_5e6_1e5']:+.4f}{e['flag_best_5e6_1e5'] and '(' + e['flag_best_5e6_1e5'] + ')'} x={x} "
                   f"other={e['other_lr']}")
         if "attr_best_5e6_1e5" in row:
-            print("  attr:", row["attr_best_5e6_1e5"], "\n  matched-data:", row["matched_data"])
+            print("  attr:", row["attr_best_5e6_1e5"], "\n  log2x:", row.get("attr_log2x_best_5e6_1e5"),
+                  "\n  matched-data:", row["matched_data"])
     print(f"\n-> {a.out}")
 
 
