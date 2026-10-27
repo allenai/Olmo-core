@@ -1235,7 +1235,7 @@ task, with a same-backend baseline.
 Together with CPT's results (topk and random lose on both frozen and trainable bases and degrade with training),
 partial MLP is closed.
 
-## Known trap: intermittent end-of-run crash after mid-run saves (2026-10-25, CPT side)
+## Known trap (FIXED in 319d7442a): intermittent end-of-run crash after mid-run saves (2026-10-25, CPT side)
 
 Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not specific to freeze-early**:
 - **Failure.** Runs that did mid-run checkpoint saves (SAVE_INTERVAL 60) sometimes die right AFTER their final step:
@@ -1266,5 +1266,8 @@ Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not s
     then only awaits it, because the step already counts as saved, so the save's gloo work overlaps teardown.
   - Fix: `CheckpointerCallback._is_final_step()` makes that save synchronous, and `post_train` reuses it as the final
     checkpoint. Tests: `src/test/train/callbacks/checkpointer_final_step_test.py`.
-  - The GPU check is pending: the next CPT run with a dividing SAVE.
+  - **GPU-confirmed (CPT, 2026-10-26).** K32 frozen-head at 64k, 120 steps, `--save-interval 60` (final step on an
+    interval multiple), 8 x H100 Beaker (tree o3cd/composite-209f4c2d4-offload3). Train, export and eval finished
+    cleanly, with no gloo reset; before the fix this pattern crashed 8 of 10 times. Any SAVE value is safe on
+    319d7442a or later.
   **Practical workaround: pick SAVE so it does not divide the final step**, or relaunch into the same dir.
