@@ -59,7 +59,7 @@ CPT32 = {
     "Dense": [(137, 1.7096), (247, 1.7008), (685, 1.6912), (1344, 1.6880), (3318, 1.6853), (6606, 1.6827),
               (13188, 1.6800), (26349, 1.6762)],
     "Whole-model LoRA (rank 64, all 32 blocks)": [(941, 1.6849), (2323, 1.6819), (4624, 1.6804), (9232, 1.6788), (18444, 1.6774)],
-    "Whole-model LoRA, frozen output layer": [(921, 1.6842), (2273, 1.6812)],
+    "Whole-model LoRA, frozen output layer": [(921, 1.6842), (2273, 1.6812), (4525, 1.6795), (9034, 1.6779), (18049, 1.6764)],
     "LoRA rank 64, blocks 0–15": [(305, 1.6942), (587, 1.6895), (1151, 1.6864), (2842, 1.6834), (5660, 1.6820),
                                   (11296, 1.6794)],
     "Token router, keep 10% after block 7": [(335, 1.7308), (643, 1.7138), (1258, 1.7079), (3083, 1.7055)],
@@ -71,6 +71,7 @@ CPT32 = {
 # 64k: dense PF estimated as LoRA PF / 0.696 (the dense-64k flops file is a partial count)
 CPT64 = {"Dense": [(3799, 1.7210), (7598, 1.7170), (15195, 1.7134)],
          "Whole-model LoRA (rank 64, all 32 blocks)": [(2644, 1.7161), (5288, 1.7137), (10576, 1.7114)]}
+CPT_M_FH = [(48, 4.8), (120, 4.3), (240, 3.2), (480, 2.1), (960, 1.4)]
 CPT_M = [(12, 1.65), (24, 2.75), (48, 3.9), (120, 3.45), (240, 2.5), (480, 1.8), (960, 1.12)]
 # ---- peak memory per GPU vs row length, SFT 4B, 2 x A100-80GB, FSDP-2, full AC, steady routed step (router record,
 # "B' round 0/2" memprobe tables). Standard flags: fixed + transient at 32k/64k/128k. All memory flags (routed warmup,
@@ -161,7 +162,7 @@ a { color: var(--c2); }
     <li><b>SFT, 11-task mix:</b> ≈1.7× for the recipe; whole-model LoRA + two-stage scores 0.762 against dense's 0.697 at the same 232 PF (2 seeds), ≈2.4×. Gains concentrate on xabsence, contradiction and outlier; four retrieval tasks are near dense's ceiling; grouping is the one task the router loses.</li>
     <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. <b>The recipe at 64k (1/4 epoch, one seed): +0.037 task-average at 0.365× dense FLOPs, ahead on all 10 graded tasks, 24% less peak active memory</b> (37.2 vs 48.7 GiB); its gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k).</li>
     <li><b>The recipe:</b> rank-64 LoRA adapters on blocks 0–6 (frozen base), an online gradient-norm router that keeps 20% of tokens from block 7 and rescores to 7% at block 16, no full-context steps, LR 5e-6, plus a 16-token floor per document on the 11-task mix. Whole-model LoRA (all 32 blocks, LR 1e-5) is cheaper still at the same quality.</li>
-    <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and parity by 960 steps (dev CE +0.0012 behind dense; ≈1.04× counting recompute). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure, so this is a short-budget recipe. At 64k context the lead is ≈1.4–1.5× the 32k one, and about the same at 128k. <b>Freezing the output layer too is cheaper and better</b> (no full-rank weights trained at all): −0.0037 / −0.0041 vs dense at 48 / 120 steps, ≈4.8× / ≈4.3× FLOPs-to-match, 0.685× FLOPs per step, 22.3 vs 35.2 GiB peak; longer budgets are training.</li>
+    <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and parity by 960 steps (dev CE +0.0012 behind dense; ≈1.04× counting recompute). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure, so this is a short-budget recipe. At 64k context the lead is ≈1.4–1.5× the 32k one, and about the same at 128k. <b>Freezing the output layer too is the CPT recipe</b> (no full-rank weights trained at all; 0.685× FLOPs per step, 22.3 vs 35.2 GiB peak): never behind dense up to 960 steps. Dense FLOPs to match: 4.8× / 4.3× / 3.2× / 2.1× / ≈1.4× at 48 / 120 / 240 / 480 / 960 steps (dev CE −0.0037 / −0.0041 / −0.0032 / −0.0022 / +0.0002); seed 1 reproduces at 120. It also forgets less on short documents.</li>
     <li><b>Max train length at 80 GB (SFT):</b> ≈1.8× dense for the recipe and ≈2.4× for whole-model LoRA (extrapolated from short probes).</li>
   </ul>
 </section>
@@ -369,7 +370,9 @@ function draw() {
     ch.data.datasets.forEach(ds => { if (ds.label.includes("fit")) { ds.pointRadius = 0; } }); ch.update(); } });
   plot("cpt32", Object.entries(D.cpt32).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
   plot("cpt64", Object.entries(D.cptlen).map(([k, v], i) => ({ label: "train + eval at " + k, col: COL[i + 1], pts: v.map(p => ({ x: p[0], y: p[1] })) })), "LoRA − dense dev CE (nats)", { xlab: "training steps (log)", dp: 4 });
-  plot("cptm", [{ label: "whole-model LoRA, 32k", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1" }], "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
+  plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
+                { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
+       "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
 }
 function multiples(hostId, sets, tasks, prefix) {
   const host = document.getElementById(hostId); if (!host) return;
@@ -555,7 +558,7 @@ def main():
     data = {"f4fresh": [{"label": l, "dense": dn, "p": pick(S, "mt4", "f", arm)} for l, arm, dn in f4fresh],
             "f4orig": f4orig, "f11": f11, "m64": m64_data(a.m64),
             "cptlen": {"32k": [(48, -0.0031), (120, -0.0034), (240, -0.0023), (480, -0.0012)], "64k": [(120, -0.0050), (240, -0.0030), (480, -0.0017)],
-                       "128k": [(48, -0.0035), (120, -0.0041)]}, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "maxt": MAXT, "memstd": MEM_STD, "memflags": MEM_FLAGS, "memstdfit": MEM_STD_FIT, "memflagsfit": MEM_FLAGS_FIT}
+                       "128k": [(48, -0.0035), (120, -0.0041)]}, "cpt32": CPT32, "cpt64": CPT64, "cptm": CPT_M, "cptmfh": CPT_M_FH, "maxt": MAXT, "memstd": MEM_STD, "memflags": MEM_FLAGS, "memstdfit": MEM_STD_FIT, "memflagsfit": MEM_FLAGS_FIT}
     data["bylen"] = by_length(data["m64"])
     try:
         data["gc"] = json.load(open(a.gradcomp))
