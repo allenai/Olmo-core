@@ -8,7 +8,7 @@ kind: result
 status: current
 superseded_by:
 artifact: https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
-summary: OLMo 3 7B stage-2 → 32k/64k/128k CPT on Longmino. Every token-drop / router / MoD / partial-MLP / backprop-stop arm loses to dense; whole-model LoRA r64 with a frozen LM head (no full-rank weights trained) beats dense at 0.685x FLOPs and 37% less memory, m 4.8 → 1.4 from 48 to 960 steps (tie at 960); edge ~1.4-1.5x larger at 64k.
+summary: OLMo 3 7B stage-2 → 32k/64k/128k CPT on Longmino. Every token-drop / router / MoD / partial-MLP / backprop-stop arm loses to dense; whole-model LoRA r64 with a frozen LM head (no full-rank weights trained) beats dense at 0.685x FLOPs and 37% less memory: m 4.8 → 1.4 from 48 to 960 steps at 32k (tie at 960), and a larger edge at 64k / 128k (−0.0057 / −0.0046 at 120 steps).
 ---
 # Result — OLMo 3 7B long-context CPT: what saves FLOPs
 
@@ -27,6 +27,16 @@ Code: `research/token_routing/olmo3_cptdrop/`. Every number below is in the ops 
   | dense CE | 1.6880 | 1.6853 | 1.6827 | 1.6800 | 1.6762 |
   | Δ (paired SE ≤ ±0.0002) | −0.0037 | −0.0041 | −0.0032 | −0.0022 | +0.0002 (tie) |
   | m | 4.8 | 4.3 | 3.2 | 2.1 | ~1.4 |
+
+  At long context, full-row dev CE (512 rows), K32fh vs dense at the same step count:
+
+  | context | 48 | 120 | 240 | 480 |
+  |---|---|---|---|---|
+  | 64k Δ (32k–64k positions) | | −0.0057 (−0.0057) | −0.0039 (−0.0036) | −0.0026 (−0.0023) |
+  | 128k Δ (64k–128k positions) | −0.0038 (−0.0037) | −0.0046 (−0.0044) | | |
+
+  At 64k the 240-step run ties dense at 480 (m ≈ 2.9). Every long-context K32fh run beats K32 with a trained head by
+  0.0003–0.0009.
 
   The frozen head adds ~20–30% to m at every budget, and turns the trained-head K32's 960-step deficit (+0.0012)
   into a tie. Long-range bin at 960: +0.0031 vs dense, so the remaining gap is long-range. Short guard at 960:
