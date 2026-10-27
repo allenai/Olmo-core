@@ -279,6 +279,18 @@ class CheckpointerCallback(Callback):
                     "be removed when the next checkpoint is saved"
                 )
 
+    def _is_final_step(self) -> bool:
+        """Whether this is the run's last step (the earlier of ``max_duration`` and ``hard_stop``)."""
+        t = self.trainer
+        try:
+            cands = [t.max_steps]
+            if getattr(t, "hard_stop", None) is not None:
+                cands.append(t._get_max_steps(t.hard_stop))
+        except Exception:  # durations that cannot be converted to steps up front
+            return False
+        cands = [int(c) for c in cands if c]
+        return bool(cands) and self.step >= min(cands)
+
     def post_train_batch(self):
         if not self.enabled:
             return
@@ -287,13 +299,18 @@ class CheckpointerCallback(Callback):
         if not self.checkpoint_pending:
             self._remove_old_checkpoints()
 
+        # An interval / fixed-step save that lands on the FINAL step is the final checkpoint (post_train reuses it):
+        # save it synchronously, so no async save is still running its gloo collectives while ranks tear down
+        # (2026-10-26: 8 of 10 runs whose last step was a multiple of save_interval died after the last step with a
+        # gloo "Connection reset by peer"; 0 of ~21 others did).
+        final_async = False if self._is_final_step() else None
         if self.fixed_steps is not None and self.step in self.fixed_steps:
             # Save permanent checkpoint.
-            self._checkpoints.append(self._save_checkpoint())
+            self._checkpoints.append(self._save_checkpoint(save_async=final_async))
             self._trim_checkpoints()
         elif self.save_interval is not None and self.step % self.save_interval == 0:
             # Save permanent checkpoint.
-            self._checkpoints.append(self._save_checkpoint())
+            self._checkpoints.append(self._save_checkpoint(save_async=final_async))
             self._trim_checkpoints()
         elif (
             self.ephemeral_save_interval is not None
