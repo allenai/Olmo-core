@@ -33,6 +33,11 @@ class SchedulerUnits(StrEnum):
 class Scheduler(Config, Registrable, metaclass=ABCMeta):
     """
     Learning rate scheduler base class.
+
+    Explicit deprecated duration aliases (``warmup_steps``, ``decay_steps``, and
+    ``schedulers_max_steps``) take precedence over their canonical fields. This preserves
+    legacy CLI overrides of recipes that already set canonical values. Subclasses migrate
+    and clear these aliases during initialization, emitting a deprecation warning.
     """
 
     lr_field: str = LR_FIELD
@@ -130,7 +135,7 @@ class ConstantWithWarmup(Scheduler):
 
     def __post_init__(self, *args):
         del args
-        if self.warmup is None and self.warmup_steps is not None:
+        if self.warmup_steps is not None:
             self.warmup = self.warmup_steps
             self.warmup_steps = None
             warnings.warn(
@@ -179,7 +184,7 @@ class WSD(Scheduler):
 
     def __post_init__(self, *args):
         del args
-        if self.warmup is None and self.warmup_steps is not None:
+        if self.warmup_steps is not None:
             self.warmup = self.warmup_steps
             self.warmup_steps = None
             warnings.warn(
@@ -195,7 +200,7 @@ class WSD(Scheduler):
         ):
             raise OLMoConfigurationError("warmup_fraction must be between 0 and 1.")
 
-        if self.decay is None and self.decay_steps is not None:
+        if self.decay_steps is not None:
             self.decay = self.decay_steps
             self.decay_steps = None
             warnings.warn(
@@ -272,14 +277,14 @@ class PowerLR(Scheduler):
     def __post_init__(self, *args):
         del args
         # --- handle deprecated aliases -------------------------------------------------
-        if self.warmup is None and self.warmup_steps is not None:
+        if self.warmup_steps is not None:
             self.warmup = self.warmup_steps
             self.warmup_steps = None
             warnings.warn(
                 f"'{self.__class__.__name__}.warmup_steps' is deprecated, please use '.warmup' instead.",
                 DeprecationWarning,
             )
-        if self.decay is None and self.decay_steps is not None:
+        if self.decay_steps is not None:
             self.decay = self.decay_steps
             self.decay_steps = None
             warnings.warn(
@@ -367,7 +372,7 @@ class LinearWithWarmup(Scheduler):
 
     def __post_init__(self, *args):
         del args
-        if self.warmup is None and self.warmup_steps is not None:
+        if self.warmup_steps is not None:
             self.warmup = self.warmup_steps
             self.warmup_steps = None
             warnings.warn(
@@ -420,7 +425,7 @@ class InvSqrtWithWarmup(Scheduler):
 
     def __post_init__(self, *args):
         del args
-        if self.warmup is None and self.warmup_steps is not None:
+        if self.warmup_steps is not None:
             self.warmup = self.warmup_steps
             self.warmup_steps = None
             warnings.warn(
@@ -468,7 +473,7 @@ class CosWithWarmup(Scheduler):
 
     def __post_init__(self, *args):
         del args
-        if self.warmup is None and self.warmup_steps is not None:
+        if self.warmup_steps is not None:
             self.warmup = self.warmup_steps
             self.warmup_steps = None
             warnings.warn(
@@ -523,7 +528,7 @@ class HalfCosWithWarmup(Scheduler):
 
     def __post_init__(self, *args):
         del args
-        if self.warmup is None and self.warmup_steps is not None:
+        if self.warmup_steps is not None:
             self.warmup = self.warmup_steps
             self.warmup_steps = None
             warnings.warn(
@@ -580,7 +585,7 @@ class CosWithWarmupAndLinearDecay(CosWithWarmup):
         del args
         super().__post_init__()
 
-        if self.decay is None and self.decay_steps is not None:
+        if self.decay_steps is not None:
             self.decay = self.decay_steps
             self.decay_steps = None
             warnings.warn(
@@ -887,7 +892,7 @@ class SequentialScheduler(Scheduler):
 
     def __post_init__(self, *args):
         del args
-        if self.schedulers_max is None and self.schedulers_max_steps is not None:
+        if self.schedulers_max_steps is not None:
             self.schedulers_max = self.schedulers_max_steps
             self.schedulers_max_steps = None
             warnings.warn(

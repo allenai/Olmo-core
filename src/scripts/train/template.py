@@ -20,7 +20,12 @@ from olmo_core.internal.common import (
 )
 from olmo_core.launch.beaker import BeakerLaunchConfig
 from olmo_core.nn.transformer import TransformerConfig
-from olmo_core.optim import AdamWConfig, CosWithWarmup, OptimGroupOverride
+from olmo_core.optim import (
+    AdamWConfig,
+    CosWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+)
 from olmo_core.train import (
     TrainerConfig,
     prepare_cli_environment,
@@ -131,7 +136,7 @@ def build_config(script: str, run_name: str, overrides: List[str]) -> Experiment
             name=DataParallelType.hsdp, param_dtype=DType.bfloat16, reduce_dtype=DType.float32
         ),
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=2000),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=2000),
     )
 
     trainer_config = (

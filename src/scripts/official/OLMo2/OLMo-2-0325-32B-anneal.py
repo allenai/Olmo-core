@@ -17,7 +17,12 @@ from olmo_core.data import (
 from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.distributed.utils import get_world_size
 from olmo_core.nn.transformer import TransformerConfig
-from olmo_core.optim import LinearWithWarmup, OptimGroupOverride, SkipStepAdamWConfig
+from olmo_core.optim import (
+    LinearWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+    SkipStepAdamWConfig,
+)
 from olmo_core.script_utils import (
     ExperimentConfig,
     get_cli_parser,
@@ -124,7 +129,8 @@ def build_config(opts: argparse.Namespace, overrides: List[str]) -> ExperimentCo
                 modules=["blocks.*.feed_forward"],
             ),
             scheduler=LinearWithWarmup(
-                warmup_steps=0,
+                units=SchedulerUnits.steps,
+                warmup=0,
                 alpha_f=0.0,
             ),
             max_grad_norm=1.0,

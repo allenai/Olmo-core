@@ -26,7 +26,12 @@ from olmo_core.data.numpy_dataset import NumpyDatasetConfig
 from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.distributed.utils import get_rank
 from olmo_core.nn.transformer import TransformerConfig
-from olmo_core.optim import AdamWConfig, CosWithWarmup, OptimGroupOverride
+from olmo_core.optim import (
+    AdamWConfig,
+    CosWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+)
 from olmo_core.train import (
     Duration,
     TrainerConfig,
@@ -189,7 +194,7 @@ def build_config(opts, overrides: List[str]) -> ExperimentConfig:
             name=DataParallelType.fsdp, param_dtype=DType.bfloat16, reduce_dtype=DType.float32
         ),
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=100),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=100),
     )
 
     trainer_config = (

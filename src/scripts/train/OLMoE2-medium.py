@@ -17,7 +17,12 @@ from olmo_core.internal.experiment import (
 )
 from olmo_core.launch.beaker import OLMoCoreBeakerImage
 from olmo_core.nn.transformer import TransformerBlockType, TransformerConfig
-from olmo_core.optim import AdamWConfig, CosWithWarmup, OptimGroupOverride
+from olmo_core.optim import (
+    AdamWConfig,
+    CosWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+)
 from olmo_core.train import TrainerConfig
 from olmo_core.train.callbacks import CheckpointerCallback, CometCallback, WandBCallback
 from olmo_core.train.train_module import (
@@ -99,7 +104,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
         float8_config=Float8Config(ao=AOFloat8LinearConfig.recommended(), enabled=False),
         z_loss_multiplier=1e-5,
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=2000),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=2000),
     )
 
 

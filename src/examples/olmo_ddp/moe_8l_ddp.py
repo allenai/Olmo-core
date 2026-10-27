@@ -76,7 +76,7 @@ from olmo_core.nn.transformer import (
     TransformerBlockType,
     TransformerType,
 )
-from olmo_core.optim import OLMoDDPOptimizerConfig, OptimGroupOverride
+from olmo_core.optim import OLMoDDPOptimizerConfig, OptimGroupOverride, SchedulerUnits
 from olmo_core.optim.scheduler import CosWithWarmup
 from olmo_core.train import prepare_training_environment, teardown_training_environment
 from olmo_core.train.train_module import (
@@ -298,7 +298,7 @@ def build_train_module_config(common: CommonComponents) -> OLMoDDPTrainModuleCon
         float8_config=None,
         z_loss_multiplier=1e-4,
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=WARMUP_STEPS),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=WARMUP_STEPS),
     )
 
 

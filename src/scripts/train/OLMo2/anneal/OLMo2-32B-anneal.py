@@ -32,6 +32,7 @@ from olmo_core.optim import (
     CosWithWarmup,
     LinearWithWarmup,
     OptimGroupOverride,
+    SchedulerUnits,
     SkipStepAdamWConfig,
 )
 from olmo_core.train import (
@@ -204,7 +205,8 @@ class AnnealingConfig(Config):
                 #    mode=TransformerActivationCheckpointingMode.full
                 # ),
                 scheduler=LinearWithWarmup(
-                    warmup_steps=0,
+                    units=SchedulerUnits.steps,
+                    warmup=0,
                     alpha_f=0.0,
                 ),
                 max_grad_norm=1.0,

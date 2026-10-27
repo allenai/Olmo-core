@@ -19,7 +19,12 @@ from olmo_core.nn.transformer import (
     TransformerActivationCheckpointingMode,
     TransformerConfig,
 )
-from olmo_core.optim import CosWithWarmup, OptimGroupOverride, SkipStepAdamWConfig
+from olmo_core.optim import (
+    CosWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+    SkipStepAdamWConfig,
+)
 from olmo_core.script_utils import ExperimentConfig, main
 from olmo_core.train import Duration, TrainerConfig
 from olmo_core.train.callbacks import (
@@ -76,7 +81,7 @@ def build_config(opts: argparse.Namespace, overrides: List[str]) -> ExperimentCo
             compile=True,
             foreach=False,
         ),
-        scheduler=CosWithWarmup(warmup_steps=2000),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=2000),
         compile_model=True,
         dp_config=TransformerDataParallelConfig(
             name=DataParallelType.hsdp,

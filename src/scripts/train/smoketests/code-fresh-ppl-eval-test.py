@@ -43,7 +43,12 @@ from olmo_core.nn.transformer import (
     TransformerConfig,
     TransformerDataParallelWrappingStrategy,
 )
-from olmo_core.optim import CosWithWarmup, OptimGroupOverride, SkipStepAdamWConfig
+from olmo_core.optim import (
+    CosWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+    SkipStepAdamWConfig,
+)
 from olmo_core.train import Duration, TrainerConfig
 from olmo_core.train.callbacks import LMEvaluatorCallbackConfig, WandBCallback
 from olmo_core.train.train_module import (
@@ -102,7 +107,7 @@ def build_experiment_config(cli_context: CliContext) -> ExperimentConfig:
         ),
         z_loss_multiplier=1e-5,
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=2000),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=2000),
     )
 
     # Use a small eval dataset as training data — this is just a smoke test.

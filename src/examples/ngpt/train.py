@@ -16,7 +16,7 @@ from olmo_core.data import NumpyDataLoaderConfig, NumpyFSLDatasetConfig, Tokeniz
 from olmo_core.data.numpy_dataset import NumpyDatasetConfig
 from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.nn.transformer import TransformerConfig
-from olmo_core.optim import AdamConfig, CosWithWarmup
+from olmo_core.optim import AdamConfig, CosWithWarmup, SchedulerUnits
 from olmo_core.train import (
     TrainerConfig,
     prepare_training_environment,
@@ -97,7 +97,7 @@ def build_config(run_name: str, overrides: List[str]) -> ExperimentConfig:
             name=DataParallelType.fsdp, param_dtype=DType.bfloat16, reduce_dtype=DType.float32
         ),
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=0),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=0),
     )
 
     trainer_config = (

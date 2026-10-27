@@ -11,7 +11,12 @@ from olmo_core.float8 import Float8Config
 from olmo_core.internal.experiment import CommonComponents, build_config, main
 from olmo_core.nn.attention import AttentionBackendName
 from olmo_core.nn.transformer import TransformerConfig
-from olmo_core.optim import AdamWConfig, CosWithWarmup, OptimGroupOverride
+from olmo_core.optim import (
+    AdamWConfig,
+    CosWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+)
 from olmo_core.train import TrainerConfig
 from olmo_core.train.callbacks import CheckpointerCallback, CometCallback, WandBCallback
 from olmo_core.train.train_module import (
@@ -62,7 +67,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
         else TransformerContextParallelConfig.zig_zag(degree=8),
         float8_config=Float8Config(enabled=False),
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=2000),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=2000),
     )
 
 

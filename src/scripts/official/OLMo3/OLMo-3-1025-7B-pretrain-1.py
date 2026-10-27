@@ -19,7 +19,12 @@ from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.float8 import Float8Config
 from olmo_core.nn.attention import AttentionBackendName
 from olmo_core.nn.transformer import TransformerConfig
-from olmo_core.optim import CosWithWarmup, OptimGroupOverride, SkipStepAdamWConfig
+from olmo_core.optim import (
+    CosWithWarmup,
+    OptimGroupOverride,
+    SchedulerUnits,
+    SkipStepAdamWConfig,
+)
 from olmo_core.script_utils import ExperimentConfig, main
 from olmo_core.train import Duration, TrainerConfig
 from olmo_core.train.callbacks import (
@@ -77,7 +82,7 @@ def build_config(opts: argparse.Namespace, overrides: List[str]) -> ExperimentCo
                 OptimGroupOverride(params=["embeddings.weight"], opts=dict(weight_decay=0.0))
             ],
         ),
-        scheduler=CosWithWarmup(warmup_steps=2000),
+        scheduler=CosWithWarmup(units=SchedulerUnits.steps, warmup=2000),
         compile_model=True,
         dp_config=TransformerDataParallelConfig(
             name=DataParallelType.hsdp,
