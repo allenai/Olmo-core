@@ -169,6 +169,8 @@ class OLMoDDPOptimizerConfig(Config):
     """``muon_adamw`` uses standard Muon for hidden matrices and AdamW elsewhere."""
     muon_momentum: float = 0.95
     muon_rms: float = 0.2
+    muon_backend: str = "shared"
+    """Choose ``shared`` reference updates or ``dion`` math and batched execution."""
 
     rolling_interval_length: int = 128
     """
@@ -348,6 +350,8 @@ class OLMoDDPOptimizerConfig(Config):
 
         # not used: train_module (was); now used to pass process groups
         kwargs = self.as_dict()
+        if self.algorithm == "muon_adamw" and self.muon_backend == "dion" and self.compile:
+            raise ValueError("Dion compiles its own kernels; set optimizer compile=False")
         kwargs.pop("group_overrides")
         kwargs.pop("compile")
         kwargs.pop("fixed_fields")
@@ -531,12 +535,22 @@ class OLMoDDPOptimizer:
         muon_momentum: float = 0.95,
         muon_rms: float = 0.2,
         muon_layouts: Optional[Dict[str, MuonLayout]] = None,
+        muon_backend: str = "shared",
     ) -> None:
         if algorithm not in {"adamw", "muon_adamw"}:
             raise ValueError(f"Unknown optimizer algorithm: {algorithm}")
         if not 0 <= muon_momentum < 1 or not math.isfinite(muon_rms) or muon_rms <= 0:
             raise ValueError("Invalid Muon momentum or RMS scale")
         self.algorithm = algorithm
+        if muon_backend not in {"shared", "dion"}:
+            raise ValueError(f"Unknown Muon backend: {muon_backend}")
+        if algorithm == "muon_adamw" and muon_backend == "dion":
+            if muon_rms != 0.2:
+                raise ValueError("Dion uses fixed RMS scaling 0.2")
+            from .dion_backend import require_dion
+
+            require_dion()
+        self.muon_backend = muon_backend
         self.muon_momentum = muon_momentum
         self.muon_rms = muon_rms
         self.muon_layouts = dict(muon_layouts or {})
@@ -2083,6 +2097,53 @@ class OLMoDDPOptimizer:
         )
 
     @torch.compiler.disable
+    def _step_muon_dion(self, name, shape, group):
+        """Bridge flat DP state to Dion's batched independent logical matrices.
+
+        OLMoDDP retains checkpoint/state ownership. Gather only this parameter,
+        distribute orthogonalization across its state mesh, then copy back local
+        shards. Expert model-parallel ranks never exchange independent experts.
+        """
+        from .dion_backend import dion_update, logical_matrix_views
+
+        main = self.states[f"{name}.main"]
+        moment = self.states[f"{name}.exp_avg"]
+        grad = self.main_grad[name]
+        if not isinstance(grad, DTensor):
+            grad = DTensor.from_local(
+                grad.float(),
+                device_mesh=main.device_mesh,
+                placements=main.placements,
+                shape=main.shape,
+                stride=main.stride(),
+                run_check=False,
+            )
+        param_full, grad_full, moment_full = (
+            main.full_tensor(),
+            grad.full_tensor(),
+            moment.full_tensor(),
+        )
+        layout = self.muon_layouts.get(name)
+        mesh = main.device_mesh
+        # The state mesh is DP or EP-DP, never the EP model mesh.
+        pg = mesh.get_group() if mesh.ndim == 1 else None
+        dion_update(
+            logical_matrix_views(param_full, name, shape, layout),
+            logical_matrix_views(grad_full, name, shape, layout),
+            logical_matrix_views(moment_full, name, shape, layout),
+            lr=group["lr"],
+            momentum=self.muon_momentum,
+            weight_decay=group["weight_decay"],
+            process_group=pg,
+        )
+        for full, target in [(param_full, main), (moment_full, moment)]:
+            local_shape, offset = compute_local_shape_and_global_offset(
+                target.shape, target.device_mesh, target.placements
+            )
+            target.to_local().copy_(full.narrow(0, offset[0], local_shape[0]))
+        self.states[f"{name}.step"].to_local().add_(1)
+
+    @torch.compiler.disable
     def _step_muon(
         self, name: str, shape: Tuple[int, ...], group: Dict[str, Any], step_factor: torch.Tensor
     ) -> None:
@@ -2143,6 +2204,12 @@ class OLMoDDPOptimizer:
         step_factor = self.get_step_factor()  # type: ignore
         step_factor = cast(torch.Tensor, step_factor)
         self._step_skipped = 1 - step_factor
+        dion = (
+            getattr(self, "algorithm", "adamw") == "muon_adamw"
+            and getattr(self, "muon_backend", "shared") == "dion"
+        )
+        if dion and not bool(step_factor.item()):
+            return
 
         # Allow overriding via attribute; default to X elements.
         CHUNK_ELEMS = getattr(self, "_foreach_chunk_threshold", 600_000_000)
@@ -2225,7 +2292,10 @@ class OLMoDDPOptimizer:
                         )
                     shape = layout.shape
                 if getattr(self, "algorithm", "adamw") == "muon_adamw" and uses_muon(name, shape):
-                    self._step_muon(name, shape, group, step_factor)
+                    if dion:
+                        self._step_muon_dion(name, shape, group)
+                    else:
+                        self._step_muon(name, shape, group, step_factor)
                     continue
 
                 # in adam step(), make everything local and fp32
@@ -2367,6 +2437,8 @@ class OLMoDDPOptimizer:
         sd[self.GRAD_NORMS_STATE_DICT_KEY] = [
             float(v.detach().cpu().item()) for v in self._grad_norms
         ]
+        if getattr(self, "algorithm", "adamw") == "muon_adamw":
+            sd["_muon_backend"] = getattr(self, "muon_backend", "shared")
 
         return sd
 
@@ -2414,6 +2486,11 @@ class OLMoDDPOptimizer:
             reset_optimizer_moments_on_load = self.reset_optimizer_moments_on_load
 
         loaded_losses = state_dict.pop(self.LOSSES_STATE_DICT_KEY, None)
+        checkpoint_backend = state_dict.pop("_muon_backend", "shared")
+        if getattr(self, "algorithm", "adamw") == "muon_adamw" and checkpoint_backend != getattr(
+            self, "muon_backend", "shared"
+        ):
+            raise ValueError("Checkpoint Muon backend differs; start a new optimizer recipe")
         loaded_grad_norms = state_dict.pop(self.GRAD_NORMS_STATE_DICT_KEY, None)
 
         for param_group in self.param_groups:

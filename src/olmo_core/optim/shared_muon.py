@@ -1,7 +1,7 @@
 """Dense DTensor adapter for the same numerical Muon core used by OLMoDDP.
 
-This correctness-first adapter gathers full matrices in FP32. It does not use
-Dion's BF16 transport or independently implement the update equations.
+The default shared backend gathers full matrices in FP32. The optional Dion
+backend uses native batched tasks, BF16 transport, and Polar Express instead.
 """
 
 from dataclasses import dataclass
@@ -54,7 +54,17 @@ class SharedMuon(SkipStepOptimizer):
         eps=1e-8,
         rolling_interval_length=128,
         sigma_factor=6,
+        muon_backend="shared",
     ):
+        if muon_backend not in {"shared", "dion"}:
+            raise ValueError(f"Unknown Muon backend: {muon_backend}")
+        if muon_backend == "dion":
+            if rms != 0.2:
+                raise ValueError("Dion uses fixed RMS scaling 0.2")
+            from .dion_backend import require_dion
+
+            require_dion()
+        self.muon_backend = muon_backend
         if lr < 0 or not 0 <= momentum < 1 or rms <= 0:
             raise ValueError("Invalid Muon hyperparameters")
         super().__init__(
@@ -67,6 +77,7 @@ class SharedMuon(SkipStepOptimizer):
                 betas=betas,
                 eps=eps,
                 algorithm="muon",
+                muon_backend=muon_backend,
             ),
             rolling_interval_length=rolling_interval_length,
             sigma_factor=sigma_factor,
@@ -102,6 +113,42 @@ class SharedMuon(SkipStepOptimizer):
                 loss = closure()
         factor = self.get_step_factor()
         self._step_skipped = 1 - factor
+        if self.muon_backend == "dion":
+            # Dion mutates momentum before orthogonalizing. Bypass the whole
+            # update on skips, including AdamW and all step counters.
+            if not bool(factor.item()):
+                return loss
+            from .dion_backend import dion_update
+
+            for group in self.param_groups:
+                params = [p for p in group["params"] if p.grad is not None]
+                if not params:
+                    continue
+                if group["algorithm"] == "muon":
+                    dion_update(
+                        params,
+                        [p.grad for p in params],
+                        [self.state[p]["momentum"] for p in params],
+                        lr=group["lr"],
+                        momentum=group["momentum"],
+                        weight_decay=group["weight_decay"],
+                    )
+                    for p in params:
+                        self.state[p]["step"].add_(1)
+                else:
+                    foreach_adamw_step(
+                        [_local(p) for p in params],
+                        [_local(p.grad) for p in params],
+                        [_local(self.state[p]["momentum"]) for p in params],
+                        [_local(self.state[p]["variance"]) for p in params],
+                        [self.state[p]["step"] for p in params],
+                        lr=group["lr"],
+                        betas=group["betas"],
+                        eps=group["eps"],
+                        weight_decay=group["weight_decay"],
+                        step_factor=factor,
+                    )
+            return loss
         for group in self.param_groups:
             for param in group["params"]:
                 if param.grad is None:
@@ -148,6 +195,9 @@ class SharedMuon(SkipStepOptimizer):
         return result
 
     def load_state_dict(self, state_dict):
+        for group in state_dict["param_groups"]:
+            if group.get("muon_backend", "shared") != self.muon_backend:
+                raise ValueError("Checkpoint Muon backend differs; start a new optimizer recipe")
         state_dict = dict(state_dict)
         state_dict["param_groups"] = [dict(group) for group in state_dict["param_groups"]]
         history = state_dict["param_groups"][0].pop("skip_history", dict(losses=[], grad_norms=[]))
@@ -170,6 +220,8 @@ class SharedMuonConfig(OptimConfig[SharedMuon]):
     eps: float = 1e-8
     rolling_interval_length: int = 128
     sigma_factor: int = 6
+    muon_backend: str = "shared"
+    """``shared`` preserves the reference recipe; ``dion`` uses batched Polar Express."""
 
     @classmethod
     def optimizer(cls):

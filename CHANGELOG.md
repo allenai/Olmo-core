@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added opt-in `muon_backend="dion"` to `SharedMuonConfig` and `OLMoDDPOptimizerConfig`, using Dion's batched task execution and Polar Express with adapter-owned skip/checkpoint state. The default remains `"shared"`; checkpoint resume rejects changing the backend.
 - Added `SharedMuonConfig` for dense FP32/DTensor training, sharing Muon momentum, orthogonalization, scaling, and skipped-step updates with `OLMoDDPOptimizer`, with checkpointed skip history.
 - Added opt-in Muon + AdamW to `OLMoDDPOptimizer`, with per-expert matrix updates, sharded optimizer state, and AdamW updates for embeddings, output heads, vectors, and KDA convolution parameters.
 - Added Molmo2 support in `olmo_core.nn.vision`: a HuggingFace Molmo2 checkpoint loader (`molmo2_loader`) and special-token definitions, plus logit-parity and generation tests. `MultimodalLM` gains bidirectional image-token attention (`token_type_ids`), explicit RoPE `position_ids`, and sub-segment (branch-packing) attention isolation.
