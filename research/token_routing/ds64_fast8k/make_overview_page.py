@@ -162,6 +162,7 @@ a { color: var(--c2); }
     <li><b>SFT, 11-task mix:</b> ≈1.7× for the recipe; whole-model LoRA + two-stage scores 0.762 against dense's 0.697 at the same 232 PF (2 seeds), ≈2.4×. Gains concentrate on xabsence, contradiction and outlier; four retrieval tasks are near dense's ceiling; grouping is the one task the router loses.</li>
     <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. <b>The recipe at 64k (1/4 epoch, one seed): +0.037 task-average at 0.365× dense FLOPs, ahead on all 10 graded tasks, 24% less peak active memory</b> (37.2 vs 48.7 GiB); its gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k).</li>
     <li><b>The recipe:</b> rank-64 LoRA adapters on blocks 0–6 (frozen base), an online gradient-norm router that keeps 20% of tokens from block 7 and rescores to 7% at block 16, no full-context steps, LR 5e-6, plus a 16-token floor per document on the 11-task mix. Whole-model LoRA (all 32 blocks, LR 1e-5) is cheaper still at the same quality.</li>
+    <li><b>LoRA vs routing (2×2 ablation):</b> routing does most of the matched-FLOP gain; LoRA-all is a smaller add-on. Dense FLOPs to match, 4-task (original 1,464 / fresh 1,952 / fresh 3,904 rows per task): dense + LoRA-all 1.48 / 1.41 / 1.17×, routing alone 3.45 / 2.85 / 2.89×, both 4.82 / 4.63 / 3.81×. 11-task (240 / 480 / 720 rows per task): 1.39 / 1.15 / 1.06×, 1.79 / 1.67 / 1.56×, 1.83 / 2.09 / 2.30×. Routing alone is 65–79% of the log multiplier on the 4-task mix and 53–96% on the 11-task mix. LoRA's share shrinks with data on the 11-task mix (54% → 19% → 7%). At matched data all four arms score within ≈0.03, so the gain is cheaper steps, not better learning. Dense is at its best LR throughout. A random token choice nearly matches the router (+0.027 at 1,464 rows, a tie at 3,904), so most of the routing gain comes from the drop structure. ⚠ Mostly 1–3 seeds.</li>
     <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and parity by 960 steps (dev CE +0.0012 behind dense; ≈1.04× counting recompute). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure, so this is a short-budget recipe. At 64k context the lead is ≈1.4–1.5× the 32k one, and about the same at 128k (frozen-output-layer recipe: −0.0057 / −0.0039 / −0.0026 at 64k after 120 / 240 / 480 steps, −0.0038 / −0.0046 at 128k after 48 / 120; the 64k 240-step run ties dense at 480, ≈2.9×). <b>Freezing the output layer too is the CPT recipe</b> (no full-rank weights trained at all; 0.685× FLOPs per step, 22.3 vs 35.2 GiB peak): never behind dense up to 960 steps. Dense FLOPs to match: 4.8× / 4.3× / 3.2× / 2.1× / ≈1.4× at 48 / 120 / 240 / 480 / 960 steps (dev CE −0.0037 / −0.0041 / −0.0032 / −0.0022 / +0.0002); seed 1 reproduces at 120. It also forgets less on short documents.</li>
     <li><b>Max train length at 80 GB (SFT):</b> ≈1.8× dense for the recipe and ≈2.4× for whole-model LoRA (extrapolated from short probes).</li>
   </ul>
@@ -183,6 +184,8 @@ a { color: var(--c2); }
   </table></div>
   <p class="note">"Dense FLOPs to match" = training PF dense needs to reach the same 8-cell mean on its fresh curve (log-linear between 1,952 and 3,904 rows/task) divided by the method's PF; "&gt;" when the method is above dense's best point (a lower bound). Dense at 5,856 and 7,808 rows/task is training to extend the curve.</p>
 </section>
+
+__LORA2X2__
 
 <section>
   <h2>Per task: 4-task mix @8k</h2>
@@ -537,6 +540,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--updated", default="")
     ap.add_argument("--gradcomp", default=__file__.rsplit("/", 1)[0] + "/gradcomp_summary.json")
+    ap.add_argument("--lora2x2", default=__file__.rsplit("/", 1)[0] + "/lora_routing_2x2.json",
+                    help="LoRA x routing 2x2 (lora_routing_2x2.py); its section is skipped if the file is missing")
     ap.add_argument("--m64", default="/accounts/projects/berkeleynlp/prasann/projects/OLMo-core/.claude/worktrees/mt11-64k/research/token_routing/mt11_64k/results/points.json")
     a = ap.parse_args()
     S = series(json.load(open(a.points)))
@@ -573,7 +578,12 @@ def main():
         data["gc"] = None
     data["early"] = EARLY_SHARE
     data["cptctx"] = CPT_CTX
-    html = PAGE.replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
+    try:
+        from make_lora_routing_section import section as lora2x2_section
+        lora2x2 = lora2x2_section(json.load(open(a.lora2x2)))
+    except FileNotFoundError:
+        lora2x2 = ""
+    html = PAGE.replace("__LORA2X2__", lora2x2).replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
     for k in ("f4fresh", "f4orig", "f11"):
         for s in data[k]:
