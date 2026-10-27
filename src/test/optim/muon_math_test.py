@@ -39,6 +39,16 @@ def test_parameter_routing():
         assert not uses_muon(name, shape)
 
 
+@pytest.mark.parametrize("prefix", ["blocks.0.attention.", "module.blocks.0.attention."])
+def test_kda_projection_routing(prefix):
+    for name in ("w_q", "w_k", "w_v", "w_out", "f_proj_1", "f_proj_2", "g_proj_1", "g_proj_2"):
+        assert uses_muon(prefix + name + ".weight", (8, 16))
+    assert not uses_muon(prefix + "w_b.weight", (8, 1024))
+    assert not uses_muon(prefix + "g_proj_2.bias", (16,))
+    for name in ("q_norm", "k_norm", "o_norm"):
+        assert not uses_muon(prefix + name + ".weight", (8, 16))
+
+
 def _real_v2_modules(
     num_shared=1, activation=ExpertActivation.swiglu, d_model=5, hidden_size=7, num_experts=3
 ):

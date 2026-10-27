@@ -31,6 +31,15 @@ configured momentum with Nesterov enabled. Auxiliary parameters keep the
 adapter's AdamW implementation and parameter routing, including convolution
 parameters and embeddings.
 
+Both adapters keep KDA `w_q`, `w_k`, `w_v`, `w_out`, `f_proj_1/2`, and
+`g_proj_1/2` weights on Muon. The per-head scalar write-gate projection `w_b`
+uses AdamW, as do all biases, normalization gains (including 2D per-head Q/K
+gains), convolution filters, `A_log`, and `dt_bias`. Global-attention gate
+projection weights remain on Muon. This routing is independent of backend.
+The `w_b` choice follows single-seed MoE hybrid Cx1 retrieval evidence; its
+benefit has not yet been validated on the dense ladder. Earlier profiling
+runs used Muon for `w_b`. Start fresh optimizer state when changing routing.
+
 Dion's replicated and matrix-sharded paths can also produce different rounding
 because their batching and padding differ. They share a numerical recipe, but
 do not promise bitwise equality across execution layouts. Validate each adapter

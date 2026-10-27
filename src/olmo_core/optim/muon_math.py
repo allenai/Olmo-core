@@ -79,7 +79,7 @@ def collect_muon_layouts(model_parts: Iterable[torch.nn.Module]) -> dict[str, Mu
 
 
 def uses_muon(name: str, shape: tuple[int, ...]) -> bool:
-    """Select hidden matrices; keep norms, embeddings, heads and KDA convs on AdamW."""
+    """Select hidden matrices; keep norms, embeddings, heads and scalar gates on AdamW."""
     parts = name.split(".")
     if (
         len(shape) == 1
@@ -92,6 +92,8 @@ def uses_muon(name: str, shape: tuple[int, ...]) -> bool:
     if (
         "embeddings" in parts
         or "lm_head" in parts
+        # KDA/recurrent write gates produce one scalar per head, not feature vectors.
+        or "w_b" in parts
         or name.endswith("bias")
         or parts[-1].startswith("b_")
     ):

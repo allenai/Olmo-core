@@ -101,6 +101,7 @@ def test_routing_covers_embedding_norm_and_convolutions():
     model.embeddings = torch.nn.Embedding(16, 8)
     model.embedding_norm = torch.nn.LayerNorm(8)
     model.projection = torch.nn.Linear(8, 8)
+    model.w_b = torch.nn.Linear(8, 2, bias=False)
     model.conv = torch.nn.Conv1d(8, 8, 4)
     model.lm_head = torch.nn.Linear(8, 16)
     groups = SharedMuonConfig().build_groups(model)
