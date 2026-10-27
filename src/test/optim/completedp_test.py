@@ -34,9 +34,7 @@ BASE_DEPTH = 2
 LR, EPS, WEIGHT_DECAY, BETAS = 1e-3, 1e-8, 0.1, (0.9, 0.95)
 
 
-def _model(
-    d_model: int = D_MODEL, n_layers: int = N_LAYERS, alpha: float = 1.0, completedp: bool = True
-) -> nn.Module:
+def _model_config(d_model: int = D_MODEL, n_layers: int = N_LAYERS) -> TransformerConfig:
     norm = LayerNormConfig(name=LayerNormType.rms, bias=False)
     return TransformerConfig.llama_like(
         d_model=d_model,
@@ -48,12 +46,26 @@ def _model(
         use_head_qk_norm=True,
         attn_backend=AttentionBackendName.torch,
         embedding_norm=norm,
-        completedp=(
-            CompletedPConfig(base_width=BASE_WIDTH, base_depth=BASE_DEPTH, alpha=alpha)
-            if completedp
-            else None
-        ),
-    ).build(init_device="cpu")
+    )
+
+
+def _model(
+    d_model: int = D_MODEL,
+    n_layers: int = N_LAYERS,
+    alpha: float = 1.0,
+    completedp: bool = True,
+    legacy: bool = False,
+) -> nn.Module:
+    config = _model_config(d_model, n_layers)
+    if legacy:
+        config.completedp = CompletedPConfig(
+            base_width=BASE_WIDTH, base_depth=BASE_DEPTH, alpha=alpha
+        )
+    elif completedp:
+        config.completedp = CompletedPConfig.from_base_model(
+            _model_config(BASE_WIDTH, BASE_DEPTH), alpha=alpha
+        )
+    return config.build(init_device="cpu")
 
 
 def _group_of(optim: torch.optim.Optimizer, param: torch.Tensor) -> dict:
@@ -74,16 +86,16 @@ def _expected_multipliers(
         "lm_head.w_out.weight": (s / m_n, 1 / s, m_n * s),
     }
     for i in range(n_layers):
-        for name, fan_in in (
-            ("attention.w_q", d_model),
-            ("attention.w_k", d_model),
-            ("attention.w_v", d_model),
-            ("attention.w_out", d_model),
-            ("feed_forward.w1", d_model),
-            ("feed_forward.w3", d_model),
-            ("feed_forward.w2", 4 * d_model),
+        for name, fan_in, base_fan_in in (
+            ("attention.w_q", d_model, BASE_WIDTH),
+            ("attention.w_k", d_model, BASE_WIDTH),
+            ("attention.w_v", d_model, BASE_WIDTH),
+            ("attention.w_out", d_model, BASE_WIDTH),
+            ("feed_forward.w1", d_model, BASE_WIDTH),
+            ("feed_forward.w3", d_model, BASE_WIDTH),
+            ("feed_forward.w2", 4 * d_model, 4 * BASE_WIDTH),
         ):
-            r = fan_in / BASE_WIDTH
+            r = fan_in / base_fan_in
             expected[f"blocks.{i}.{name}.weight"] = (
                 m_l ** (alpha - 1) * s / r,
                 m_l**-alpha / (m_n * s),
@@ -124,9 +136,23 @@ def test_completedp_multipliers(alpha: float, optim_config: CompletedPOptimConfi
         assert actual["weight_decay"] == pytest.approx(weight_decay), name
 
 
-def test_completedp_learning_rates_match_mup_at_base_depth():
-    """At the base depth, batch size and duration, CompletedP learning rates are muP's."""
-    model = _model(n_layers=BASE_DEPTH)
+@pytest.mark.parametrize("config_cls", [AdamWConfig, SkipStepAdamWConfig])
+def test_base_model_gets_the_base_hyperparameters(config_cls):
+    model = _model(d_model=BASE_WIDTH, n_layers=BASE_DEPTH, alpha=0.5)
+    optim = config_cls(
+        lr=LR, eps=EPS, betas=BETAS, weight_decay=WEIGHT_DECAY, completedp=CompletedPOptimConfig()
+    ).build(model)
+    (group,) = optim.param_groups
+    assert (group["lr"], group["eps"], group["weight_decay"]) == (LR, EPS, WEIGHT_DECAY)
+    assert tuple(group["betas"]) == BETAS
+
+
+def test_legacy_completedp_learning_rates_match_mup_at_base_depth():
+    """
+    Without base fan-ins, every matrix uses ``base_width`` as its base fan-in, so at the base
+    depth, batch size and duration the learning rates are muP's.
+    """
+    model = _model(n_layers=BASE_DEPTH, legacy=True)
     completedp = completedp_multipliers(model, CompletedPOptimConfig())
     mup = mup_lr_multipliers(model, MuPConfig(base_width=BASE_WIDTH))
     for name, multiplier in mup.items():

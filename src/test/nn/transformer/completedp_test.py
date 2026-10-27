@@ -151,11 +151,56 @@ def _init_dense(config: TransformerConfig) -> nn.Module:
         (dict(base_width=128, base_depth=0), "base_depth"),
         (dict(base_width=128, base_depth=2, alpha=0.4), "alpha"),
         (dict(base_width=128, base_depth=2, alpha=1.1), "alpha"),
+        (dict(base_width=128, base_depth=2, base_block_fan_ins=[{}]), "empty"),
+        (dict(base_width=128, base_depth=2, base_block_fan_ins=[{"w.weight": 0}]), "positive"),
+        (
+            dict(base_width=128, base_depth=2, base_block_fan_ins=[{"w.weight": 1}] * 2),
+            "same matrix names",
+        ),
     ],
 )
 def test_completedp_config_validation(kwargs, match):
     with pytest.raises(OLMoConfigurationError, match=match):
         CompletedPConfig(**kwargs)
+
+
+def test_from_base_model_records_base_shapes():
+    base = _dense_config(d_model=BASE_WIDTH, n_layers=BASE_DEPTH)
+    config = CompletedPConfig.from_base_model(base, alpha=0.5)
+    assert (config.base_width, config.base_depth, config.alpha) == (BASE_WIDTH, BASE_DEPTH, 0.5)
+    assert config.base_block_fan_ins == [
+        {
+            "attention.w_q.weight": BASE_WIDTH,
+            "attention.w_k.weight": BASE_WIDTH,
+            "attention.w_v.weight": BASE_WIDTH,
+            "attention.w_out.weight": BASE_WIDTH,
+            "feed_forward.w1.weight": BASE_WIDTH,
+            "feed_forward.w3.weight": BASE_WIDTH,
+            "feed_forward.w2.weight": 4 * BASE_WIDTH,
+        }
+    ]
+    assert CompletedPConfig.from_dict(config.as_config_dict()) == config
+
+
+def test_from_base_model_rejects_ambiguous_blocks():
+    def narrow_feed_forward(block: TransformerBlockConfig) -> TransformerBlockConfig:
+        block.feed_forward = FeedForwardConfig(hidden_size=2 * BASE_WIDTH, bias=False)
+        return block
+
+    base = _dense_config(
+        d_model=BASE_WIDTH, n_layers=BASE_DEPTH, block_mods={1: narrow_feed_forward}
+    )
+    with pytest.raises(OLMoConfigurationError, match="same weight matrices with different"):
+        CompletedPConfig.from_base_model(base)
+
+
+def test_block_without_a_matching_base_block_raises():
+    completedp = CompletedPConfig.from_base_model(
+        _dense_config(d_model=BASE_WIDTH, n_layers=BASE_DEPTH)
+    )
+    gate = GateConfig(granularity=GateGranularity.elementwise)
+    with pytest.raises(OLMoConfigurationError, match="don't match any block"):
+        _dense_config(gate=gate, completedp=completedp).build(init_device="meta")
 
 
 @pytest.mark.parametrize("alpha", [1.0, 0.75, 0.5])
@@ -454,6 +499,63 @@ def test_completedp_init_ddp_model():
         if factor != 1.0:
             expected.mul_(factor)
         assert torch.equal(param.detach(), expected), name
+
+
+def _dense_base_config(**kwargs) -> TransformerConfig:
+    return _dense_config(d_model=BASE_WIDTH, n_layers=BASE_DEPTH, embedding_norm=NORM, **kwargs)
+
+
+def _ddp_base_config(**kwargs) -> TransformerConfig:
+    return _ddp_model_config(d_model=64, n_layers=BASE_DEPTH, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "make_config",
+    [pytest.param(_dense_base_config, id="dense"), pytest.param(_ddp_base_config, id="ddp")],
+)
+def test_base_model_gets_the_base_hyperparameters(make_config):
+    """The base model's init is the ``normal`` init and every multiplier is 1."""
+    normal = make_config().build(init_device="cpu")
+    normal.init_weights(device=torch.device("cpu"))
+    completedp = CompletedPConfig.from_base_model(make_config())
+    model = make_config(completedp=completedp).build(init_device="cpu")
+    model.init_weights(device=torch.device("cpu"))
+    normal_params = dict(normal.named_parameters())
+    for name, param in model.named_parameters():
+        assert torch.equal(param.detach(), normal_params[name].detach()), name
+    for name, multipliers in completedp_multipliers(model, CompletedPOptimConfig()).items():
+        assert multipliers == {"lr": 1.0, "eps": 1.0, "weight_decay": 1.0}, name
+
+
+def test_width_ratios_use_each_matrix_base_fan_in():
+    """Each matrix is compared with the same matrix of the matching base block."""
+    completedp = CompletedPConfig.from_base_model(_ddp_base_config())
+    config = _ddp_model_config(d_model=128, n_layers=4, completedp=completedp)
+    normal = _ddp_model_config(d_model=128, n_layers=4).build(init_device="cpu")
+    normal.init_weights(device=torch.device("cpu"))
+    model = config.build(init_device="cpu")
+    model.init_weights(device=torch.device("cpu"))
+    normal_params = dict(normal.named_parameters())
+    model_params = dict(model.named_parameters())
+    matrices = 0
+    for name, param in named_completedp_params(model).items():
+        if param.fan_in is None:
+            continue
+        matrices += 1
+        # Block 0 has no latent MoE. In the other blocks, the latent width (32) is fixed, so
+        # matrices that read it don't grow; everything else doubles with d_model.
+        reads_latent = name.endswith(("latent_up_proj.weight", "routed_experts.w_up_gate"))
+        r = 1.0 if reads_latent and not name.startswith("blocks.0.") else 2.0
+        assert param.width_ratio == r, name
+        if param.role == CompletedPRole.hidden_matrix:
+            factor = (1 / r) ** 0.5
+        else:
+            factor = 1 / r
+        expected = normal_params[name].detach().clone()
+        if factor != 1.0:
+            expected.mul_(factor)
+        assert torch.equal(model_params[name].detach(), expected), name
+    assert matrices > 0
 
 
 def _assert_normal_init_matrices_have_init_std(module: nn.Module, std: float = INIT_STD):

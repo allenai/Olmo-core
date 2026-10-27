@@ -4,6 +4,19 @@ Written 2026-10-20 against commit `e45401f0c` (branch `tanushy/parameterization`
 uncommitted changes. **Nothing has been committed.** Line numbers refer to the working tree at
 the time of writing; re-grep before editing.
 
+**Update 2026-10-26: per-matrix base fan-ins.** A matrix's width ratio is now
+`r = fan_in / base_fan_in`, its fan-in over the fan-in of the same matrix in the base model,
+instead of `fan_in / base_width`. `CompletedPConfig.from_base_model(base_model_config, alpha)`
+builds the base model on the meta device and records every block matrix's fan-in in
+`CompletedPConfig.base_block_fan_ins`, one mapping per distinct block structure. A block of another
+model uses the mapping with exactly its set of matrix names, and building a model raises if none
+matches. The LM head's base fan-in is `base_width`, and epsilon still uses
+`m_N = d_model / base_width`. So the base model now gets exactly the base init and hyperparameters
+(every multiplier 1), and the ratios between two models are unchanged. Configs without
+`base_block_fan_ins` keep the old rule and log a warning. The absolute multipliers at the base
+quoted below (Section 1.4, item 1; Section 1.6's small-hero values such as KDA `f_proj_2` at 4x
+LR; the small-hero group counts) were computed with the old rule.
+
 Companion docs:
 - `docs/PARAMETERIZATION_HANDOFF.md`: how init and optimizer groups work in this codebase.
 - `docs/NANOCHAT_INIT_HANDOFF.md`: `InitMethod.nanochat`, the spectral init.
@@ -201,13 +214,15 @@ Per-module init scales and residual multipliers are not supported.
 
 Decisions settled with the user before implementing:
 
-1. **Each matrix uses its own width ratio `r = fan_in / base_width`** for init, LR and weight decay,
-   instead of one model-wide `m_N`. This matches `MuPConfig` and matters on the hero, whose
-   dimensions do not grow together.
+1. **Each matrix uses its own width ratio** for init, LR and weight decay, instead of one
+   model-wide `m_N`. This matters on the hero, whose dimensions do not grow together.
    - Small -> medium: `d_model` x1.5, attention head space x2, KDA's 256-wide low-rank projections
      x1.
-   - Consequence: even at the base run not every multiplier is 1. KDA `f_proj_2` gets 4x LR and 2x
-     init std at `base_width = 1024`, for example.
+   - Originally `r = fan_in / base_width`, as in `MuPConfig`. Then not every multiplier was 1 even
+     at the base run: KDA `f_proj_2` got 4x LR and 2x init std at `base_width = 1024`, for
+     example.
+   - Now `r = fan_in / base_fan_in`, the same matrix's fan-in in the base model (see the update
+     note at the top), so every multiplier is 1 at the base run.
 2. **The base init std is `init_std`.** CompletedP scales the existing `normal` init (truncated
    normal at +/-3 std) by the width factors. At `fan_in == base_width` the init is bit-identical to
    today's hero init. Setting `init_std = base_width ** -0.5` gives the hidden matrices a
