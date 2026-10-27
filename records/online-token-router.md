@@ -1261,4 +1261,10 @@ Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not s
   - no mid-run save: 0 of ~20 crashed.
 
   The non-multiple side is still small-n, but the pattern holds.
+- **Cause and fix (319d7442a).**
+  - Cause: when the last step is a save_interval multiple, `post_train_batch` starts an ASYNC save there. `post_train`
+    then only awaits it, because the step already counts as saved, so the save's gloo work overlaps teardown.
+  - Fix: `CheckpointerCallback._is_final_step()` makes that save synchronous, and `post_train` reuses it as the final
+    checkpoint. Tests: `src/test/train/callbacks/checkpointer_final_step_test.py`.
+  - The GPU check is pending: the next CPT run with a dividing SAVE.
   **Practical workaround: pick SAVE so it does not divide the final step**, or relaunch into the same dir.
