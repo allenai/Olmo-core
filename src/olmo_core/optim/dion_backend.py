@@ -26,6 +26,10 @@ def require_dion():
             "muon_backend='dion' requires OLMo-core's pinned Dion dependency; "
             "install the 'dion' extra using the repository's uv source pin."
         ) from exc
+    # Dion specializes compiled kernels for matrix shapes, strides, and batch
+    # sizes. Match the MoE trainer's allowance rather than failing at PyTorch's
+    # default eight variants (the legacy Muon config also raises this limit).
+    torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, 64)
     return muon_update_megabatch_async, AsyncRuntime, AsyncTask, polar_express
 
 
