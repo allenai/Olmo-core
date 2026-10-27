@@ -17,6 +17,12 @@ matches. The LM head's base fan-in is `base_width`, and epsilon still uses
 quoted below (Section 1.4, item 1; Section 1.6's small-hero values such as KDA `f_proj_2` at 4x
 LR; the small-hero group counts) were computed with the old rule.
 
+**Update 2026-10-27: fixed KV width.** `CompletedPConfig.fixed_kv_width` (default off, also an
+argument of `from_base_model`) adds softmax attention's `w_k` / `w_v` to the readout matrices, for
+ladders whose `n_kv_heads * head_dim` is the same at every size. It raises with fused QKV
+projections and doesn't touch linear attention. The mainline ladder sets it. The other conditional
+cases in Section 5, item 3 (fixed latent rank, expert width, head count) are still not handled.
+
 Companion docs:
 - `docs/PARAMETERIZATION_HANDOFF.md`: how init and optimizer groups work in this codebase.
 - `docs/NANOCHAT_INIT_HANDOFF.md`: `InitMethod.nanochat`, the spectral init.
@@ -1360,8 +1366,8 @@ numbers are copied from the report output.
    - New in-block matrices whose output size does not grow with width (a new router type, a
      fixed-rank bottleneck) need adding to `_readout_param_names`. So do the conditional cases in
      a config that fixes a size the hero lets grow: a fixed latent rank (`latent_down_proj`), fixed
-     expert width (expert gate/up), fixed KV-head count (K/V), fixed head count (`w_b`). Otherwise
-     they get the hidden init and epsilon.
+     expert width (expert gate/up), fixed head count (`w_b`). Otherwise they get the hidden init
+     and epsilon. A fixed KV width (attention K/V) is handled by `CompletedPConfig.fixed_kv_width`.
 4. **`output_scale` is only honored by `LayerNorm` and `RMSNorm`.** Other norm classes override
    `forward`, report `supports_output_scale() == False`, and the DDP block falls back to
    `torch.add`. Never set `output_scale` on them directly.

@@ -389,6 +389,62 @@ def test_named_completedp_params_qk_norm(
         assert params[f"blocks.0.attention.{name}.weight"].role == expected
 
 
+@pytest.mark.parametrize("fixed_kv_width", [False, True])
+def test_named_completedp_params_fixed_kv_width(fixed_kv_width: bool):
+    completedp = CompletedPConfig(
+        base_width=BASE_WIDTH, base_depth=BASE_DEPTH, fixed_kv_width=fixed_kv_width
+    )
+    model = _dense_config(completedp=completedp, n_kv_heads=1).build(init_device="meta")
+    roles = {name: p.role for name, p in named_completedp_params(model).items()}
+    kv_role = (
+        CompletedPRole.hidden_readout_matrix if fixed_kv_width else CompletedPRole.hidden_matrix
+    )
+    for block_idx in range(4):
+        prefix = f"blocks.{block_idx}.attention"
+        assert roles[f"{prefix}.w_k.weight"] == kv_role
+        assert roles[f"{prefix}.w_v.weight"] == kv_role
+        assert roles[f"{prefix}.w_q.weight"] == CompletedPRole.hidden_matrix
+        assert roles[f"{prefix}.w_out.weight"] == CompletedPRole.hidden_matrix
+
+
+def test_fixed_kv_width_rejects_fused_qkv():
+    completedp = CompletedPConfig(base_width=BASE_WIDTH, base_depth=BASE_DEPTH, fixed_kv_width=True)
+    config = _dense_config(completedp=completedp, n_kv_heads=1)
+    _block(config).sequence_mixer.name = AttentionType.fused_v2  # type: ignore[attr-defined]
+    with pytest.raises(OLMoConfigurationError, match="fixed_kv_width"):
+        config.build(init_device="meta")
+
+
+@pytest.mark.parametrize("alpha", [1.0, 0.5])
+def test_fixed_kv_width_gives_kv_projections_the_readout_rules(alpha: float):
+    """With one KV head of width 64 at every size, only ``w_k`` / ``w_v`` keep a fixed output."""
+    completedp = CompletedPConfig.from_base_model(
+        _dense_base_config(n_kv_heads=1), alpha=alpha, fixed_kv_width=True
+    )
+    assert completedp.fixed_kv_width
+    assert CompletedPConfig.from_dict(completedp.as_config_dict()) == completedp
+    config = _dense_config(d_model=256, n_layers=8, n_kv_heads=1, embedding_norm=NORM)
+    normal = config.build(init_device="cpu")
+    normal.init_weights(device=torch.device("cpu"))
+    model = config.replace(completedp=completedp).build(init_device="cpu")
+    model.init_weights(device=torch.device("cpu"))
+    normal_params = dict(normal.named_parameters())
+    model_params = dict(model.named_parameters())
+    multipliers = completedp_multipliers(model, CompletedPOptimConfig())
+    m_n = r = 256 / BASE_WIDTH
+    m_l = 8 / BASE_DEPTH
+    for name in ("w_k", "w_v", "w_q"):
+        param = f"blocks.0.attention.{name}.weight"
+        is_kv = name != "w_q"
+        factor = 1 / r if is_kv else (1 / r) ** 0.5
+        expected = normal_params[param].detach() * factor
+        assert torch.equal(model_params[param].detach(), expected), name
+        assert multipliers[param]["lr"] == pytest.approx(m_l ** (alpha - 1) / r), name
+        assert multipliers[param]["weight_decay"] == pytest.approx(r), name
+        eps = m_l**-alpha if is_kv else m_l**-alpha / m_n
+        assert multipliers[param]["eps"] == pytest.approx(eps), name
+
+
 def test_named_completedp_params_ddp_model():
     model = _ddp_model_config(completedp=_completedp()).build(init_device="meta")
     params = named_completedp_params(model)

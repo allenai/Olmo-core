@@ -46,8 +46,9 @@ class CompletedPOptimConfig(Config):
 
     - hidden weight matrices: ``lr * m_L**(alpha - 1) * s / r``,
       ``eps * m_L**-alpha / (m_N * s)``, ``weight_decay * r * s``; in-block matrices with a fixed
-      output size (MoE routers, KDA ``f_proj_1`` / ``g_proj_1``) use the output-weight epsilon,
-      ``eps * m_L**-alpha / s``;
+      output size (MoE routers, KDA ``f_proj_1`` / ``g_proj_1``, attention ``w_k`` / ``w_v`` with
+      :data:`~olmo_core.nn.transformer.CompletedPConfig.fixed_kv_width`) use the output-weight
+      epsilon, ``eps * m_L**-alpha / s``;
     - hidden vectors (norm gains, biases, ...): ``lr * m_L**(alpha - 1) * s``,
       ``eps * m_L**-alpha / (m_N * s)``, ``weight_decay * s``; vectors shared across attention
       heads (e.g. head-wise QK-norm gains) use ``eps * m_L**-alpha / s``;
