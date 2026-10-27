@@ -17,7 +17,7 @@ cut points s488st31/st61, s240st32/st64, which are flagged). "x dense" = dense P
 Sources: results/pareto_points.json (collect_pareto_points.py; main checkout by default) plus any cell run listed
 in the given state.json files that it does not cover yet (scores from ops results, PF from the Beaker log; cached).
 
-    python3 research/token_routing/ds64_fast8k/lora_routing_2x2.py --out results/lora_routing_2x2.json
+    python3 research/token_routing/ds64_fast8k/lora_routing_2x2.py   # -> lora_routing_2x2.json (tracked)
 """
 
 import argparse
@@ -140,11 +140,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--points", default=f"{MAIN}/results/pareto_points.json")
     ap.add_argument("--state", action="append", default=None, help="launch_fast8k state.json files (repeatable)")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", default=f"{HERE}/lora_routing_2x2.json")
+    ap.add_argument("--cache", default=None, help="PF cache (default: lora_routing_2x2_pf_cache.json next to this file)")
     a = ap.parse_args()
-    states = a.state or [f"{MAIN}/state.json", f"{HERE}/state.json"]
+    # state_tdx.json = snapshot of the 2x2's -tdx campaign state (run from its own worktree; tracked so this script
+    # can be re-run from any checkout)
+    states = a.state or [f"{MAIN}/state.json", f"{HERE}/state.json", f"{HERE}/state_tdx.json"]
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    runs = load_runs(a.points, states, os.path.join(os.path.dirname(os.path.abspath(a.out)), "lora_routing_2x2_pf_cache.json"))
+    runs = load_runs(a.points, states, a.cache or os.path.join(HERE, "lora_routing_2x2_pf_cache.json"))
 
     # group seed copies: (mix, pool, rows, steps, cell|arm, lr) -> [(run, pf, score, o8, c8, per-task 8k)]
     grp = collections.defaultdict(list)

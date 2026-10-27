@@ -149,12 +149,14 @@ as effects.
 
 ## Where things are
 
-- Launcher: `research/token_routing/ds64_fast8k/launch_fast8k.py` (`F8K_SUFFIX=-tdx`, `--seed`);
-  run state `research/token_routing/ds64_fast8k/state.json` on branch
-  `claude/vibrant-williams-4b0f66` (untracked).
-- Analysis: `research/token_routing/ds64_fast8k/lora_routing_2x2.py` →
-  `results/lora_routing_2x2.json` (gitignored; tables above are `make_lora_routing_section.py
-  --md`). Overview-page section: `make_lora_routing_section.section()`.
+- Launcher: `research/token_routing/ds64_fast8k/launch_fast8k.py` (`F8K_SUFFIX=-tdx`, `--seed`),
+  branch `claude/vibrant-williams-4b0f66`. Run state snapshot (Beaker experiment ids for all 46
+  `-tdx` runs and their evals): `research/token_routing/ds64_fast8k/state_tdx.json`.
+- Analysis: `research/token_routing/ds64_fast8k/lora_routing_2x2.py` → `lora_routing_2x2.json`
+  (PF cache `lora_routing_2x2_pf_cache.json`); the tables above are
+  `make_lora_routing_section.py lora_routing_2x2.json --md`. The overview page
+  (`make_overview_page.py`) splices in `make_lora_routing_section.section()` before the
+  per-task 4-task section.
 - Recording: `record_beaker_evals.py --suffix=-tdx` (finalized jobs only, adapter check). All
   numbers are in `ops result show --experiment tokdrop_lr` under the `-tdx` / `-tde` / `-tdb` /
   `-lro` / `-lrg` train runs.

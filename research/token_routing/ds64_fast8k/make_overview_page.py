@@ -184,6 +184,8 @@ a { color: var(--c2); }
   <p class="note">"Dense FLOPs to match" = training PF dense needs to reach the same 8-cell mean on its fresh curve (log-linear between 1,952 and 3,904 rows/task) divided by the method's PF; "&gt;" when the method is above dense's best point (a lower bound). Dense at 5,856 and 7,808 rows/task is training to extend the curve.</p>
 </section>
 
+__LORA2X2__
+
 <section>
   <h2>Per task: 4-task mix @8k</h2>
   <p class="note">Same runs and colours as above, one panel per task (8k rung, eval_size 500 each, no-cot). Fresh data on the top row, original pool below.</p>
@@ -532,6 +534,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--updated", default="")
     ap.add_argument("--gradcomp", default=__file__.rsplit("/", 1)[0] + "/gradcomp_summary.json")
+    ap.add_argument("--lora2x2", default=__file__.rsplit("/", 1)[0] + "/lora_routing_2x2.json",
+                    help="LoRA x routing 2x2 (lora_routing_2x2.py); its section is skipped if the file is missing")
     ap.add_argument("--m64", default="/accounts/projects/berkeleynlp/prasann/projects/OLMo-core/.claude/worktrees/mt11-64k/research/token_routing/mt11_64k/results/points.json")
     a = ap.parse_args()
     S = series(json.load(open(a.points)))
@@ -566,7 +570,12 @@ def main():
         data["gc"] = None
     data["early"] = EARLY_SHARE
     data["cptctx"] = CPT_CTX
-    html = PAGE.replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
+    try:
+        from make_lora_routing_section import section as lora2x2_section
+        lora2x2 = lora2x2_section(json.load(open(a.lora2x2)))
+    except FileNotFoundError:
+        lora2x2 = ""
+    html = PAGE.replace("__LORA2X2__", lora2x2).replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
     for k in ("f4fresh", "f4orig", "f11"):
         for s in data[k]:
