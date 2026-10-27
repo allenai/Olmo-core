@@ -1256,9 +1256,15 @@ Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not s
   barrier) rather than a deterministic failure.
 - **Test (CPT, 2026-10-26).** K32 frozen-head seed 1, 120 steps, SAVE 70 (interval save at 70, final at 120) finished
   cleanly through train, export and eval. Tally:
-  - ending on a multiple of SAVE: 7 crashed, 2 survived;
+  - ending on a multiple of SAVE: 8 of 10 crashed, including the SAVE-60 control K32fh-960 (gloo reset on rank 3);
   - not on a multiple: 0 of 1 crashed;
   - no mid-run save: 0 of ~20 crashed.
 
-  This is consistent with the hypothesis, but rests on one run. The SAVE-60 control (K32fh-960) is pending.
+  The non-multiple side is still small-n, but the pattern holds.
+- **Cause and fix (319d7442a).**
+  - Cause: when the last step is a save_interval multiple, `post_train_batch` starts an ASYNC save there. `post_train`
+    then only awaits it, because the step already counts as saved, so the save's gloo work overlaps teardown.
+  - Fix: `CheckpointerCallback._is_final_step()` makes that save synchronous, and `post_train` reuses it as the final
+    checkpoint. Tests: `src/test/train/callbacks/checkpointer_final_step_test.py`.
+  - The GPU check is pending: the next CPT run with a dividing SAVE.
   **Practical workaround: pick SAVE so it does not divide the final step**, or relaunch into the same dir.
