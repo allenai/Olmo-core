@@ -8,7 +8,7 @@ kind: result
 status: current
 superseded_by:
 artifact: https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
-summary: OLMo 3 7B stage-2 → 32k/64k CPT on Longmino. Every token-drop / router / MoD / partial-MLP / backprop-stop arm loses to dense; whole-model LoRA r64 (frozen base) beats dense at 0.70x FLOPs/step and 29% less memory up to ~480 steps (m peaks 3.9, edge ~1.5x larger at 64k) but falls behind at 960 steps (m 1.1).
+summary: OLMo 3 7B stage-2 → 32k/64k/128k CPT on Longmino. Every token-drop / router / MoD / partial-MLP / backprop-stop arm loses to dense; whole-model LoRA r64 with a frozen LM head (no full-rank weights trained) beats dense at 0.685x FLOPs and 37% less memory, m 4.8 → 1.4 from 48 to 960 steps (tie at 960); edge ~1.4-1.5x larger at 64k.
 ---
 # Result — OLMo 3 7B long-context CPT: what saves FLOPs
 
@@ -18,8 +18,19 @@ Code: `research/token_routing/olmo3_cptdrop/`. Every number below is in the ops 
 ## Verdict
 
 - **Recipe: whole-model LoRA with the LM head frozen too ("K32fh").** It trains no full-rank weights at all: 0.685x
-  dense FLOPs/step, 22.3 GiB peak. CE 1.6842 / 1.6812 at 48 / 120 steps (dense 1.6880 / 1.6853), m ≈ 4.8 / 4.3. The
-  table below is for K32 with a trained head, which is slightly worse (m 3.9 / 3.45).
+  dense FLOPs/step (measured: 2,294 PF at 120 steps), 22.3 GiB peak. Never behind dense at the same step count up to
+  960 steps; seed 1 reproduces seed 0 (1.6813 vs 1.6812 at 120).
+
+  | steps | 48 | 120 | 240 | 480 | 960 |
+  |---|---|---|---|---|---|
+  | K32fh CE | 1.6842 | 1.6812 | 1.6795 | 1.6779 | 1.6764 |
+  | dense CE | 1.6880 | 1.6853 | 1.6827 | 1.6800 | 1.6762 |
+  | Δ (paired SE ≤ ±0.0002) | −0.0037 | −0.0041 | −0.0032 | −0.0022 | +0.0002 (tie) |
+  | m | 4.8 | 4.3 | 3.2 | 2.1 | ~1.4 |
+
+  The frozen head adds ~20–30% to m at every budget, and turns the trained-head K32's 960-step deficit (+0.0012)
+  into a tie. Long-range bin at 960: +0.0031 vs dense, so the remaining gap is long-range. Short guard at 960:
+  1.1688 vs dense 1.1829 (less forgetting; ⚠ 256 rows). The tables below are for K32 with a trained head.
 - **Base: whole-model LoRA ("K32").** Freeze the embeddings and every block, and train rank-64 adapters (scale 32) on
   every linear in all 32 blocks, at LR 1e-5 to 2e-5, 16 rows/step, no token dropping. The untied LM head and the final
   norm still train at full rank, so the cost and memory figures include a full-rank head; a frozen-head or head-LoRA
