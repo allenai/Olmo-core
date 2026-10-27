@@ -47,7 +47,8 @@ class CompletedPConfig(Config):
     - scales every residual branch by ``(n_layers / base_depth) ** -alpha``;
     - multiplies the :data:`~olmo_core.nn.transformer.init.InitMethod.normal` init of each hidden
       weight matrix by ``sqrt(1 / r)``, and of the LM head and of each in-block matrix with a fixed
-      output size (routers, KDA ``f_proj_1`` / ``g_proj_1``) by ``1 / r``, so the init variance
+      output size (routers, KDA ``f_proj_1`` / ``g_proj_1``, and attention ``w_k`` / ``w_v`` with
+      :data:`fixed_kv_width`) by ``1 / r``, so the init variance
       scales as ``1 / width`` and ``1 / width**2``.
 
     ``r = fan_in / base_fan_in`` is a matrix's own width ratio: its fan-in over the fan-in of the
@@ -87,6 +88,15 @@ class CompletedPConfig(Config):
     base model. This is kept only so that runs started with it keep their parameterization.
     """
 
+    fixed_kv_width: bool = False
+    """
+    Whether the key/value width of softmax attention (``n_kv_heads * head_dim``) is the same in
+    every model being compared. If so, attention's ``w_k`` and ``w_v`` have a fixed output size
+    and are readout matrices (:data:`CompletedPRole.hidden_readout_matrix`) rather than hidden
+    ones. Only set it when the key/value width really is fixed. It doesn't affect linear attention
+    (KDA, GatedDeltaNet), and it isn't supported with fused QKV projections.
+    """
+
     def __post_init__(self):
         if self.base_width <= 0:
             raise OLMoConfigurationError(f"base_width must be positive, got {self.base_width}")
@@ -114,7 +124,7 @@ class CompletedPConfig(Config):
 
     @classmethod
     def from_base_model(
-        cls, base_model: "TransformerConfig", alpha: float = 1.0
+        cls, base_model: "TransformerConfig", alpha: float = 1.0, fixed_kv_width: bool = False
     ) -> "CompletedPConfig":
         """
         Create the config that transfers hyperparameters tuned on ``base_model``. It records the
@@ -124,6 +134,7 @@ class CompletedPConfig(Config):
         :param base_model: The config of the base model. It is built on the meta device, without
             its own ``completedp`` setting.
         :param alpha: The depth exponent.
+        :param fixed_kv_width: See :data:`fixed_kv_width`.
 
         :raises OLMoConfigurationError: If two blocks of the base model have the same weight
             matrices with different fan-ins, so a block of another model can't be matched to one.
@@ -146,6 +157,7 @@ class CompletedPConfig(Config):
             base_depth=transformer.n_layers,
             alpha=alpha,
             base_block_fan_ins=[fan_ins for _, fan_ins in by_names.values()],
+            fixed_kv_width=fixed_kv_width,
         )
 
     def width_ratio(self, d_model: int) -> float:
@@ -191,8 +203,9 @@ class CompletedPRole(StrEnum):
     hidden_readout_matrix = "hidden_readout_matrix"
     """
     A weight matrix inside a block whose output size does not grow with width: MoE routers (one
-    output per expert) and the projections into KDA's fixed-width gate bottlenecks (``f_proj_1``,
-    ``g_proj_1``). It follows the output-weight rules for width (init std and learning rate
+    output per expert), the projections into KDA's fixed-width gate bottlenecks (``f_proj_1``,
+    ``g_proj_1``), and, with :data:`CompletedPConfig.fixed_kv_width`, attention's ``w_k`` and
+    ``w_v``. It follows the output-weight rules for width (init std and learning rate
     ``1 / r``, epsilon not width-scaled) and the hidden rules for depth.
     """
 
@@ -397,10 +410,12 @@ def _head_shared_param_names(transformer: "Transformer", prefix: str) -> Set[str
 
 
 def _readout_param_names(transformer: "Transformer", prefix: str) -> Set[str]:
+    from ..attention import Attention, FusedAttentionV2
     from ..attention.kda import KimiDeltaAttention
     from ..moe import MoERouter
     from ..moe.v2.router import MoERouterV2
 
+    fixed_kv_width = transformer.completedp is not None and transformer.completedp.fixed_kv_width
     names: Set[str] = set()
     for module_name, module in transformer.named_modules():
         if isinstance(module, (MoERouterV2, MoERouter)):
@@ -409,6 +424,14 @@ def _readout_param_names(transformer: "Transformer", prefix: str) -> Set[str]:
             # These project into the fixed head_v_dim-wide bottlenecks of the decay and output
             # gates.
             for linear in ("f_proj_1", "g_proj_1"):
+                names.add(f"{prefix}{module_name}.{linear}.weight")
+        elif fixed_kv_width and isinstance(module, Attention):
+            if isinstance(module, FusedAttentionV2):
+                raise OLMoConfigurationError(
+                    "CompletedP's 'fixed_kv_width' needs separate key and value projections, but "
+                    f"{module_name} fuses them into 'w_qkv'"
+                )
+            for linear in ("w_k", "w_v"):
                 names.add(f"{prefix}{module_name}.{linear}.weight")
     return names
 
