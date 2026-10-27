@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from olmo_core.config import DType, StrEnum
 from olmo_core.nn.config import ModuleConfig
 from olmo_core.nn.vision.config import VisionEncoderConfig
+from olmo_core.nn.vision.sdpa import vision_scaled_dot_product_attention
 
 __all__ = [
     "ImagePoolingType",
@@ -124,7 +125,7 @@ class _PoolingCrossAttention(nn.Module):
             k = k.repeat_interleave(self.num_kv_groups, dim=2)
             v = v.repeat_interleave(self.num_kv_groups, dim=2)
 
-        out = F.scaled_dot_product_attention(
+        out = vision_scaled_dot_product_attention(
             q.transpose(1, 2),
             k.transpose(1, 2),
             v.transpose(1, 2),

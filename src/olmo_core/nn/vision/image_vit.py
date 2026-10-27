@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from olmo_core.nn.vision.config import VisionEncoderConfig
+from olmo_core.nn.vision.sdpa import vision_scaled_dot_product_attention
 
 __all__ = [
     "ViTAttention",
@@ -99,7 +100,7 @@ class ViTAttention(nn.Module):
             k = k.repeat_interleave(self.num_kv_groups, dim=2)
             v = v.repeat_interleave(self.num_kv_groups, dim=2)
 
-        out = F.scaled_dot_product_attention(
+        out = vision_scaled_dot_product_attention(
             q.transpose(1, 2).contiguous(),
             k.transpose(1, 2).contiguous(),
             v.transpose(1, 2).contiguous(),

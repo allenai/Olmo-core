@@ -917,9 +917,11 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
                 self.embeddings,
                 d_model=self.d_model,
                 embed_scale=self.embed_scale,
-                std=self.embedding_init_std
-                if self.embedding_init_std is not None
-                else self.init_std,
+                std=(
+                    self.embedding_init_std
+                    if self.embedding_init_std is not None
+                    else self.init_std
+                ),
                 generator=generator,
             )
 
@@ -1295,6 +1297,7 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         self,
         input_ids: torch.Tensor,
         *,
+        input_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         ignore_index: int = -100,
         loss_reduction: Literal["mean", "sum", "none"] = "mean",
@@ -1307,9 +1310,31 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         Run the transformer on the token input IDs.
 
         :param input_ids: The token input IDs, shape ``(batch_size, seq_len)``.
+        :param input_embeddings: Optional post-scale, post-normalization embeddings,
+            shape ``(batch_size, seq_len, d_model)``. These replace the embedding
+            lookup, scale and norm, allowing differentiable image-feature addition.
+            Not supported with context/pipeline parallelism or two-batch overlap.
 
         :returns: The logits if ``labels`` is ``None`` or the losses if ``labels`` is not ``None``.
         """
+        if input_embeddings is not None:
+            if (
+                self.tbo
+                or self._cp_load_balancer is not None
+                or self.embeddings is None
+                or self.lm_head is None
+            ):
+                raise ValueError(
+                    "input_embeddings requires a non-pipeline, non-CP model without two-batch overlap"
+                )
+            if input_embeddings.shape != (*input_ids.shape, self.d_model):
+                raise ValueError("input_embeddings must have shape (batch_size, seq_len, d_model)")
+            if (
+                not input_embeddings.is_floating_point()
+                or input_embeddings.device != input_ids.device
+            ):
+                raise ValueError("input_embeddings must be floating point on the input_ids device")
+
         if self.tbo:
             return self.forward_tbo(
                 input_ids,
@@ -1339,7 +1364,7 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
             **kwargs,
         )
 
-        h = self.forward_embed(input_ids)
+        h = self.forward_embed(input_ids) if input_embeddings is None else input_embeddings
 
         if self.recompute_all_blocks_by_chunk:
             h = checkpoint(
