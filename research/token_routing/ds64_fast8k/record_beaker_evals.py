@@ -43,7 +43,7 @@ def main():
     rows, fetched, empty = [], 0, 0
     for ename, e in st.get("evals", {}).items():
         run, ex = e.get("train_run"), e.get("ex")
-        if not run or not ex or not any(s in ename for s in a.suffix):
+        if not run or not ex or ex == "local" or not any(s in ename for s in a.suffix):  # local: record_local_evals
             continue
         task = KEY_TASK.get(e.get("task", ""), e.get("task", ""))
         if ex in done_jobs:  # this job's log was already parsed (all its lines were recorded then)
