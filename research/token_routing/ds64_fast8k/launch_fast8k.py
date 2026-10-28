@@ -76,7 +76,7 @@ PROBE_LAUNCHER = f"{REPO}/research/ffn_compute/flop_scaling/beaker_bench_launch.
 PROBE = "research/token_routing/pooled_kv/outlier_probe/outlier_slot_probe.py"
 SHARDS = f"{W}/ds64/fast8k/shards"
 LEDGER = f"{D}/LAUNCH_LEDGER.tsv"
-STATE = f"{D}/state.json"
+STATE = os.environ.get("F8K_STATE", f"{D}/state.json")  # F8K_STATE: drive another checkout's campaign state
 
 TASK = os.environ.get("F8K_TASK", "outlier")
 BUDGETS = ["8M", "16M", "20M"]
