@@ -515,14 +515,42 @@ def arm_args(task, arm, budget):
                      f"plus the -warm variants {', '.join(WARM_FROM)})")
 
 
+_STATE_SNAPSHOT = {}
+
+
 def load_state():
-    return json.load(open(STATE)) if os.path.exists(STATE) else {"runs": {}, "evals": {}, "parity": {}}
+    st = json.load(open(STATE)) if os.path.exists(STATE) else {"runs": {}, "evals": {}, "parity": {}}
+    _STATE_SNAPSHOT.clear()
+    _STATE_SNAPSHOT.update(json.loads(json.dumps(st)))
+    return st
 
 
 def save_state(st):
+    """Write back only the entries THIS process changed since load_state, onto the file's current contents (under a
+    lock): a launch wave and an eval driver can then share one state.json without dropping each other's entries."""
+    import fcntl
+
     st.setdefault("parity", {})
-    json.dump(st, open(STATE + ".tmp", "w"), indent=1)
-    os.replace(STATE + ".tmp", STATE)
+    with open(STATE + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        disk = json.load(open(STATE)) if os.path.exists(STATE) else {}
+        for sec, entries in st.items():
+            if not isinstance(entries, dict):
+                disk[sec] = entries
+                continue
+            old = _STATE_SNAPSHOT.get(sec, {})
+            tgt = disk.setdefault(sec, {})
+            for k, v in entries.items():
+                if old.get(k) != v:
+                    tgt[k] = v
+            for k in set(old) - set(entries):  # removed by this process
+                tgt.pop(k, None)
+        json.dump(disk, open(STATE + ".tmp", "w"), indent=1)
+        os.replace(STATE + ".tmp", STATE)
+        _STATE_SNAPSHOT.clear()
+        _STATE_SNAPSHOT.update(json.loads(json.dumps(disk)))
+        st.clear()
+        st.update(disk)
 
 
 def _log(name, mode, out):
