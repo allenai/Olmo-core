@@ -484,6 +484,12 @@ def budget_epochs(budget):
 
 
 def arm_args(task, arm, budget):
+    # <arm>sd<k>: the same arm at --seed k (data order + router / keep / drop seeds); the collector reads the seed off
+    # the same suffix (collect_pareto_points.parse_name)
+    m_sd = re.fullmatch(r"(.+?)sd(\d+)", arm)
+    if m_sd:
+        variant, data, common, extra = arm_args(task, m_sd.group(1), budget)
+        return variant, data, common + ["--seed", m_sd.group(2)], extra
     recipe, base = resolve(arm)
     data, _, max_steps = parse_budget(task, budget)
     micro = ARM_MICRO.get(recipe, DEFAULT_MICRO)
@@ -589,7 +595,12 @@ SUITE_ROW_RUNS = {"mt11"}
 SUITE_EVAL_ENV = ["LADDER_GEN_BATCH=32", "LADDER_GEN_BATCH_TOKENS=196608"]
 
 
-def eval_cmd(ename, task, ckpt, suite):
+#: env F8K_EVAL_SPLIT=1: score every (task, rung) of an mt4 run as its own 1-GPU job (``<run>-ev<task>-<rung>``)
+#: instead of one 2-GPU job per task -- shorter eval wall-clock, and 1-GPU jobs schedule fastest on jupiter.
+EVAL_SPLIT = os.environ.get("F8K_EVAL_SPLIT", "") == "1"
+
+
+def eval_cmd(ename, task, ckpt, suite, rung=None, ngpu=2):
     """The run_q4b_beaker_multirung_eval.py command scoring ``task`` of checkpoint ``ckpt``.
 
     ``suite`` (mt11): the CTC-suite rows at query position ``both`` with ctc-spec grading; else the ds64
@@ -597,14 +608,15 @@ def eval_cmd(ename, task, ckpt, suite):
     cmd = [sys.executable, "-u", EVAL_LAUNCHER, ename, EVAL_CLUSTER,
            "--task", TASK_KEY.get(task, task), "--variant", "docchunk", "--ckpt", ckpt,
            "--query-position", "both" if suite else "after", "--cot-mode", "none",
-           "--tokenizer", TOKENIZER, "--ngpu", "2", "--max-test", "500", "--priority", "urgent",
+           "--tokenizer", TOKENIZER, "--ngpu", str(ngpu), "--max-test", "500", "--priority", "urgent",
            # >= the 8k rung's prompt + generation, with headroom: a --max-length BELOW the
            # prompt truncates it away and the run scores exactly 0.000 (records/ memory
            # "Goldgrad eval MAXLEN truncation bug"). 20000 covers an 8k-rung outlier row.
            "--max-length", "20000", "--batch-size", "8"]
     if suite:
         return cmd + ["--suite-rows"] + [a for kv in SUITE_EVAL_ENV for a in ("--env", kv)]
-    return cmd + ["--dc-rung-files", json.dumps({task: RUNGS[task]}), "--dc-rungs", ",".join(RUNGS[task])]
+    rungs = {rung: RUNGS[task][rung]} if rung else RUNGS[task]
+    return cmd + ["--dc-rung-files", json.dumps({task: rungs}), "--dc-rungs", ",".join(rungs)]
 
 
 def do_eval(args):
@@ -637,15 +649,19 @@ def do_eval(args):
             tasks = tasks + ["rerank"]
         if args.eval_tasks:
             tasks = [t for t in tasks if t in args.eval_tasks.split(",")]
-        for task in tasks:
+        jobs = ([(task, rung) for task in tasks for rung in RUNGS[task]] if (EVAL_SPLIT and not suite)
+                else [(task, None) for task in tasks])
+        for task, rung in jobs:
             ename = f"{name}-ev{task}" if r["task"] in MT_TASKS else name
+            if rung:
+                ename = f"{name}-ev{task}-{rung}"
             if ename != name and st["evals"].get(ename, {}).get("ex") and not args.force and not dry:
                 print(f"[skip] eval {ename} already launched ({st['evals'][ename]['ex']})")
                 continue
             # --eval-step-dir: score the trainer's final distcp step dir instead of the post-fit export (the
             # 10-22 tdb runs finished every step, then died in wandb.finish before the export was written)
             ckpt = f"{CKPTS}/{name}/step{r['steps_expected']}" if args.eval_step_dir else f"{CKPTS}/{name}"
-            cmd = eval_cmd(ename, task, ckpt, suite)
+            cmd = eval_cmd(ename, task, ckpt, suite, rung=rung, ngpu=1 if rung else 2)
             if dry:
                 rc, out = sh(cmd + ["--dry-run"])
                 print(f"eval {ename} [dry-run rc={rc}]: " + " ".join(
