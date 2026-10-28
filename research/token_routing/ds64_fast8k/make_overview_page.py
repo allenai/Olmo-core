@@ -158,7 +158,7 @@ a { color: var(--c2); }
 <section class="lead">
   <h2>Where things stand</h2>
   <ul>
-    <li><b>SFT, 4-task mix:</b> dense needs about <b>3×</b> the training FLOPs to match the cheap methods on fresh data (3,904 rows/task), and <b>≈2.2×</b> or more at 7,808 rows/task where dense nears its ceiling. On the original pool, dense needs ≈3.5–3.9× to match the recipe and ≈4.4× for whole-model LoRA + two-stage keep.</li>
+    <li><b>SFT, 4-task mix:</b> dense needs about <b>3×</b> the training FLOPs to match the cheap methods on fresh data (3,904 rows/task), and <b>≈2×</b> at 7,808 rows/task (now a point estimate: the recipe's 0.926 equals dense at 3,904 rows; dense gains only +0.005 from 3,904 to 7,808, so the 7,808 ratios are good only to ≈1.5–4×). On the original pool, dense needs ≈3.5–3.9× to match the recipe and ≈4.4× for whole-model LoRA + two-stage keep.</li>
     <li><b>SFT, 11-task mix:</b> ≈1.7× for the recipe; whole-model LoRA + two-stage scores 0.762 against dense's 0.697 at the same 232 PF (2 seeds), ≈2.4×. Gains concentrate on xabsence, contradiction and outlier; four retrieval tasks are near dense's ceiling; grouping is the one task the router loses.</li>
     <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. <b>The recipe at 64k (1/4 epoch, one seed): +0.037 task-average at 0.365× dense FLOPs, ahead on all 10 graded tasks, 24% less peak active memory</b> (37.2 vs 48.7 GiB); its gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k).</li>
     <li><b>The recipe:</b> rank-64 LoRA adapters on blocks 0–6 (frozen base), an online gradient-norm router that keeps 20% of tokens from block 7 and rescores to 7% at block 16, no full-context steps, LR 5e-6, plus a 16-token floor per document on the 11-task mix. Whole-model LoRA (all 32 blocks, LR 1e-5) is cheaper still at the same quality.</li>
@@ -182,7 +182,7 @@ a { color: var(--c2); }
     <tr><th>method (fresh data, LR 5e-6, no full-context steps)</th><th class="n">rows/task</th><th class="n">PF</th><th class="n">8-cell mean</th><th class="n">outlier@8k</th><th class="n">dense FLOPs to match</th></tr>
     __FTM__
   </table></div>
-  <p class="note">"Dense FLOPs to match" = training PF dense needs to reach the same 8-cell mean on its fresh curve (log-linear between 1,952 and 3,904 rows/task) divided by the method's PF; "&gt;" when the method is above dense's best point (a lower bound). Dense at 5,856 and 7,808 rows/task is training to extend the curve.</p>
+  <p class="note">"Dense FLOPs to match" = training PF dense needs to reach the same 8-cell mean on its fresh curve (piecewise log-linear along dense at 1,952 / 3,904 / 5,856 / 7,808 rows/task) divided by the method's PF; "&gt;" when the method is above dense's best point (a lower bound).</p>
 </section>
 
 __LORA2X2__
@@ -518,7 +518,16 @@ def ftm_rows(S):
     dense = pick(S, "mt4", "f", "dense")
     if len(dense) < 2:
         return ""
-    (x0, y0), (x1, y1) = (dense[0]["x"], dense[0]["y"]), (dense[-1]["x"], dense[-1]["y"])
+    dpts = sorted((d["x"], d["y"]) for d in dense)
+    x1, y1 = dpts[-1]
+
+    def need_pf(y):
+        """dense PF at score y: piecewise log-linear along the fresh dense curve (first crossing)"""
+        for (xa, ya), (xb, yb) in zip(dpts, dpts[1:]):
+            if min(ya, yb) <= y <= max(ya, yb) and yb != ya:
+                return xa * (xb / xa) ** ((y - ya) / (yb - ya))
+        (xa, ya), (xb, yb) = dpts[0], dpts[1]  # below the curve: extrapolate the first segment
+        return xa * (xb / xa) ** ((y - ya) / (yb - ya))
     names = {"lora64r20to7": "Recipe: adapters 0–6 + two-stage 20%→7%", "lora64fa75r3s": "Adapters (frozen at 75%) + three-stage",
              "lora64fa75r20to7": "Adapters (frozen at 75%) + two-stage", "lora64fa75r20to10": "Adapters (frozen at 75%) + two-stage 20%→10%",
              "r20to7M7de0": "Two-stage 20%→7%, no adapters", "otr10M7de0": "Router keep 10%", "fa50M7": "Router + freeze blocks 0–6 at 50%",
@@ -527,8 +536,7 @@ def ftm_rows(S):
            f'<td class="n">{p["o"]:.3f}</td><td class="n">1.0×</td></tr>' for p in dense]
     for arm, label in names.items():
         for p in pick(S, "mt4", "f", arm):
-            need = x0 * (x1 / x0) ** ((p["y"] - y0) / (y1 - y0))
-            txt = f'&gt;{x1 / p["x"]:.1f}×' if p["y"] > y1 else f'{need / p["x"]:.1f}×'
+            txt = f'&gt;{x1 / p["x"]:.1f}×' if p["y"] > max(y for _, y in dpts) else f'{need_pf(p["y"]) / p["x"]:.1f}×'
             out.append(f'<tr><td>{label}</td><td class="n">{p["rows"]}</td><td class="n">{p["x"]:.0f}</td><td class="n">{p["y"]:.3f}</td>'
                        f'<td class="n">{p["o"]:.3f}</td><td class="n"><b>{txt}</b></td></tr>')
     return "\n".join(out)
