@@ -344,6 +344,11 @@ ARM_EXTRA.update({
 _SK3 = "--train-skip-layers 20,24,28"
 _SK8 = "--train-skip-layers 16,17,18,20,21,22,24,25"
 _LDL = "--layer-drop-p 0.2 --layer-drop-schedule linear --layer-drop-exclude-first 4 --layer-drop-exclude-last 2"
+# 2026-10-28 layer-skip screen (Prasann: "could you just try layer skipping?"): blocks 20-27 = the 8-block span with
+# the least gradient energy in the grad-composition plot (includes full-attention blocks 23 and 27); ldu40 = gentle
+# LayerDrop on the UPPER half only (blocks 16-29, p_i = 0.4 (i+1)/32 = 0.21..0.38, ~4.1 blocks skipped per step).
+_SK2027 = "--train-skip-layers 20-27"
+_LDU = "--layer-drop-p 0.4 --layer-drop-schedule linear --layer-drop-exclude-first 16 --layer-drop-exclude-last 2"
 #: dense + a train-time modifier (variant full with extra flags)
 DENSE_EXTRA = {
     # dense with the LM head only at supervised positions (exact; meter charges it so from router d74ad1194)
@@ -351,11 +356,16 @@ DENSE_EXTRA = {
     # review controls (2026-10-26): dense + whole-model LoRA, no router (is the LoRA-all gain LoRA or routing?)
     "denselora64all": "--lora-rank 64 --lora-blocks 0 --lora-scale 32",
     "denseffn50": "--ffn-width-frac 0.5",
-    "denseffn25": "--ffn-width-frac 0.25","dense-sk3": _SK3, "dense-sk8": _SK8, "dense-ldl20": _LDL}
+    "denseffn25": "--ffn-width-frac 0.25","dense-sk3": _SK3, "dense-sk8": _SK8, "dense-ldl20": _LDL,
+    "dense-sk2027": _SK2027, "dense-ldu40": _LDU}
 for _r in ("tier67a50m32", "tier67flm16", "gbflk64p8"):
     ARM_EXTRA[f"{_r}-sk3"] = f"{ARM_EXTRA[_r]} {_SK3}"
     ARM_EXTRA[f"{_r}-sk8"] = f"{ARM_EXTRA[_r]} {_SK8}"
     ARM_EXTRA[f"{_r}-ldl20"] = f"{ARM_EXTRA[_r]} {_LDL}"
+# the universal recipe (whole-model LoRA + two-stage keep, LR 1e-5) + layer skipping; 7 and 16 (the router's drop
+# points) are not in either skip set
+for _sfx, _flags in (("sk3", _SK3), ("sk2027", _SK2027)):
+    ARM_EXTRA[f"lora64all32r20to7-{_sfx}"] = f"{ARM_EXTRA['lora64all32r20to7']} {_flags}"
 ARM_MICRO = {}          # every arm at micro 2: the FLOP audit (09-15 10:30) requires identical
 DEFAULT_MICRO = 2       # gpus/micro across any pair that will be compared at matched FLOPs.
 
