@@ -603,3 +603,54 @@ def test_finevision_image_correspondence_filter_is_opt_in(tmp_path):
         len(FineVisionDatasetConfig(dataset_path=str(d), min_image_correspondence=4).build(tok))
         == 0
     )
+
+
+def test_mmfinereason_rejects_filter_without_its_column(tmp_path):
+    from olmo_core.data.multimodal import MMFineReasonDatasetConfig
+
+    d = tmp_path / "mmfr3"
+    d.mkdir()
+    rows = [
+        {
+            "question": "<image>q1",
+            "original_answer": "a1",
+            "image": {"bytes": _png_bytes(0), "path": None},
+        }
+    ]
+    _write_parquet(str(d / "train-00000.parquet"), rows, ["question", "original_answer", "image"])
+    tok = _FakeTokenizer()
+
+    with pytest.raises(ValueError, match="no 'source' column"):
+        MMFineReasonDatasetConfig(dataset_path=str(d), sources=["MMR1"]).build(tok)
+    assert len(MMFineReasonDatasetConfig(dataset_path=str(d)).build(tok)) == 1
+
+
+@pytest.mark.parametrize(
+    "hour, expected",
+    [
+        (0, "12:30 AM"),
+        (1, "1:30 AM"),
+        (11, "11:30 AM"),
+        (12, "12:30 PM"),
+        (13, "1:30 PM"),
+        (23, "11:30 PM"),
+    ],
+)
+def test_pixmo_clocks_am_pm_labels(monkeypatch, hour, expected):
+    from PIL import Image
+
+    from olmo_core.data.multimodal import pixmo_clocks
+
+    monkeypatch.setattr(
+        pixmo_clocks, "_open_image", lambda path: Image.new("RGB", (8, 200), "white")
+    )
+    row = {
+        "time_format": "12 hour clock (with AM/PM)",
+        "shows_seconds": False,
+        "hour": hour,
+        "minute": 30,
+        "second": 0,
+        "image": "x.png",
+    }
+    out = pixmo_clocks.format_pixmo_clocks_row(row, np.random.RandomState(0), aug=False)
+    assert out["text"] == f"The time shown is {expected}"
