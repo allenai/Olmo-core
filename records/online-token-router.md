@@ -1235,6 +1235,68 @@ task, with a same-backend baseline.
 Together with CPT's results (topk and random lose on both frozen and trainable bases and degrade with training),
 partial MLP is closed.
 
+## Gradient fidelity v2 (2026-10-28): bias vs variance, batch-level, early drops
+
+**Verdict.**
+- **(a) Variance vs bias.** At trained checkpoints, random's per-row error is mostly variance. But it also carries
+  ~2x the router's bias, and the full gradient cancels across rows. So averaging does not rescue it in the probe: the
+  8-batch (128-row) cos is 0.08 for random vs 0.45 for the router on the recipe checkpoint.
+- **(b) Ranking.** Batch-level and 8-batch fidelity rank drop points and stage placement the way training does. They
+  rank random far below the router, which training does not show (+0.027 at s1464, tie at f3904).
+- **(c) Early drops.** They fail by bias even for the oracle: the deterministic oracle's fidelity falls from 0.55
+  (after block 7) to 0.08 (after block 1) on the recipe checkpoint. No router can fix that.
+- **(d) Best predictor.** No single per-step metric predicts every training contrast. dCE (truncated minus full answer
+  CE) and the oracle's fidelity predict the drop point and stage placement best. Every metric overstates random's
+  penalty.
+- **Caveat.** The probe evaluates random selection on checkpoints trained with the router (off-policy). A run trained
+  on random selection adapts to it.
+
+**Method.** `research/token_routing/online_router/grad_fidelity2.py` (61a58ad87, 16f11eebd); merge
+`grad_fidelity2_merge.py`.
+- **Jobs.** 42 one-GPU Beaker jobs (checkpoint x setting x 128-row group; ids in `gradfid2_jobs.txt`).
+- **Rows.** Held-out rows from the fresh pool mt4f1952, 64 per task (⚠ eval_size 256 rows: a probe). The router is
+  fit on 32 mt4s1464 training rows per task.
+- **Draws.** Stochastic rules (random; router with 10% exploration) take K=8 draws per row. The bias is K-debiased, so
+  var/K is subtracted from ||gbar - g_full||^2.
+- **Batches.** 16-row batches mix tasks; the 8-batch accumulation covers 128 rows.
+- **Gradient views.** Fixed random coordinate samples: "trained" (LoRA A/B + head for the LoRA checkpoint, 8M coords;
+  all parameters for dense / base) and "all" (16M coords). Both views agree.
+- **Approximation.** The stage-2 router (block 16) is fit and scored on the full pass, not the routed one.
+- **Checkpoints.** Base markerfix; recipe `f8k-mt4-lora64K32r20to7-s1464-tdb-lr1e-05` (final; there is no mid-run
+  save); dense `f8k-mt4-densesp-s1464-tde-lr5e-06`.
+- **Recorded.** `ops result add --check`: 1,365 rows (`gf2_<rule>_<view>_<metric>`). Full table:
+  `research/token_routing/online_router/gradfid2_table.md`.
+
+**Recipe checkpoint, trained view, two-stage 7:0.2 / 16:0.07:**
+
+| rule | single-draw cos | cos(gbar) | rel bias | var | 16-row cos | 8-batch cos | dCE |
+|---|---|---|---|---|---|---|---|
+| router | 0.613 | 0.613 | 0.93 | 0 | 0.473 | 0.453 | 0.000 |
+| router + explore | 0.608 | 0.645 | 0.87 | 0.15 | 0.476 | 0.448 | 0.000 |
+| oracle | 0.713 | 0.713 | 0.83 | 0 | 0.643 | 0.616 | 0.000 |
+| first / last | 0.389 | 0.389 | 1.49 | 0 | 0.214 | 0.144 | 0.013 |
+| random | 0.222 | 0.296 | 2.10 | 12.1 | 0.123 | 0.076 | 0.065 |
+
+Here var and bias^2 are relative to ||g_full||^2. On the trained checkpoints g_full is small (rows are nearly fit), so
+the relative errors exceed 1.
+
+**Drop point, keep 10%, recipe checkpoint; oracle (zero variance) / router.** Training contra (full FT, otr10M{L}):
+0.77 / 0.80 (M5) / 0.93 (M7).
+
+| split after block | oracle cos | oracle 8-batch | router cos | router 8-batch | router dCE |
+|---|---|---|---|---|---|
+| 1 | 0.081 | 0.030 | 0.038 | 0.000 | 0.691 |
+| 3 | 0.183 | 0.079 | 0.095 | 0.040 | 0.235 |
+| 5 | 0.254 | 0.084 | 0.151 | 0.039 | 0.157 |
+| 7 | 0.549 | 0.413 | 0.432 | 0.244 | 0.004 |
+
+The dense and base checkpoints show the same monotone pattern; the base oracle cos is 0.42 / 0.58 / 0.65 / 0.76. A
+two-stage router with its first stage at 5 / 3 scores 8-batch 0.152 / 0.116, vs 0.453 at 7. That matches training:
+first stage at 5 costs -0.084 contra on LoRA-all.
+
+**Base checkpoint** (untrained, so the full gradient is large and coherent). Random's error is bias-dominated: rel
+bias 0.77 (bias^2 0.60) vs var 0.09 at two-stage. Every rule's 8-batch cos is high (random 0.93, router 0.98).
+
 ## Known trap (FIXED in 319d7442a): intermittent end-of-run crash after mid-run saves (2026-10-25, CPT side)
 
 Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not specific to freeze-early**:
