@@ -238,7 +238,7 @@ def worker(a):
     OP.FEATURE_SETS = {**OP.FEATURE_SETS, **{f"L{L}+q": (L, True, False) for L in layers}}
     torch.manual_seed(0)
     model, lora = load_model(a.ckpt)
-    fit = OP.load_rows(a.shard, a.fit_rows, a.fit_offset, None)
+    fit = OP.load_rows(a.fit_shard or a.shard, a.fit_rows, a.fit_offset, None)
     test = OP.load_rows(a.shard, a.rows_per_task, a.row_offset, None)
     # interleave tasks so every 16-row batch mixes them (training batches do)
     by = {}
@@ -375,7 +375,7 @@ def worker(a):
             for v in d:
                 rec[f"{v}_cos"] = cos(d[v], afull[v])
             accum_out.append(rec)
-    json.dump(dict(tag=a.tag, ckpt=a.ckpt, shard=a.shard, lora=lora, settings=settings, K=a.k, KB=KB,
+    json.dump(dict(tag=a.tag, ckpt=a.ckpt, shard=a.shard, fit_shard=a.fit_shard or a.shard, lora=lora, settings=settings, K=a.k, KB=KB,
                    row_offset=a.row_offset, rows_per_task=a.rows_per_task, fit_offset=a.fit_offset, fit_rows=a.fit_rows,
                    rows=rows_out, batches=batch_out, accum=accum_out), open(a.out, "w"))
     log(f"wrote {a.out}")
@@ -456,6 +456,7 @@ def main():
     ap.add_argument("--ckpt", default="")
     ap.add_argument("--tag", default="ckpt")
     ap.add_argument("--shard", default="")
+    ap.add_argument("--fit-shard", default="", help="shard of the router-fit rows (default --shard); training rows")
     ap.add_argument("--settings", default="2st_7_16,1st_7_10")
     ap.add_argument("--row-offset", type=int, default=1464)
     ap.add_argument("--rows-per-task", type=int, default=32)
