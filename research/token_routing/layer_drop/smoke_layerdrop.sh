@@ -22,7 +22,10 @@ mkdir -p "$D/logs" "$TMPDIR" "$TRITON_CACHE_DIR"
 cd "$ROOT"
 RULE="--st-keep-mode gold_plus_random --st-keep-frac 0.6667 --st-keep-token-rule first_last --st-keep-token-k 0.05 --st-kept-doc-k 0.5 --st-keep-token-min 32 --st-header-extra-tokens 8 --st-drop-slots --attn-backend flash_2"
 LD="--layer-drop-p 0.25"
+GS_STATIC=0.0845,0.0236,0.0304,0.0283,0.0256,0.0325,0.0426,0.0372,0.0249,0.0267,0.0512,0.0508,0.0314,0.0255,0.0491,0.0459,0.0204,0.0188,0.0316,0.0236,0.0083,0.0073,0.0136,0.0118,0.0040,0.0034,0.0056,0.0102,0.0073,0.0095,0.0218,0.0876
+GS_HI=$(seq -s, 0 31)
 for arm in $ARMS; do
+  PROF=""; case $arm in *_prof) PROF="--torch-profile" ;; esac
   case $arm in
     dense) V=full; X="" ;;
     dense_ld25) V=full; X="$LD" ;;
@@ -30,6 +33,11 @@ for arm in $ARMS; do
     tier67_ld25) V=softtoken; X="$RULE $LD" ;;
     dense_ldlin) V=full; X="--layer-drop-p 0.4 --layer-drop-schedule linear --layer-drop-exclude-first 4 --layer-drop-exclude-last 2" ;;
     dense_fix3) V=full; X="--train-skip-layers 20,24,28" ;;  # three GatedDeltaNet blocks
+    # grad layer select A/B (2026-10-28): static top-8 = 31,0,10,11,14,15,6,7 (cut at block 0 every step) vs the top
+    # 8 blocks only (cut at 24); *_prof = the same with --torch-profile (top CUDA ops over steps 3-4)
+    dense_prof) V=full; X="" ;;
+    gsu25st|gsu25st_prof) V=full; X="--grad-select-frac 0.25 --grad-select-mode update --grad-select-rank static --grad-select-static-energy $GS_STATIC" ;;
+    gsu25hi) V=full; X="--grad-select-frac 0.25 --grad-select-mode update --grad-select-rank static --grad-select-static-energy $GS_HI" ;;
     tier67_ldlin) V=softtoken; X="$RULE --layer-drop-p 0.4 --layer-drop-schedule linear --layer-drop-exclude-first 4 --layer-drop-exclude-last 2" ;;
     *) echo "unknown arm $arm"; exit 2 ;;
   esac
@@ -42,7 +50,7 @@ for arm in $ARMS; do
     --run-name "$run" --base-checkpoint "$D/base/q35-4b-base-markerfix/model_and_optim" \
     --data "$D/shards/mt4s488" --work-dir "$D/work/$run" --save-folder "$D/save/$run" \
     --seq-len 10240 --global-batch 16 --micro-batch-instances 2 --epochs 1 --lr 5e-6 --seed 0 \
-    --max-steps "$MAX_STEPS" --no-final-checkpoint --no-compile $X >> "$D/logs/$arm.log" 2>&1
+    --max-steps "$MAX_STEPS" --no-final-checkpoint --no-compile $X $PROF >> "$D/logs/$arm.log" 2>&1
   echo "=== $arm exit $?" | tee -a "$D/logs/$arm.log"
   [ -f "$D/save/$run/flops.json" ] && cat "$D/save/$run/flops.json" >> "$D/logs/$arm.log"
 done
