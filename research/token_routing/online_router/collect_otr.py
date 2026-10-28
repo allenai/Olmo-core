@@ -19,7 +19,8 @@ import subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 BEAKER = os.path.expanduser("~/.local/bin/beaker")
 SCORE_RE = re.compile(r"\[ladder:([a-z_]+)@(\d+k)\] ([a-z0-9_]+)=(-?[0-9.]+) \(n=(\d+)")
-FLOP_RE = re.compile(r"'actual_pflops': ([0-9.]+), 'dense_equivalent_pflops': ([0-9.]+).*?'overhead_pflops': (-?[0-9.]+), 'steps': (\d+)")
+FLOP_RE = re.compile(r"'actual_pflops': ([0-9.]+), 'dense_equivalent_pflops': ([0-9.]+)(.*?)'steps': (\d+)")
+OVERHEAD_RE = re.compile(r"'overhead_pflops': (-?[0-9.]+)")  # its position in the summary dict varies (layer_drop_run_frac)
 
 
 def logs(ex):
@@ -79,8 +80,9 @@ def main():
     runs = {}
     for name, r in st["runs"].items():
         m = FLOP_RE.search(logs(r["ex"]))
+        ov = OVERHEAD_RE.search(m.group(3)) if m else None
         runs[name] = dict(r, pf=float(m.group(1)) if m else None, dense_eq=float(m.group(2)) if m else None,
-                          overhead=float(m.group(3)) if m else None, steps=int(m.group(4)) if m else None, scores={})
+                          overhead=float(ov.group(1)) if ov else None, steps=int(m.group(4)) if m else None, scores={})
     for ename, e in st["evals"].items():
         for m in SCORE_RE.finditer(logs(e["ex"])):
             runs[e["train_run"]]["scores"][(m.group(1), m.group(2))] = (float(m.group(4)), int(m.group(5)), e["ex"],

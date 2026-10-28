@@ -2,7 +2,7 @@
 experiment: learned_router
 title: End-to-end learned token-drop router -- now ONLINE at train time (ridge refit every step from the training backward; + mid-stack token exit), plus the earlier frozen-checkpoint routers and gradprobe
 status: active
-updated: 2026-10-22
+updated: 2026-10-25
 branch: claude/online-router-1bc01a (online router, pushed); earlier: prasann/flopdrop_clean (gradprobe), prasann/landmark (frozen routers)
 launcher: research/token_routing/online_router/launch_otr.py (online, Beaker); research/token_routing/learned_router/train_e2e_router.py (frozen, legacy)
 records:
@@ -25,7 +25,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/f8k-otr (online); https://wandb.ai/prasann-uc-berkeley-electrical-engineering-computer-sciences/memory-networks/groups/router-e2e (frozen)
-next_step: ONLINE ROUTER (2026-10-23). DONE (record "Follow-up ablations"): split curve M1-M12 with 2-3 seeds = depth threshold at block 7 (full-attention hypothesis falsified; M7 cheapest on the plateau); target gnorm ~ gxh > mix > dh ~ random; exploration 0-50% irrelevant; keep 5% ~ 10% (-8% PF); router + layer skip (cdab8480a) -0.03 contra for -5% PF; otr10M8-s1952 (633 PF) ~ dense-s1464 (1,160 PF). OPEN: per-task -tdp evals + remaining mt11/de16/sd1 Beaker evals (pending in the jupiter backlog) -> collect_otr.py --rows, filter rows already in ~/ops_state/results.jsonl, ops result add --check; proposed next: otr05M7, otr10M7de16 on Lambda node02 (dirs OLMo-core-otr2/otr3).
+next_step: ONLINE ROUTER (2026-10-25). Rule: no full-context steps (de0); cheap arms get more fresh rows. mt4s1464 LR 5e-6, 2 seeds each: (a) BEST QUALITY: two-stage drop --st-otr-stages 7:0.2,16:0.07 = 0.956/0.909/0.644/0.791 at 0.31x (dense 0.956/0.936/0.630/0.719; one-stage router 0.937/0.902/0.623/0.682 at 0.30x), 60.8 GiB. (b) BEST COMPUTE+MEMORY: LoRA r64 early stack + freeze at 75% = 0.934/0.901/0.622/0.737 at 0.23x, 48.4 GiB. (c) combined (LoRA r64 + freeze 75% + two-stage, 2 seeds): 0.938/0.922/0.610/0.765 at 0.24x, 48.9 GiB; sweep winners (2 seeds): stage-2 10% (7:0.2,16:0.10) 0.950/0.918/0.634/0.770 at 0.25x, 3-stage (+24:0.03) 0.947/0.916/0.622/0.760 at 0.23x. On mt11 freezing the LoRA stack costs xabsence early or late (fa75 0.544, fa85 0.584); NO freeze recovers it: LoRA r64 + two-stage + floor = 0.751 mean9 at 0.38x (2 seeds, +0.045 vs dense interp; = best mt11 arm at the LoRA memory peak). Stage-2 10% no freeze on mt11: 0.740. Universal recipe: LoRA r64 + 7:0.2,16:0.07, no freeze (mt4 0.26x, 2 seeds: 0.945/0.912/0.636/0.726, ~49 GiB). mt11s720 + floor 16 at 5e-6: freeze-half 0.750 (0.36x), LoRA r64 0.748 (0.37x), r20to7 0.748 (0.43x), sk3 0.735 (0.40x), vs dense interp ~0.70. Layer skip (sk3), MoD, adaptive mass, block-16 target, progressive freeze: neutral or worse (record). LoRA r64 + per-task neutral. Recipe compute curves (record): mt4 leads dense at matched PF at s488 / s976 / s1464 (FLOPs-to-match ~3.5x); mt11 s240-s960 leads by +0.04-0.05 mean9 (~1.7x). Recipe + per-task on mt11 neutral (2 seeds). IN FLIGHT: none of mine (parent: dense mt11 s240 at 32 / 64 steps for the s240 matched read). Code: claude/online-router-1bc01a (5e1202e4b+).
 ---
 
 # learned_router
@@ -89,6 +89,31 @@ budget beats dense at matched FLOPs. Design + numbers: `records/online-token-rou
 - Launch bugs fixed 2026-10-22: wandb finish(quiet=) TypeError at shutdown (0b5b21ace; also killed the parent's tdb
   runs before export) and a trainer argparse check that rejected the online rule (c5f8106dc + a variant-wiring
   check, research/token_routing/online_router/check_variant_wiring.py). Arms relaunched on c5f8106dc.
+- **Max train length at fixed 80 GB (A', 2026-10-25; 2 x A100, FSDP-2, full AC; `--mem-probe-steps`, 8b8a79d15).**
+  Steady routed step: dense ~124k tokens; otr10M7de0 ~177k (1.43x); recipe ~205k (1.65x); LoRA-all + two-stage router
+  ~266k (2.15x). Fixed state is 27.3 / 27.8 / 22.9 / 13.2 GiB; the transient is 0.386 vs ~0.25 GiB per 1k tokens.
+  **Today all methods are capped at ~165k (1.33x)** by the dense passes, i.e. the trainer dry run and router warmup
+  step 1; all OOM at step 0 at 196k / 256k. The routed peak is the recompute of full-length blocks 0-6, not the
+  residual stream. Next (B'): route the dry run and warmup, then chunk the block 0-6 recompute. Record section
+  "Memory vs train length"; raw output in research/token_routing/online_router/memprobe/.
+  **B' round 1 (same day):** `--st-otr-warmup-random --skip-dry-run` (c5676a12f) remove both dense passes, and
+  `--ffn-chunk-tokens 8192` (172f12f68, exact) chunks the FFN recompute. Max T is now: dense+chunk ~148k; recipe ~234k
+  (1.58x; 196k fits at 70.3 GiB); LoRA-all ~300k (2.0x); otr10M7de0 ~210k. Next binding term: autograd C++ backward
+  buffers, 22-32 GiB; probe them with stacks="all". Routed-warmup quality check: free (0.947 / 0.924 / 0.614 / 0.699
+  at 291 PF vs the recipe's 0.945 / 0.912 / 0.636 / 0.726).
+  **B' round 2:** those buffers were FLA's GDN backward rebuilding every chunk state at once.
+  `--gdn-segment-tokens 16384` (a558feb2b; exact, GPU-tested) segments the GDN, carrying state between segments.
+  **Max T with all four flags: dense ~165k; otr10M7de0 ~250k; recipe ~300k (1.8x); LoRA-all ~400k (2.4x).**
+- **Adapter scope (B):** LoRA r64 on all 32 blocks at LR 1e-5 scores 0.946 / 0.908 / 0.625 / 0.719 at 261 PF, matching
+  the recipe (296 PF) at 0.88x its compute (one seed). At 5e-6 it loses outlier (0.686). K=16 ≈ recipe; K=24 dips
+  (likely noise). Rank 128 at K=32 gives no gain. 2 seeds at 1e-5: 0.940 / 0.913 / 0.623 / 0.703. The recipe at 1e-5
+  loses oolong (0.565), so the K=7 recipe stays at 5e-6.
+  **mt11s720: LoRA-all at LR 1e-5 scores mean9 0.755 at 232 PF, vs dense s240 at the same 232 PF: 0.697 (+0.058;
+  outlier +0.14, oolong -0.02).** **Seed 1: 0.768. The 2-seed mean is 0.762, +0.065 over dense at the same 232 PF
+  (outlier +0.16, oolong +0.01); FLOPs-to-match ~2.4x. NEW RECIPE: `--st-otr-early-lora 64
+  --st-otr-early-lora-blocks 32 --st-otr-stages 7:0.2,16:0.07 --st-otr-dense-every 0 [--st-otr-min-per-doc 16 on mt11]`,
+  LR 1e-5** (launch_otr arm lora64K32r20to7f16). The mt4 curve gives FLOPs-to-match 4.4x; LR 2e-5 overshoots (outlier
+  0.653). Running: the max-T config at 8k (114758) and stage 2 at 10% (114759).
 
 ## Current best numbers
 All are teacher-forced answer-CE deltas on frozen dense 4B checkpoints. Nothing here is generation-graded.

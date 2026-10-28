@@ -1,0 +1,121 @@
+queue empty after 3 checks
+== f8k-memprobe-dense-T10240-lam
+[mem-snapshot] peak live 50.57 GB in 3233 blocks; top sites:
+[mem-snapshot]     9.02 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.02 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.02 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.83 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-otr10M7de0-T10240-lam
+[mem-snapshot] peak live 50.96 GB in 3266 blocks; top sites:
+[mem-snapshot]     9.04 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.04 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.04 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.86 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-recipe-T10240-lam
+[mem-snapshot] peak live 39.22 GB in 3366 blocks; top sites:
+[mem-snapshot]     6.45 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.45 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-loraall-T10240-lam
+[mem-snapshot] peak live 9.97 GB in 83 blocks; top sites:
+[mem-snapshot]     6.02 GB  cross_entropy_loss.py:106 fused_linear_cross_entropy_loss
+[mem-snapshot]     2.37 GB  model.py:3042 forward
+[mem-snapshot]     1.21 GB  residual_stream.py:19 forward
+[mem-snapshot]     0.08 GB  online_token_router.py:725 full_features
+== f8k-memprobe-dense-T16384-lam
+[mem-snapshot] peak live 50.57 GB in 3233 blocks; top sites:
+[mem-snapshot]     9.02 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.02 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.02 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.83 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-otr10M7de0-T16384-lam
+[mem-snapshot] peak live 50.96 GB in 3266 blocks; top sites:
+[mem-snapshot]     9.04 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.04 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.04 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.86 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-recipe-T16384-lam
+[mem-snapshot] peak live 39.22 GB in 3366 blocks; top sites:
+[mem-snapshot]     6.45 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.45 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-loraall-T16384-lam
+[mem-snapshot] peak live 10.58 GB in 89 blocks; top sites:
+[mem-snapshot]     6.02 GB  cross_entropy_loss.py:106 fused_linear_cross_entropy_loss
+[mem-snapshot]     2.37 GB  model.py:3042 forward
+[mem-snapshot]     1.37 GB  residual_stream.py:19 forward
+[mem-snapshot]     0.40 GB  online_token_router.py:1518 begin_step
+== f8k-memprobe-dense-T32768-lam
+[mem-snapshot] peak live 50.57 GB in 3233 blocks; top sites:
+[mem-snapshot]     9.02 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.02 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.02 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.83 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-otr10M7de0-T32768-lam
+[mem-snapshot] peak live 50.96 GB in 3266 blocks; top sites:
+[mem-snapshot]     9.04 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.04 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.04 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.86 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-recipe-T32768-lam
+[mem-snapshot] peak live 39.22 GB in 3366 blocks; top sites:
+[mem-snapshot]     6.45 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.45 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-loraall-T32768-lam
+[mem-snapshot] peak live 14.40 GB in 135 blocks; top sites:
+[mem-snapshot]     5.52 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     3.97 GB  residual_stream.py:19 forward
+[mem-snapshot]     1.03 GB  layer_norm.py:308 forward
+[mem-snapshot]     1.00 GB  early_lora.py:44 _lora_hook
+== f8k-memprobe-dense-T65536-lam
+[mem-snapshot] peak live 50.57 GB in 3233 blocks; top sites:
+[mem-snapshot]     9.02 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.02 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.02 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.83 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-otr10M7de0-T65536-lam
+[mem-snapshot] peak live 50.96 GB in 3266 blocks; top sites:
+[mem-snapshot]     9.04 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     9.04 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     9.04 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     7.86 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-recipe-T65536-lam
+[mem-snapshot] peak live 39.22 GB in 3366 blocks; top sites:
+[mem-snapshot]     6.45 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.45 GB  adamw.py:206 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:207 _step_foreach
+[mem-snapshot]     6.45 GB  adamw.py:82 foreach_adamw_step
+== f8k-memprobe-loraall-T65536-lam
+[mem-snapshot] peak live 26.76 GB in 135 blocks; top sites:
+[mem-snapshot]     8.93 GB  residual_stream.py:19 forward
+[mem-snapshot]     7.40 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     2.30 GB  layer_norm.py:308 forward
+[mem-snapshot]     2.24 GB  early_lora.py:44 _lora_hook
+== f8k-memprobe-dense-T131072-lam
+[mem-snapshot] peak live 53.45 GB in 89 blocks; top sites:
+[mem-snapshot]    19.38 GB  residual_stream.py:19 forward
+[mem-snapshot]    11.38 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.75 GB  feed_forward.py:171 forward
+[mem-snapshot]     5.00 GB  layer_norm.py:308 forward
+== f8k-memprobe-otr10M7de0-T131072-lam
+[mem-snapshot] peak live 54.24 GB in 108 blocks; top sites:
+[mem-snapshot]    19.34 GB  residual_stream.py:19 forward
+[mem-snapshot]    11.39 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.74 GB  feed_forward.py:171 forward
+[mem-snapshot]     4.99 GB  layer_norm.py:308 forward
+== f8k-memprobe-recipe-T131072-lam
+[mem-snapshot] peak live 55.11 GB in 115 blocks; top sites:
+[mem-snapshot]    19.34 GB  residual_stream.py:19 forward
+[mem-snapshot]    11.39 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.74 GB  feed_forward.py:171 forward
+[mem-snapshot]     4.99 GB  layer_norm.py:308 forward
+== f8k-memprobe-loraall-T131072-lam
+[mem-snapshot] peak live 52.69 GB in 135 blocks; top sites:
+[mem-snapshot]    19.34 GB  residual_stream.py:19 forward
+[mem-snapshot]    11.36 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     4.99 GB  layer_norm.py:308 forward
+[mem-snapshot]     4.85 GB  early_lora.py:44 _lora_hook

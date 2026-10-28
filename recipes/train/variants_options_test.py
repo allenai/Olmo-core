@@ -58,3 +58,36 @@ def test_every_trainer_layer_drop_flag_is_a_layerdrop_option_field():
     assert not missing, f"layer-drop flags parsed by the trainer but dropped by options_from_namespace: {missing}"
     used = set(re.findall(r"\bo\.((?:layer_drop|train_skip)_[a-z0-9_]+)", open(VARIANTS).read()))
     assert not (used - fields), f"variants.py reads layer-drop options that are not fields: {sorted(used - fields)}"
+
+
+def test_no_variant_defines_a_method_twice():
+    """A second ``def`` of the same name in a class silently replaces the first. On 2026-10-24 SoftToken had two
+    ``export_config`` methods; the later one won, so the ``early_lora`` block never reached config.json and every eval
+    loaded the LoRA checkpoints as plain models (a DCP load reads only the keys the model asks for: the adapters were
+    dropped without an error)."""
+    tree = ast.parse(open(VARIANTS).read())
+    dups = []
+    for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+        seen = set()
+        for node in cls.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name in seen:
+                    dups.append(f"{cls.name}.{node.name}")
+                seen.add(node.name)
+    assert not dups, dups
+
+
+def test_every_trainer_ffn_width_flag_is_an_ffnwidth_option_field():
+    flags = {f.replace("-", "_") for f in re.findall(r'"--(ffn-width-[a-z-]+)"', open(TRAINER).read())}
+    assert flags and flags <= _option_fields("FFNWidthOptions"), flags - _option_fields("FFNWidthOptions")
+
+
+def test_every_trainer_ffn_chunk_flag_is_an_ffnchunk_option_field():
+    flags = {f.replace("-", "_") for f in re.findall(r'"--(ffn-chunk-[a-z-]+)"', open(TRAINER).read())}
+    assert flags and flags <= _option_fields("FFNChunkOptions"), flags - _option_fields("FFNChunkOptions")
+
+
+def test_every_trainer_lora_flag_is_a_lora_option_field():
+    flags = {f.replace("-", "_") for f in re.findall(r'"--(lora-[a-z-]+)"', open(TRAINER).read())}
+    assert flags and flags <= _option_fields("LoRAOptions"), flags - _option_fields("LoRAOptions")
+
