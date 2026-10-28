@@ -36,9 +36,9 @@ def format_pixmo_clocks_row(
     if hour == 0:
         hour_str = "12"
         am_pm = "AM"
-    elif hour > 12:
+    elif hour >= 12:
         am_pm = "PM"
-        hour_str = hour - 12
+        hour_str = 12 if hour == 12 else hour - 12
     else:
         hour_str = hour
         am_pm = "AM"

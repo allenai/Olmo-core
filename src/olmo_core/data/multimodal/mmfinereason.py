@@ -159,20 +159,29 @@ class MMFineReasonDataset:
             return None
 
         cols = self._data.column_names
+        for active, col in (
+            (cfg.sources is not None, "source"),
+            (cfg.max_pass_rate is not None, "pass_rate"),
+            (cfg.require_consistent is not None, "is_consistent"),
+        ):
+            if active and col not in cols:
+                raise ValueError(
+                    f"MMFineReason filter requested but {cfg.dataset_path!r} has no {col!r} column"
+                )
         keep = np.ones(len(self._data), dtype=bool)
-        if cfg.sources is not None and "source" in cols:
+        if cfg.sources is not None:
             wanted = set(cfg.sources)
             keep &= np.array(
                 [s in wanted for s in self._data["source"]],
                 dtype=bool,
             )
-        if cfg.max_pass_rate is not None and "pass_rate" in cols:
+        if cfg.max_pass_rate is not None:
             rates = np.array(
                 [np.inf if r is None else float(r) for r in self._data["pass_rate"]],
                 dtype=np.float64,
             )
             keep &= rates <= cfg.max_pass_rate
-        if cfg.require_consistent is not None and "is_consistent" in cols:
+        if cfg.require_consistent is not None:
             keep &= np.array(
                 [bool(v) == cfg.require_consistent for v in self._data["is_consistent"]],
                 dtype=bool,

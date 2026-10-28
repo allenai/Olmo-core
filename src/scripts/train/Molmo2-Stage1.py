@@ -72,7 +72,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from olmo_core.config import Config, DType
 from olmo_core.data.multimodal import (
@@ -80,7 +80,6 @@ from olmo_core.data.multimodal import (
     GuiSynDatasetConfig,
     MixtureDataLoader,
     MultimodalCollatorConfig,
-    MultimodalDataLoader,
     NvidiaSynthOcrDatasetConfig,
     OcrCaptionTarsDatasetConfig,
     OlmOcrMixDatasetConfig,
@@ -1344,7 +1343,7 @@ def _build_mixture_sources(tokenizer, config: ExperimentConfig):
         names += pointing_names
 
     if n > 0:
-        datasets.append(Tulu4DatasetConfig().build(tokenizer))
+        datasets.append(Tulu4DatasetConfig(max_sequence_length=SEQUENCE_LENGTH).build(tokenizer))
         weights.append(n)
         names.append("tulu4")
 
@@ -1395,6 +1394,8 @@ def _build_mixture_sources(tokenizer, config: ExperimentConfig):
 
 def train(config: ExperimentConfig):
     seed_all(config.init_seed)
+    # `--data_seed` controls all data randomness, including the caption dataset's.
+    config.dataset.seed = config.data_seed
 
     tokenizer = _load_tokenizer(config.model_size, config.init_from)
 
@@ -1417,41 +1418,25 @@ def train(config: ExperimentConfig):
     dp_pg = train_module.dp_process_group
     dp_world_size, dp_rank = get_world_size(dp_pg), get_rank(dp_pg)
 
-    data_loader: Union[MixtureDataLoader, MultimodalDataLoader]
-    if (
-        config.pointing_rate > 0
-        or config.nlp_rate > 0
-        or config.ocr_rate > 0
-        or config.academic_rate > 0
-        or config.clock_rate > 0
-    ):
-        datasets, weights, names = _build_mixture_sources(tokenizer, config)
-        data_loader = MixtureDataLoader(
-            datasets,
-            weights,
-            collator,
-            dataset_names=names,
-            work_dir=config.trainer.save_folder,
-            global_batch_size=config.global_batch_size,
-            seed=config.data_seed,
-            pack=config.pack_sequences,
-            pack_max_crops=config.pack_max_crops if config.pack_sequences else None,
-            pack_buffer_size=config.pack_buffer_size,
-            pack_image_weight=config.pack_image_weight,
-            prefetch_workers=config.data_prefetch_workers,
-            dp_world_size=dp_world_size,
-            dp_rank=dp_rank,
-        )
-    else:
-        data_loader = MultimodalDataLoader(
-            config.dataset.build(tokenizer),
-            collator,
-            work_dir=config.trainer.save_folder,
-            global_batch_size=config.global_batch_size,
-            seed=config.data_seed,
-            dp_world_size=dp_world_size,
-            dp_rank=dp_rank,
-        )
+    # Also for caption-only runs (every auxiliary rate 0): one source, so packing and prefetching
+    # still apply and an ablation changes the mixture only, not the batching.
+    datasets, weights, names = _build_mixture_sources(tokenizer, config)
+    data_loader = MixtureDataLoader(
+        datasets,
+        weights,
+        collator,
+        dataset_names=names,
+        work_dir=config.trainer.save_folder,
+        global_batch_size=config.global_batch_size,
+        seed=config.data_seed,
+        pack=config.pack_sequences,
+        pack_max_crops=config.pack_max_crops if config.pack_sequences else None,
+        pack_buffer_size=config.pack_buffer_size,
+        pack_image_weight=config.pack_image_weight,
+        prefetch_workers=config.data_prefetch_workers,
+        dp_world_size=dp_world_size,
+        dp_rank=dp_rank,
+    )
 
     trainer = config.trainer.build(train_module, data_loader)
 
