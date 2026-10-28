@@ -175,9 +175,25 @@ class TransformerBlockConfig(ModuleConfig):
         Use :data:`sequence_mixer` instead. This field is only kept for backwards compatibility
         with old configs that used ``attention: AttentionConfig``.
     """
-    layer_norm: Optional[LayerNormConfig] = None
+    attention_norm: Optional[LayerNormConfig] = None
     """
-    The layer norm config.
+    The attention layer norm config.
+    """
+    feed_forward_norm: Optional[LayerNormConfig] = None
+    """
+    The feed-forward layer norm config.
+    """
+    layer_norm: InitVar[Optional[LayerNormConfig]] = None
+    """
+    .. deprecated::
+        Use :data:`attention_norm` and :data:`feed_forward_norm` instead. This field is only
+        kept for backwards compatibility with old configs that used a single ``layer_norm`` for
+        both norms. When provided, it is copied into both :data:`attention_norm` and
+        :data:`feed_forward_norm`.
+
+        Because this is an ``InitVar`` it is not serialized, so dotlist/CLI overrides targeting
+        it (e.g. ``layer_norm.eps=1e-6``) no longer apply after merging. Override
+        :data:`attention_norm` and :data:`feed_forward_norm` directly instead.
     """
     feed_forward: Optional[FeedForwardConfig] = None
     """
@@ -211,8 +227,14 @@ class TransformerBlockConfig(ModuleConfig):
     A scaling factor applied to the feed-forward (MLP) output before adding it to the residual stream.
     """
 
-    def __post_init__(self, attention: Optional[AttentionConfig] = None):
-        # Handle backwards compatibility: old configs used `attention` instead of `sequence_mixer`.
+    def __post_init__(
+        self,
+        attention: Optional[AttentionConfig] = None,
+        layer_norm: Optional[LayerNormConfig] = None,
+    ):
+        # Handle backwards compatibility: old configs used `attention` instead of
+        # `sequence_mixer`, and used a single `layer_norm` for both the attention and
+        # feed-forward norms.
         if attention is not None:
             if self.sequence_mixer is not UNSET:
                 raise OLMoConfigurationError(
@@ -220,6 +242,15 @@ class TransformerBlockConfig(ModuleConfig):
                     "Use 'sequence_mixer' only (the 'attention' field is deprecated)."
                 )
             self.sequence_mixer = attention
+        if layer_norm is not None:
+            if self.attention_norm is not None or self.feed_forward_norm is not None:
+                raise OLMoConfigurationError(
+                    "Cannot specify both 'layer_norm' and the split norm fields in "
+                    "TransformerBlockConfig. Use 'attention_norm' and 'feed_forward_norm' "
+                    "for new configs."
+                )
+            self.attention_norm = layer_norm
+            self.feed_forward_norm = layer_norm
         if self.sequence_mixer is UNSET:
             raise OLMoConfigurationError(
                 "TransformerBlockConfig requires 'sequence_mixer' to be set."
@@ -301,23 +332,26 @@ class TransformerBlockConfig(ModuleConfig):
 
         # Block attention params.
         block_params += self.sequence_mixer.num_params(d_model)
-        if self.layer_norm is not None:
-            block_params += self.layer_norm.num_params(d_model)
+        if self.attention_norm is not None:
+            block_params += self.attention_norm.num_params(d_model)
 
         # Block feed forward (dense and/or sparse).
         if self.feed_forward is not None:
             block_params += self.feed_forward.num_params(d_model)
-            if self.layer_norm is not None:
-                block_params += self.layer_norm.num_params(d_model)
+            if self.feed_forward_norm is not None:
+                block_params += self.feed_forward_norm.num_params(d_model)
         if self.feed_forward_moe is not None:
             block_params += self.feed_forward_moe.num_params(d_model)
-            if self.layer_norm is not None:
-                block_params += self.layer_norm.num_params(d_model)
+            if self.feed_forward_norm is not None:
+                block_params += self.feed_forward_norm.num_params(d_model)
 
-        # Two extra norms for Peri-LN block type.
+        # Two extra norms for Peri-LN block type: a post-attention norm built from
+        # `attention_norm` and a post-feed-forward norm built from `feed_forward_norm`.
         if self.name == TransformerBlockType.peri_norm:
-            assert self.layer_norm is not None
-            block_params += 2 * self.layer_norm.num_params(d_model)
+            assert self.attention_norm is not None
+            assert self.feed_forward_norm is not None
+            block_params += self.attention_norm.num_params(d_model)
+            block_params += self.feed_forward_norm.num_params(d_model)
 
         return block_params
 
@@ -1775,7 +1809,8 @@ class TransformerConfig(ModelConfig):
             ),
             feed_forward=feed_forward,
             feed_forward_moe=feed_forward_moe,
-            layer_norm=layer_norm,
+            attention_norm=layer_norm,
+            feed_forward_norm=layer_norm,
         )
 
         if block_mods and kwargs.get("block_overrides"):
@@ -1978,7 +2013,8 @@ class TransformerConfig(ModelConfig):
                 dtype=dtype,
                 activation=activation,
             ),
-            layer_norm=layer_norm,
+            attention_norm=layer_norm,
+            feed_forward_norm=layer_norm,
         )
 
         global_block = local_block.copy()

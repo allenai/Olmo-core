@@ -37,7 +37,8 @@ def _build_block(
         n_layers=1,
         sequence_mixer=attn_cfg,
         feed_forward=ff_cfg,
-        layer_norm=ln_cfg,
+        attention_norm=ln_cfg,
+        feed_forward_norm=ln_cfg,
         init_device=init_device,
     )
 

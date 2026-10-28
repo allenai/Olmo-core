@@ -101,7 +101,8 @@ class TransformerBlock(TransformerBlockBase):
     :param block_idx: The index/position of the block within the model. Ranges from 0 to ``n_layers - 1``.
     :param sequence_mixer: The sequence mixer module config (e.g. attention, recurrent, convolution, etc.).
     :param feed_forward: The feed forward module config.
-    :param layer_norm: The layer norm config for both the attention LN and the feed forward LN.
+    :param attention_norm: The layer norm config for the attention LN.
+    :param feed_forward_norm: The layer norm config for the feed forward LN.
     :param dropout: Dropout probability.
     :param init_device: The device used when initializing parameters.
     """
@@ -114,7 +115,8 @@ class TransformerBlock(TransformerBlockBase):
         n_layers: int,
         sequence_mixer: SequenceMixerConfig,
         feed_forward: FeedForwardConfig,
-        layer_norm: LayerNormConfig,
+        attention_norm: LayerNormConfig,
+        feed_forward_norm: LayerNormConfig,
         dropout: float = 0.0,
         masked_dropout: float = 0.0,
         attention_residual_alpha: float = 1.0,
@@ -132,12 +134,12 @@ class TransformerBlock(TransformerBlockBase):
         self.attention = sequence_mixer.build(
             d_model, layer_idx=block_idx, n_layers=n_layers, init_device=init_device, cache=cache
         )
-        self.attention_norm = layer_norm.build(d_model, init_device=init_device)
+        self.attention_norm = attention_norm.build(d_model, init_device=init_device)
         self.attention_residual_stream = ResidualStream(
             alpha=attention_residual_alpha, dropout=dropout, masked_dropout=masked_dropout
         )
         self.feed_forward = feed_forward.build(d_model=d_model, init_device=init_device)
-        self.feed_forward_norm = layer_norm.build(d_model, init_device=init_device)
+        self.feed_forward_norm = feed_forward_norm.build(d_model, init_device=init_device)
         self.feed_forward_residual_stream = ResidualStream(
             alpha=feed_forward_residual_alpha, dropout=dropout, masked_dropout=masked_dropout
         )
@@ -260,7 +262,8 @@ class LayerNormScaledTransformerBlock(TransformerBlock):
         n_layers: int,
         sequence_mixer: SequenceMixerConfig,
         feed_forward: FeedForwardConfig,
-        layer_norm: LayerNormConfig,
+        attention_norm: LayerNormConfig,
+        feed_forward_norm: LayerNormConfig,
         dropout: float = 0.0,
         attention_residual_alpha: float = 1.0,
         feed_forward_residual_alpha: float = 1.0,
@@ -273,7 +276,8 @@ class LayerNormScaledTransformerBlock(TransformerBlock):
             n_layers=n_layers,
             sequence_mixer=sequence_mixer,
             feed_forward=feed_forward,
-            layer_norm=layer_norm,
+            attention_norm=attention_norm,
+            feed_forward_norm=feed_forward_norm,
             dropout=dropout,
             attention_residual_alpha=attention_residual_alpha,
             feed_forward_residual_alpha=feed_forward_residual_alpha,
@@ -334,7 +338,8 @@ class PeriNormTransformerBlock(TransformerBlock):
         n_layers: int,
         sequence_mixer: SequenceMixerConfig,
         feed_forward: FeedForwardConfig,
-        layer_norm: LayerNormConfig,
+        attention_norm: LayerNormConfig,
+        feed_forward_norm: LayerNormConfig,
         dropout: float = 0.0,
         attention_residual_alpha: float = 1.0,
         feed_forward_residual_alpha: float = 1.0,
@@ -347,15 +352,16 @@ class PeriNormTransformerBlock(TransformerBlock):
             n_layers=n_layers,
             sequence_mixer=sequence_mixer,
             feed_forward=feed_forward,
-            layer_norm=layer_norm,
+            attention_norm=attention_norm,
+            feed_forward_norm=feed_forward_norm,
             dropout=dropout,
             attention_residual_alpha=attention_residual_alpha,
             feed_forward_residual_alpha=feed_forward_residual_alpha,
             init_device=init_device,
             cache=cache,
         )
-        self.post_attention_norm = layer_norm.build(d_model, init_device=init_device)
-        self.post_feed_forward_norm = layer_norm.build(d_model, init_device=init_device)
+        self.post_attention_norm = attention_norm.build(d_model, init_device=init_device)
+        self.post_feed_forward_norm = feed_forward_norm.build(d_model, init_device=init_device)
 
     def forward(
         self,
@@ -535,7 +541,8 @@ class MoETransformerBlock(TransformerBlockBase):
         n_layers: int,
         sequence_mixer: SequenceMixerConfig,
         feed_forward_moe: MoEConfig,
-        layer_norm: LayerNormConfig,
+        attention_norm: LayerNormConfig,
+        feed_forward_norm: LayerNormConfig,
         dropout: float = 0.0,
         init_device: str = "cpu",
         cache: Optional[BufferCache] = None,
@@ -550,11 +557,11 @@ class MoETransformerBlock(TransformerBlockBase):
         self.attention = sequence_mixer.build(
             d_model, layer_idx=block_idx, n_layers=n_layers, init_device=init_device, cache=cache
         )
-        self.attention_norm = layer_norm.build(d_model, init_device=init_device)
+        self.attention_norm = attention_norm.build(d_model, init_device=init_device)
         self.feed_forward_moe = feed_forward_moe.build(
             d_model=d_model, n_layers=n_layers, init_device=init_device, cache=cache
         )
-        self.feed_forward_norm = layer_norm.build(d_model, init_device=init_device)
+        self.feed_forward_norm = feed_forward_norm.build(d_model, init_device=init_device)
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
         self._ep_enabled = False
         self._tp_enabled = False
@@ -736,7 +743,8 @@ class MoEHybridTransformerBlockBase(MoETransformerBlock):
         d_model: int,
         n_layers: int,
         sequence_mixer: SequenceMixerConfig,
-        layer_norm: LayerNormConfig,
+        attention_norm: LayerNormConfig,
+        feed_forward_norm: LayerNormConfig,
         feed_forward: FeedForwardConfig,
         init_device: str = "cpu",
         **kwargs,
@@ -745,12 +753,13 @@ class MoEHybridTransformerBlockBase(MoETransformerBlock):
             d_model=d_model,
             n_layers=n_layers,
             sequence_mixer=sequence_mixer,
-            layer_norm=layer_norm,
+            attention_norm=attention_norm,
+            feed_forward_norm=feed_forward_norm,
             init_device=init_device,
             **kwargs,
         )
         self.feed_forward = feed_forward.build(d_model=d_model, init_device=init_device)
-        self.feed_forward_moe_norm = layer_norm.build(d_model, init_device=init_device)
+        self.feed_forward_moe_norm = feed_forward_norm.build(d_model, init_device=init_device)
         self._use_combined_forward: Optional[bool] = None
 
     @property
