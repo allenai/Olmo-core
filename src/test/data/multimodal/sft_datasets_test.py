@@ -637,6 +637,7 @@ def test_mmfinereason_rejects_filter_without_its_column(tmp_path):
     ],
 )
 def test_pixmo_clocks_am_pm_labels(monkeypatch, hour, expected):
+    pytest.importorskip("torchvision")  # imported lazily by the formatter; not in every CI image
     from PIL import Image
 
     from olmo_core.data.multimodal import pixmo_clocks
