@@ -456,6 +456,12 @@ def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.Vari
     ldrop_opts = ldrop.options_from_namespace(opts)
     if ldrop_opts.active:  # type: ignore[attr-defined]
         out.append((ldrop, ldrop_opts))
+    gsel = V.VARIANTS["gradselect"]
+    gsel_opts = gsel.options_from_namespace(opts)
+    if gsel_opts.active:  # type: ignore[attr-defined]
+        if ldrop_opts.active:  # type: ignore[attr-defined]
+            raise SystemExit("--grad-select-* and --train-skip-layers / --layer-drop-* both own the skip set: use one")
+        out.append((gsel, gsel_opts))
     fwidth = V.VARIANTS["ffnwidth"]
     fwidth_opts = fwidth.options_from_namespace(opts)
     if fwidth_opts.active:  # type: ignore[attr-defined]
@@ -1165,6 +1171,9 @@ def build_and_fit(opts: argparse.Namespace) -> None:
                     "layer_drop_exclude_first": opts.layer_drop_exclude_first,
                     "layer_drop_exclude_last": opts.layer_drop_exclude_last,
                     "layer_drop_rescale": opts.layer_drop_rescale,
+                    "grad_select_frac": opts.grad_select_frac,
+                    "grad_select_mode": opts.grad_select_mode,
+                    "grad_select_rank": opts.grad_select_rank,
                     "data": opts.data,
                 },
             ),
@@ -1609,6 +1618,34 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument(
         "--layer-drop-exclude-last", type=int, default=0, help="never drop the last K blocks"
+    )
+    # ---- gradient-ranked layer selection (olmo_core.nn.grad_layer_select; any arm, training only) ----
+    ap.add_argument(
+        "--grad-select-frac",
+        type=float,
+        default=0.0,
+        help="keep only this share of blocks per optimizer step, the ones with the most gradient energy (0 = off)",
+    )
+    ap.add_argument(
+        "--grad-select-mode",
+        choices=["update", "skip"],
+        default="update",
+        help="update: every block runs forward, only the selected ones get weight gradients (no backward below the "
+        "lowest one); skip: only the selected blocks run at all",
+    )
+    ap.add_argument(
+        "--grad-select-rank",
+        choices=["online", "static"],
+        default="online",
+        help="online: EMA of each block's measured gradient energy + exploration; static: --grad-select-static-energy",
+    )
+    ap.add_argument("--grad-select-explore", type=float, default=0.1, help="share of the slots drawn at random")
+    ap.add_argument("--grad-select-ema", type=float, default=0.9, help="EMA decay of the per-block energy")
+    ap.add_argument(
+        "--grad-select-static-energy", default="", help="static ranking: one energy per block, comma-separated"
+    )
+    ap.add_argument(
+        "--grad-select-always", default="", help="blocks selected every step (e.g. '0,31'; ranges allowed)"
     )
     ap.add_argument(
         "--layer-drop-rescale",

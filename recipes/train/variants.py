@@ -186,6 +186,24 @@ class FFNDropOptions(VariantOptions):
 
 
 @dataclass
+class GradSelectOptions(VariantOptions):
+    """gradselect: keep only the top grad_select_frac of blocks by gradient energy each step
+    (olmo_core.nn.grad_layer_select); update-only or forward-skip. 0 = off."""
+
+    grad_select_frac: float = 0.0
+    grad_select_mode: str = "update"
+    grad_select_rank: str = "online"
+    grad_select_explore: float = 0.1
+    grad_select_ema: float = 0.9
+    grad_select_static_energy: str = ""
+    grad_select_always: str = ""
+
+    @property
+    def active(self) -> bool:
+        return self.grad_select_frac > 0
+
+
+@dataclass
 class LayerDropOptions(VariantOptions):
     """layerdrop: train-time WHOLE-block skipping (olmo_core.nn.layer_drop), a fixed set and/or
     random LayerDrop per optimizer step. No params; eval runs every block."""
@@ -1082,6 +1100,62 @@ class LayerDrop(Variant):
         return {"layer_drop": LayerDropCallback()}
 
 
+class GradSelect(Variant):
+    """Gradient-ranked layer selection (olmo_core.nn.grad_layer_select), a modifier on any arm
+    (``--grad-select-*``). With the online router: in skip mode its drop layers always run, and in update mode the
+    backward cut stops at its first drop layer with an input gradient there (the router's gradient-norm targets
+    are read at and above it)."""
+
+    name = "gradselect"
+    options_cls = GradSelectOptions
+
+    def validate(self, o):
+        assert isinstance(o, GradSelectOptions)
+        if not o.active:
+            raise ValueError("gradselect needs grad_select_frac > 0")
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, GradSelectOptions)
+        from olmo_core.nn.layer_drop import parse_layer_list
+
+        n = len(model.blocks)
+        always = set(parse_layer_list(o.grad_select_always, n))
+        otr = getattr(model, "_online_token_router", None)
+        drops = sorted({int(r.cfg.drop_layer) for r in otr.chain()} - {0}) if otr is not None else []
+        max_cut = None
+        if drops and o.grad_select_mode == "skip":
+            always |= set(drops)
+        elif drops:
+            max_cut = drops[0]
+        static = [float(x) for x in o.grad_select_static_energy.split(",") if x.strip()] or None
+        model.enable_grad_layer_select(
+            keep_frac=o.grad_select_frac,
+            mode=o.grad_select_mode,
+            ranking=o.grad_select_rank,
+            explore_frac=o.grad_select_explore,
+            ema=o.grad_select_ema,
+            static_energy=static,
+            always=sorted(always),
+            max_cut=max_cut,
+            cut_input_grad=bool(drops),
+            seed=ctx.seed,
+        )
+        if otr is not None:
+            for r in otr.chain():
+                r._grad_select = model._grad_select
+        sel = model._grad_select
+        print(
+            f"[variants] grad-select: mode={sel.mode} ranking={sel.ranking} keep {sel.k}/{n} blocks per step "
+            f"(explore {sel.n_explore()}), always {sorted(sel.always)}, max_cut {sel.max_cut}",
+            flush=True,
+        )
+
+    def extra_callbacks(self, o, ctx):
+        from olmo_core.train.callbacks import GradLayerSelectCallback
+
+        return {"grad_select": GradLayerSelectCallback()}
+
+
 # -- soft tokens -------------------------------------------------------------------------------
 
 
@@ -1550,6 +1624,7 @@ VARIANTS: Dict[str, Variant] = {
         FlexCompute(),
         FFNDrop(),
         LayerDrop(),
+        GradSelect(),
         FFNWidth(),
         FFNChunk(),
         LoRA(),

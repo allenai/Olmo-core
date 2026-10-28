@@ -366,6 +366,23 @@ for _r in ("tier67a50m32", "tier67flm16", "gbflk64p8"):
 # points) are not in either skip set
 for _sfx, _flags in (("sk3", _SK3), ("sk2027", _SK2027)):
     ARM_EXTRA[f"lora64all32r20to7-{_sfx}"] = f"{ARM_EXTRA['lora64all32r20to7']} {_flags}"
+# Gradient-ranked layer selection (olmo_core.nn.grad_layer_select, 2026-10-28, Prasann: "keep only the x% of layers
+# with the most gradient signal, with and without token skipping"). gsu<x> = update-only (all blocks forward, only the
+# top x% get weight gradients, no backward below the lowest), gss<x> = forward-skip (only the top x% run). Online EMA of
+# per-block ||g||^2 + 10% exploration; ...st = the static control: the grad-composition per-block parameter-gradient
+# share (mean over the dense 31/61/122/366-step checkpoints, gradcomp_summary.json; top 8 = 31,0,10,11,14,15,6,7).
+# With the router (recipe arms) the variant keeps its drop layers 7/16 running in skip mode and stops the update-mode
+# backward at block 7.
+_GS_STATIC = ("0.0845,0.0236,0.0304,0.0283,0.0256,0.0325,0.0426,0.0372,0.0249,0.0267,0.0512,0.0508,0.0314,0.0255,"
+              "0.0491,0.0459,0.0204,0.0188,0.0316,0.0236,0.0083,0.0073,0.0136,0.0118,0.0040,0.0034,0.0056,0.0102,"
+              "0.0073,0.0095,0.0218,0.0876")
+_GS = {f"gs{m[0]}{x}{'st' if st else ''}": (f"--grad-select-frac {x / 100} --grad-select-mode {m}"
+                                            + (f" --grad-select-rank static --grad-select-static-energy {_GS_STATIC}"
+                                               if st else ""))
+       for m in ("update", "skip") for x in (25, 50) for st in (False, True)}
+DENSE_EXTRA.update({f"dense-{k}": v for k, v in _GS.items()})
+for _k in ("gsu25", "gsu50", "gss25", "gss50"):
+    ARM_EXTRA[f"lora64all32r20to7-{_k}"] = f"{ARM_EXTRA['lora64all32r20to7']} {_GS[_k]}"
 ARM_MICRO = {}          # every arm at micro 2: the FLOP audit (09-15 10:30) requires identical
 DEFAULT_MICRO = 2       # gpus/micro across any pair that will be compared at matched FLOPs.
 

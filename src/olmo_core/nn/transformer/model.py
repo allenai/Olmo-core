@@ -1100,6 +1100,33 @@ class Transformer(nn.Module):
             plan.expected_run_frac(),
         )
 
+    def enable_grad_layer_select(self, **kw: Any) -> None:
+        """
+        Enable gradient-ranked layer selection (see :mod:`olmo_core.nn.grad_layer_select`): each optimizer step only
+        the top ``keep_frac`` blocks by gradient energy are updated (``mode="update"``) or run at all
+        (``mode="skip"``). Driven by :class:`~olmo_core.train.callbacks.GradLayerSelectCallback`; eval runs every
+        block. Exclusive with :meth:`enable_layer_drop` (both own ``_layer_drop``).
+
+        :param kw: :class:`~olmo_core.nn.grad_layer_select.GradLayerSelector` arguments except ``n_layers``.
+        """
+        from ..grad_layer_select import GradLayerSelector
+
+        if self._layer_drop is not None:
+            raise OLMoConfigurationError("grad layer select cannot be combined with layer drop")
+        sel = GradLayerSelector(n_layers=len(self.blocks), **kw)
+        self._layer_drop = sel
+        self._grad_select = sel
+        log.info(
+            "Grad layer select: mode=%s ranking=%s k=%d/%d explore=%d always=%s max_cut=%s",
+            sel.mode,
+            sel.ranking,
+            sel.k,
+            sel.n_layers,
+            sel.n_explore(),
+            sorted(sel.always),
+            sel.max_cut,
+        )
+
     def _attach_block_budget(self, h: torch.Tensor, block_idx: int) -> torch.Tensor:
         """
         Hand this block's router expectations their budget gradient through ``h`` (see
@@ -1762,6 +1789,8 @@ class Transformer(nn.Module):
         # the no-grad prefix ends at the drop layer, or earlier when a progressive freeze has frozen fewer blocks
         otr_nograd_end = int(getattr(otr, "_nograd_until", 0) or otr_layer) if otr_nograd else -1
         grad_was = torch.is_grad_enabled()
+        # grad layer select, update mode: no backward below the lowest selected block (olmo_core.nn.grad_layer_select)
+        gs_cut = ld.cut() if (ld is not None and grad_was and hasattr(ld, "cut")) else 0
         if otr_nograd:
             torch.set_grad_enabled(False)
         for block_key, block in self.blocks.items():
@@ -1770,6 +1799,9 @@ class Transformer(nn.Module):
                 torch.set_grad_enabled(grad_was)
                 # a fresh leaf: the router's target hook at the split reads dL/dh at or above here
                 h = h.detach().requires_grad_(grad_was)
+            if gs_cut and block_idx == gs_cut:
+                # a leaf: a router target hook at or above here still reads dL/dh (cut_input_grad)
+                h = h.detach().requires_grad_(bool(ld.cut_input_grad))  # type: ignore[union-attr]
             if block_idx in otr_stages:
                 # online router, mid-stack drop: dropped tokens skip blocks [otr_layer, n_layers)
                 h, all_block_kwargs = otr_stages[block_idx].mid_compact(self, h, all_block_kwargs)

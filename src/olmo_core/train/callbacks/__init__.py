@@ -28,6 +28,7 @@ from .block_skip import BlockSkipCallback
 from .kv_route import KVRouteCallback
 from .ffn_token_drop import FFNTokenDropCallback
 from .ffn_width import FFNWidthCallback
+from .grad_layer_select import GradLayerSelectCallback
 from .layer_drop import LayerDropCallback
 from .nested_ffn_moe import NestedFFNMoECallback
 from .profiler import (
@@ -62,6 +63,7 @@ __all__ = [
     "KVRouteCallback",
     "FFNTokenDropCallback",
     "FFNWidthCallback",
+    "GradLayerSelectCallback",
     "LayerDropCallback",
     "NestedFFNMoECallback",
     "HFConverterCallback",

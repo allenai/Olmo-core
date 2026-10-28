@@ -1435,6 +1435,13 @@ class OnlineTokenRouter:
         credit (-(1 - f) x the FFN, scaled by the block's factor), so both land at the right length in every stage."""
         n = len(model.blocks)
         ab = self._lora_block_charges(model) if getattr(model, "_early_lora", None) else [0.0] * n
+        ld = getattr(model, "_layer_drop", None)
+        if ld is not None and model.training:
+            # adapters of a block skipped whole ran for no token; grad layer select (update mode): an unselected
+            # block's adapters skip their weight gradient (2/3), below the cut they run forward-only (1/3)
+            skip = ld.skipped()
+            g = ld.block_factors() if hasattr(ld, "block_factors") else {}
+            ab = [0.0 if i in skip else a * g.get(i, 1.0) for i, a in enumerate(ab)]
         fw = getattr(model, "_ffn_width", None)
         if fw is not None:
             cr = fw.credits_per_block(n)
@@ -1446,7 +1453,13 @@ class OnlineTokenRouter:
         only), 2/3 for frozen blocks at or above the drop layer (no weight gradient), else 1."""
         nu, L0, P = self._nograd_until, self.cfg.drop_layer, self.frozen_blocks
         K = self.lora_blocks()
-        return [1.0 / 3.0 if i < nu else (2.0 / 3.0 if (L0 <= i < P or i < K) else 1.0) for i in range(n_blocks)]
+        fac = [1.0 / 3.0 if i < nu else (2.0 / 3.0 if (L0 <= i < P or i < K) else 1.0) for i in range(n_blocks)]
+        gs = getattr(self, "_grad_select", None)
+        if gs is not None and gs.mode == "update":
+            # grad layer select: unselected blocks skip their weight gradient (2/3), below its cut run forward-only
+            g = gs.block_factors()
+            fac = [min(f, g.get(i, 1.0)) for i, f in enumerate(fac)]
+        return fac
 
     def lora_blocks(self) -> int:
         """Blocks [0, K) carry LoRA adapters with a frozen base (0 without early_lora)."""

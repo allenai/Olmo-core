@@ -76,7 +76,7 @@ class FlopMeterCallback(Callback):
             # the model records per-example lengths of every TRAINING forward while this is set
             self._model()._flop_pad_id = int(self.pad_id)
 
-    def _per_example_flops(self, m, skipped=frozenset()):
+    def _per_example_flops(self, m, skipped=frozenset(), factors=None):
         """``(dense, actual, tokens, examples)`` summed over ranks from the model's length log;
         ``actual`` charges only the blocks that ran (``skipped``: this step's layer-drop set)."""
         import torch
@@ -87,12 +87,15 @@ class FlopMeterCallback(Callback):
             self._fpt_cache = {}
         cache = self._fpt_cache
 
-        def cost(lens, skip=frozenset()):
+        fkey = tuple(sorted(factors.items())) if factors else ()
+
+        def cost(lens, skip=frozenset(), fac=None):
             tot = 0.0
             for L in lens:
-                f = cache.get((L, skip))
+                key = (L, skip, fkey if fac else ())
+                f = cache.get(key)
                 if f is None:
-                    f = cache[(L, skip)] = flops_per_token_ran(m, int(L), skip)
+                    f = cache[key] = flops_per_token_ran(m, int(L), skip, fac)
                 tot += float(L) * f
             return tot
 
@@ -108,7 +111,7 @@ class FlopMeterCallback(Callback):
                 for d, a in zip(st["dense"], st["actual"])
             )
         else:
-            actual = cost(st["actual"], skipped)
+            actual = cost(st["actual"], skipped, factors)
         dev = next(m.parameters()).device
         v = torch.tensor(
             [cost(st["dense"]), actual, float(sum(st["dense"])), float(len(st["dense"]))],
@@ -188,6 +191,11 @@ class FlopMeterCallback(Callback):
         dense_tok, ffn_tok = self._per_token()
         ld = getattr(m, "_layer_drop", None)
         ld_skip = ld.skipped() if ld is not None else frozenset()
+        # grad layer select (update mode): per-block shares of forward + backward that ran; with the online router
+        # the router prices them itself (its block factors), so they are applied here only without it
+        gs_fac = None
+        if ld is not None and hasattr(ld, "block_factors") and getattr(m, "_online_token_router", None) is None:
+            gs_fac = {i: f for i, f in ld.block_factors().items() if i not in ld_skip} or None
         tokens = int(self.trainer.global_batch_size)  # tokens in the (padded) global batch
         if self._real_tokens_this_step is not None:
             tokens = self._real_tokens_this_step
@@ -255,7 +263,7 @@ class FlopMeterCallback(Callback):
             # the counters are per rank and count PADDED input tokens; the compacted output is
             # what actually ran. Scale per-rank -> world by the padded global batch.
             scale = int(self.trainer.global_batch_size) / max(1, comp["tokens_in"])
-            actual = comp["tokens_out"] * scale * flops_per_token_ran(m, int(out_len), ld_skip)
+            actual = comp["tokens_out"] * scale * flops_per_token_ran(m, int(out_len), ld_skip, gs_fac)
             exit_layer = self._exit_layer(m)
             if exit_layer > 0 and ld_skip:
                 raise ValueError("FlopMeter: token exit + layer drop in one step is not priced; refusing to guess")
@@ -279,9 +287,9 @@ class FlopMeterCallback(Callback):
                 )
             comp["tokens_in"] = comp["tokens_out"] = comp["rows"] = 0
             comp["labels_in"] = comp["labels_out"] = 0
-        elif ld_skip:
+        elif ld_skip or gs_fac:
             # the router / dense costs above priced every block at seq_len: drop the skipped ones
-            actual *= flops_per_token_ran(m, self.seq_len, ld_skip) / max(1, dense_tok)
+            actual *= flops_per_token_ran(m, self.seq_len, ld_skip, gs_fac) / max(1, dense_tok)
 
         if ld is not None:
             run_frac = 1.0 - len(ld_skip) / len(m.blocks)
@@ -290,7 +298,7 @@ class FlopMeterCallback(Callback):
             self.trainer.record_metric("flop_meter/layers_run_frac", run_frac)
 
         if self.per_example:
-            dense_flops, actual, tokens, n_ex = self._per_example_flops(m, ld_skip)
+            dense_flops, actual, tokens, n_ex = self._per_example_flops(m, ld_skip, gs_fac)
             self._examples += n_ex
             if dense_flops > 0:
                 self.trainer.record_metric("flop_meter/step_actual_over_dense", actual / dense_flops)

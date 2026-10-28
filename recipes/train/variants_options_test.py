@@ -91,3 +91,11 @@ def test_every_trainer_lora_flag_is_a_lora_option_field():
     flags = {f.replace("-", "_") for f in re.findall(r'"--(lora-[a-z-]+)"', open(TRAINER).read())}
     assert flags and flags <= _option_fields("LoRAOptions"), flags - _option_fields("LoRAOptions")
 
+
+
+def test_every_trainer_grad_select_flag_is_a_gradselect_option_field():
+    flags = re.findall(r'add_argument\(\s*"--(grad-select-[a-z0-9-]+)"', open(TRAINER).read())
+    assert "grad-select-frac" in flags and "grad-select-mode" in flags, flags
+    fields = _option_fields("GradSelectOptions")
+    missing = sorted(f for f in flags if f.replace("-", "_") not in fields)
+    assert not missing, f"grad-select flags parsed by the trainer but dropped by options_from_namespace: {missing}"

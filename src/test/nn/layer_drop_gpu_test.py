@@ -129,3 +129,83 @@ def test_gdn_blocks_are_skipped_whole():
     out.float().sum().backward()
     assert all(p.grad is None for p in m.blocks["1"].parameters())
     assert all(p.grad is not None for p in m.blocks["2"].parameters())
+
+
+def run_fsdp2_grad_select_update_mode_matches_single_process():
+    """Grad layer select, update mode, under FSDP2: requires_grad toggled on the sharded params each step reaches the
+    unsharded ones (FSDP2 copies it on every unshard); unselected blocks get no grad on any rank; the selected
+    blocks' grads and params match a single-process reference that freezes the same blocks; the online EMA is
+    identical on both ranks."""
+    from olmo_core.train.callbacks import GradLayerSelectCallback
+    from types import SimpleNamespace
+
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    dev = get_default_device()
+    seed_all(0)
+    cfg = TransformerConfig.olmo2_190M(vocab_size=VOCAB, n_layers=6, fused_ops=False, dtype=DType.float32)
+    model = cfg.build(init_device=dev)
+    model.init_weights(max_seq_len=64, device=dev)
+    ref = copy.deepcopy(model)
+    model.apply_fsdp()
+    for m in (model, ref):
+        m.enable_grad_layer_select(keep_frac=0.5, explore_frac=0.34, seed=0)  # k=3, 1 explored slot
+        m.train()
+    cbs = []
+    for m in (model, ref):
+        cb = GradLayerSelectCallback(log_every=0)
+        cb._trainer = SimpleNamespace(global_step=0, save_folder="/nonexistent",  # type: ignore[assignment]
+                                      train_module=SimpleNamespace(model=m), record_metric=lambda k, v: None)
+        cb.pre_train()
+        cbs.append(cb)
+    opt = torch.optim.SGD(model.parameters(), lr=0.05)
+    ref_opt = torch.optim.SGD(ref.parameters(), lr=0.05)
+    rank, world = get_rank(), dist.get_world_size()
+    gen = torch.Generator().manual_seed(1)
+    seen = []
+    for step in range(1, 8):
+        for cb in cbs:
+            cb._trainer.global_step = step
+            cb.pre_step({})
+        sel = model._grad_select.selected()
+        assert sel == ref._grad_select.selected(), step  # ref EMA is built from the full-batch grads
+        seen.append(sel)
+        batch = torch.randint(0, VOCAB, (2 * world, 33), generator=gen).to(dev)
+        local = batch[2 * rank : 2 * rank + 2]
+        for mb in range(2):
+            (_ce(model, local[mb : mb + 1]) / 2).backward()
+        (sum(_ce(ref, batch[i : i + 1]) for i in range(batch.shape[0])) / batch.shape[0]).backward()
+        for k, blk in model.blocks.items():
+            has = [p.grad is not None for p in blk.parameters()]
+            assert all(has) if int(k) in sel else not any(has), (step, k, sel)
+        for (n, p), (_, rp) in zip(model.named_parameters(), ref.named_parameters()):
+            if p.grad is None:
+                assert rp.grad is None, n
+                continue
+            torch.testing.assert_close(get_full_tensor(p.grad), rp.grad, atol=1e-6, rtol=1e-3,
+                                       msg=lambda m_, n=n: f"{n} step {step}: {m_}")
+        for cb in cbs:
+            cb.pre_optim_step()
+        opt.step()
+        ref_opt.step()
+        opt.zero_grad(set_to_none=True)
+        ref_opt.zero_grad(set_to_none=True)
+        e = torch.tensor([x if x is not None else -1.0 for x in model._grad_select.ema], device=dev)
+        e0 = e.clone()
+        dist.broadcast(e0, 0)
+        torch.testing.assert_close(e, e0)  # same ranking state on every rank
+        # the reference's callback also all-reduces (SUM) its full, replicated grads over the 2 ranks: 2x the energy
+        r = torch.tensor([x / world if x is not None else -1.0 for x in ref._grad_select.ema], device=dev)
+        torch.testing.assert_close(torch.where(e < 0, e, e), torch.where(r < 0, e, r), rtol=1e-3, atol=0.0)
+        for (n, p), (_, rp) in zip(model.named_parameters(), ref.named_parameters()):
+            torch.testing.assert_close(get_full_tensor(p).detach(), rp.detach(), atol=1e-5, rtol=1e-4,
+                                       msg=lambda m_, n=n: f"{n} step {step}: {m_}")
+    assert len(set(seen)) > 1, seen
+    assert all(x is not None for x in model._grad_select.ema)  # every block measured
+
+
+@requires_multi_gpu
+def test_fsdp2_grad_select_update_mode_matches_single_process():
+    run_distributed_test(
+        run_fsdp2_grad_select_update_mode_matches_single_process, backend="nccl", start_method="spawn"
+    )

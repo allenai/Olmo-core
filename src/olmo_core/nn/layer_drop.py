@@ -134,12 +134,20 @@ class LayerDropPlan:
         return 1.0 - (len(self.fixed) + sum(self.probs.values())) / self.n_layers
 
 
-def flops_per_token_ran(model, seq_len: int, skipped: Iterable[int]) -> int:
+def flops_per_token_ran(
+    model, seq_len: int, skipped: Iterable[int], factors: Optional[Dict[int, float]] = None
+) -> float:
     """``model.num_flops_per_token(seq_len)`` minus the blocks in ``skipped`` (they ran neither
-    forward nor backward), i.e. the per-token training FLOPs of a forward that skipped them."""
+    forward nor backward), i.e. the per-token training FLOPs of a forward that skipped them.
+    ``factors``: share of a block's forward + backward that ran (grad layer select: 2/3 = no weight
+    gradient, 1/3 = forward only); blocks not listed pay 1."""
     full = int(model.num_flops_per_token(int(seq_len)))
     skipped = list(skipped)
-    if not skipped:
+    if not skipped and not factors:
         return full
     blocks: Sequence = list(model.blocks.values())
-    return full - sum(int(blocks[i].num_flops_per_token(int(seq_len))) for i in skipped)
+    out = float(full) - sum(int(blocks[i].num_flops_per_token(int(seq_len))) for i in skipped)
+    for i, f in (factors or {}).items():
+        if i not in skipped:
+            out -= (1.0 - float(f)) * int(blocks[i].num_flops_per_token(int(seq_len)))
+    return out

@@ -10,3 +10,25 @@ fast8k	4b	outlier	cpi33	16M	f8k-outlier-cpi33-16M	ai2/ceres-cirrascale,ai2/satur
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
 fast8k	4b	outlier	kvgb50	16M	f8k-outlier-kvgb50-16M	ai2/ceres-cirrascale,ai2/saturn-cirrascale,ai2/jupiter-cirrascale-2	2026-09-15 11:54	LAUNCHED	"01M2K6QB53SVSEXJC3PK6Z8SDY   warnings.warn(msg, UserWarning)
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk3	s1464	f8k-mt4-dense-sk3-s1464-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-28 14:19	LAUNCHED	"01M625ZMF8Z78PNP2A6A0FN1RN transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk3	f3904	f8k-mt4-dense-sk3-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-28 14:19	LAUNCHED	"01M6260F5YZPMDRTR0ZH67WSYG transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk2027	s1464	f8k-mt4-dense-sk2027-s1464-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-28 14:19	LAUNCHED	"01M62619HYJD5NYZKD5V5CQQQM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk2027	f3904	f8k-mt4-dense-sk2027-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-28 14:19	LAUNCHED	"01M62621SB7TETEE1J2JEDR5CR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-ldu40	s1464	f8k-mt4-dense-ldu40-s1464-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-28 14:19	LAUNCHED	"01M6263DEQEP381PE60EDQYPV5 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-ldu40	f3904	f8k-mt4-dense-ldu40-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-28 14:19	LAUNCHED	"01M6264GNWBYHDE26Y0GNF4EW3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7-sk3	s1464	f8k-mt4-lora64all32r20to7-sk3-s1464-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 14:21	LAUNCHED	"01M6265FVQ1SPXDGRPCR41JTVM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7-sk3	f3904	f8k-mt4-lora64all32r20to7-sk3-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 14:21	LAUNCHED	"01M62669MPERRW02XAQSCEP2KY transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7-sk2027	s1464	f8k-mt4-lora64all32r20to7-sk2027-s1464-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 14:21	LAUNCHED	"01M6267C4ATZ5XHJQ6MBD6PMTN transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7-sk2027	f3904	f8k-mt4-lora64all32r20to7-sk2027-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 14:21	LAUNCHED	"01M626874NM7DZF6Y5AYEQN9XA transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7	s1464	f8k-mt4-lora64all32r20to7-s1464-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 14:22	LAUNCHED	"01M62690WE9DBJJ3JAF3TJRSE7 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
