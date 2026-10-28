@@ -340,5 +340,57 @@
   "steps": 495,
   "wall": 5326.73,
   "ex": "01M5YCBB45ENT8NEF9GS2336E4"
+ },
+ "f8k-mt4-dense-f1952-tde-lr5e-06": {
+  "pf": 1531.25242,
+  "ex": "01M5QGZ7BXVERPKX365GRS0VH4"
+ },
+ "f8k-mt4-dense-f3904-tde-lr5e-06": {
+  "pf": 3063.15168,
+  "ex": "01M5QH036NM7RNSPY6V56CCG2G"
+ },
+ "f8k-mt4-dense-f5856-tde-lr5e-06": {
+  "pf": 4594.9259,
+  "ex": "01M5RX8TEC0VTPFG16BEPV6NXJ"
+ },
+ "f8k-mt4-dense-f7808-tde-lr5e-06": {
+  "pf": 6128.21971,
+  "ex": "01M5RXA2XQPHWS71B23GA21NPZ"
+ },
+ "f8k-mt4-dense-f3904-tde-lr1e-05": {
+  "pf": 3063.15168,
+  "ex": "01M5VJG9JFVG5EWQJFPF1JFR6X"
+ },
+ "f8k-mt4-lora64r20to7-f1952-tde-lr5e-06": {
+  "pf": 390.34892,
+  "ex": "01M5RFQFNF77Y1XRBKJNR5S3K4"
+ },
+ "f8k-mt4-lora64r20to7-f3904-tde-lr5e-06": {
+  "pf": 777.37867,
+  "ex": "01M5RFREDMSNY2GTN8KVE7Z2Y1"
+ },
+ "f8k-mt4-lora64r20to7-f7808-tde-lr5e-06": {
+  "pf": 1550.87874,
+  "ex": "01M5RFSE75MEGQ9SD42NNYE8ZV"
+ },
+ "f8k-mt4-lora64r20to10-f7808-tde-lr5e-06": {
+  "pf": 1639.24831,
+  "ex": "01M5RFWFY7BYBN45625M6HC4ZB"
+ },
+ "f8k-mt4-lora64r20to7-s1952-tde-lr5e-06": {
+  "pf": 393.40329,
+  "ex": "01M5RWMJNWFPM1WEP71NT25VSC"
+ },
+ "f8k-mt4-lora64r20to7ffn50e-s1952-tde-lr5e-06": {
+  "pf": 335.21686,
+  "ex": "01M5TN4968YDV48FRDGMT4185Y"
+ },
+ "f8k-mt4-denselora64all-f3904-tde-lr5e-06": {
+  "pf": 2286.39814,
+  "ex": "01M5VJD3NYTH12QRSVNCFBNFMX"
+ },
+ "f8k-mt4-r20to7M7de0-f7808-tde-lr5e-06": {
+  "pf": 1868.7472,
+  "ex": "01M5QK8R20JBEMNXE6N559Z78W"
  }
 }

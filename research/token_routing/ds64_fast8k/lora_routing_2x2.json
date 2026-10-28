@@ -42,6 +42,18 @@
     "y": 0.9257,
     "pts": "f3904",
     "lr": "5e-06"
+   },
+   {
+    "pf": 4594.9,
+    "y": 0.928,
+    "pts": "f5856",
+    "lr": "5e-06"
+   },
+   {
+    "pf": 6128.2,
+    "y": 0.931,
+    "pts": "f7808",
+    "lr": "5e-06"
    }
   ],
   "mt4:best_any_lr": [
@@ -85,6 +97,18 @@
     "pf": 3063.2,
     "y": 0.9257,
     "pts": "f3904",
+    "lr": "5e-06"
+   },
+   {
+    "pf": 4594.9,
+    "y": 0.928,
+    "pts": "f5856",
+    "lr": "5e-06"
+   },
+   {
+    "pf": 6128.2,
+    "y": 0.931,
+    "pts": "f7808",
     "lr": "5e-06"
    }
   ],
@@ -867,6 +891,7 @@
     "A": {
      "lr": "5e-06",
      "lrs_tried": [
+      "1e-05",
       "5e-06"
      ],
      "n": 1,
@@ -879,39 +904,44 @@
      "runs": [
       "f8k-mt4-dense-f3904-tde-lr5e-06"
      ],
-     "other_lr": {},
+     "other_lr": {
+      "1e-05": 0.9133
+     },
      "d_best_5e6_1e5": 0.0,
-     "flag_best_5e6_1e5": "above",
+     "flag_best_5e6_1e5": "",
      "x_best_5e6_1e5": 1.0,
      "xgt_best_5e6_1e5": false,
      "d_best_any_lr": 0.0,
-     "flag_best_any_lr": "above",
+     "flag_best_any_lr": "",
      "x_best_any_lr": 1.0,
      "xgt_best_any_lr": false
     },
     "B": {
-     "lr": "1e-05",
+     "lr": "5e-06",
      "lrs_tried": [
-      "1e-05"
+      "1e-05",
+      "5e-06"
      ],
      "n": 1,
      "pf": 2286.3981,
-     "y": 0.9167,
-     "o8": 0.966,
-     "c8": 0.987,
+     "y": 0.9267,
+     "o8": 0.961,
+     "c8": 0.985,
      "y_sd": null,
      "o8_sd": null,
      "runs": [
-      "f8k-mt4-denselora64all-f3904-tde-lr1e-05"
+      "f8k-mt4-denselora64all-f3904-tde-lr5e-06"
      ],
-     "other_lr": {},
-     "d_best_5e6_1e5": 0.0108,
+     "other_lr": {
+      "1e-05": 0.9167
+     },
+     "d_best_5e6_1e5": 0.0208,
      "flag_best_5e6_1e5": "",
-     "x_best_5e6_1e5": 1.17,
+     "x_best_5e6_1e5": 1.6,
      "xgt_best_5e6_1e5": false,
-     "d_best_any_lr": 0.0108,
+     "d_best_any_lr": 0.0208,
      "flag_best_any_lr": "",
-     "x_best_any_lr": 1.17,
+     "x_best_any_lr": 1.6,
      "xgt_best_any_lr": false
     },
     "C": {
@@ -972,42 +1002,42 @@
     }
    },
    "attr_best_5e6_1e5": {
-    "lora_no_route": 0.0108,
+    "lora_no_route": 0.0208,
     "lora_with_route": 0.0393,
     "route_no_lora": 0.1022,
-    "route_with_lora": 0.1307,
-    "interaction": 0.0285,
+    "route_with_lora": 0.1207,
+    "interaction": 0.0185,
     "total": 0.1415
    },
    "attr_log2x_best_5e6_1e5": {
-    "lora_no_route": 0.227,
+    "lora_no_route": 0.678,
     "lora_with_route": 0.399,
     "route_no_lora": 1.531,
-    "route_with_lora": 1.703,
-    "interaction": 0.172,
+    "route_with_lora": 1.252,
+    "interaction": -0.279,
     "total": 1.93
    },
    "attr_best_any_lr": {
-    "lora_no_route": 0.0108,
+    "lora_no_route": 0.0208,
     "lora_with_route": 0.0259,
     "route_no_lora": 0.0881,
-    "route_with_lora": 0.1032,
-    "interaction": 0.0151,
+    "route_with_lora": 0.0932,
+    "interaction": 0.0051,
     "total": 0.114
    },
    "attr_log2x_best_any_lr": {
-    "lora_no_route": 0.227,
+    "lora_no_route": 0.678,
     "lora_with_route": 0.399,
     "route_no_lora": 1.531,
-    "route_with_lora": 1.703,
-    "interaction": 0.172,
+    "route_with_lora": 1.252,
+    "interaction": -0.279,
     "total": 1.93
    },
    "matched_data": {
-    "lora_no_route": -0.009,
+    "lora_no_route": 0.001,
     "lora_with_route": -0.0021,
     "route_no_lora": -0.0083,
-    "route_with_lora": -0.0014,
+    "route_with_lora": -0.0114,
     "pf_ratio": {
      "B": 0.746,
      "C": 0.306,
@@ -1018,8 +1048,65 @@
   {
    "mix": "mt4",
    "pool": "f",
+   "rows": 5856,
+   "cells": {
+    "A": {
+     "lr": "5e-06",
+     "lrs_tried": [
+      "5e-06"
+     ],
+     "n": 1,
+     "pf": 4594.9259,
+     "y": 0.928,
+     "o8": 0.981,
+     "c8": 0.983,
+     "y_sd": null,
+     "o8_sd": null,
+     "runs": [
+      "f8k-mt4-dense-f5856-tde-lr5e-06"
+     ],
+     "other_lr": {},
+     "d_best_5e6_1e5": 0.0,
+     "flag_best_5e6_1e5": "",
+     "x_best_5e6_1e5": 1.0,
+     "xgt_best_5e6_1e5": false,
+     "d_best_any_lr": 0.0,
+     "flag_best_any_lr": "",
+     "x_best_any_lr": 1.0,
+     "xgt_best_any_lr": false
+    }
+   }
+  },
+  {
+   "mix": "mt4",
+   "pool": "f",
    "rows": 7808,
    "cells": {
+    "A": {
+     "lr": "5e-06",
+     "lrs_tried": [
+      "5e-06"
+     ],
+     "n": 1,
+     "pf": 6128.2197,
+     "y": 0.931,
+     "o8": 0.987,
+     "c8": 0.99,
+     "y_sd": null,
+     "o8_sd": null,
+     "runs": [
+      "f8k-mt4-dense-f7808-tde-lr5e-06"
+     ],
+     "other_lr": {},
+     "d_best_5e6_1e5": 0.0,
+     "flag_best_5e6_1e5": "above",
+     "x_best_5e6_1e5": 1.0,
+     "xgt_best_5e6_1e5": false,
+     "d_best_any_lr": 0.0,
+     "flag_best_any_lr": "above",
+     "x_best_any_lr": 1.0,
+     "xgt_best_any_lr": false
+    },
     "C": {
      "lr": "5e-06",
      "lrs_tried": [
@@ -2183,6 +2270,24 @@
    "rows": 3904,
    "steps": 0,
    "cell": "A",
+   "lr": "1e-05",
+   "n": 1,
+   "pf": 3063.1517,
+   "y": 0.9133,
+   "o8": 0.96,
+   "c8": 0.986,
+   "y_sd": null,
+   "o8_sd": null,
+   "runs": [
+    "f8k-mt4-dense-f3904-tde-lr1e-05"
+   ]
+  },
+  {
+   "mix": "mt4",
+   "pool": "f",
+   "rows": 3904,
+   "steps": 0,
+   "cell": "A",
    "lr": "2e-05",
    "n": 1,
    "pf": 3063.1517,
@@ -2229,6 +2334,24 @@
    "o8_sd": null,
    "runs": [
     "f8k-mt4-denselora64all-f3904-tde-lr1e-05"
+   ]
+  },
+  {
+   "mix": "mt4",
+   "pool": "f",
+   "rows": 3904,
+   "steps": 0,
+   "cell": "B",
+   "lr": "5e-06",
+   "n": 1,
+   "pf": 2286.3981,
+   "y": 0.9267,
+   "o8": 0.961,
+   "c8": 0.985,
+   "y_sd": null,
+   "o8_sd": null,
+   "runs": [
+    "f8k-mt4-denselora64all-f3904-tde-lr5e-06"
    ]
   },
   {
@@ -2301,6 +2424,42 @@
    "o8_sd": null,
    "runs": [
     "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06"
+   ]
+  },
+  {
+   "mix": "mt4",
+   "pool": "f",
+   "rows": 5856,
+   "steps": 0,
+   "cell": "A",
+   "lr": "5e-06",
+   "n": 1,
+   "pf": 4594.9259,
+   "y": 0.928,
+   "o8": 0.981,
+   "c8": 0.983,
+   "y_sd": null,
+   "o8_sd": null,
+   "runs": [
+    "f8k-mt4-dense-f5856-tde-lr5e-06"
+   ]
+  },
+  {
+   "mix": "mt4",
+   "pool": "f",
+   "rows": 7808,
+   "steps": 0,
+   "cell": "A",
+   "lr": "5e-06",
+   "n": 1,
+   "pf": 6128.2197,
+   "y": 0.931,
+   "o8": 0.987,
+   "c8": 0.99,
+   "y_sd": null,
+   "o8_sd": null,
+   "runs": [
+    "f8k-mt4-dense-f7808-tde-lr5e-06"
    ]
   },
   {

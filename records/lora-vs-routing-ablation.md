@@ -1,14 +1,14 @@
 ---
 title: Result — LoRA vs token routing, a 2×2 ablation at matched LRs (Qwen3.5-4B SFT, 4-task and 11-task CTC mixes)
 date: 2026-10-27
-updated: 2026-10-27
+updated: 2026-10-28
 experiment: tokdrop_lr
 area: token_routing
 kind: result
 status: current
 superseded_by:
 artifact: https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5 (tokdrop_lr overview; section from make_lora_routing_section.py)
-summary: Routing does most of the work. At matched FLOPs, two-stage routing alone saves 2.5-3.5x dense FLOPs on the 4-task mix and 1.6-1.8x on the 11-task mix; whole-model LoRA alone saves 1.0-1.5x; both 3.8-4.8x and 1.8-2.3x. In log-FLOP terms routing is ~53-96% of the gain, LoRA-alone 7-25% (54% at the smallest 11-task size). At matched DATA all four cells score within ~0.03; the gain is FLOP cuts (PF 0.74x LoRA, 0.31-0.43x routing, 0.23-0.32x both). The LR confound is not the story - dense and routing-only are best at 5e-6, LoRA arms mostly at 1e-5.
+summary: Routing does most of the work. At matched FLOPs, two-stage routing alone saves 2.5-3.5x dense FLOPs on the 4-task mix and 1.6-1.8x on the 11-task mix; whole-model LoRA alone saves 1.0-1.6x; both 3.8-4.8x and 1.8-2.3x. In log-FLOP terms routing is ~53-96% of the gain, LoRA-alone 7-35% (54% at the smallest 11-task size). At matched DATA all four cells score within ~0.03; the gain is FLOP cuts (PF 0.74x LoRA, 0.31-0.43x routing, 0.23-0.32x both). The LR confound is not the story - dense and routing-only are best at 5e-6, LoRA arms mostly at 1e-5.
 ---
 # Result — how much of the cheap-method gain is LoRA, how much is routing?
 
@@ -32,20 +32,20 @@ at **both** LRs and attributes the matched-FLOP gain.
 
   | | 4-task (1,464 / 1,952 / 3,904 rows/task) | 11-task (240 / 480 / 720 rows/task) |
   |---|---|---|
-  | B. dense + LoRA-all | 1.48× / 1.41× / 1.17× | 1.39× / 1.15× / 1.06× |
+  | B. dense + LoRA-all | 1.48× / 1.41× / 1.60× | 1.39× / 1.15× / 1.06× |
   | C. routing, no LoRA | 3.45× / 2.85× / 2.89× | 1.79× / 1.67× / 1.56× |
   | D. routing + LoRA-all | 4.82× / 4.63× / 3.81× | 1.83× / 2.09×¹ / 2.30× |
 
 - **Share of the gain** (log2 of the FLOP multiplier, D = total): routing alone accounts for
-  65–79% on the 4-task mix and 53–96% on the 11-task mix; LoRA alone for 12–25% (4-task) and
+  65–79% on the 4-task mix and 53–96% on the 11-task mix; LoRA alone for 15–35% (4-task) and
   7–54% (11-task, shrinking with data: 54% at 240 → 19% at 480 → 7% at 720 rows/task). The
   remainder is interaction: positive at 11-task 720 (LoRA helps more on top of routing: D vs C
-  1.47×) and on 4-task f1952, roughly zero to negative elsewhere.
+  1.47×) and on 4-task f1952, negative at 4-task 1,464 and 3,904 (where LoRA alone is worth 1.5–1.6× but adds only 1.3–1.4× on top of routing).
 - **LoRA's value on top of routing** (D vs C at matched FLOPs) is 1.3–1.6× on the 4-task mix and
   1.0× → 1.25× → 1.47× on the 11-task mix as data grows. On matched DATA, LoRA on top of routing is
   worth −0.02…+0.02 — i.e. it is a FLOP saving, not a quality gain.
 - **LR.** Dense is best at 5e-6 at every size (1e-5 costs 0.01–0.05), and so is routing without
-  LoRA in 5 of 6 sizes; the LoRA arms prefer 1e-5: B in 4 of the 5 sizes run at both LRs, D in 4 of 6 (the 11-task 240 pick is a 0.002 tie). At the smallest 4-task sizes (488 / 976 rows/task) dense is better still at 2e-6, which is why the reference curve takes every LR. So the original
+  LoRA in 5 of 6 sizes; the LoRA arms mostly prefer 1e-5: B in 4 of 6 sizes, D in 4 of 6 (the 11-task 240 pick is a 0.002 tie). At the smallest 4-task sizes (488 / 976 rows/task) dense is better still at 2e-6, which is why the reference curve takes every LR. So the original
   "LoRA at 1e-5, dense at 5e-6" choices were each arm's better LR, not a handicap on dense.
 - **Router vs random token choice** (whole-model LoRA + two-stage, LR 1e-5): the gradient-norm
   router beats random choice by +0.027 at 1,464 rows/task (router 4 seeds vs random 1) and ties at
@@ -110,8 +110,8 @@ as effects.
 |  | B. dense + LoRA-all | 1e-05 | 5e-06: 0.877 | 2 (sd 0.002) | 1142 | 0.882 | 0.808 | 0.969 | +0.030 | 1.41× |
 |  | C. two-stage routing | 5e-06 | 1e-05: 0.852 | 2 (sd 0.008) | 467 | 0.866 | 0.839 | 0.962 | +0.084 | 2.85× |
 |  | D. routing + LoRA-all | 1e-05 | 5e-06: 0.865 | 2 (sd 0.002) | 344 | 0.881 | 0.861 | 0.957 | +0.114 | 4.63× |
-| 4-task, fresh 3,904 rows/task | A. dense | 5e-06 | – | 1 | 3063 | 0.926 | 0.976 | 0.983 | +0.000 | 1.00× |
-|  | B. dense + LoRA-all | 1e-05 | – | 1 | 2286 | 0.917 | 0.966 | 0.987 | +0.011 | 1.17× |
+| 4-task, fresh 3,904 rows/task | A. dense | 5e-06 | 1e-05: 0.913 | 1 | 3063 | 0.926 | 0.976 | 0.983 | +0.000 | 1.00× |
+|  | B. dense + LoRA-all | 5e-06 | 1e-05: 0.917 | 1 | 2286 | 0.927 | 0.961 | 0.985 | +0.021 | 1.60× |
 |  | C. two-stage routing | 5e-06 | 1e-05: 0.900 | 1 | 936 | 0.917 | 0.983 | 0.977 | +0.088 | 2.89× |
 |  | D. routing + LoRA-all | 1e-05 | 5e-06: 0.914 | 1 | 688 | 0.915 | 0.970 | 0.977 | +0.114 | 3.81× |
 | 4-task, original pool 1,464 rows/task | A. dense | 5e-06 | 1e-05: 0.802 | 3 (sd 0.013) | 1154 | 0.854 | 0.729 | 0.962 | +0.000 | 1.00× |
@@ -127,7 +127,7 @@ as effects.
 | 11-task, 480 rows/task | +0.013 / 1.15× | +0.017 / 1.25× | +0.045 / 1.67× | +0.050 / 1.82× | +0.005 / 1.09× | +0.062 / 2.09× | 0.74 · 0.43 · 0.32 |
 | 11-task, 720 rows/task | +0.004 / 1.06× | +0.033 / 1.47× | +0.040 / 1.56× | +0.069 / 2.17× | +0.029 / 1.39× | +0.072 / 2.30× | 0.74 · 0.43 · 0.32 |
 | 4-task, fresh 1,952 rows/task | +0.021 / 1.24× | +0.030 / 1.62× | +0.075 / 2.50× | +0.084 / 3.28× | +0.009 / 1.31× | +0.105 / 4.06× | 0.75 · 0.30 · 0.23 |
-| 4-task, fresh 3,904 rows/task | +0.011 / 1.17× | +0.026 / 1.32× | +0.088 / 2.89× | +0.103 / 3.26× | +0.015 / 1.13× | +0.114 / 3.81× | 0.75 · 0.31 · 0.23 |
+| 4-task, fresh 3,904 rows/task | +0.021 / 1.60× | +0.026 / 1.32× | +0.088 / 2.89× | +0.093 / 2.38× | +0.005 / 0.82× | +0.114 / 3.81× | 0.75 · 0.31 · 0.23 |
 | 4-task, original pool 1,464 rows/task | +0.043 / 1.48× | +0.016 / 1.40× | +0.090 / 3.45× | +0.063 / 3.26× | -0.027 / 0.94× | +0.106 / 4.82× | 0.74 · 0.31 · 0.23 |
 
 ¹ 11-task 480, cell D: the second seed (`lora64all32r20to7f16sd1`, LR 1e-5) has no grouping score: its grouping eval died twice at the same point with an NCCL all-gather timeout (one rank stuck ~10 min, most likely a runaway generation), so the cell is one seed. On the 8 other tasks seed 1 scores 0.779 vs seed 0's 0.770, so the single-seed number, if anything, understates D.
@@ -140,6 +140,7 @@ as effects.
   hard-stopped cuts (4-task s488 at 31 / 61 steps; 11-task s240 at 32 / 64 steps) whose LR never
   decayed. Those cuts under-state dense somewhat, which inflates the multipliers of C and D more
   than B's.
+- **Dense near its ceiling.** The fresh dense curve now runs to 7,808 rows/task (f5856 0.928, f7808 0.931, LR 5e-6, one seed each): it gains only +0.005 from 3,904 to 7,808 rows/task, so any multiplier for a cell scoring above ≈0.92 swings widely with a 0.005 (sub-seed-noise) change in its score.
 - **Pools.** For the fresh 4-task cells (f1952 / f3904) dense below 1,530 PF comes from the
   original pool (s-pool); dense f1952 vs s1952 differ by 0.017, within seed noise.
 - **Scope.** Matched data costs routing 0.02–0.04 on the 11-task mix; the cheap methods win on
