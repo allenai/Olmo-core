@@ -40,6 +40,7 @@ from olmo_core.nn.transformer import Transformer
 from olmo_core.nn.transformer.config import TransformerActivationCheckpointingMode
 from olmo_core.optim import OptimConfig, SkipStepOptimizer
 from olmo_core.optim.scheduler import Scheduler
+from olmo_core.optim.shared_muon import SharedMuon
 from olmo_core.utils import (
     gc_cuda,
     get_default_device,
@@ -338,6 +339,8 @@ class TransformerTrainModule(TrainModule):
                     )
                     load_opts = replace(load_opts, flatten_optimizer_state_dict=True)
 
+        if optim and isinstance(self.optim, SharedMuon):
+            self.optim.prepare_for_checkpoint_load(metadata)
         state_dict = self._get_state_dict(load_opts, optim=optim)
         if self.load_key_mapping is not None:
             swap_param_keys(state_dict, self.load_key_mapping, metadata=metadata)

@@ -134,3 +134,52 @@ def test_dcp_preserves_skip_history_and_updates():
             opt.step()
         torch.testing.assert_close(restored_model.weight, model.weight, atol=0, rtol=0)
         torch.testing.assert_close(restored.step_skipped, original.step_skipped, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("flatten", [False, True])
+@pytest.mark.parametrize("history_steps", [0, 2, 9])
+def test_disk_checkpoint_restores_history_and_next_updates(tmp_path, flatten, history_steps):
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+    from olmo_core.train.train_module.transformer.train_module import TransformerTrainModule
+
+    def module():
+        result = object.__new__(TransformerTrainModule)
+        result.model = torch.nn.Linear(4, 8)
+        result.optim = SharedMuonConfig(rolling_interval_length=6).build(result.model)
+        result.state_dict_save_opts = StateDictOptions(flatten_optimizer_state_dict=flatten)
+        result.state_dict_load_opts = StateDictOptions(flatten_optimizer_state_dict=flatten)
+        result.load_key_mapping = None
+        return result
+
+    def step(mod, loss):
+        mod.optim.latest_loss = torch.tensor(loss)
+        mod.optim.latest_grad_norm = torch.tensor(loss)
+        for param in mod.model.parameters():
+            param.grad = torch.ones_like(param)
+        mod.optim.step()
+
+    original = module()
+    for _ in range(history_steps):
+        step(original, 1.0)
+    # This is the pre-fix format too: no migration or altered save format required.
+    dcp.save(original.state_dict_to_save(), checkpoint_id=tmp_path)
+    restored = module()
+    metadata = dcp.FileSystemReader(tmp_path).read_metadata()
+    state = restored.state_dict_to_load(metadata)
+    dcp.load(state, checkpoint_id=tmp_path)
+    restored.load_state_dict(state)
+    torch.testing.assert_close(original.optim._losses, restored.optim._losses, atol=0, rtol=0)
+    torch.testing.assert_close(
+        original.optim._grad_norms, restored.optim._grad_norms, atol=0, rtol=0
+    )
+    for loss in [1.0, 1.0, 100.0, 1.0]:
+        step(original, loss)
+        step(restored, loss)
+        torch.testing.assert_close(original.optim.step_skipped, restored.optim.step_skipped)
+        for a, b in zip(original.model.parameters(), restored.model.parameters()):
+            torch.testing.assert_close(a, b, atol=0, rtol=0)
+            torch.testing.assert_close(
+                original.optim.state[a], restored.optim.state[b], atol=0, rtol=0
+            )

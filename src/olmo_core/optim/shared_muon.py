@@ -7,6 +7,7 @@ backend uses native batched tasks, BF16 transport, and Polar Express instead.
 from dataclasses import dataclass
 
 import torch
+from torch.distributed.checkpoint.metadata import Metadata, TensorStorageMetadata
 from torch.distributed.tensor import DTensor
 from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
 
@@ -96,6 +97,7 @@ class SharedMuon(SkipStepOptimizer):
                 state["step"] = torch.zeros((), device=param.device)
                 if group["algorithm"] == "adamw":
                     state["variance"] = torch.zeros_like(param)
+        self._sync_skip_history()
 
     @property
     def step_skipped(self):
@@ -186,13 +188,57 @@ class SharedMuon(SkipStepOptimizer):
                     )
         return loss
 
-    def state_dict(self):
-        result = super().state_dict()
-        # DCP keeps state/param_groups but drops arbitrary top-level keys.
-        result["param_groups"][0]["skip_history"] = dict(
+    def _sync_skip_history(self) -> None:
+        # DCP's flattened loader enumerates live param-group keys, not just state_dict().
+        self.param_groups[0]["skip_history"] = dict(
             losses=self._losses, grad_norms=self._grad_norms
         )
-        return result
+
+    def prepare_for_checkpoint_load(self, metadata: Metadata) -> None:
+        """Allocate skip-history buffers matching an existing DCP checkpoint.
+
+        DCP flattens populated lists into indexed tensor keys, but an empty list
+        into a single byte-storage key. A fresh optimizer therefore needs the
+        saved list lengths before the train module constructs its load template.
+        This preserves the existing checkpoint format and all saved history.
+        """
+        for field, attr in (("losses", "_losses"), ("grad_norms", "_grad_norms")):
+            histories = {}
+            marker = f".skip_history.{field}"
+            for key, storage in metadata.state_dict_metadata.items():
+                if not key.startswith("optim.param_groups.") or marker not in key:
+                    continue
+                prefix, suffix = key.rsplit(marker, 1)
+                entries = histories.setdefault(prefix, {})
+                if suffix:
+                    if not suffix.startswith(".") or not suffix[1:].isdigit():
+                        raise ValueError(f"Invalid skip-history checkpoint key: {key}")
+                    if not isinstance(storage, TensorStorageMetadata):
+                        raise ValueError(f"Expected tensor skip-history entry: {key}")
+                    entries[int(suffix[1:])] = storage
+            if not histories:
+                raise ValueError(f"Checkpoint is missing Muon skip history: {field}")
+            entries = next(iter(histories.values()))
+            if any(other != entries for other in histories.values()):
+                raise ValueError(f"Inconsistent Muon skip-history metadata: {field}")
+            if sorted(entries) != list(range(len(entries))):
+                raise ValueError(f"Non-contiguous Muon skip history: {field}")
+            setattr(
+                self,
+                attr,
+                [
+                    torch.empty(
+                        entries[i].size, dtype=entries[i].properties.dtype, device=self.device
+                    )
+                    for i in range(len(entries))
+                ],
+            )
+        self._sync_skip_history()
+
+    def state_dict(self):
+        # DCP keeps state/param_groups but drops arbitrary top-level keys.
+        self._sync_skip_history()
+        return super().state_dict()
 
     def load_state_dict(self, state_dict):
         for group in state_dict["param_groups"]:
@@ -204,6 +250,7 @@ class SharedMuon(SkipStepOptimizer):
         super().load_state_dict(state_dict)
         self._losses = [v.to(self.device) for v in history["losses"]]
         self._grad_norms = [v.to(self.device) for v in history["grad_norms"]]
+        self._sync_skip_history()
         self._step_skipped = None
 
 
