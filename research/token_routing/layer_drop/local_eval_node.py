@@ -108,12 +108,19 @@ def main():
             if not todo:
                 continue
             pending += len(todo)
-            if run not in have_ckpt:
+            free_now = sum(1 for cur in slots.values() if cur is None)
+            # download only when a GPU is free, or to prefetch ONE run ahead (an 18G export takes ~2.5 min, and the
+            # loop does not refill finished slots while it downloads)
+            staged = [x for x in have_ckpt if any(not os.path.exists(os.path.join(a.claims, f"{x}__{t}__{r}"))
+                                                  for t, r in CELLS)]
+            if run not in have_ckpt and (free_now > 0 or not staged):
                 if not synced(c, run):
                     continue
                 print(f"[local-eval] downloading {run}", flush=True)
                 download_prefix(c, f"{CKPT_PREFIX}/{run}", os.path.join(a.root, "ckpts", run))
                 have_ckpt.add(run)
+            if run not in have_ckpt:
+                continue
             for t, r in todo:
                 free = [g for g, cur in slots.items() if cur is None]
                 if not free:

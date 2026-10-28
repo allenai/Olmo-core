@@ -67,10 +67,13 @@ def main():
             for r in (json.loads(out) if out.strip().startswith("[") else [])}
     rows = []
     for cell in cells:
-        if not os.path.exists(os.path.join(a.claims, cell + ".done")):
+        # a cell's [ladder:...] line is printed only once its rung is fully scored, so the log alone is enough (the
+        # .done marker is not needed: a restarted node driver does not write it for evals it did not start)
+        lp = os.path.join(a.claims, cell + ".log")
+        if not os.path.exists(lp):
             continue
         run, task, rung = cell.split("__")
-        log = open(os.path.join(a.claims, cell + ".log"), errors="replace").read()
+        log = open(lp, errors="replace").read()
         for m in LINE.finditer(log):
             t, rg, metric, v, n = m.groups()
             t = KEY_TASK.get(t, t)
