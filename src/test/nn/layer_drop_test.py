@@ -151,3 +151,16 @@ def test_flops_per_token_ran():
     blk = m.blocks["1"].num_flops_per_token(128)
     assert flops_per_token_ran(m, 128, ()) == full
     assert flops_per_token_ran(m, 128, {1, 2}) == full - 2 * blk
+
+
+def test_early_lora_call_check_ignores_skipped_blocks():
+    """The early-LoRA 'every adapted linear ran' check must not count blocks layer drop skipped on purpose."""
+    from olmo_core.nn.early_lora import install_early_lora
+
+    seed_all(4)
+    m = _model()
+    install_early_lora(m, 4, 4, scale=8.0)
+    m.enable_layer_drop(fixed={1, 2})
+    m.train()
+    out = m(torch.randint(0, 1000, (1, 8)))  # raised "adapted linears never ran their forward" before the fix
+    assert m._early_lora["checked"] and torch.isfinite(out).all()

@@ -103,7 +103,10 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
         st = module._early_lora
         if st["checked"]:
             return
-        dead = [i for i, m in enumerate(st["modules"]) if m._lora_calls == 0]
+        # blocks skipped whole by layer drop / grad layer select never run their linears on purpose
+        ld = getattr(module, "_layer_drop", None)
+        skip = ld.skipped() if (ld is not None and module.training) else frozenset()
+        dead = [i for i, m in enumerate(st["modules"]) if m._lora_calls == 0 and m._lora_block not in skip]
         if dead:
             raise RuntimeError(f"early LoRA: {len(dead)} of {len(st['modules'])} adapted linears never ran their "
                                "forward (a fused path reads .weight directly): their adapters would be silent no-ops")
