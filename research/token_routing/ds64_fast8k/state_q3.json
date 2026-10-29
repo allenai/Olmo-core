@@ -1,0 +1,24 @@
+{
+ "runs": {
+  "f8k-mt4-dense-f1952st4-q3-lr5e-06": {
+   "ex": "01M64W51GSDWB4BCH02ZSN70B1",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952@4",
+   "steps_expected": 4,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all36r20at8-f1952st4-q3-lr1e-05": {
+   "ex": "01M64W5V3075WWKFNDFTGBMHX5",
+   "task": "mt4",
+   "arm": "q3lora64all36r20at8",
+   "budget": "f1952@4",
+   "steps_expected": 4,
+   "gpus": 2,
+   "state": "S"
+  }
+ },
+ "evals": {},
+ "parity": {}
+}
