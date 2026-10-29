@@ -1,6 +1,22 @@
 [
  {
   "date": "2026-10-29",
+  "status": "running",
+  "track": "Model scale",
+  "who": "side session (Qwen3 generalization)",
+  "title": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?",
+  "result": "Started 10-29."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "running",
+  "track": "Model scale",
+  "who": "side session (scale ablation)",
+  "title": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models",
+  "result": "Started 10-29."
+ },
+ {
+  "date": "2026-10-29",
   "status": "done",
   "track": "SFT 4-task + 11-task",
   "who": "main (tokdrop)",
@@ -41,27 +57,27 @@
  },
  {
   "date": "2026-10-29",
-  "status": "proposed",
+  "status": "dropped",
   "track": "Next (≥5×)",
   "who": "main (tokdrop)",
   "title": "Shared-context multi-query training",
-  "result": "k questions per corpus; run the corpus once, train on all k answers. Ceiling ≈k× on top of routing. Needs a data rebuild. Awaiting Prasann's go."
- },
- {
-  "date": "2026-10-29",
-  "status": "proposed",
-  "track": "Next (≥5×)",
-  "who": "main (tokdrop)",
-  "title": "Row selection: train only on the hardest 10–20% of fresh rows",
-  "result": "Cheap scoring pass picks rows; ceiling 3–5× on top of routing. Screenable on existing fresh pools. Awaiting Prasann's go."
+  "result": "k questions per corpus; run the corpus once, train on all k answers. Ceiling ≈k× on top of routing. Needs a data rebuild. Awaiting Prasann's go. Dropped 10-29 (Prasann: no drastic data changes for now)."
  },
  {
   "date": "2026-10-29",
   "status": "dropped",
   "track": "Next (≥5×)",
   "who": "main (tokdrop)",
+  "title": "Row selection: train only on the hardest 10–20% of fresh rows",
+  "result": "Cheap scoring pass picks rows; ceiling 3–5× on top of routing. Screenable on existing fresh pools. Awaiting Prasann's go. Dropped 10-29 (Prasann: no drastic data changes for now)."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "running",
+  "track": "Next (≥5×)",
+  "who": "main (tokdrop)",
   "title": "Small-model front end (0.8B picks tokens for the 4B)",
-  "result": "Metered FLOPs show dropping after block 1 still costs 0.14× dense, so the full-length early blocks are only ≈40% of the recipe's cost: ceiling ≈1.5×, below the 5× bar."
+  "result": "Reopened 10-29 at Prasann's request: a side session is testing small-model token selection (0.8B or smaller). Earlier estimate: ceiling ≈1.5× over the recipe, since dropping after block 1 still costs 0.14× dense."
  },
  {
   "date": "2026-10-29",
