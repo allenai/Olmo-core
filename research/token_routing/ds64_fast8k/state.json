@@ -129,6 +129,60 @@
    "steps_expected": 1952,
    "gpus": 2,
    "state": "S"
+  },
+  "f8k-mt4-dense-f1952st244-tds08b-lr5e-06": {
+   "ex": "01M651AE61Q62S69QMJYCMYACS",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952@244",
+   "steps_expected": 244,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1952st122-tds08b-lr5e-06": {
+   "ex": "01M651BWPYEFGF7PBQ0S3J5WA7",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952@122",
+   "steps_expected": 122,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all24r20to7s12-f1952-tds08b-lr3e-05": {
+   "ex": "01M651D0A8A7EBRBD75C1HA3NE",
+   "task": "mt4",
+   "arm": "lora64all24r20to7s12",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1952st244-tds2b-lr5e-06": {
+   "ex": "01M651DZ4JSNE3FAJ679KQK1E9",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952@244",
+   "steps_expected": 244,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1952st122-tds2b-lr5e-06": {
+   "ex": "01M651EQ27WVGAPMBJYPQP7ZST",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952@122",
+   "steps_expected": 122,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all24r20to7s12-f1952-tds2b-lr3e-05": {
+   "ex": "01M651FHWQ933TG6ZRMBAT8C0P",
+   "task": "mt4",
+   "arm": "lora64all24r20to7s12",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
   }
  },
  "evals": {},
