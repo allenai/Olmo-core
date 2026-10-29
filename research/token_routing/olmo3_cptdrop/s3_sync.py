@@ -23,7 +23,7 @@ import boto3
 from boto3.s3.transfer import TransferConfig
 
 BUCKET = "ai2-llm"
-ROOT = "checkpoints/prasanns/_transfer/olmo3_cptdrop"
+ROOT = os.environ.get("S3_ROOT", "checkpoints/prasanns/_transfer/olmo3_cptdrop")  # S3_ROOT: another hub (e.g. _transfer/q3recipe)
 CFG = TransferConfig(multipart_chunksize=128 << 20, max_concurrency=16)
 ETAGS = ".s3_etags.json"
 

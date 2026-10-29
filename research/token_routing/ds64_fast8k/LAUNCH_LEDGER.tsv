@@ -98,3 +98,7 @@ fast8k	4b	mt11	lora64all32r20to7f16	s240	f8k-mt11-lora64all32r20to7f16sd1-s240-t
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
 fast8k	4b	mt11	lora64all32r20to7f16	s480	f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-27 04:11	LAUNCHED	"01M5YGXMDMN5P0636DWJ9ZMPEY transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f1952@4	f8k-mt4-dense-f1952st4-q3-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 15:23	LAUNCHED	"01M64W51GSDWB4BCH02ZSN70B1 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	q3lora64all36r20at8	f1952@4	f8k-mt4-q3lora64all36r20at8-f1952st4-q3-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 15:23	LAUNCHED	"01M64W5V3075WWKFNDFTGBMHX5 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
