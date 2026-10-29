@@ -936,6 +936,30 @@
    "lr": 1e-05,
    "mix": "mt4",
    "seed": 1
+  },
+  "f8k-mt4-lora64K32m70c50sd1-s1464-tdb-lr1e-05": {
+   "ex": "01M62Z4XK8RSQ8F22S0G225R11",
+   "arm": "lora64K32m70c50",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 1
+  },
+  "f8k-mt4-lora64K32m70c50sd2-s1464-tdb-lr1e-05": {
+   "ex": "01M62Z62XCD60XER20TACCS92J",
+   "arm": "lora64K32m70c50",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 2
+  },
+  "f8k-mt4-lora64K32mlprgsd1-s1464-tdb-lr1e-05": {
+   "ex": "01M62Z89D93PBVQWBK4RJES4D9",
+   "arm": "lora64K32mlprg",
+   "budget": "s1464",
+   "lr": 1e-05,
+   "mix": "mt4",
+   "seed": 1
   }
  },
  "evals": {
