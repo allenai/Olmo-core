@@ -534,17 +534,35 @@ class GatedDeltaNet(SequenceMixer):
             initial_state = (
                 cache.recurrent_state if (continue_prefill and cache is not None) else None
             )
-            o, new_state = dispatch_chunk_gated_delta_rule(
-                q=q,
-                k=k,
-                v=v,
-                g=g,
-                beta=beta,
-                cu_seqlens=cu_doc_lens,
-                initial_state=initial_state,
-                output_final_state=cache is not None,
-                use_qk_l2norm_in_kernel=True,
-            )
+            seg = int(getattr(self, "_gdn_segment_tokens", 0))
+            if (seg > 0 and self.training and torch.is_grad_enabled() and cu_doc_lens is None
+                    and cache is None and initial_state is None and q.size(1) > seg):
+                # sequence-segmented training forward (--gdn-segment-tokens, 2026-10-25): the kernel saves only
+                # its inputs and rebuilds the per-64-token chunk states h (T/64 x H x K x V) in backward, which
+                # set the long-row peak. Segments of `seg` tokens (a multiple of 64) carry the final state, so
+                # backward rebuilds one segment's h at a time. Exact: chunk boundaries are unchanged.
+                outs, st = [], None
+                Tq = q.size(1)
+                for s0 in range(0, Tq, seg):
+                    sl = slice(s0, min(s0 + seg, Tq))
+                    o_s, st = dispatch_chunk_gated_delta_rule(
+                        q=q[:, sl], k=k[:, sl], v=v[:, sl], g=g[:, sl], beta=beta[:, sl],
+                        initial_state=st, output_final_state=s0 + seg < Tq, use_qk_l2norm_in_kernel=True,
+                    )
+                    outs.append(o_s)
+                o, new_state = torch.cat(outs, dim=1), None
+            else:
+                o, new_state = dispatch_chunk_gated_delta_rule(
+                    q=q,
+                    k=k,
+                    v=v,
+                    g=g,
+                    beta=beta,
+                    cu_seqlens=cu_doc_lens,
+                    initial_state=initial_state,
+                    output_final_state=cache is not None,
+                    use_qk_l2norm_in_kernel=True,
+                )
 
         if cache is not None:
             cache.recurrent_state = new_state

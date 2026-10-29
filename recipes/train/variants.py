@@ -203,6 +203,55 @@ class LayerDropOptions(VariantOptions):
 
 
 @dataclass
+class FFNWidthOptions(VariantOptions):
+    """ffnwidth: partial-MLP training (olmo_core.nn.ffn_width), a step-seeded neuron subset of every listed FFN for all
+    tokens; eval runs the full width. No params."""
+
+    ffn_width_frac: float = 1.0
+    ffn_width_layers: str = ""
+    ffn_width_mode: str = "random"
+    ffn_width_no_rescale: bool = False
+    ffn_width_block: int = 128
+    ffn_width_explore: float = 0.1
+    ffn_width_refresh_every: int = 50
+    ffn_width_ema: float = 0.5
+
+    @property
+    def active(self) -> bool:
+        return self.ffn_width_frac < 1.0
+
+
+@dataclass
+class LoRAOptions(VariantOptions):
+    """lora: frozen base + rank-R adapters on blocks [B, K) for ANY arm (olmo_core.nn.early_lora), without the
+    online-router path. Embeddings frozen; blocks [0, B) frozen with no adapter (no backward below B)."""
+
+    lora_rank: int = 0
+    lora_blocks: int = 0
+    lora_start: int = 0
+    lora_scale: float = 32.0
+    lora_freeze_head: bool = False
+
+    @property
+    def active(self) -> bool:
+        return self.lora_rank > 0
+
+
+@dataclass
+class FFNChunkOptions(VariantOptions):
+    """ffnchunk: sequence-chunked FFN sublayer (olmo_core.nn.ffn_chunk) in training -- exact, cuts the long-row
+    recompute working set (peak memory / max train length). No params, no FLOP change."""
+
+    ffn_chunk_tokens: int = 0
+    ffn_chunk_layers: str = ""
+    gdn_segment_tokens: int = 0
+
+    @property
+    def active(self) -> bool:
+        return self.ffn_chunk_tokens > 0 or self.gdn_segment_tokens > 0
+
+
+@dataclass
 class SoftTokenOptions(VariantOptions):
     """softtoken: pooled-document soft tokens (compacted rows) + keep policy."""
 
@@ -259,6 +308,16 @@ class SoftTokenOptions(VariantOptions):
     st_otr_keep_frac: float = 0.3
     st_otr_explore_frac: float = 0.1
     st_otr_doc_share: float = 1.0
+    st_otr_keep_first: int = 0
+    st_otr_early_nograd: bool = False
+    st_otr_dense_tail_frac: float = 0.0
+    st_otr_stages: str = ""
+    st_otr_merge_dropped: bool = False
+    st_otr_freeze_early: bool = False
+    st_otr_min_per_doc: int = 0
+    st_otr_freeze_after: int = 0
+    st_otr_exit_loss_weight: float = 0.0
+    st_otr_dense_keep_frac: float = 1.0
     st_otr_score: str = "router"
     st_otr_feature_layer: int = 0
     st_otr_drop_layer: int = 0
@@ -272,6 +331,31 @@ class SoftTokenOptions(VariantOptions):
     st_otr_dense_every: int = 0
     st_otr_samples_per_row: int = 2048
     st_otr_proj_dim: int = 0
+    st_otr_freeze_schedule: str = ""
+    st_otr_target_layer: int = 0
+    st_otr_early_lora: int = 0
+    st_otr_early_lora_scale: float = 32.0
+    st_otr_early_lora_blocks: int = 0
+    st_otr_early_lora_start: int = 0
+    st_otr_early_lora_freeze_head: bool = False
+    st_otr_route_min_len: int = 0
+    st_otr_warmup_random: bool = False
+    st_otr_keep_mode: str = "topk"
+    st_otr_ctx_feats: bool = False
+    st_otr_mlp_hidden: int = 0
+    st_otr_ridge_groups: bool = False
+    st_otr_diag_every: int = 0
+    st_otr_mlp_steps: int = 4
+    st_otr_mlp_lr: float = 1e-3
+    st_otr_later_mass_target: float = 0.0
+    st_otr_later_max_keep_frac: float = 1.0
+    st_otr_task_onehot: int = 0
+    st_otr_row_cap: float = 2.0
+    st_otr_keep_sched: str = ""
+    st_otr_mass_target: float = 0.0
+    st_otr_max_keep_frac: float = 1.0
+    st_otr_mod_layers: str = ""
+    st_otr_per_task_key_tokens: int = 0
     st_otr_log_every: int = 10
 
 
@@ -814,6 +898,106 @@ class FlexCompute(FFNMoE, KVRoute):
         return out
 
 
+class FFNWidth(Variant):
+    """Partial-MLP training modifier (``--ffn-width-frac`` on any arm, dense or softtoken): each step and listed layer
+    computes a step-seeded subset of FFN neurons for every token (gate / up rows and down columns gathered, output
+    rescaled by 1/f unless ``--ffn-width-no-rescale``); eval runs the full width. FLOPs charged at f for those FFNs."""
+
+    name = "ffnwidth"
+    options_cls = FFNWidthOptions
+
+    def validate(self, o):
+        assert isinstance(o, FFNWidthOptions)
+        if not 0.0 < o.ffn_width_frac < 1.0:
+            raise ValueError("ffnwidth needs 0 < ffn_width_frac < 1")
+        if o.ffn_width_mode not in ("random", "blocked", "topk"):
+            raise ValueError(f"ffn_width_mode must be random / blocked / topk, got {o.ffn_width_mode!r}")
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, FFNWidthOptions)
+        from olmo_core.nn.ffn_width import install_ffn_width
+
+        # topk keeps the most active neurons exactly: no 1/f rescale
+        rescale = not o.ffn_width_no_rescale and o.ffn_width_mode != "topk"
+        h = install_ffn_width(model, o.ffn_width_frac, o.ffn_width_layers, mode=o.ffn_width_mode,
+                              rescale=rescale, block=o.ffn_width_block, seed=ctx.seed, explore=o.ffn_width_explore,
+                              refresh_every=o.ffn_width_refresh_every, ema=o.ffn_width_ema)
+        extra = (f", explore {o.ffn_width_explore}, refresh every {o.ffn_width_refresh_every}, ema {o.ffn_width_ema}"
+                 if o.ffn_width_mode == "topk" else "")
+        print(f"[variants] ffn-width: frac {o.ffn_width_frac} ({o.ffn_width_mode}, rescale={rescale}{extra}) "
+              f"on blocks {sorted(h.layers)}", flush=True)
+
+    def extra_callbacks(self, o, ctx):
+        from olmo_core.train.callbacks import FFNWidthCallback
+
+        return {"ffn_width": FFNWidthCallback()}
+
+
+class LoRA(Variant):
+    """LoRA modifier (``--lora-rank R [--lora-blocks K] [--lora-start B] [--lora-scale S]`` on any arm, e.g. the dense
+    one): base weights of blocks [0, K) and the embeddings frozen, rank-R adapters on [B, K). FLOPs: the meter charges
+    [0, B) forward-only (1/3), [B, K) at 2/3 + the adapters (the online router's accounting). Exported as the
+    ``early_lora`` block so the eval re-installs the adapters before its strict load."""
+
+    name = "lora"
+    options_cls = LoRAOptions
+    new_params = True
+
+    def _K(self, o, model=None) -> int:
+        return o.lora_blocks or (len(model.blocks) if model is not None else 0)
+
+    def validate(self, o):
+        assert isinstance(o, LoRAOptions)
+        if o.lora_rank <= 0 or o.lora_start < 0 or (o.lora_blocks and o.lora_start >= o.lora_blocks):
+            raise ValueError("lora needs rank > 0 and 0 <= lora_start < lora_blocks")
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, LoRAOptions)
+        from olmo_core.nn.early_lora import install_early_lora
+
+        K = self._K(o, model)
+        mods = install_early_lora(model, K, o.lora_rank, o.lora_scale, start=o.lora_start,
+                                  freeze_head=o.lora_freeze_head)
+        o.lora_blocks = K  # recorded for the export
+        print(f"[variants] lora: base of blocks [0, {K}) + embeddings frozen, rank-{o.lora_rank} adapters on "
+              f"[{o.lora_start}, {K}) ({len(mods)} linears, scale {o.lora_scale})", flush=True)
+
+    def export_config(self, o):
+        assert isinstance(o, LoRAOptions)
+        if not o.lora_blocks:
+            raise RuntimeError("lora export before post_build_model resolved the block count")
+        out = {"n_blocks": o.lora_blocks, "rank": o.lora_rank, "scale": o.lora_scale}
+        if o.lora_start:
+            out["start"] = o.lora_start
+        return {"early_lora": out}
+
+
+class FFNChunk(Variant):
+    """Sequence-chunked FFN sublayer modifier (``--ffn-chunk-tokens N`` on any arm): the listed blocks run
+    ``h + FFN(norm(h))`` over N-token chunks, each under its own activation checkpoint. Exact; memory only."""
+
+    name = "ffnchunk"
+    options_cls = FFNChunkOptions
+
+    def validate(self, o):
+        assert isinstance(o, FFNChunkOptions)
+        if o.ffn_chunk_tokens <= 0 and o.gdn_segment_tokens <= 0:
+            raise ValueError("ffnchunk needs ffn_chunk_tokens > 0 or gdn_segment_tokens > 0")
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, FFNChunkOptions)
+        from olmo_core.nn.ffn_chunk import install_ffn_chunk
+
+        if o.ffn_chunk_tokens > 0:
+            ids = install_ffn_chunk(model, o.ffn_chunk_tokens, o.ffn_chunk_layers)
+            print(f"[variants] ffn-chunk: {o.ffn_chunk_tokens}-token FFN chunks on blocks {ids}", flush=True)
+        if o.gdn_segment_tokens > 0:
+            from olmo_core.nn.ffn_chunk import install_gdn_segments
+
+            n = install_gdn_segments(model, o.gdn_segment_tokens)
+            print(f"[variants] gdn-segment: {o.gdn_segment_tokens}-token segments on {n} GDN layers", flush=True)
+
+
 class FFNDrop(Variant):
     """Drop-CPT: random null-FFN token drop (no router). In train_ctc_suite this is a modifier
     (``--ffn-drop-*`` on any non-routed arm); on setA it is ``--variant ffndrop``."""
@@ -1012,6 +1196,16 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         keep_frac=o.st_otr_keep_frac,
         explore_frac=o.st_otr_explore_frac,
         doc_share=o.st_otr_doc_share,
+        keep_first=o.st_otr_keep_first,
+        early_nograd=o.st_otr_early_nograd,
+        dense_tail_frac=o.st_otr_dense_tail_frac,
+        stages=o.st_otr_stages,
+        merge_dropped=o.st_otr_merge_dropped,
+        freeze_early=o.st_otr_freeze_early,
+        min_per_doc=o.st_otr_min_per_doc,
+        freeze_after=o.st_otr_freeze_after,
+        exit_loss_weight=o.st_otr_exit_loss_weight,
+        dense_keep_frac=o.st_otr_dense_keep_frac,
         score=o.st_otr_score,
         feature_layer=o.st_otr_feature_layer,
         drop_layer=o.st_otr_drop_layer,
@@ -1025,6 +1219,29 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         dense_every=o.st_otr_dense_every,
         samples_per_row=o.st_otr_samples_per_row,
         proj_dim=o.st_otr_proj_dim,
+        freeze_schedule=o.st_otr_freeze_schedule,
+        target_layer=o.st_otr_target_layer,
+        early_lora=o.st_otr_early_lora,
+        early_lora_blocks=o.st_otr_early_lora_blocks,
+        early_lora_start=o.st_otr_early_lora_start,
+        route_min_len=o.st_otr_route_min_len,
+        warmup_random=o.st_otr_warmup_random,
+        keep_mode=o.st_otr_keep_mode,
+        ctx_feats=o.st_otr_ctx_feats,
+        mlp_hidden=o.st_otr_mlp_hidden,
+        ridge_groups=o.st_otr_ridge_groups,
+        diag_every=o.st_otr_diag_every,
+        mlp_steps=o.st_otr_mlp_steps,
+        mlp_lr=o.st_otr_mlp_lr,
+        later_mass_target=o.st_otr_later_mass_target,
+        later_max_keep_frac=o.st_otr_later_max_keep_frac,
+        task_onehot=o.st_otr_task_onehot,
+        row_cap=o.st_otr_row_cap,
+        keep_sched=o.st_otr_keep_sched,
+        mass_target=o.st_otr_mass_target,
+        max_keep_frac=o.st_otr_max_keep_frac,
+        mod_layers=o.st_otr_mod_layers,
+        per_task_key_tokens=o.st_otr_per_task_key_tokens,
         seed=ctx.seed,
         log_every=o.st_otr_log_every,
     )
@@ -1184,6 +1401,24 @@ class SoftToken(Variant):
             slot_stop_ids=(None if o.st_slot_mode == "mean" else build_slot_stop_set(o, ctx)),
             cat_keep=resolve_cat_keep(o),
         )
+        if online and o.st_otr_early_lora > 0:
+            from olmo_core.nn.early_lora import install_early_lora
+
+            r = model._online_token_router
+            K = o.st_otr_early_lora_blocks or r.cfg.drop_layer
+            B0 = o.st_otr_early_lora_start
+            mods = install_early_lora(model, K, o.st_otr_early_lora, o.st_otr_early_lora_scale, start=B0,
+                                      freeze_head=o.st_otr_early_lora_freeze_head)
+            print(f"[variants] online router early LoRA: blocks [0, {K}) + embeddings frozen, adapters on [{B0}, {K}), "
+                  f"{len(mods)} linears get rank-{o.st_otr_early_lora} adapters (scale {o.st_otr_early_lora_scale})",
+                  flush=True)
+        if online and o.st_otr_freeze_early:
+            from olmo_core.nn.online_token_router import freeze_early_blocks
+
+            r = model._online_token_router
+            n = freeze_early_blocks(model, r.cfg.drop_layer)
+            print(f"[variants] online router freeze_early: embeddings + blocks [0, {r.cfg.drop_layer}) frozen "
+                  f"({n / 1e6:.0f}M params: no grads, no optimizer state)", flush=True)
         if o.st_tokexit_layer >= 0:
             # token exit: the same keep rule, dropped tokens leave at the input of this block
             model.enable_token_exit(o.st_tokexit_layer)
@@ -1265,7 +1500,23 @@ class SoftToken(Variant):
         return {"online_router": OnlineRouterCallback()}
 
     def export_config(self, o):
+        out: Dict[str, Any] = {}
+        if o.st_keep_token_rule == "online" and o.st_otr_early_lora > 0:
+            # the eval re-installs the adapters before loading (nested_ffn_moe.post_build_hook_from_config); a DCP load
+            # only reads the keys the model asks for, so without this block the adapters would be silently dropped
+            from olmo_core.nn.online_token_router import parse_mod_layers
+
+            L = parse_mod_layers(o.st_otr_mod_layers)[0] if o.st_otr_mod_layers else o.st_otr_drop_layer
+            if o.st_otr_stages:
+                from olmo_core.nn.online_token_router import parse_stages
+
+                L = parse_stages(o.st_otr_stages)[0][0]
+            L = o.st_otr_early_lora_blocks or L
+            out["early_lora"] = {"n_blocks": L, "rank": o.st_otr_early_lora, "scale": o.st_otr_early_lora_scale}
+            if o.st_otr_early_lora_start:
+                out["early_lora"]["start"] = o.st_otr_early_lora_start
         return {
+            **out,
             "softtoken": {
                 "n_random": o.st_n_random,
                 "n_random_range": o.st_n_random_range,
@@ -1299,13 +1550,16 @@ VARIANTS: Dict[str, Variant] = {
         FlexCompute(),
         FFNDrop(),
         LayerDrop(),
+        FFNWidth(),
+        FFNChunk(),
+        LoRA(),
     )
 }
 #: setA spells the dense arm ``dense``.
 VARIANTS["dense"] = VARIANTS["full"]
 
 #: Every export key, ``None`` unless an active variant fills it (train_ctc_suite's config.json).
-EXPORT_KEYS = ("ffn_token_drop", "ffn_moe", "kv_route", "block_skip", "softtoken")
+EXPORT_KEYS = ("ffn_token_drop", "ffn_moe", "kv_route", "block_skip", "softtoken", "early_lora")
 
 
 def get_variant(name: str) -> Variant:
@@ -1386,6 +1640,8 @@ def tolerant_base_load(base_checkpoint: str, model, save_folder: str) -> None:
         "bskip_routers.",
         "pooled_projector.",
         "._pooled_projector",
+        ".lora_A",
+        ".lora_B",
     )
     bad = [k for k in missing if not any(a in k for a in allowed)]
     if bad:
