@@ -2,6 +2,14 @@
  {
   "date": "2026-10-29",
   "status": "running",
+  "track": "Wall-clock",
+  "who": "main (tokdrop)",
+  "title": "Per-layer skipping overhead: token-level vs 100/128-token chunks (microbenchmark)",
+  "result": "Real Qwen3.5-4B GDN and attention blocks, T = 8k / 32k, keep 25% / 50%, fwd + bwd, 1 GPU on mooney."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "running",
   "track": "Model scale",
   "who": "side session (Qwen3 generalization)",
   "title": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?",
@@ -73,11 +81,11 @@
  },
  {
   "date": "2026-10-29",
-  "status": "running",
+  "status": "dropped",
   "track": "Next (≥5×)",
-  "who": "main (tokdrop)",
+  "who": "small-model-select",
   "title": "Small-model front end (0.8B picks tokens for the 4B)",
-  "result": "Reopened 10-29 at Prasann's request: a side session is testing small-model token selection (0.8B or smaller). Earlier estimate: ceiling ≈1.5× over the recipe, since dropping after block 1 still costs 0.14× dense."
+  "result": "Cost model only (no training): with a 0.8B selector the ceiling is ≈1.35× over the recipe (≈4× dense) assuming no score loss; even a near-free selector with 7% kept from block 0 is ≈2.6× (≈8× dense) only if score is unchanged. Measured early drops already lose 0.04–0.08, random token choice ≈ router (0.914 vs 0.915), so selection is not the bottleneck: realistic ≈1.9× dense, below the recipe's ≈3×. Branch claude/small-model-select-0a941a (small_model_cost.py)."
  },
  {
   "date": "2026-10-29",
