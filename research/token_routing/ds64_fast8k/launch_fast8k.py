@@ -311,6 +311,14 @@ ARM_EXTRA.update({
                                  "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
                                  "--st-otr-early-lora-blocks 32 --st-otr-later-mass-target 0.7 --st-otr-later-max-keep-frac 0.5"
                                  + x) for t, x in (("", ""), ("f16", " --st-otr-min-per-doc 16"))},
+    # early first stage (Prasann: drop before the first full-attention layer at block 3), recipe otherwise; and a
+    # pyramid that keeps 50% from block 3 before the usual 20% / 7%
+    **{f"lora64all32{tag}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                             "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                             f"--st-otr-stages {st} --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                             "--st-otr-early-lora-blocks 32")
+       for tag, st in (("r20at1", "1:0.2,16:0.07"), ("r20at3", "3:0.2,16:0.07"), ("r20at5", "5:0.2,16:0.07"),
+                       ("p50at3", "3:0.5,7:0.2,16:0.07"))},
     # second stage at block 12 instead of 16 (same budgets)
     "lora64r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                         "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
