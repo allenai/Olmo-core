@@ -1,38 +1,298 @@
 [
-  {"date": "2026-10-29", "status": "running", "track": "SFT 4-task", "who": "main (tokdrop)", "title": "Pyramid keep: 50% after block 3 → 20% after 7 → 7% after 16 (recipe otherwise)", "result": "Seed 0 on fresh 3,904 rows: 0.908 at 0.83× the recipe's FLOPs, a tie (≈1.2×). Seeds 1–2 and the 1,952 / 7,808-row pools are training or evaluating."},
-  {"date": "2026-10-29", "status": "done", "track": "SFT 4-task", "who": "main (tokdrop)", "title": "Recipe with its first drop after block 1 / 3 / 5 (no full-context steps)", "result": "0.839 / 0.872 / 0.880 vs the recipe's 0.916 at 0.61 / 0.73 / 0.87× its FLOPs (fresh 3,904 rows, 1 seed): loses 0.02–0.04 at matched FLOPs. The cliff before block 7 holds."},
-  {"date": "2026-10-29", "status": "done", "track": "Mechanism", "who": "online-router", "title": "Gradient fidelity v2: bias vs variance, batch-level cosine", "result": "Early drops fail by bias even for a perfect predictor (8-batch cos 0.41 / 0.08 / 0.08 / 0.03 for splits after 7 / 5 / 3 / 1). Random's per-row error is mostly variance but does not average out in the probe. No single metric predicts router vs random (off-policy). 64 rows/task."},
-  {"date": "2026-10-29", "status": "done", "track": "SFT 4-task + 11-task", "who": "main (tokdrop)", "title": "Adaptive stage-2 budget (keep tokens covering 70% of predicted gradient mass, cap 50%) scaled up", "result": "Ties the recipe on fresh data (0.880 / 0.918 / 0.922 vs 0.883 / 0.915 / 0.924 at 1,952 / 3,904 / 7,808 rows) and loses 0.03 on the 11-task mix (xabsence −0.10, outlier −0.11). Dropped; not sent to 64k."},
-  {"date": "2026-10-29", "status": "proposed", "track": "Next (≥5×)", "who": "main (tokdrop)", "title": "Shared-context multi-query training", "result": "k questions per corpus; run the corpus once, train on all k answers. Ceiling ≈k× on top of routing. Needs a data rebuild. Awaiting Prasann's go."},
-  {"date": "2026-10-29", "status": "proposed", "track": "Next (≥5×)", "who": "main (tokdrop)", "title": "Row selection: train only on the hardest 10–20% of fresh rows", "result": "Cheap scoring pass picks rows; ceiling 3–5× on top of routing. Screenable on existing fresh pools. Awaiting Prasann's go."},
-  {"date": "2026-10-29", "status": "dropped", "track": "Next (≥5×)", "who": "main (tokdrop)", "title": "Small-model front end (0.8B picks tokens for the 4B)", "result": "Metered FLOPs show dropping after block 1 still costs 0.14× dense, so the full-length early blocks are only ≈40% of the recipe's cost: ceiling ≈1.5×, below the 5× bar."},
-  {"date": "2026-10-29", "status": "done", "track": "Infra", "who": "main (tokdrop)", "title": "Unified results hub (this page) and experiment log", "result": "Nine sections with sidebar navigation; detail pages and the Aug–Sep archive linked under Provenance."},
-  {"date": "2026-10-28", "status": "done", "track": "SFT 4-task", "who": "layerskip-train", "title": "Layer-skip screen, 44 runs: fixed skips (20/24/28, 20–27), LayerDrop on 16–29, gradient-ranked top-25/50% layers (update-only and forward-skip)", "result": "Dense + skips ties dense at 0.78–0.89× FLOPs (Δ −0.03 to +0.02); recipe + skip loses 0.007–0.13 for 3–8% FLOPs; forward-skip selectors collapse. Record: records/layer-skip-screen.md (branch claude/train-layerskip-35010b)."},
-  {"date": "2026-10-28", "status": "dropped", "track": "SFT 4-task", "who": "main (tokdrop)", "title": "Fresh-pool FLOP curves for layer-skip arms", "result": "Not launched: best case ≈1.1–1.2× FLOPs-to-match, far below routing."},
-  {"date": "2026-10-28", "status": "done", "track": "SFT 4-task", "who": "online-router", "title": "Hill-climb replicates: adaptive stage-2 budget (3 seeds), MLP + per-group ridge (2 seeds)", "result": "Adaptive budget 0.864 vs the recipe's 0.852 (+3.5% FLOPs) on the 1,464-row screen; MLP + per-group ridge 0.856, no gain."},
-  {"date": "2026-10-28", "status": "done", "track": "SFT 4-task", "who": "lora-vs-routing", "title": "Scored dense at 5,856 / 7,808 fresh rows and the recipe at 7,808", "result": "Dense 0.928 / 0.931; the recipe's 0.926 at 7,808 equals dense at 3,904, so FLOPs-to-match ≈2.0× is now a point estimate (good only to ≈1.5–4×: dense is flat there)."},
-  {"date": "2026-10-28", "status": "done", "track": "CPT", "who": "CPT Run Iteration", "title": "Frozen-output-layer whole-model LoRA at 64k and 128k (full-row CE)", "result": "−0.0057 / −0.0039 / −0.0026 at 64k after 120 / 240 / 480 steps; −0.0038 / −0.0046 at 128k after 48 / 120; the 64k 240-step run ties dense at 480 (≈2.9×). 0.68× FLOPs at both lengths."},
-  {"date": "2026-10-28", "status": "held", "track": "CPT", "who": "CPT Run Iteration", "title": "Matched SFT + CTC generation eval of the CPT checkpoints", "result": "Held for Prasann's decision."},
-  {"date": "2026-10-27", "status": "done", "track": "SFT 4-task + 11-task", "who": "lora-vs-routing", "title": "LoRA × routing 2×2 ablation (each cell at its best LR)", "result": "Routing does most of the gain; LoRA-all is 15–35% of it on the 4-task mix and shrinks with data on 11-task (54% → 19% → 7%). At matched data all arms score within ≈0.03: the gain is cheaper steps. Record: records/lora-vs-routing-ablation.md (branch claude/vibrant-williams-4b0f66)."},
-  {"date": "2026-10-27", "status": "done", "track": "SFT 4-task", "who": "main (tokdrop)", "title": "Review controls: dense + LoRA-all, dense LR 1e-5 / 2e-5, sparse loss positions, random token choice", "result": "Dense is best at 5e-6 everywhere; random token choice nearly matches the router (+0.027 at 1,464 rows, tie at 3,904)."},
-  {"date": "2026-10-26", "status": "done", "track": "Infra", "who": "online-router", "title": "End-of-run checkpoint crash (async save on the final step overlapping teardown)", "result": "Fixed in 319d7442a (final-step interval save made synchronous); confirmed twice on GPU."},
-  {"date": "2026-10-26", "status": "done", "track": "SFT 4-task", "who": "online-router", "title": "Router hill-climb round: threshold keep, MLP router, document-context features, task one-hot, per-task routers, per-group ridge, keep schedule, stage 2 at block 12, partial FFN width", "result": "Everything ties the linear router (0.83–0.86 vs 0.852) or loses; first stage at block 5 −0.033; 75% FFN width −0.10. A better router predicts gradients better (rank corr 0.54 vs 0.37) but does not score better."},
-  {"date": "2026-10-26", "status": "done", "track": "CPT", "who": "CPT Run Iteration", "title": "Whole-model LoRA with frozen output layer: full budget curve to 960 steps", "result": "Never behind dense; FLOPs-to-match 4.8 / 4.3 / 3.2 / 2.1 / ≈1.4× at 48 / 120 / 240 / 480 / 960 steps; 22.3 vs 35.2 GiB peak."},
-  {"date": "2026-10-26", "status": "done", "track": "Infra", "who": "main (tokdrop)", "title": "Fresh 4-task pools (mt4f, 8,200 rows/task, generator seed 5310)", "result": "Built; zero train/eval overlap on nq and outlier (not checked for contradiction / oolong)."},
-  {"date": "2026-10-26", "status": "partial", "track": "SFT 11-task", "who": "main (tokdrop)", "title": "Rerank / reorder graders for the 11-task mix", "result": "Tolerant reorder and rerank graders fixed; rerank evals launched from prasann/eval-rerank-lora. Not yet on the hub's 11-task means."},
-  {"date": "2026-10-25", "status": "done", "track": "Memory", "who": "online-router", "title": "Max trainable length at 80 GB (memory probes + four memory fixes)", "result": "With all fixes: dense ≈165k, 10% router ≈250k, two-stage ≈255k, 20% router ≈270k, recipe ≈300k, whole-model LoRA ≈400k tokens per row."},
-  {"date": "2026-10-25", "status": "done", "track": "64k", "who": "long-context-64k", "title": "Recipe at 64k on the 11-task mix (¼ epoch, 10× data)", "result": "+0.037 task average over dense at matched FLOPs, ahead on all 10 graded tasks, 0.365× FLOPs, 24% less peak memory. Gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k). 1 seed."},
-  {"date": "2026-10-25", "status": "done", "track": "Memory", "who": "main (tokdrop)", "title": "Wall-clock vs FLOPs analysis", "result": "Cheap methods run at 0.54–0.65× dense step time for 0.22–0.30× FLOPs; predicted ≈0.29–0.47× after packing, fused LoRA and compile."},
-  {"date": "2026-10-24", "status": "done", "track": "Mechanism", "who": "grad-composition", "title": "Gradient composition probe (SFT checkpoints + CPT addendum)", "result": "Blocks 0–6 hold 0.45 of the parameter gradient at the base, 0.20–0.40 after training; documents dominate early-mid blocks and fade with depth; rankings decorrelate with depth (case for rescoring at block 16). CPT importance is flat (top 10% hold 0.62)."},
-  {"date": "2026-10-24", "status": "done", "track": "SFT 4-task", "who": "online-router", "title": "LoRA early stack (rank 64 on blocks 0–6, frozen base) with the router", "result": "Same quality as the plain router at 0.25× dense FLOPs (vs 0.30×) and 48.4 vs 60.3 GiB peak, from step 0 (2 seeds). Rank 16 worse."},
-  {"date": "2026-10-24", "status": "done", "track": "SFT 4-task", "who": "online-router", "title": "Two-stage keep (20% after block 7, 7% after block 16)", "result": "Best router quality on the 1,464-row original pool (+0.11 outlier over one-stage at matched FLOPs, 2 seeds); ties one-stage on fresh pools and the 11-task mix."},
-  {"date": "2026-10-24", "status": "done", "track": "SFT 4-task + 11-task", "who": "online-router", "title": "Freeze variants: freeze blocks 0–6 at 50% / 75%, progressive freeze", "result": "Fine on the 4-task mix (0.21–0.24× FLOPs) but freezing costs xabsence on the 11-task mix (0.54–0.58 vs 0.68–0.71), so the recipe does not freeze."},
-  {"date": "2026-10-24", "status": "done", "track": "SFT 4-task", "who": "online-router", "title": "Mixture-of-depths (capacity 0.25, blocks 8–30 alternate) and adaptive keep by predicted gradient mass", "result": "MoD loses outlier (−0.25) at 0.78× FLOPs; adaptive keep spends more FLOPs for no gain."},
-  {"date": "2026-10-23", "status": "done", "track": "SFT 4-task", "who": "online-router", "title": "Aggressive-cut screen: no full-context steps, frozen / no-grad early stack, pyramid, merging dropped tokens, early-exit loss", "result": "Dropping the full-context steps is free; freezing from step 0, the pyramid and merging all lose contradiction (0.34–0.55 vs 0.66); early-exit loss is a no-op on SFT."},
-  {"date": "2026-10-23", "status": "done", "track": "CPT", "who": "CPT Run Iteration", "title": "Token dropping in CPT: router, input drops, slots, MoD, all-local attention, early-exit loss, partial MLP", "result": "Every variant loses to dense; whole-model LoRA without dropping wins instead."},
-  {"date": "2026-10-22", "status": "done", "track": "SFT 4-task", "who": "online-router", "title": "Split-point sweep (drop after block 1–12), router target ablation, exploration share", "result": "Cliff between blocks 6 and 7 (outlier 0.38 → 0.58); gradient-norm target best (residual-change target near random); exploration 0–50% all fine."},
-  {"date": "2026-10-22", "status": "done", "track": "Mechanism", "who": "online-router", "title": "Gradient fidelity v1 and offline router-accuracy probe", "result": "Router near a perfect predictor (cos 0.78 vs 0.83 after block 7; 0.45 vs 0.50 at the input); mid-stack drop is the big lever. Router rank correlation 0.5–0.6 from block-8 features."},
-  {"date": "2026-10-22", "status": "done", "track": "64k", "who": "long-context-64k", "title": "64k study: online router (keep 10% after block 7) vs dense, ¼ to 1 epoch", "result": "≈+0.03 task average over dense at matched FLOPs at every budget (≈1.6–1.7× FLOPs-to-match); trails dense by ≈0.03 on the same data. Gain grows with eval length to 16–32k and holds at 64k."},
-  {"date": "2026-10-20", "status": "done", "track": "SFT 4-task", "who": "main (tokdrop)", "title": "Fixed keep rules: gold kept whole + trimmed context, gold-blind and two-tier rules, LR sweep", "result": "Gold-whole rules learn a shortcut (contradiction@8k 0.03–0.07 vs dense 0.89 at every LR); gold-blind rules at best tie dense at 0.57× FLOPs."},
-  {"date": "2026-09-30", "status": "done", "track": "Archive", "who": "earlier sessions", "title": "Earlier compute-saving work: soft-KV, soft-token slots, routed FFN, dev-loss scheme grid", "result": "Superseded by the online router; pages linked in the hub's archive."}
+ {
+  "date": "2026-10-29",
+  "status": "done",
+  "track": "SFT 4-task + 11-task",
+  "who": "main (tokdrop)",
+  "title": "LoRA × routing Pareto plots (multi-point) on the hub",
+  "result": "Three panels (4-task fresh, 4-task original pool, 11-task) with dense, dense + LoRA-all, routing, and both, from the 2×2 data."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "running",
+  "track": "SFT 4-task",
+  "who": "main (tokdrop)",
+  "title": "Pyramid keep: 50% after block 3 → 20% after 7 → 7% after 16 (recipe otherwise)",
+  "result": "Seed 0 on fresh 3,904 rows: 0.908 at 0.83× the recipe's FLOPs, a tie (≈1.2×). Seeds 1–2 and the 1,952 / 7,808-row pools are training or evaluating."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "main (tokdrop)",
+  "title": "Recipe with its first drop after block 1 / 3 / 5 (no full-context steps)",
+  "result": "0.839 / 0.872 / 0.880 vs the recipe's 0.916 at 0.61 / 0.73 / 0.87× its FLOPs (fresh 3,904 rows, 1 seed): loses 0.02–0.04 at matched FLOPs. The cliff before block 7 holds."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "done",
+  "track": "Mechanism",
+  "who": "online-router",
+  "title": "Gradient fidelity v2: bias vs variance, batch-level cosine",
+  "result": "Early drops fail by bias even for a perfect predictor (8-batch cos 0.41 / 0.08 / 0.08 / 0.03 for splits after 7 / 5 / 3 / 1). Random's per-row error is mostly variance but does not average out in the probe. No single metric predicts router vs random (off-policy). 64 rows/task."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "done",
+  "track": "SFT 4-task + 11-task",
+  "who": "main (tokdrop)",
+  "title": "Adaptive stage-2 budget (keep tokens covering 70% of predicted gradient mass, cap 50%) scaled up",
+  "result": "Ties the recipe on fresh data (0.880 / 0.918 / 0.922 vs 0.883 / 0.915 / 0.924 at 1,952 / 3,904 / 7,808 rows) and loses 0.03 on the 11-task mix (xabsence −0.10, outlier −0.11). Dropped; not sent to 64k."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "proposed",
+  "track": "Next (≥5×)",
+  "who": "main (tokdrop)",
+  "title": "Shared-context multi-query training",
+  "result": "k questions per corpus; run the corpus once, train on all k answers. Ceiling ≈k× on top of routing. Needs a data rebuild. Awaiting Prasann's go."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "proposed",
+  "track": "Next (≥5×)",
+  "who": "main (tokdrop)",
+  "title": "Row selection: train only on the hardest 10–20% of fresh rows",
+  "result": "Cheap scoring pass picks rows; ceiling 3–5× on top of routing. Screenable on existing fresh pools. Awaiting Prasann's go."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "dropped",
+  "track": "Next (≥5×)",
+  "who": "main (tokdrop)",
+  "title": "Small-model front end (0.8B picks tokens for the 4B)",
+  "result": "Metered FLOPs show dropping after block 1 still costs 0.14× dense, so the full-length early blocks are only ≈40% of the recipe's cost: ceiling ≈1.5×, below the 5× bar."
+ },
+ {
+  "date": "2026-10-29",
+  "status": "done",
+  "track": "Infra",
+  "who": "main (tokdrop)",
+  "title": "Unified results hub (this page) and experiment log",
+  "result": "Nine sections with sidebar navigation; detail pages and the Aug–Sep archive linked under Provenance."
+ },
+ {
+  "date": "2026-10-28",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "layerskip-train",
+  "title": "Layer-skip screen, 44 runs: fixed skips (20/24/28, 20–27), LayerDrop on 16–29, gradient-ranked top-25/50% layers (update-only and forward-skip)",
+  "result": "Dense + skips ties dense at 0.78–0.89× FLOPs (Δ −0.03 to +0.02); recipe + skip loses 0.007–0.13 for 3–8% FLOPs; forward-skip selectors collapse. Record: records/layer-skip-screen.md (branch claude/train-layerskip-35010b)."
+ },
+ {
+  "date": "2026-10-28",
+  "status": "dropped",
+  "track": "SFT 4-task",
+  "who": "main (tokdrop)",
+  "title": "Fresh-pool FLOP curves for layer-skip arms",
+  "result": "Not launched: best case ≈1.1–1.2× FLOPs-to-match, far below routing."
+ },
+ {
+  "date": "2026-10-28",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "online-router",
+  "title": "Hill-climb replicates: adaptive stage-2 budget (3 seeds), MLP + per-group ridge (2 seeds)",
+  "result": "Adaptive budget 0.864 vs the recipe's 0.852 (+3.5% FLOPs) on the 1,464-row screen; MLP + per-group ridge 0.856, no gain."
+ },
+ {
+  "date": "2026-10-28",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "lora-vs-routing",
+  "title": "Scored dense at 5,856 / 7,808 fresh rows and the recipe at 7,808",
+  "result": "Dense 0.928 / 0.931; the recipe's 0.926 at 7,808 equals dense at 3,904, so FLOPs-to-match ≈2.0× is now a point estimate (good only to ≈1.5–4×: dense is flat there)."
+ },
+ {
+  "date": "2026-10-28",
+  "status": "done",
+  "track": "CPT",
+  "who": "CPT Run Iteration",
+  "title": "Frozen-output-layer whole-model LoRA at 64k and 128k (full-row CE)",
+  "result": "−0.0057 / −0.0039 / −0.0026 at 64k after 120 / 240 / 480 steps; −0.0038 / −0.0046 at 128k after 48 / 120; the 64k 240-step run ties dense at 480 (≈2.9×). 0.68× FLOPs at both lengths."
+ },
+ {
+  "date": "2026-10-28",
+  "status": "held",
+  "track": "CPT",
+  "who": "CPT Run Iteration",
+  "title": "Matched SFT + CTC generation eval of the CPT checkpoints",
+  "result": "Held for Prasann's decision."
+ },
+ {
+  "date": "2026-10-27",
+  "status": "done",
+  "track": "SFT 4-task + 11-task",
+  "who": "lora-vs-routing",
+  "title": "LoRA × routing 2×2 ablation (each cell at its best LR)",
+  "result": "Routing does most of the gain; LoRA-all is 15–35% of it on the 4-task mix and shrinks with data on 11-task (54% → 19% → 7%). At matched data all arms score within ≈0.03: the gain is cheaper steps. Record: records/lora-vs-routing-ablation.md (branch claude/vibrant-williams-4b0f66)."
+ },
+ {
+  "date": "2026-10-27",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "main (tokdrop)",
+  "title": "Review controls: dense + LoRA-all, dense LR 1e-5 / 2e-5, sparse loss positions, random token choice",
+  "result": "Dense is best at 5e-6 everywhere; random token choice nearly matches the router (+0.027 at 1,464 rows, tie at 3,904)."
+ },
+ {
+  "date": "2026-10-26",
+  "status": "done",
+  "track": "Infra",
+  "who": "online-router",
+  "title": "End-of-run checkpoint crash (async save on the final step overlapping teardown)",
+  "result": "Fixed in 319d7442a (final-step interval save made synchronous); confirmed twice on GPU."
+ },
+ {
+  "date": "2026-10-26",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "online-router",
+  "title": "Router hill-climb round: threshold keep, MLP router, document-context features, task one-hot, per-task routers, per-group ridge, keep schedule, stage 2 at block 12, partial FFN width",
+  "result": "Everything ties the linear router (0.83–0.86 vs 0.852) or loses; first stage at block 5 −0.033; 75% FFN width −0.10. A better router predicts gradients better (rank corr 0.54 vs 0.37) but does not score better."
+ },
+ {
+  "date": "2026-10-26",
+  "status": "done",
+  "track": "CPT",
+  "who": "CPT Run Iteration",
+  "title": "Whole-model LoRA with frozen output layer: full budget curve to 960 steps",
+  "result": "Never behind dense; FLOPs-to-match 4.8 / 4.3 / 3.2 / 2.1 / ≈1.4× at 48 / 120 / 240 / 480 / 960 steps; 22.3 vs 35.2 GiB peak."
+ },
+ {
+  "date": "2026-10-26",
+  "status": "done",
+  "track": "Infra",
+  "who": "main (tokdrop)",
+  "title": "Fresh 4-task pools (mt4f, 8,200 rows/task, generator seed 5310)",
+  "result": "Built; zero train/eval overlap on nq and outlier (not checked for contradiction / oolong)."
+ },
+ {
+  "date": "2026-10-26",
+  "status": "partial",
+  "track": "SFT 11-task",
+  "who": "main (tokdrop)",
+  "title": "Rerank / reorder graders for the 11-task mix",
+  "result": "Tolerant reorder and rerank graders fixed; rerank evals launched from prasann/eval-rerank-lora. Not yet on the hub's 11-task means."
+ },
+ {
+  "date": "2026-10-25",
+  "status": "done",
+  "track": "Memory",
+  "who": "online-router",
+  "title": "Max trainable length at 80 GB (memory probes + four memory fixes)",
+  "result": "With all fixes: dense ≈165k, 10% router ≈250k, two-stage ≈255k, 20% router ≈270k, recipe ≈300k, whole-model LoRA ≈400k tokens per row."
+ },
+ {
+  "date": "2026-10-25",
+  "status": "done",
+  "track": "64k",
+  "who": "long-context-64k",
+  "title": "Recipe at 64k on the 11-task mix (¼ epoch, 10× data)",
+  "result": "+0.037 task average over dense at matched FLOPs, ahead on all 10 graded tasks, 0.365× FLOPs, 24% less peak memory. Gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k). 1 seed."
+ },
+ {
+  "date": "2026-10-25",
+  "status": "done",
+  "track": "Memory",
+  "who": "main (tokdrop)",
+  "title": "Wall-clock vs FLOPs analysis",
+  "result": "Cheap methods run at 0.54–0.65× dense step time for 0.22–0.30× FLOPs; predicted ≈0.29–0.47× after packing, fused LoRA and compile."
+ },
+ {
+  "date": "2026-10-24",
+  "status": "done",
+  "track": "Mechanism",
+  "who": "grad-composition",
+  "title": "Gradient composition probe (SFT checkpoints + CPT addendum)",
+  "result": "Blocks 0–6 hold 0.45 of the parameter gradient at the base, 0.20–0.40 after training; documents dominate early-mid blocks and fade with depth; rankings decorrelate with depth (case for rescoring at block 16). CPT importance is flat (top 10% hold 0.62)."
+ },
+ {
+  "date": "2026-10-24",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "online-router",
+  "title": "LoRA early stack (rank 64 on blocks 0–6, frozen base) with the router",
+  "result": "Same quality as the plain router at 0.25× dense FLOPs (vs 0.30×) and 48.4 vs 60.3 GiB peak, from step 0 (2 seeds). Rank 16 worse."
+ },
+ {
+  "date": "2026-10-24",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "online-router",
+  "title": "Two-stage keep (20% after block 7, 7% after block 16)",
+  "result": "Best router quality on the 1,464-row original pool (+0.11 outlier over one-stage at matched FLOPs, 2 seeds); ties one-stage on fresh pools and the 11-task mix."
+ },
+ {
+  "date": "2026-10-24",
+  "status": "done",
+  "track": "SFT 4-task + 11-task",
+  "who": "online-router",
+  "title": "Freeze variants: freeze blocks 0–6 at 50% / 75%, progressive freeze",
+  "result": "Fine on the 4-task mix (0.21–0.24× FLOPs) but freezing costs xabsence on the 11-task mix (0.54–0.58 vs 0.68–0.71), so the recipe does not freeze."
+ },
+ {
+  "date": "2026-10-24",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "online-router",
+  "title": "Mixture-of-depths (capacity 0.25, blocks 8–30 alternate) and adaptive keep by predicted gradient mass",
+  "result": "MoD loses outlier (−0.25) at 0.78× FLOPs; adaptive keep spends more FLOPs for no gain."
+ },
+ {
+  "date": "2026-10-23",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "online-router",
+  "title": "Aggressive-cut screen: no full-context steps, frozen / no-grad early stack, pyramid, merging dropped tokens, early-exit loss",
+  "result": "Dropping the full-context steps is free; freezing from step 0, the pyramid and merging all lose contradiction (0.34–0.55 vs 0.66); early-exit loss is a no-op on SFT."
+ },
+ {
+  "date": "2026-10-23",
+  "status": "done",
+  "track": "CPT",
+  "who": "CPT Run Iteration",
+  "title": "Token dropping in CPT: router, input drops, slots, MoD, all-local attention, early-exit loss, partial MLP",
+  "result": "Every variant loses to dense; whole-model LoRA without dropping wins instead."
+ },
+ {
+  "date": "2026-10-22",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "online-router",
+  "title": "Split-point sweep (drop after block 1–12), router target ablation, exploration share",
+  "result": "Cliff between blocks 6 and 7 (outlier 0.38 → 0.58); gradient-norm target best (residual-change target near random); exploration 0–50% all fine."
+ },
+ {
+  "date": "2026-10-22",
+  "status": "done",
+  "track": "Mechanism",
+  "who": "online-router",
+  "title": "Gradient fidelity v1 and offline router-accuracy probe",
+  "result": "Router near a perfect predictor (cos 0.78 vs 0.83 after block 7; 0.45 vs 0.50 at the input); mid-stack drop is the big lever. Router rank correlation 0.5–0.6 from block-8 features."
+ },
+ {
+  "date": "2026-10-22",
+  "status": "done",
+  "track": "64k",
+  "who": "long-context-64k",
+  "title": "64k study: online router (keep 10% after block 7) vs dense, ¼ to 1 epoch",
+  "result": "≈+0.03 task average over dense at matched FLOPs at every budget (≈1.6–1.7× FLOPs-to-match); trails dense by ≈0.03 on the same data. Gain grows with eval length to 16–32k and holds at 64k."
+ },
+ {
+  "date": "2026-10-20",
+  "status": "done",
+  "track": "SFT 4-task",
+  "who": "main (tokdrop)",
+  "title": "Fixed keep rules: gold kept whole + trimmed context, gold-blind and two-tier rules, LR sweep",
+  "result": "Gold-whole rules learn a shortcut (contradiction@8k 0.03–0.07 vs dense 0.89 at every LR); gold-blind rules at best tie dense at 0.57× FLOPs."
+ },
+ {
+  "date": "2026-09-30",
+  "status": "done",
+  "track": "Archive",
+  "who": "earlier sessions",
+  "title": "Earlier compute-saving work: soft-KV, soft-token slots, routed FFN, dev-loss scheme grid",
+  "result": "Superseded by the online router; pages linked in the hub's archive."
+ }
 ]

@@ -273,6 +273,18 @@ ol.log li:last-child { border-bottom: 0; }
 </section>
 __LORA2X2__
 <section>
+  <h2>LoRA × routing: Pareto view</h2>
+  <div class="figs">
+    <figure><h3>4-task, fresh pools (1,952 / 3,904 / 7,808 rows/task)</h3><div class="chart"><canvas id="lr2f" aria-label="LoRA x routing, 4-task fresh"></canvas></div>
+      <figcaption>8-cell mean (4 tasks × 2k / 8k), eval_size 500, no-cot. Each arm at its better LR (5e-6 or 1e-5). Points left to right = more rows/task. 1–2 seeds per point.</figcaption></figure>
+    <figure><h3>4-task, original pool (488–1,952 rows/task)</h3><div class="chart"><canvas id="lr2o" aria-label="LoRA x routing, 4-task original pool"></canvas></div>
+      <figcaption>Same metric. Dense's two cheapest points are runs cut at 31 / 61 steps. Dense + LoRA-all and routing-only exist only at 1,464 rows; both arms at 488–1,952.</figcaption></figure>
+    <figure><h3>11-task (240 / 480 / 720 rows/task)</h3><div class="chart"><canvas id="lr2e" aria-label="LoRA x routing, 11-task"></canvas></div>
+      <figcaption>Mean over 9 tasks at 8k, eval_size 500, no-cot. Dense's two cheapest points are 240-row runs cut at 32 / 64 steps. Routing arms use the 16-token floor.</figcaption></figure>
+  </div>
+  <p class="note">Read across at a fixed score (dense FLOPs to match, from the table above): on the 4-task mix routing alone (orange) is ≈2.9–3.5× left of dense and routing + LoRA-all (blue) ≈3.8–4.8×, while dense + LoRA-all (green) is only ≈1.4–1.6×. On the 11-task mix the arms are closer: 1.06–1.39× (LoRA-all), 1.56–1.79× (routing), 1.83–2.30× (both).</p>
+</section>
+<section>
   <h2>Per task: 4-task mix @8k</h2>
   <p class="note">Same runs and colours as above, one panel per task (8k rung, eval_size 500 each, no-cot). Fresh data on the top row, original pool below.</p>
   <div class="figs small" id="pt4f"></div>
@@ -572,6 +584,11 @@ function draw() {
     ch.data.datasets.forEach(ds => { if (ds.label.includes("fit")) { ds.pointRadius = 0; } }); ch.update(); } });
   plot("cpt32", Object.entries(D.cpt32).map(([k, v], i) => ({ label: k, pts: v.map(p => ({ x: p[0], y: p[1] })), dense: i === 0 })), "dev CE (nats)", { dp: 4 });
   plot("cpt64", cptLenSets(), "LoRA − dense dev CE (nats)", { xlab: "training steps (log)", dp: 4 });
+  if (D.lr2) Object.entries(D.lr2).forEach(([id, pan]) => {
+    const lab = { A: "dense", B: "dense + LoRA-all", C: "routing (two-stage)", D: "routing + LoRA-all" }, col = { A: "--dense", B: "--c3", C: "--c1", D: "--c2" };
+    plot(id, ["A", "B", "C", "D"].filter(c => pan[c] && pan[c].length).map(c => ({ label: lab[c], dense: c === "A", col: col[c], shape: c === "B" ? "triangle" : "rectRot",
+      pts: pan[c].map(p => ({ x: p[0], y: p[1], note: (p[2] === "cut" ? "cut run" : p[2] + " rows/task") + (p[3] > 1 ? ", " + p[3] + " seeds" : "") })) })),
+      id === "lr2e" ? "mean of 9 tasks @8k" : "8-cell mean"); });
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
@@ -788,9 +805,21 @@ def main():
     data["cptctx"] = CPT_CTX
     try:
         from make_lora_routing_section import section as lora2x2_section
-        lora2x2 = lora2x2_section(json.load(open(a.lora2x2)))
+        lr2 = json.load(open(a.lora2x2))
+        lora2x2 = lora2x2_section(lr2)
+        cut = {"mt4": [(102, 0.666), (197, 0.743)], "mt11": [(46, 0.500), (92, 0.616)]}  # dense runs cut at 31/61 (32/64) steps
+        def arm(mix, pool, c):
+            return sorted((t["cells"][c]["pf"], t["cells"][c]["y"], t["rows"], t["cells"][c]["n"]) for t in lr2["tables"]
+                          if t["mix"] == mix and t["pool"] == pool and c in t["cells"])
+        data["lr2"] = {}
+        for key, mix, pool in (("lr2f", "mt4", "f"), ("lr2o", "mt4", "s"), ("lr2e", "mt11", "s")):
+            pan = {c: arm(mix, pool, c) for c in "ABCD"}
+            if key != "lr2f":
+                pan["A"] = sorted([(x, y, "cut", 1) for x, y in cut[mix]] + pan["A"])
+            data["lr2"][key] = pan
     except FileNotFoundError:
         lora2x2 = ""
+        data["lr2"] = {}
     log = sorted(json.load(open(a.log)), key=lambda e: e["date"], reverse=True)
     html = PAGE.replace("__LOG__", json.dumps(log).replace("</", "<\\/")).replace("__LORA2X2__", lora2x2).replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
