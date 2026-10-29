@@ -2,16 +2,20 @@
 experiment: tokdrop_lr
 title: LR ablation for token-drop training — dense vs gold_fl20p8_noslot (gfl20p8ns) × LR {5e-6, 1.5e-5, 5e-5}, ONE multi-task job per (arm, LR) on contradiction+nq+outlier+oolong (fast8k mt4 shard), Qwen3.5-4B base
 status: active
-updated: 2026-10-23
-branch: prasann/flopdrop_clean @ b84afc2a2 (pushed); Beaker -tde runs pinned at origin/claude/online-router-1bc01a 67a28d605
+updated: 2026-10-28
+branch: prasann/flopdrop_clean @ eb3c9dd1e (pushed); Beaker -tde runs pinned at origin/claude/online-router-1bc01a 67a28d605
 launcher: research/token_routing/ds64_fast8k/launch_fast8k.py (env F8K_SUFFIX=-lra, OPS_EXPERIMENT=tokdrop_lr)
 records:
   - records/flopdrop-final-figures-plan.md
+  - records/lora-vs-routing-ablation.md (branch claude/vibrant-williams-4b0f66, unmerged)
+  - records/layer-skip-screen.md (branch claude/train-layerskip-35010b, unmerged)
+  - records/online-token-router.md (router branch claude/online-router-1bc01a: hill-climb + gradient fidelity v2)
 results:
 artifacts:
+  - https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (overview, v20, the summary page)
   - https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/f8k-lra-q35-4b
-next_step: (10-23) LEAD = mid-stack online router (otr10M7: keep 10% after block 7, gnorm target, full-context step every 8): >= dense at matched FLOPs on mt4 (3 seeds, s1464/s1952). 11-task: fails strmatch (-0.11..-0.25) and grouping@8k; per-doc floor f8/f16 screening (router session). AGGRESSIVE (FLOPs+memory, Prasann 10-23): mt4s488 screen at matched FLOPs: otr10M7de0 (no full steps) worst -0.057 vs otr10M7 -0.081 = free at small scale; frozen/no-grad early stack -0.13 contra@2k; pyramid -0.16; merge -0.09. In flight (Beaker -tde, pinned router branch): otr10M7de0 s1464, otr10M7de0xl3 s1464 (early-exit LM loss W0.3), otr10M7de0xl3/xl10 s488; mt11 s960 dense x2 / otr10M7 / otr10M8 / otr10M7gold evals. CPT track (olmo3_cptdrop, artifact 4tZKEXtpSpg5ax6B1YeoLk): router loses to dense on dev CE at every budget; exit-loss screen queued there. 64k study: experiment mt11_64k. Hourly cron check-in drives this.
+next_step: (10-28) RECIPE = whole-model LoRA + two-stage 7:0.2,16:0.07, no full-context steps: dense FLOPs-to-match 3.0x / 3.0x / 2.0x at fresh 1,952 / 3,904 / 7,808 rows/task (f7808 now a point estimate; dense curve extended to f5856/f7808). 2x2: routing is most of the gain, LoRA 15-35% on 4-task. Router hill-climb (threshold, MLP, ctx feats, task id, per-task, keep sched) all tie; early drop (<block 7) fails by bias even for an oracle (fidelity v2). Layer skip (44 runs): ties dense at 0.78-0.89x, hurts on the recipe. IN FLIGHT: m70c50 (adaptive stage-2 budget, 0.870 on 1 seed vs recipe 0.852) seeds 1-2 + mlprg sd1 (router session, Beaker). PENDING PRASANN: fresh-pool curves for layer-skip arms (recommend skip); early-split sweep of the recipe at blocks 1/3/5/7; per-row drop depth; matched SFT+CTC of CPT ckpts. Hourly cron check-in drives this.
 ---
 
 # tokdrop_lr
