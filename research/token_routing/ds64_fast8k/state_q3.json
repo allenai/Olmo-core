@@ -17,6 +17,96 @@
    "steps_expected": 4,
    "gpus": 2,
    "state": "S"
+  },
+  "f8k-mt4-dense-f7808-q3-lr5e-06": {
+   "ex": "01M64XMF19Q9F6FZ1Q6TKWFXAP",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f7808",
+   "steps_expected": 1952,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f3904-q3-lr5e-06": {
+   "ex": "01M64XNAQ5ZWD9P261XYH9KC8T",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05": {
+   "ex": "01M64XP48R32THR7V4MM242CA7",
+   "task": "mt4",
+   "arm": "q3lora64all36r20at8",
+   "budget": "f7808",
+   "steps_expected": 1952,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all36r20at8-f3904-q3-lr1e-05": {
+   "ex": "01M64XQ6DHQB18BRXCMKRKHWT9",
+   "task": "mt4",
+   "arm": "q3lora64all36r20at8",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f488-q3-lr5e-06": {
+   "ex": "01M64XRG2YN27GR1PMEP14P798",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f488",
+   "steps_expected": 122,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f976-q3-lr5e-06": {
+   "ex": "01M64XSNFEJ7AFKHEF58YA7JKH",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f976",
+   "steps_expected": 244,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1464-q3-lr5e-06": {
+   "ex": "01M64XTHJXV70HH7PPY6JJKPKA",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1952-q3-lr1e-05": {
+   "ex": "01M64XV9VRWN8PA0E1G98210WA",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05": {
+   "ex": "01M64XW2393DNK6XJXXX3Q6T4F",
+   "task": "mt4",
+   "arm": "q3lora64all36r20at4",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05": {
+   "ex": "01M64XWVWZRK1CPS3N5Q3VZCRE",
+   "task": "mt4",
+   "arm": "q3lora64all36r20at12",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
   }
  },
  "evals": {},
