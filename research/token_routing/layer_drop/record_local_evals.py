@@ -47,8 +47,19 @@ def main():
     a = ap.parse_args()
     import launch_fast8k as L  # merge-safe load/save of the shared state.json
 
-    cells = sorted(d for d in os.listdir(a.claims) if os.path.isdir(os.path.join(a.claims, d)))
     st = L.load_state()
+    # cells Beaker already ran or is running: pre-claim them (marker <cell>.beaker) so the local nodes skip them
+    runs_file = os.path.join(os.path.dirname(os.path.abspath(a.claims)), "runs.txt")
+    for run in (open(runs_file).read().split() if os.path.exists(runs_file) else []):
+        for task in ("contradiction", "nq", "outlier", "oolong"):
+            for rung in ("8k", "2k"):
+                e = st["evals"].get(f"{run}-ev{task}-{rung}", {})
+                cell = os.path.join(a.claims, f"{run}__{task}__{rung}")
+                if e.get("ex") and e["ex"] != "local" and e.get("state") in ("DONE", "R") and not os.path.exists(cell):
+                    os.mkdir(cell)
+                    open(cell + ".beaker", "w").write(f"{e['ex']} {e['state']}\n")
+    cells = sorted(d for d in os.listdir(a.claims) if os.path.isdir(os.path.join(a.claims, d))
+                   and not os.path.exists(os.path.join(a.claims, d + ".beaker")))
     changed = False
     for cell in cells:
         run, task, rung = cell.split("__")
@@ -84,6 +95,7 @@ def main():
             rows.append(dict(run_id=f"{run}-ev{task}-{rung}", train_run=run, experiment=a.experiment, task=t,
                              rung=rg, metric=metric, value=v, eval_size=n, se=se and round(se, 6),
                              cot_label="no-cot", eval_backend="olmo-core-native-docchunk-ladder (berkeley, batched)",
+                             ckpt_path=f"/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/{run}",
                              eval_job_id=f"local:{cell}"))
             have.add((run, t, rg, metric))
     with open(a.out, "w") as f:
