@@ -1235,6 +1235,23 @@ task, with a same-backend baseline.
 Together with CPT's results (topk and random lose on both frozen and trainable bases and degrade with training),
 partial MLP is closed.
 
+## Hill-climb replicates (2026-10-28): adaptive stage-2 budget holds over 3 seeds
+
+The 8-cell mean covers 4 tasks x the 2k and 8k rungs, eval_size 500, no-cot. The setup is mt4s1464, Beaker, LoRA-all,
+LR 1e-5, de0. Reference: the LoRA-all recipe's 5-run mean, **0.852** at 261 PF.
+
+| arm | seed | PF | 8-cell | contra / nq / oolong / outlier @8k |
+|---|---|---|---|---|
+| stage-2 adaptive mass 0.7, cap 0.5 (`lora64K32m70c50`) | 0 | 272 | 0.870 | 0.943 / 0.924 / 0.614 / 0.776 |
+| same | 1 | 270 | 0.861 | 0.940 / 0.914 / 0.616 / 0.782 |
+| same | 2 | 270 | 0.862 | 0.941 / 0.918 / 0.635 / 0.760 |
+| **same, 3-seed mean** | | **271** | **0.864** | 0.941 / 0.919 / 0.622 / 0.773 |
+| MLP + per-group ridge (`lora64K32mlprg`) | 0 / 1 | 259 | 0.859 / 0.852 (mean 0.856) | 0.965 / 0.908 / 0.611 / 0.774 · 0.935 / 0.914 / 0.643 / 0.733 |
+
+**The adaptive stage-2 budget holds on all 3 seeds (≥ 0.86): +0.012 over the recipe for +3.5% PF.** Stage 2 keeps each
+document's top tokens covering 70% of its predicted gradient mass among survivors, capped at 50% of them. Every
+other screen is within noise of the recipe; MLP + per-group ridge is 0.856. Next: fresh pools and mt11.
+
 ## Gradient fidelity v2 (2026-10-28): bias vs variance, batch-level, early drops
 
 **Verdict.**
