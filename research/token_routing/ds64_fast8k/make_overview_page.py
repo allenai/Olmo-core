@@ -145,29 +145,84 @@ code, .mono { font-family: var(--mono); font-size: .8rem; overflow-wrap: anywher
 .note { color: var(--muted); font-size: .84rem; }
 .pos { color: var(--c3); } .neg { color: var(--c1); }
 a { color: var(--c2); }
+.layout { max-width: 1340px; margin: 0 auto; padding-inline: 16px; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 32px; }
+.layout > .wrap { max-width: none; margin: 0; padding-inline: 0; min-width: 0; gap: 34px; }
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; padding-block: 28px; display: grid; gap: 2px; }
+nav.toc a { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: 4px; color: var(--muted); text-decoration: none; font-size: .88rem; line-height: 1.3; }
+nav.toc a span { font: 500 .72rem/1 var(--mono); color: var(--muted); min-width: 1ch; }
+nav.toc a:hover { color: var(--fg); background: var(--surface); }
+nav.toc a.on { color: var(--fg); background: var(--surface); box-shadow: inset 2px 0 0 var(--c2); }
+.part { display: grid; gap: 26px; scroll-margin-top: 60px; }
+.parthead { border-top: 2px solid var(--fg); padding-top: 14px; display: grid; gap: 6px; }
+.ptitle { font: 600 1.7rem/1.15 var(--display); margin: 0; }
+.verdict { font-size: 1rem; max-width: 80ch; margin: 0; }
+.part section h2 { font-size: 1.15rem; }
+.arch li { margin-bottom: 6px; }
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; gap: 0; }
+  nav.toc { z-index: 20; background: var(--bg); display: flex; overflow-x: auto; padding-block: 8px; border-bottom: 1px solid var(--rule); gap: 4px; }
+  nav.toc a { white-space: nowrap; padding: 6px 8px; }
+  .part { scroll-margin-top: 56px; }
+}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=JetBrains+Mono:wght@400;500&family=Public+Sans:wght@400;600&display=swap">
-<div class="wrap">
+<div class="layout">
+<nav class="toc" aria-label="Sections">
+  <a href="#summary"><span>1</span>Summary</a>
+  <a href="#sft4"><span>2</span>SFT 4-task</a>
+  <a href="#sft11"><span>3</span>SFT 11-task + long context</a>
+  <a href="#cpt"><span>4</span>CPT</a>
+  <a href="#memory"><span>5</span>Memory + wall-clock</a>
+  <a href="#mechanism"><span>6</span>Mechanism</a>
+  <a href="#ruledout"><span>7</span>Ruled out</a>
+  <a href="#next"><span>8</span>Next ideas</a>
+  <a href="#provenance"><span>9</span>Provenance</a>
+</nav>
+<main class="wrap">
 <header>
-  <span class="eyebrow">Train-time token / layer drop · 2026-10-11 to 10-25 · updated __UPDATED__</span>
+  <span class="eyebrow">Train-time token / layer drop · all results in one place · updated __UPDATED__</span>
   <h1>Cheaper training that matches dense at matched FLOPs</h1>
   <p class="sub">Qwen3.5-4B SFT on CTC long-context tasks (4-task and 11-task mixes, 64k) and OLMo 3 7B long-document continued pretraining. Every plot puts training FLOPs (measured by the FLOP meter) on the x-axis; up-and-left of the dense line is better (down-and-left for CPT loss). Private page.</p>
 </header>
-
+<div class="part" id="summary">
+<div class="parthead"><span class="eyebrow">1 · Summary</span><h2 class="ptitle">Where things stand</h2><p class="verdict">Routing plus LoRA trains ≈2–4× cheaper than dense on SFT at matched quality; in CPT, LoRA alone wins and every token drop loses.</p></div>
 <section class="lead">
-  <h2>Where things stand</h2>
+  <h2>Verdicts</h2>
   <ul>
     <li><b>SFT, 4-task mix:</b> dense needs about <b>3×</b> the training FLOPs to match the cheap methods on fresh data (3,904 rows/task), and <b>≈2×</b> at 7,808 rows/task (now a point estimate: the recipe's 0.926 equals dense at 3,904 rows; dense gains only +0.005 from 3,904 to 7,808, so the 7,808 ratios are good only to ≈1.5–4×). On the original pool, dense needs ≈3.5–3.9× to match the recipe and ≈4.4× for whole-model LoRA + two-stage keep.</li>
     <li><b>SFT, 11-task mix:</b> ≈1.7× for the recipe; whole-model LoRA + two-stage scores 0.762 against dense's 0.697 at the same 232 PF (2 seeds), ≈2.4×. Gains concentrate on xabsence, contradiction and outlier; four retrieval tasks are near dense's ceiling; grouping is the one task the router loses.</li>
     <li><b>SFT, 11-task mix at 64k with 10× the data:</b> the router (keep 10% after block 7, LR 5e-6) is ≈+0.03 task-average over dense at matched FLOPs at every budget from 1/4 to 1 epoch; dense needs ≈1.6–1.7× the FLOPs to match. On the same data it trails dense by ≈0.03. <b>The recipe at 64k (1/4 epoch, one seed): +0.037 task-average at 0.365× dense FLOPs, ahead on all 10 graded tasks, 24% less peak active memory</b> (37.2 vs 48.7 GiB); its gains grow with length (contradiction +0.041 at 8k → +0.119 at 64k).</li>
     <li><b>The recipe:</b> rank-64 LoRA adapters on blocks 0–6 (frozen base), an online gradient-norm router that keeps 20% of tokens from block 7 and rescores to 7% at block 16, no full-context steps, LR 5e-6, plus a 16-token floor per document on the 11-task mix. Whole-model LoRA (all 32 blocks, LR 1e-5) is cheaper still at the same quality.</li>
-    <li><b>LoRA vs routing (2×2 ablation):</b> routing does most of the matched-FLOP gain; LoRA-all is a smaller add-on. Dense FLOPs to match, 4-task (original 1,464 / fresh 1,952 / fresh 3,904 rows per task): dense + LoRA-all 1.48 / 1.41 / 1.17×, routing alone 3.45 / 2.85 / 2.89×, both 4.82 / 4.63 / 3.81×. 11-task (240 / 480 / 720 rows per task): 1.39 / 1.15 / 1.06×, 1.79 / 1.67 / 1.56×, 1.83 / 2.09 / 2.30×. Routing alone is 65–79% of the log multiplier on the 4-task mix and 53–96% on the 11-task mix. LoRA's share shrinks with data on the 11-task mix (54% → 19% → 7%). At matched data all four arms score within ≈0.03, so the gain is cheaper steps, not better learning. Dense is at its best LR throughout. A random token choice nearly matches the router (+0.027 at 1,464 rows, a tie at 3,904), so most of the routing gain comes from the drop structure. ⚠ Mostly 1–3 seeds.</li>
+    <li><b>LoRA vs routing (2×2 ablation):</b> routing does most of the matched-FLOP gain; LoRA-all is a smaller add-on. Dense FLOPs to match, 4-task (original 1,464 / fresh 1,952 / fresh 3,904 rows per task): dense + LoRA-all 1.48 / 1.41 / 1.60×, routing alone 3.45 / 2.85 / 2.89×, both 4.82 / 4.63 / 3.81×. 11-task (240 / 480 / 720 rows per task): 1.39 / 1.15 / 1.06×, 1.79 / 1.67 / 1.56×, 1.83 / 2.09 / 2.30×. LoRA alone is 15–35% of the log multiplier on the 4-task mix; on the 11-task mix its share shrinks with data (54% → 19% → 7%). At matched data all four arms score within ≈0.03, so the gain is cheaper steps, not better learning. Dense is at its best LR throughout. A random token choice nearly matches the router (+0.027 at 1,464 rows, a tie at 3,904), so most of the routing gain comes from the drop structure. ⚠ Mostly 1–3 seeds.</li>
     <li><b>CPT:</b> every token-drop variant loses. Whole-model LoRA with no dropping beats dense at 0.70× metered FLOPs per step (≈0.75× counting checkpoint recompute): ≈2–4× FLOPs-to-match between 24 and 240 steps, ≈1.8× at 480, and parity by 960 steps (dev CE +0.0012 behind dense; ≈1.04× counting recompute). The adapters saturate around 0.25–0.5B tokens while full CPT keeps learning long-range structure, so this is a short-budget recipe. At 64k context the lead is ≈1.4–1.5× the 32k one, and about the same at 128k (frozen-output-layer recipe: −0.0057 / −0.0039 / −0.0026 at 64k after 120 / 240 / 480 steps, −0.0038 / −0.0046 at 128k after 48 / 120; the 64k 240-step run ties dense at 480, ≈2.9×). <b>Freezing the output layer too is the CPT recipe</b> (no full-rank weights trained at all; 0.685× FLOPs per step, 22.3 vs 35.2 GiB peak): never behind dense up to 960 steps. Dense FLOPs to match: 4.8× / 4.3× / 3.2× / 2.1× / ≈1.4× at 48 / 120 / 240 / 480 / 960 steps (dev CE −0.0037 / −0.0041 / −0.0032 / −0.0022 / +0.0002); seed 1 reproduces at 120. It also forgets less on short documents.</li>
     <li><b>Max train length at 80 GB (SFT):</b> ≈1.8× dense for the recipe and ≈2.4× for whole-model LoRA (extrapolated from short probes).</li>
   </ul>
 </section>
-
+<section>
+  <h2>At a glance</h2>
+  <div class="tbl"><table>
+    <tr><th>setting</th><th>best method</th><th class="n">FLOPs / step vs dense</th><th class="n">dense FLOPs to match</th><th>notes</th></tr>
+    <tr><td>SFT 4-task, fresh 3,904 rows/task</td><td>recipe (LoRA + two-stage keep)</td><td class="n">0.22×</td><td class="n">≈3.0–3.7×</td><td>1–2 seeds</td></tr>
+    <tr><td>SFT 4-task, fresh 7,808 rows/task</td><td>recipe</td><td class="n">0.25×</td><td class="n">≈2.0×</td><td>dense near ceiling; good only to ≈1.5–4×</td></tr>
+    <tr><td>SFT 11-task, 720 rows/task</td><td>whole-model LoRA + two-stage + floor</td><td class="n">≈0.33×</td><td class="n">≈1.7–2.4×</td><td>2 seeds</td></tr>
+    <tr><td>SFT 11-task at 64k, ¼ epoch</td><td>recipe</td><td class="n">0.365×</td><td class="n">+0.037 at matched FLOPs</td><td>10 / 10 tasks ahead, 1 seed</td></tr>
+    <tr><td>CPT, OLMo 3 7B, 32k</td><td>whole-model LoRA, frozen output layer</td><td class="n">0.685×</td><td class="n">4.8× → 1.4×</td><td>48 → 960 steps; larger at 64k</td></tr>
+    <tr><td>Max train length at 80 GB (SFT)</td><td>whole-model LoRA + router</td><td class="n">–</td><td class="n">≈2.4× dense's max T</td><td>extrapolated probes</td></tr>
+  </table></div>
+  <p class="note">"FLOPs / step vs dense" is per training step; "dense FLOPs to match" is the Pareto gain (compute dense needs to reach the same score). They differ because cheap methods score a little lower per row.</p>
+</section>
+<section>
+  <h2>Open decisions</h2>
+  <ul>
+    <li><b>Which ≥5× idea to start</b> (Section 8): shared-context multi-query training or row selection. Prasann's bar (10-29): gains of at least 5–10×; tweaks around 1.2× are not pursued.</li>
+    <li><b>CPT checkpoints:</b> run a matched SFT + CTC generation eval (held).</li>
+    <li><b>Branches to merge</b> (not merged by choice): <code>claude/vibrant-williams-4b0f66</code> (LoRA × routing 2×2), <code>claude/train-layerskip-35010b</code> (layer skip), <code>claude/online-router-1bc01a</code> (router code, hill-climb, fidelity v2).</li>
+  </ul>
+</section>
+</div>
+<div class="part" id="sft4">
+<div class="parthead"><span class="eyebrow">2 · SFT, 4-task mix</span><h2 class="ptitle">Pareto, FLOPs-to-match and the LoRA × routing split</h2><p class="verdict">Dense needs ≈3× the FLOPs at 3,904 fresh rows/task and ≈2× at 7,808; routing carries most of that gain.</p></div>
 <section>
   <h2>SFT: 4-task mix</h2>
   <div class="figs">
@@ -184,30 +239,28 @@ a { color: var(--c2); }
   </table></div>
   <p class="note">"Dense FLOPs to match" = training PF dense needs to reach the same 8-cell mean on its fresh curve (piecewise log-linear along dense at 1,952 / 3,904 / 5,856 / 7,808 rows/task) divided by the method's PF; "&gt;" when the method is above dense's best point (a lower bound).</p>
 </section>
-
 __LORA2X2__
-
 <section>
   <h2>Per task: 4-task mix @8k</h2>
   <p class="note">Same runs and colours as above, one panel per task (8k rung, eval_size 500 each, no-cot). Fresh data on the top row, original pool below.</p>
   <div class="figs small" id="pt4f"></div>
   <div class="figs small" id="pt4o" style="margin-top:12px"></div>
 </section>
-
+</div>
+<div class="part" id="sft11">
+<div class="parthead"><span class="eyebrow">3 · SFT, 11-task mix and long context</span><h2 class="ptitle">11 tasks, 64k, and gain vs length</h2><p class="verdict">≈1.7–2.4× on 11 tasks; at 64k the recipe is ahead on all 10 graded tasks at 0.365× FLOPs; the gain grows to 16–32k and holds at 64k.</p></div>
 <section>
   <h2>SFT: 11-task mix</h2>
   <div class="figs">
     <figure><h3>Mean over 9 tasks @8k vs training FLOPs</h3><div class="chart"><canvas id="f11" aria-label="11-task Pareto"></canvas></div>
       <figcaption>720 rows/task unless noted; the recipe also at 240/480/960. Mean over nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction, xabsence, strmatch, grouping at 8k (reorder and rerank excluded: no working grader). Dense below 240 rows/task = 240-row runs cut at 32 and 64 steps.</figcaption></figure>
-    <figure><h3>Peak memory vs row length (standard settings)</h3><div class="chart"><canvas id="memstd" aria-label="memory vs length standard"></canvas></div>
-      <figcaption>Peak GPU memory per GPU at the steady (routed) training step vs tokens per row. Qwen3.5-4B, 2× A100-80GB, FSDP-2, full checkpointing. The slope is memory per token: dense 0.39 GiB per 1k tokens, routed arms ≈0.25. Dense out of memory at 128k. Markers = measured; dashed = linear fit run out to where it reaches the 80 GB line (the estimated max length); dotted = 79.25 GiB usable.</figcaption></figure>
-    <figure><h3>Peak memory vs row length (all memory optimizations)</h3><div class="chart"><canvas id="memflags" aria-label="memory vs length optimized"></canvas></div>
-      <figcaption>Same probe with routed warmup, no dry run, chunked FFN recompute and segmented GDN. Slopes: dense 0.28, router 0.17, whole-model LoRA 0.16 GiB per 1k tokens. Markers = measured, dashed = linear fit run out to the 80 GB line (the recipe has one point at this setting, so its line uses the slope from the chunked-FFN round). Two-stage without adapters and the 20% router were measured on Beaker H100s (per-length memory matches the A100 probes to 0.03 GiB).</figcaption></figure>
-    <figure><h3>Max train length at 80 GB</h3><div class="chart"><canvas id="maxt" aria-label="max train length"></canvas></div>
-      <figcaption>Qwen3.5-4B SFT, 2× A100-80GB, FSDP-2, full activation checkpointing, chunked FFN + segmented GDN. Linear extrapolation from 3-step probes, one sample each (router session record).</figcaption></figure>
   </div>
 </section>
-
+<section>
+  <h2>Per task: 11-task mix @8k</h2>
+  <p class="note">Each panel = one task at 8k, same runs and colours as the 11-task plot. Reorder and rerank are not shown (no working grader yet; fixes in progress).</p>
+  <div class="figs small" id="pt11"></div>
+</section>
 <section>
   <h2>SFT: 11-task mix at 64k (10× data)</h2>
   <div class="figs">
@@ -219,7 +272,6 @@ __LORA2X2__
   <p class="note">The recipe (adapters + two-stage keep + floor, 1/4 epoch, one seed) is +0.037 over dense at matched FLOPs (dense = seed-averaged, better of two LRs), ahead on all 10 graded tasks: xabsence +0.111, contradiction +0.069, outlier +0.063, grouping +0.027, oolong +0.023, hotpotqa +0.022, strmatch +0.020, reorder (2k) +0.018, qdmatch_nq +0.017, nq +0.004. Peak active memory 37.2 vs 48.7 GiB on 4 H100s.</p>
   <div class="figs small" id="pt64" style="margin-top:12px"></div>
 </section>
-
 <section>
   <h2>Does the advantage grow with context length?</h2>
   <div class="figs">
@@ -232,13 +284,9 @@ __LORA2X2__
   </div>
   <p class="note" id="lenNote"><b>Reading:</b> at 2k the router barely beats dense (Δ ≈ 0.001–0.004; these tasks are near their ceiling at 2k). The gain rises to +0.015–0.033 at 8k and +0.03–0.05 at 16k–32k, then stays at +0.02–0.04 at 64k; dense FLOPs to match go from ≈1.1–1.3× at 2k to ≈1.4–1.9× at 8k–32k and ≈1.3–1.6× at 64k. So the advantage grows with eval length up to ~16–32k and holds at 64k, rather than growing without bound (1/2- and 1-epoch points are one seed). In CPT (full-row scoring), LoRA's lead over dense is ≈1.4–1.5× larger when training at 64k than at 32k, and about the same at 128k as at 64k: it grows to 64k and then stops.</p>
 </section>
-
-<section>
-  <h2>Per task: 11-task mix @8k</h2>
-  <p class="note">Each panel = one task at 8k, same runs and colours as the 11-task plot. Reorder and rerank are not shown (no working grader yet; fixes in progress).</p>
-  <div class="figs small" id="pt11"></div>
-</section>
-
+</div>
+<div class="part" id="cpt">
+<div class="parthead"><span class="eyebrow">4 · Continued pretraining</span><h2 class="ptitle">Long-document CPT, OLMo 3 7B</h2><p class="verdict">Frozen-output-layer whole-model LoRA: never behind dense up to 960 steps, 4.8× → 1.4× FLOPs-to-match; every token-drop variant loses.</p></div>
 <section>
   <h2>Long-document CPT (OLMo 3 7B)</h2>
   <div class="figs">
@@ -250,7 +298,43 @@ __LORA2X2__
       <figcaption>The edge peaks near 48 steps and decays as dense keeps learning, reaching parity by 960 steps (dev CE +0.0012 behind dense there; far-repeat CE +0.0035). At 64k the gap is ≈1.5× larger at every budget.</figcaption></figure>
   </div>
 </section>
-
+</div>
+<div class="part" id="memory">
+<div class="parthead"><span class="eyebrow">5 · Memory and wall-clock</span><h2 class="ptitle">Max trainable length and real step time</h2><p class="verdict">Routing and LoRA raise max length ≈1.8–2.4×; wall-clock savings lag FLOPs (0.54–0.65× time for 0.22–0.30× FLOPs).</p></div>
+<section>
+  <h2>Memory: max trainable length at 80 GB</h2>
+  <div class="figs">
+    <figure><h3>Peak memory vs row length (standard settings)</h3><div class="chart"><canvas id="memstd" aria-label="memory vs length standard"></canvas></div>
+      <figcaption>Peak GPU memory per GPU at the steady (routed) training step vs tokens per row. Qwen3.5-4B, 2× A100-80GB, FSDP-2, full checkpointing. The slope is memory per token: dense 0.39 GiB per 1k tokens, routed arms ≈0.25. Dense out of memory at 128k. Markers = measured; dashed = linear fit run out to where it reaches the 80 GB line (the estimated max length); dotted = 79.25 GiB usable.</figcaption></figure>
+    <figure><h3>Peak memory vs row length (all memory optimizations)</h3><div class="chart"><canvas id="memflags" aria-label="memory vs length optimized"></canvas></div>
+      <figcaption>Same probe with routed warmup, no dry run, chunked FFN recompute and segmented GDN. Slopes: dense 0.28, router 0.17, whole-model LoRA 0.16 GiB per 1k tokens. Markers = measured, dashed = linear fit run out to the 80 GB line (the recipe has one point at this setting, so its line uses the slope from the chunked-FFN round). Two-stage without adapters and the 20% router were measured on Beaker H100s (per-length memory matches the A100 probes to 0.03 GiB).</figcaption></figure>
+    <figure><h3>Max train length at 80 GB</h3><div class="chart"><canvas id="maxt" aria-label="max train length"></canvas></div>
+      <figcaption>Qwen3.5-4B SFT, 2× A100-80GB, FSDP-2, full activation checkpointing, chunked FFN + segmented GDN. Linear extrapolation from 3-step probes, one sample each (router session record).</figcaption></figure>
+  </div>
+  <div class="tbl" style="margin-top:14px"><table>
+    <tr><th>CPT, OLMo 3 7B (8× H200, FSDP, full checkpointing)</th><th class="n">GiB per +32k tokens</th><th class="n">max T, 80 GB-class</th><th class="n">max T, H200</th></tr>
+    <tr><td>dense</td><td class="n">20.1</td><td class="n">≈95k</td><td class="n">≈190k</td></tr>
+    <tr><td>whole-model LoRA</td><td class="n">20.3</td><td class="n">≈111k</td><td class="n">≈206k</td></tr>
+    <tr><td>dense + activation offload</td><td class="n">12.7</td><td class="n">≈126k</td><td class="n">≈277k</td></tr>
+    <tr><td>whole-model LoRA + offload</td><td class="n">11.6</td><td class="n">≈157k</td><td class="n">≈323k</td></tr>
+  </table></div>
+  <p class="note">LoRA lowers the fixed part (no gradients or Adam state for frozen weights); routing lowers the per-token slope (only kept tokens store block inputs past the split). Offload is an implementation fix that helps every arm.</p>
+</section>
+<section>
+  <h2>Wall-clock vs FLOPs</h2>
+  <div class="tbl"><table>
+    <tr><th>method</th><th class="n">FLOPs vs dense</th><th class="n">step time vs dense (today)</th><th class="n">ideal (time = FLOPs)</th><th class="n">predicted after packing + fused LoRA + compile</th></tr>
+    <tr><td>SFT cheap methods (router, recipe, LoRA-all)</td><td class="n">0.22–0.30×</td><td class="n">0.54–0.65×</td><td class="n">0.22–0.30×</td><td class="n">≈0.29–0.47×</td></tr>
+    <tr><td>Dense, skip blocks 20–27</td><td class="n">0.78×</td><td class="n">≈0.83×</td><td class="n">0.78×</td><td class="n">–</td></tr>
+    <tr><td>Dense, update only top 25% of layers (backward reaches block 0)</td><td class="n">0.79×</td><td class="n">0.90×</td><td class="n">0.79×</td><td class="n">–</td></tr>
+    <tr><td>Dense, update only top 25% (backward stops at block 24)</td><td class="n">0.57×</td><td class="n">0.54×</td><td class="n">0.57×</td><td class="n">–</td></tr>
+    <tr><td>CPT whole-model LoRA at 128–192k</td><td class="n">0.70×</td><td class="n">≈0.97×</td><td class="n">0.70×</td><td class="n">attention-bound at this length</td></tr>
+  </table></div>
+  <p class="note">LoRA saves FLOPs but little time today because its adapter hooks are unfused; routing loses time to gather/scatter and unpacked rows. Comparisons are against pad-free dense on the same cluster; layer-skip timings are same-node H200 A/Bs.</p>
+</section>
+</div>
+<div class="part" id="mechanism">
+<div class="parthead"><span class="eyebrow">6 · Mechanism</span><h2 class="ptitle">Where the gradient lives, and what the router gets right</h2><p class="verdict">Blocks 0–6 must see every token; the router is near a perfect predictor, but token choice matters far less than where and how much is dropped.</p></div>
 <section>
   <h2>Where the gradient lives, and how that shifts during training</h2>
   <p class="note">From the gradient-composition probe: one full forward + backward of the answer loss per held-out row on frozen checkpoints along the dense fine-tuning curve (Qwen3.5-4B, 4-task rows, 64 per task ⚠ below 500; differences under ≈±0.03 are noise). Full interactive version: <a href="https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ">gradient composition</a>.</p>
@@ -267,9 +351,32 @@ __LORA2X2__
       <figcaption>OLMo 3 7B, 48 rows × 32k ⚠. Share of each block's hidden-state gradient a token receives as keys/values for later tokens (vs its own label). Early blocks learn almost entirely as context, so dropping tokens early removes their learning signal.</figcaption></figure>
   </div>
 </section>
-
 <section>
-  <h2>What failed (and the number that decided it)</h2>
+  <h2>Does the router predict the right tokens, and does it matter?</h2>
+  <div class="tbl"><table>
+    <tr><th>probe</th><th>router</th><th>perfect predictor</th><th>random</th><th>what it says</th></tr>
+    <tr><td>Offline accuracy (base model): rank correlation with per-token gradient norm; share of squared gradient in the predicted top 30%</td><td class="n">0.5–0.6; 0.70–0.95</td><td class="n">1.0; 0.86–0.95</td><td class="n">0; 0.30</td><td>cheap block-8 features predict gradient size well</td></tr>
+    <tr><td>Gradient fidelity v1 (trained checkpoint, keep 30%): per-row cosine with the full-pass gradient, drop after block 7 / at the input</td><td class="n">0.78 / 0.45</td><td class="n">0.83 / 0.50</td><td class="n">0.10 / 0.06</td><td>where the drop happens matters far more than the predictor</td></tr>
+    <tr><td>Fidelity v2 (recipe checkpoint): cosine of the 8-batch accumulated update</td><td class="n">0.45</td><td class="n">–</td><td class="n">0.08</td><td>random's error is mostly variance per row but does not average out in the probe</td></tr>
+    <tr><td>Fidelity v2: perfect predictor, split after block 7 / 5 / 3 / 1 (8-batch cosine)</td><td colspan="3" class="n">0.41 / 0.08 / 0.08 / 0.03</td><td>early drops fail by bias even with perfect knowledge: no router fixes them</td></tr>
+    <tr><td>Training outcome: router vs random token choice (whole-model LoRA + two-stage)</td><td colspan="3" class="n">+0.027 at 1,464 rows; tie at 3,904</td><td>the drop structure, not the token choice, carries most of the gain</td></tr>
+    <tr><td>Training outcome: MLP router vs linear (online rank correlation 0.54 vs 0.37)</td><td colspan="3" class="n">same score</td><td>better prediction does not buy task quality</td></tr>
+  </table></div>
+  <p class="note">⚠ Probe sizes: offline accuracy 32 held-out rows/task; fidelity v1 12 rows/task; fidelity v2 64 rows/task (256 total). Single-step fidelity is off-policy (it scores random selection on router-trained checkpoints), which likely explains why it over-predicts the value of token choice. Which tokens each method keeps, on real rows: <a href="https://claude.ai/artifact/KsLw2QqRugmkkXCvXknbBg">router keep masks</a>. Full probe write-ups: <a href="https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1">online router</a> and <code>records/online-token-router.md</code> (router branch).</p>
+</section>
+<section>
+  <h2>Why it works where it works</h2>
+  <ul>
+    <li><b>Blocks 0–6 must see every token;</b> the router decides at block 7 from features that predict each token's gradient norm (held-out Spearman 0.54–0.63). The gradient-composition study shows rankings drift with depth (Spearman between blocks 7 and 24 falls 0.57 → 0.34), which is why rescoring at block 16 helps. ⚠ probes on 32–64 rows/task.</li>
+    <li><b>In SFT only answer tokens carry loss</b>, and the gradient concentrates on few document tokens (top 10% hold ≈0.9 of late-layer gradient energy).</li>
+    <li><b>In CPT every token is a label</b> and importance is flat (top 10% hold 0.62); early blocks learn mostly as context for later tokens (0.95 of block-0 gradient). So dropping tokens removes most of the learning signal, while freezing weights behind adapters does not. ⚠ 48 rows × 32k.</li>
+  </ul>
+</section>
+</div>
+<div class="part" id="ruledout">
+<div class="parthead"><span class="eyebrow">7 · Ruled out</span><h2 class="ptitle">What did not work</h2><p class="verdict">Router-quality tweaks, layer skipping and earlier drops all land at ≤1.3× over the recipe or lose.</p></div>
+<section>
+  <h2>What failed, and the number that decided it</h2>
   <div class="tbl"><table>
     <tr><th>idea</th><th>track</th><th>result</th></tr>
     <tr><td>Fixed keep rules (gold whole + trimmed context)</td><td>SFT</td><td class="neg">gold shortcut: contradiction@8k 0.03–0.07 at every LR (dense 0.89)</td></tr>
@@ -283,22 +390,30 @@ __LORA2X2__
     <tr><td>Layer skipping (fixed 20/24/28 or 20–27, LayerDrop on blocks 16–29, gradient-ranked top-25/50% layers)</td><td>SFT 4-task, 1,464 + 3,904 rows</td><td>dense: within noise of dense at 0.78–0.92× FLOPs (Δ −0.03 to +0.02); recipe + skip: −0.007 to −0.13 for 3–8% FLOPs; running only the top 25/50% of layers collapses (records/layer-skip-screen.md, branch claude/train-layerskip-35010b)</td></tr>
     <tr><td>Router hill-climb: threshold keep, MLP router, doc-context features, task one-hot, per-task routers, per-group ridge, keep schedule</td><td>SFT 4-task, 1,464 rows, 1–4 seeds</td><td>all tie the linear router (0.83–0.86 vs 0.852); first stage at block 5 −0.033; adaptive stage-2 budget 0.864 over 3 seeds there, but it ties the recipe on fresh data (0.880 / 0.918 / 0.922 vs 0.883 / 0.915 / 0.924 at 1,952 / 3,904 / 7,808 rows) and loses 0.03 on the 11-task mix (xabsence −0.10, outlier −0.11)</td></tr>
     <tr><td>Dropping before block 7 (after block 1–6)</td><td>SFT 4-task + fidelity probe</td><td>cliff at block 6→7 (outlier 0.38→0.69); even a perfect gradient-norm predictor loses the gradient direction (8-batch cos 0.03–0.08 vs 0.41 at block 7), so no router fixes it</td></tr>
+    <tr><td>Earlier first stage on the recipe (after block 1 / 3 / 5), fresh 3,904 rows, 1 seed</td><td>SFT 4-task</td><td>0.839 / 0.872 / 0.880 vs the recipe's 0.916, at 0.61 / 0.73 / 0.87× its FLOPs: −0.02 to −0.04 at matched FLOPs</td></tr>
+    <tr><td>Pyramid 50% after block 3 → 20% after 7 → 7% after 16</td><td>SFT 4-task</td><td>0.908 at 0.83× the recipe's FLOPs: a tie, ≈1.2× at best (below the 5× bar); seeds running</td></tr>
     <tr><td>Any token dropping (router, input drop, MoD, keep 50%)</td><td>CPT</td><td class="neg">router FLOPs-to-match &lt;0.41 → 0.06; keep 50% + LoRA worse than dense after 4 steps</td></tr>
     <tr><td>Early-exit loss on dropped tokens</td><td>CPT</td><td class="neg">dev CE rises with training (1.737 → 1.771)</td></tr>
     <tr><td>All-local attention, 4k-only rows</td><td>CPT</td><td class="neg">context gain collapses (0.075 → 0.044 / 0.0005)</td></tr>
     <tr><td>Stopping backprop below block B</td><td>CPT</td><td>FLOPs-to-match 2.9 / 1.4 at B = 4 / 8, below whole-model LoRA's 3.45</td></tr>
   </table></div>
 </section>
-
+</div>
+<div class="part" id="next">
+<div class="parthead"><span class="eyebrow">8 · Next ideas</span><h2 class="ptitle">Ideas with a ≥5× ceiling</h2><p class="verdict">Shift from per-token tweaks to per-row savings: shared-context multi-query training and row selection.</p></div>
 <section>
-  <h2>Why it works where it works</h2>
-  <ul>
-    <li><b>Blocks 0–6 must see every token;</b> the router decides at block 7 from features that predict each token's gradient norm (held-out Spearman 0.54–0.63). The gradient-composition study shows rankings drift with depth (Spearman between blocks 7 and 24 falls 0.57 → 0.34), which is why rescoring at block 16 helps. ⚠ probes on 32–64 rows/task.</li>
-    <li><b>In SFT only answer tokens carry loss</b>, and the gradient concentrates on few document tokens (top 10% hold ≈0.9 of late-layer gradient energy).</li>
-    <li><b>In CPT every token is a label</b> and importance is flat (top 10% hold 0.62); early blocks learn mostly as context for later tokens (0.95 of block-0 gradient). So dropping tokens removes most of the learning signal, while freezing weights behind adapters does not. ⚠ 48 rows × 32k.</li>
-  </ul>
+  <h2>Candidates for ≥5–10× over dense</h2>
+  <div class="tbl"><table>
+    <tr><th>idea</th><th>how it saves</th><th class="n">rough ceiling</th><th>status</th></tr>
+    <tr><td>Shared-context multi-query training</td><td>k questions per corpus; run the corpus once, train on all k answers, so the context cost is split k ways</td><td class="n">≈k× on top of routing (k = 8 → 10×+)</td><td>proposed; needs a data rebuild from the CTC generators</td></tr>
+    <tr><td>Row selection</td><td>score each fresh row cheaply (small model or early blocks) and train only on the hardest 10–20%; training CE falls to ≈0.1–0.2 fast</td><td class="n">3–5× on top of routing</td><td>proposed; screenable on the existing fresh pools</td></tr>
+    <tr><td>Small-model front end</td><td>a 0.8B model reads the full context and picks tokens; the 4B sees only the kept ones</td><td class="n">≈1.5× over the recipe</td><td>deprioritized: even dropping after block 1 still costs 0.14× dense (metered), so the full-length early blocks are only ≈40% of the recipe's cost</td></tr>
+  </table></div>
+  <p class="note">Ceilings are back-of-envelope estimates, not measurements. Prasann (10-29): pursue only ideas whose ceiling is at least ≈5× over dense.</p>
 </section>
-
+</div>
+<div class="part" id="provenance">
+<div class="parthead"><span class="eyebrow">9 · Provenance</span><h2 class="ptitle">Data, code, caveats and detail pages</h2><p class="verdict">Every number traces to ops results, records and the files listed here.</p></div>
 <section>
   <h2>Caveats</h2>
   <ul>
@@ -308,7 +423,6 @@ __LORA2X2__
     <li>Max train length numbers are linear extrapolations from short probes, one sample each.</li>
   </ul>
 </section>
-
 <section>
   <h2>Where everything lives</h2>
   <div class="tbl"><table>
@@ -321,10 +435,41 @@ __LORA2X2__
     <tr><td>Router code</td><td><code>src/olmo_core/nn/online_token_router.py</code>, flags in <code>recipes/train/research_trainer/train_ctc_suite.py</code> (<code>--st-otr-*</code>, <code>--ffn-width-*</code>, <code>--lora-rank</code>)</td></tr>
     <tr><td>Records</td><td><code>records/online-token-router.md</code> (router branch), <code>records/olmo3-cptdrop-results.md</code>, <code>records/grad-composition.md</code>, <code>records/mt11-64k-online-router.md</code>, <code>records/flopdrop-final-figures-plan.md</code></td></tr>
     <tr><td>Status pages</td><td><code>ops/experiments/{tokdrop_lr,learned_router,mt11_64k,olmo3_cptdrop,grad_composition}/STATUS.md</code></td></tr>
-    <tr><td>Other pages</td><td><a href="https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5">cross-task tables</a> · <a href="https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1">online router</a> · <a href="https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk">CPT</a> · <a href="https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n">64k study</a> · <a href="https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ">gradient composition</a></td></tr>
+    <tr><td>Other pages (also listed above)</td><td><a href="https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5">cross-task tables</a> · <a href="https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1">online router</a> · <a href="https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk">CPT</a> · <a href="https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n">64k study</a> · <a href="https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ">gradient composition</a></td></tr>
   </table></div>
 </section>
+<section>
+  <h2>Detail pages</h2>
+  <div class="tbl"><table>
+    <tr><th>page</th><th>covers</th></tr>
+    <tr><td><a href="https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5">Token Drop Pareto</a></td><td>cross-task tables, matched-FLOP Δ per cell, older screens</td></tr>
+    <tr><td><a href="https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n">mt11 64k Router Study</a></td><td>64k per-rung Δ tables, per-rung Pareto small multiples, seed replicate</td></tr>
+    <tr><td><a href="https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk">OLMo 3 CPT Drop Screen</a></td><td>every CPT run, context gain, memory probe, setup</td></tr>
+    <tr><td><a href="https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ">Gradient Composition Probe</a></td><td>interactive per-block, per-token gradient maps (SFT and CPT)</td></tr>
+    <tr><td><a href="https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1">Gradprobe Follow-ups</a></td><td>online-router design, fidelity probes, every router ablation, max-length probes</td></tr>
+    <tr><td><a href="https://claude.ai/artifact/KsLw2QqRugmkkXCvXknbBg">Router Keep Masks</a></td><td>which tokens the router and the fixed rules keep, on real rows</td></tr>
+  </table></div>
+</section>
+<section>
+  <h2>Archive: earlier compute-saving work (Aug–Sep)</h2>
+  <ul class="arch">
+    <li><a href="https://claude.ai/artifact/DeDhCkJLGyMug1cNW5znGs">Sparsity vs Scale</a> · <a href="https://claude.ai/artifact/CkNbfD44b11RuvLApp6v78">Dev-Loss Scheme Grid</a> · <a href="https://claude.ai/artifact/GkXtjWSW11dckFCgR9vs7K">Soft-Token Scheme Grid</a> · <a href="https://claude.ai/artifact/8t9hNP8sKcx14V6NDB8DnD">Slot Construction Tracker</a></li>
+    <li><a href="https://claude.ai/artifact/U4torzWNyskquCsY73dkrd">Soft-KV vs Dense Pareto</a> · <a href="https://claude.ai/artifact/RPtvNxRvkqdJu2NXTKsi67">Soft KV, Explained</a></li>
+    <li><a href="https://claude.ai/artifact/LAYgcDNAXvE3CdbRDGkUiz">Does Routed FFN Compute Buy Speed?</a> · <a href="https://claude.ai/artifact/UWrbA9bAJfBwMsDPHdZzFC">Where the Router Speedup Runs Out</a> · <a href="https://claude.ai/artifact/MdQ8EhxunnQjW7sFFEypp1">Routed-FFN Ledger</a> · <a href="https://claude.ai/artifact/BSJsa9gpQh1APELNv6GzHC">Routed Compute Axes</a> · <a href="https://claude.ai/artifact/M8qDKSxiBV3Jzktwku45Ra">Routed Compute Briefing</a></li>
+    <li><a href="https://claude.ai/artifact/UzrX3T7976coNmpFQvmfLb">Dense vs Sparse per Training Hour</a> · <a href="https://claude.ai/artifact/HMPTs56ofPHYNn9uXhrrCq">Qwen3.5 Cost Anatomy</a> · <a href="https://claude.ai/artifact/Mx6VH85wUEoL5u5umJcf6E">Scaling-Law Fits: Measured vs Extrapolated</a></li>
+  </ul>
+</section>
 </div>
+</main>
+</div>
+<script>
+(() => { const links = [...document.querySelectorAll("nav.toc a")];
+  const set = id => links.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + id));
+  try { const io = new IntersectionObserver(es => { es.filter(e => e.isIntersecting).forEach(e => set(e.target.id)); },
+    { rootMargin: "-20% 0px -70% 0px" });
+    document.querySelectorAll(".part").forEach(p => io.observe(p)); } catch (e) {}
+  if (location.hash) set(location.hash.slice(1)); else set("summary"); })();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const D = __DATA__;
