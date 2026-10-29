@@ -5,7 +5,7 @@ updated: 2026-10-28
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: s1464 2 seeds done; f3904 seed 0 dense sk3 / ldu40 and dense seed-1 baseline pending
+status: complete (screen); fresh-pool FLOP curves not run (awaiting Prasann)
 superseded_by: 
 artifact: 
 summary: Fixed / random / gradient-ranked whole-block skipping on Qwen3.5-4B, mt4 fast8k, matched FLOPs. Dense - skip 20-27, LayerDrop on 16-29 and update-only top-25% ties dense at 0.78-0.89x FLOPs over 2 seeds (s1464 and f3904; no clear win). Forward-skip of the top 25-50% collapses. On the recipe (whole-model LoRA + two-stage router) layer skipping never helps - it saves at most 8% FLOPs there.
@@ -51,7 +51,7 @@ Arms:
   always runs its drop layers 7/16 and update mode stops backward at block 7.
 
 ## Results
-| arm | data | PF ÷ dense | mean Δ vs dense (s0 / s1) | outlier@8k Δ | contra@8k Δ | mean Δ vs recipe | s/step (GPUs) |
+| arm | data | PF ÷ dense | mean Δ vs dense (s0 / s1) | outlier@8k Δ | contra@8k Δ | mean Δ vs recipe | s/step (s0 / s1) |
 |---|---|---|---|---|---|---|---|
 | dense + skip 20,24,28 | s1464 | 0.92 | -0.023 / -0.040 | -0.015 / -0.104 | -0.010 / -0.003 | – | 10.3 / 5.1 |
 | dense + skip 20-27 | s1464 | 0.79 | +0.024 / -0.034 | +0.168 / -0.052 | +0.006 / -0.005 | – | 8.8 / 4.4 |
@@ -69,12 +69,17 @@ Arms:
 | recipe + update-only top 50% | s1464 | 0.22 | +0.010 / +0.090 | +0.052 / +0.393 | +0.079 / +0.079 | -0.072 / +0.007 | 5.0 / 2.8 |
 | recipe + forward-skip top 25% | s1464 | 0.07 | -0.469 / -0.526 | -0.231 / -0.249 | -0.603 / -0.617 | -0.650 / -0.703 | 3.1 / 1.8 |
 | recipe + forward-skip top 50% | s1464 | 0.12 | -0.524 / -0.529 | -0.259 / -0.267 | -0.752 / -0.752 | -0.647 / -0.654 | 4.0 / 2.3 |
-| dense + skip 20,24,28 | f3904 | 0.92 | … / +0.002 | … / +0.015 | … / -0.011 | – | … / 5.1 |
+| dense (seed-1 check) | f3904 | 1.00 | … / +0.002 | … / -0.004 | … / -0.001 | – | … / 5.5 |
+| dense + skip 20,24,28 | f3904 | 0.92 | +0.005 / +0.002 | +0.020 / +0.015 | +0.001 / -0.011 | – | 10.3 / 5.1 |
 | dense + skip 20-27 | f3904 | 0.79 | +0.004 / +0.009 | +0.049 / +0.054 | -0.008 / -0.008 | – | 8.8 / 4.4 |
-| dense + LayerDrop 16-29 (linear, p<=0.4) | f3904 | 0.89 | … / +0.000 | … / +0.016 | … / -0.003 | – | … / 5.0 |
+| dense + LayerDrop 16-29 (linear, p<=0.4) | f3904 | 0.89 | +0.002 / +0.000 | +0.023 / +0.016 | -0.001 / -0.003 | – | 5.0 / 5.0 |
 | recipe (baseline) | f3904 | 0.22 | … / +0.073 | … / +0.334 | … / +0.012 | – | … / 2.5 |
 | recipe + skip 20,24,28 | f3904 | 0.22 | +0.061 / +0.072 | +0.324 / +0.341 | +0.006 / -0.003 | -0.012 / -0.003 | 2.5 / 2.5 |
 | recipe + skip 20-27 | f3904 | 0.21 | +0.064 / +0.060 | +0.353 / +0.335 | +0.008 / -0.017 | -0.012 / -0.018 | 2.4 / 2.4 |
+
+s/step: seed 0 trained on 2 GPUs and seed 1 on 4 (same global batch), except the relaunches after a bad-node NaN or
+repeated preemption, which ran at 4 GPUs (recipe + skip 20-27 s1464 seed 0, dense + LayerDrop f3904 seed 0, dense f3904
+seed 1). Compare s/step only within one GPU count, and across nodes only roughly (H100 node-to-node variance is ~10%).
 
 ## Selected-layer histograms (share of steps each block was selected; blocks >= 0.3 shown)
 
@@ -88,7 +93,8 @@ Arms:
 
 ## Limits
 
-- Two seeds at one data size per pool; the Pareto curves (f1952 / f3904 / f7808) are not run yet.
+- Two seeds at one data size per pool; the Pareto curves (f1952 / f3904 / f7808) are not run yet. A dense seed-1 run on
+  f3904 lands +0.002 off the seed-0 dense curve, so f3904 differences of ±0.01 are ties.
 - outlier@8k swings ±0.1-0.2 between seeds for the skip arms; the means are steadier.
 - Some evals ran on Berkeley H200 (`record_local_evals.py`, batched greedy decode, validated equal to bs=1 on Lambda)
   while Beaker was backed up; the rest on Beaker.
