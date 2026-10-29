@@ -18,6 +18,7 @@ import json
 import math
 import os
 import re
+import subprocess
 from collections import defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +30,13 @@ HDR = re.compile(r"=== q3recipe host=\S+ RUN=(\S+) NGPU=(\d+)")
 LAD = re.compile(r"\[ladder:([a-z_]+)@(\d+k)\] ([a-z0-9_]+)=(-?[0-9.]+) \(n=(\d+)")
 STEP = re.compile(r"^(\S+ \S+)\s.*\[step=(\d+)/(\d+)")
 MEM = re.compile(r"gpu_memory/GPU (active|reserved) mem \(GiB\)=([0-9.]+)")
-NAME = re.compile(r"f8k-mt4-(.+)-f(\d+)(?:st(\d+))?-q3-lr([0-9.e-]+)-sn$")
+NAME = re.compile(r"f8k-mt4-(.+)-f(\d+)(?:st(\d+))?-q3-lr([0-9.e-]+)(?:-sn)?$")
+OPS = "/accounts/projects/berkeleynlp/prasann/bin/ops"
+BEAKER = os.path.expanduser("~/.local/bin/beaker")
+STATE = f"{HERE}/state_q3.json"
+CACHE = f"{HERE}/results_q3/beaker_logs"  # results*/ is gitignored
+PF_RE = re.compile(r"flop_meter/actual_pflops[ =]+([0-9.]+)")
+DENSE_PF_RE = re.compile(r"flop_meter/dense_pflops[ =]+([0-9.]+)")
 
 
 def parse_log(path):
@@ -50,7 +57,7 @@ def parse_log(path):
     return run, ngpu, scores, dict(mem), steps
 
 
-def collect():
+def collect(include_beaker=True):
     runs = {}
     for path in sorted(glob.glob(f"{LOGS}/q3recipe_*.log")):
         run, ngpu, scores, mem, steps = parse_log(path)
@@ -72,18 +79,101 @@ def collect():
         if os.path.exists(fj):
             f = json.load(open(fj))
             r["pf"], r["pf_dense_equiv"] = f["actual_pflops"], f["dense_equivalent_pflops"]
+    if include_beaker:
+        runs.update(beaker_runs(ops_results()))
     out = {}
     for run, r in runs.items():
         arm, rows, cut, lr = NAME.match(run).groups()
         cells = {f"{t}@{g}": r["scores"].get((t, g)) for t in TASKS for g in ("8k", "2k")}
         ok = all(cells.values()) and all(v[1] >= 500 for v in cells.values())
-        out[run] = dict(arm=arm, rows=int(rows), cut=int(cut or 0), lr=lr, pf=r.get("pf"),
+        out[run] = dict(arm=arm, rows=int(rows), cut=int(cut or 0), lr=lr, pf=r.get("pf"), cluster=r.get("cluster", "sneetches"),
                         pf_dense_equiv=r.get("pf_dense_equiv"), steps=r["steps"], s_per_step=r.get("s_per_step"),
                         peak_active_gib=r["mem"].get("active"), peak_reserved_gib=r["mem"].get("reserved"),
                         cells={k: (v[0] if v else None) for k, v in cells.items()},
                         eval_size={k: (v[1] if v else None) for k, v in cells.items()},
                         y=(round(sum(v[0] for v in cells.values()) / 8, 4) if ok else None), logs=r["logs"])
     return out
+
+
+def _beaker_log(ex, name):
+    """Finished Beaker job's log, cached (a running job is re-fetched every call)."""
+    os.makedirs(CACHE, exist_ok=True)
+    path = f"{CACHE}/{name}.log"
+    if os.path.exists(path):
+        return open(path, errors="replace").read()
+    j = json.loads(subprocess.run([BEAKER, "experiment", "get", ex, "--format", "json"], capture_output=True, text=True,
+                                  timeout=120).stdout or "{}")
+    j = j[0] if isinstance(j, list) else j
+    st = (j.get("jobs") or [{}])[0].get("status", {})
+    log = subprocess.run([BEAKER, "experiment", "logs", ex], capture_output=True, text=True, timeout=600).stdout
+    if st.get("exited"):
+        open(path, "w").write(log)
+    return log
+
+
+def beaker_runs(results):
+    """Beaker twins (launch_fast8k state_q3.json): scores from ops results, PF / memory / steps from the train log."""
+    out = {}
+    st = json.load(open(STATE)) if os.path.exists(STATE) else {"runs": {}}
+    for run, r in st["runs"].items():
+        if not NAME.match(run) or "st4" in run or not r.get("ex") or r.get("state") == "CANCELLED":
+            continue
+        log = _beaker_log(r["ex"], run)
+        pf = [float(x) for x in PF_RE.findall(log)]
+        dpf = [float(x) for x in DENSE_PF_RE.findall(log)]
+        if not pf or "Training for" not in log or not re.search(r"\[step=(\d+)/\1[,\]]", log):
+            continue  # unfinished
+        mem = defaultdict(float)
+        for k, v in MEM.findall(log):
+            mem[k] = max(mem[k], float(v))
+        steps = int(re.findall(r"\[step=(\d+)/", log)[-1])
+        scores = {(t, g): v for (tr, t, g), v in results.items() if tr == run}
+        out[run] = {"scores": scores, "pf": pf[-1], "pf_dense_equiv": dpf[-1] if dpf else None, "mem": dict(mem),
+                    "steps": steps, "logs": [f"beaker:{r['ex']}"], "cluster": "beaker"}
+    return out
+
+
+def ops_results():
+    """{(train_run, task, rung): (value, eval_size, metric)} -- first (primary) metric per rung, from ops results."""
+    txt = subprocess.run([OPS, "result", "show", "--experiment", "tokdrop_lr", "--json"], capture_output=True, text=True,
+                         timeout=120).stdout
+    res = {}
+    for r in (json.loads(txt) if txt.strip().startswith("[") else []):
+        if "-q3-" in (r.get("train_run") or ""):
+            res.setdefault((r["train_run"], r["task"], r["rung"]), (r["value"], r["eval_size"], r.get("metric")))
+    return res
+
+
+def record_local(out_jsonl):
+    """Append the local (-sn) ladder scores to ops results (ops result add --check), skipping recorded keys."""
+    have = {(k[0], k[1], k[2]) for k in ops_results()}
+    rows = []
+    for path in sorted(glob.glob(f"{LOGS}/q3recipe_*.log")):
+        txt = open(path, errors="replace").read()
+        m = HDR.search(txt)
+        if not m or not NAME.match(m.group(1)):
+            continue
+        run = m.group(1)
+        if "lora" in run and LAD.search(txt) and "adapters re-installed" not in txt:
+            print(f"!!! {path}: LoRA run scored without 'adapters re-installed' -- NOT recorded")
+            continue
+        for mm in LAD.finditer(txt):
+            t, rung, metric, v, n = mm.groups()
+            t = KEY.get(t, t)
+            if (run, t, rung) in have:
+                continue
+            v, n = float(v), int(n)
+            se = math.sqrt(max(v * (1 - v), 1e-9) / n) if 0 <= v <= 1 else None
+            rows.append(dict(run_id=f"{run}-ev{t}", train_run=run, experiment="tokdrop_lr", task=t, rung=rung,
+                             metric=metric, value=v, eval_size=n, se=se and round(se, 6), cot_label="no-cot",
+                             eval_backend="olmo-core-native-docchunk-ladder (sneetches)",
+                             ckpt_path=f"sneetches:/data/prasann/q3recipe/ckpts/{run}", log_path=f"sneetches:{path}"))
+            have.add((run, t, rung))
+    open(out_jsonl, "w").write("".join(json.dumps(r) + "\n" for r in rows))
+    print(f"{len(rows)} new local rows -> {out_jsonl}")
+    if rows:
+        r = subprocess.run([OPS, "result", "add", "--json", out_jsonl, "--check"], capture_output=True, text=True)
+        print((r.stdout + r.stderr).strip()[-2000:])
 
 
 def dense_curve(points):
@@ -139,7 +229,10 @@ def q35_reference():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=f"{HERE}/q3_flops_to_match.json")
+    ap.add_argument("--record", action="store_true", help="first add the local ladder scores to ops results (--check)")
     a = ap.parse_args()
+    if a.record:
+        record_local(f"{HERE}/results_q3/local_rows.jsonl")
     runs = collect()
     by = defaultdict(list)  # dense (rows, lr) -> scores
     for r in runs.values():
@@ -155,7 +248,7 @@ def main():
     for run, r in sorted(runs.items()):
         if r["y"] is None or r["pf"] is None or r["cut"]:
             continue
-        cells[run] = {k: r[k] for k in ("arm", "rows", "lr", "pf", "y", "steps", "s_per_step", "peak_active_gib",
+        cells[run] = {k: r[k] for k in ("arm", "rows", "lr", "cluster", "pf", "y", "steps", "s_per_step", "peak_active_gib",
                                         "peak_reserved_gib")}
         cells[run]["pf_per_step"] = round(r["pf"] / r["steps"], 3) if r["steps"] else None
         if curve:
