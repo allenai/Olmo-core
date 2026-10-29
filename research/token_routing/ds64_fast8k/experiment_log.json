@@ -26,7 +26,7 @@
   "track": "Model scale",
   "who": "side session (Qwen3 generalization)",
   "title": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?",
-  "result": "Recipe on fresh 1,952 rows/task: 395 PF = 0.219× Qwen3 dense's 1,806 PF (Qwen3.5: 0.225×), so the per-step cut is about the same with all-full attention; 22.5 GiB peak reserved per GPU. Scores pending (evals running on jsteinhardt).",
+  "result": "Recipe on fresh 1,952 rows/task: 395 PF = 0.219× Qwen3 dense's 1,806 PF (Qwen3.5: 0.225×), so the per-step cut is about the same with all-full attention; 22.5 GiB peak reserved per GPU. Scores pending (evals running on jsteinhardt). Recipe nq: 0.836 @8k / 0.936 @2k (eval_size 500).",
   "match": [
    "q3",
    "qwen3"
@@ -38,7 +38,7 @@
   "track": "Model scale",
   "who": "side session (scale ablation)",
   "title": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models",
-  "result": "Started 10-29.",
+  "result": "First point: 0.8B dense on fresh 1,952 rows scores 0.708 (8-cell mean) vs 0.888 at 4B; the gap is mostly outlier@8k (0.246 vs 0.817) and contradiction. The lower ceiling must be weighed against any FLOPs-to-match ratio. 2B dense and the 0.8B recipe pending.",
   "match": [
    "tds08b",
    "tds2b",
