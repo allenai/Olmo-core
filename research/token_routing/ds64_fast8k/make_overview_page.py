@@ -442,6 +442,22 @@ __LORA2X2__
     <tr><td>Stopping backprop below block B</td><td>CPT</td><td>FLOPs-to-match 2.9 / 1.4 at B = 4 / 8, below whole-model LoRA's 3.45</td></tr>
   </table></div>
 </section>
+<section>
+  <h2>Small-model token selection: cost ceiling</h2>
+  <div class="figs">
+    <figure><h3>Best-case speedup over the recipe, by selector</h3><div class="chart"><canvas id="smsel" aria-label="small-model selection ceiling"></canvas></div>
+      <figcaption>Total training PF at fresh 3,904 rows/task if the 4B drops from block 0 and loses no score, relative to the recipe's 688 PF (above 1 = cheaper than the recipe). Cost model only, no training.</figcaption></figure>
+  </div>
+  <div class="tbl" style="margin-top:14px"><table>
+    <tr><th>selector</th><th class="n">selector PF</th><th class="n">total, keep 20%→7% from block 0</th><th class="n">× recipe</th><th class="n">total, keep 7% from block 0</th><th class="n">× recipe</th></tr>
+    <tr><td>Qwen3.5-0.8B, forward only</td><td class="n">138</td><td class="n">510</td><td class="n">1.35</td><td class="n">366</td><td class="n">1.88</td></tr>
+    <tr><td>Qwen3.5-0.8B, gradient-norm scoring</td><td class="n">276</td><td class="n">648</td><td class="n">1.06</td><td class="n">503</td><td class="n">1.37</td></tr>
+    <tr><td>Qwen3.5-0.8B, first 6 blocks only</td><td class="n">33</td><td class="n">406</td><td class="n">1.70</td><td class="n">261</td><td class="n">2.64</td></tr>
+    <tr><td>≈135M model (different tokenizer)</td><td class="n">30</td><td class="n">402</td><td class="n">1.71</td><td class="n">257</td><td class="n">2.67</td></tr>
+    <tr><td>Qwen3.5-2B, forward only</td><td class="n">337</td><td class="n">709</td><td class="n">0.97</td><td class="n">564</td><td class="n">1.22</td></tr>
+  </table></div>
+  <p class="note"><b>Verdict: not worth it.</b> The recipe is 688 PF, of which ≈313 PF (45%) is blocks 0–6 at full length; a 4B that drops from block 0 costs ≈372 PF. Even a nearly free selector keeping 7% from block 0 reaches only ≈2.6× over the recipe (≈8× dense), and only if the score does not drop. Measured early drops already lose 0.04–0.08 at this budget, and random token choice scores like the router (0.914 vs 0.915), so better selection cannot recover it: at its realistic score a block-0 drop with the 0.8B is ≈1.9× dense, below the recipe's ≈3×. Cost model: <code>research/token_routing/ds64_fast8k/small_model_cost.py</code> on branch <code>claude/small-model-select-0a941a</code>.</p>
+</section>
 </div>
 <div class="part" id="next">
 <div class="parthead"><span class="eyebrow">8 · Next ideas</span><h2 class="ptitle">Ideas with a ≥5× ceiling</h2><p class="verdict">Shift from per-token tweaks to per-row savings: shared-context multi-query training and row selection.</p></div>
@@ -449,9 +465,11 @@ __LORA2X2__
   <h2>Candidates for ≥5–10× over dense</h2>
   <div class="tbl"><table>
     <tr><th>idea</th><th>how it saves</th><th class="n">rough ceiling</th><th>status</th></tr>
-    <tr><td>Shared-context multi-query training</td><td>k questions per corpus; run the corpus once, train on all k answers, so the context cost is split k ways</td><td class="n">≈k× on top of routing (k = 8 → 10×+)</td><td>proposed; needs a data rebuild from the CTC generators</td></tr>
-    <tr><td>Row selection</td><td>score each fresh row cheaply (small model or early blocks) and train only on the hardest 10–20%; training CE falls to ≈0.1–0.2 fast</td><td class="n">3–5× on top of routing</td><td>proposed; screenable on the existing fresh pools</td></tr>
-    <tr><td>Small-model front end</td><td>a 0.8B model reads the full context and picks tokens; the 4B sees only the kept ones</td><td class="n">≈1.5× over the recipe</td><td>deprioritized: even dropping after block 1 still costs 0.14× dense (metered), so the full-length early blocks are only ≈40% of the recipe's cost</td></tr>
+    <tr><td>Shared-context multi-query training</td><td>k questions per corpus; run the corpus once, train on all k answers</td><td class="n">≈k× on top of routing</td><td>dropped 10-29: no drastic data changes for now</td></tr>
+    <tr><td>Row selection</td><td>train only on the hardest 10–20% of fresh rows</td><td class="n">3–5× on top of routing</td><td>dropped 10-29: no drastic data changes for now</td></tr>
+    <tr><td>Recipe on Qwen3-4B (all full attention)</td><td>routing saves attention quadratically; more attention may mean larger gains</td><td class="n">?</td><td>running (side session)</td></tr>
+    <tr><td>Model-scale ablation (smaller Qwen3.5 sizes)</td><td>does the gain grow or shrink with scale?</td><td class="n">?</td><td>running (side session)</td></tr>
+    <tr><td>Small-model front end</td><td>a 0.8B (or smaller) model reads the full context and picks tokens; the 4B sees only the kept ones</td><td class="n">≈1.35× over the recipe (0.8B); ≤2.6× even with a free selector</td><td>tested 10-29 (cost model): dropped, see Section 7</td></tr>
   </table></div>
   <p class="note">Ceilings are back-of-envelope estimates, not measurements. Prasann (10-29): pursue only ideas whose ceiling is at least ≈5× over dense.</p>
 </section>
@@ -589,6 +607,15 @@ function draw() {
     plot(id, ["A", "B", "C", "D"].filter(c => pan[c] && pan[c].length).map(c => ({ label: lab[c], dense: c === "A", col: col[c], shape: c === "B" ? "triangle" : "rectRot",
       pts: pan[c].map(p => ({ x: p[0], y: p[1], note: (p[2] === "cut" ? "cut run" : p[2] + " rows/task") + (p[3] > 1 ? ", " + p[3] + " seeds" : "") })) })),
       id === "lr2e" ? "mean of 9 tasks @8k" : "8-cell mean"); });
+  (() => { const el = document.getElementById("smsel"); if (!el || !window.Chart) return;
+    const labs = ["0.8B forward", "0.8B grad scoring", "0.8B first 6 blocks", "≈135M", "2B forward"];
+    new Chart(el, { type: "bar", data: { labels: labs, datasets: [
+      { label: "keep 20%→7% from block 0", data: [1.35, 1.06, 1.70, 1.71, 0.97], backgroundColor: css("--c2") },
+      { label: "keep 7% from block 0", data: [1.88, 1.37, 2.64, 2.67, 1.22], backgroundColor: css("--c1") }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { ticks: { color: css("--muted"), font: { size: 10 } }, grid: { display: false } },
+                  y: { min: 0, title: { display: true, text: "× cheaper than the recipe (best case)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
