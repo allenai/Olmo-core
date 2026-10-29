@@ -61,7 +61,7 @@
   "track": "SFT 4-task",
   "who": "main (tokdrop)",
   "title": "Pyramid keep: 50% after block 3 → 20% after 7 → 7% after 16 (recipe otherwise)",
-  "result": "Seed 0 on fresh 3,904 rows: 0.908 at 0.83× the recipe's FLOPs, a tie (≈1.2×). Seeds 1–2 and the 1,952 / 7,808-row pools are training or evaluating.",
+  "result": "0.870 at 1,952 rows (recipe 0.883) and 0.908 / 0.911 at 3,904 rows over 2 seeds (recipe 0.915 / 0.917), at 0.83× the recipe's FLOPs: a tie in FLOPs-to-match (≈1.2× at best, below the 5× bar). Seed 2 and the 7,808-row run pending.",
   "match": [
    "p50at3"
   ]
