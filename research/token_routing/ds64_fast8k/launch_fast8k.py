@@ -76,7 +76,20 @@ PROBE_LAUNCHER = f"{REPO}/research/ffn_compute/flop_scaling/beaker_bench_launch.
 PROBE = "research/token_routing/pooled_kv/outlier_probe/outlier_slot_probe.py"
 SHARDS = f"{W}/ds64/fast8k/shards"
 LEDGER = f"{D}/LAUNCH_LEDGER.tsv"
-STATE = f"{D}/state.json"
+STATE = os.environ.get("F8K_STATE", f"{D}/state.json")  # F8K_STATE: drive another checkout's campaign state
+
+#: Model family (env F8K_FAMILY, 2026-10-29 Qwen3-4B recipe study). qwen3_5 = Qwen3.5-4B (32 blocks, GDN + full
+#: attention every 4th block), the campaign default. qwen3 = Qwen3-4B (36 blocks, ALL full attention): the
+#: marker-repaired base (bases/qwen3-4b-base-trainedmark, donor-row repair, checked by the trainer's marker audit),
+#: the NOTHINK Qwen3-4B tokenizer (stock template puts <think></think> in the answer loss span), and the same fresh
+#: pools re-tokenized for Qwen3 (build_mt4_fresh_beaker.sh FAMILY=qwen3 -> mt4f<rows>q3).
+FAMILY = os.environ.get("F8K_FAMILY", "qwen3_5")
+SHARD_SFX = {"qwen3_5": "", "qwen3": "q3"}[FAMILY]
+if FAMILY == "qwen3":
+    BASE = f"{W}/ctc_suite/bases/qwen3-{SCALE}-base-trainedmark/model_and_optim"
+    TOKENIZER = f"{W}/hf_tokenizers/Qwen3-4B-nothink"
+#: GPUs per eval job (the tokdrop campaign used 2; 1-GPU jobs schedule faster)
+EVAL_NGPU = os.environ.get("F8K_EVAL_NGPU", "2")
 
 TASK = os.environ.get("F8K_TASK", "outlier")
 BUDGETS = ["8M", "16M", "20M"]
@@ -106,7 +119,7 @@ SOFT_BACKEND = os.environ.get("F8K_SOFT_BACKEND", "flash_2")
 # jupiter only (2026-10-19): saturn is A100 (ask Prasann first), and Beaker GPU work goes to jupiter.
 CLUSTER = os.environ.get("F8K_CLUSTER", "ai2/jupiter-cirrascale-2")
 EVAL_CLUSTER = os.environ.get("F8K_EVAL_CLUSTER", CLUSTER)
-WANDB_GROUP = os.environ.get("F8K_WANDB_GROUP", f"f8k-q35-{SCALE}")
+WANDB_GROUP = os.environ.get("F8K_WANDB_GROUP", f"f8k-{'q35' if FAMILY == 'qwen3_5' else 'q3'}-{SCALE}")
 
 # ---------------------------------------------------------------------------------------------
 # Arm vocabulary. fast2k's arms carry over unchanged (same names, same flags); fast8k adds the
@@ -319,6 +332,13 @@ ARM_EXTRA.update({
                              "--st-otr-early-lora-blocks 32")
        for tag, st in (("r20at1", "1:0.2,16:0.07"), ("r20at3", "3:0.2,16:0.07"), ("r20at5", "5:0.2,16:0.07"),
                        ("p50at3", "3:0.5,7:0.2,16:0.07"))},
+    # Qwen3-4B (36 blocks, all full attention; F8K_FAMILY=qwen3): the recipe with LoRA on all 36 blocks and the drop
+    # points at proportional depth (7/32 -> 8/36, 16/32 -> 18/36); q3r20at{4,12} move the first stage (split sweep)
+    **{f"q3lora64all36r20at{a}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                                  f"--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer {a} "
+                                  f"--st-otr-stages {a}:0.2,18:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                                  "--st-otr-early-lora-blocks 36")
+       for a in (4, 8, 12)},
     # second stage at block 12 instead of 16 (same budgets)
     "lora64r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                         "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
@@ -455,7 +475,7 @@ def parse_budget(task, budget):
     cut at ``<steps>`` optimizer steps (the dense matched-FLOP curve). Returns (data dir, examples, max_steps)."""
     if budget.startswith("f") and budget[1:2].isdigit():  # f<rows>: first-N of the FRESH pools (build_mt4_fresh_beaker.sh)
         rows, _, steps = budget[1:].partition("@")
-        return f"{SHARDS}/{task}f{rows}", int(rows) * len(MT_TASKS.get(task, [task])), int(steps or 0)
+        return f"{SHARDS}/{task}f{rows}{SHARD_SFX}", int(rows) * len(MT_TASKS.get(task, [task])), int(steps or 0)
     if budget.startswith("s"):
         rows, _, steps = budget[1:].partition("@")
         rows = rows.split("x")[0]  # s1952x2 = two epochs over mt4s1952 (see budget_epochs)
@@ -525,7 +545,7 @@ def do_launch(args, mode):
                 print(f"[skip] {name} already launched ({st['runs'][name].get('ex')})")
                 continue
             cmd = [sys.executable, "-u", LAUNCHER, "--task", args.task, "--variant", variant,
-                   "--model-family", "qwen3_5", "--model-scale", SCALE, "--data-root", data,
+                   "--model-family", FAMILY, "--model-scale", SCALE, "--data-root", data,
                    "--run-name", name, "--exact-run-name", "--num-nodes", str(NODES),
                    "--num-gpus", str(GPUS), "--epochs", str(budget_epochs(budget)), "--lr", str(args.lr),
                    "--cluster", CLUSTER, "--wandb-group", args.wandb_group, "--priority", "urgent",
@@ -587,7 +607,7 @@ def eval_cmd(ename, task, ckpt, suite):
     cmd = [sys.executable, "-u", EVAL_LAUNCHER, ename, EVAL_CLUSTER,
            "--task", TASK_KEY.get(task, task), "--variant", "docchunk", "--ckpt", ckpt,
            "--query-position", "both" if suite else "after", "--cot-mode", "none",
-           "--tokenizer", TOKENIZER, "--ngpu", "2", "--max-test", "500", "--priority", "urgent",
+           "--tokenizer", TOKENIZER, "--ngpu", EVAL_NGPU, "--max-test", "500", "--priority", "urgent",
            # >= the 8k rung's prompt + generation, with headroom: a --max-length BELOW the
            # prompt truncates it away and the run scores exactly 0.000 (records/ memory
            # "Goldgrad eval MAXLEN truncation bug"). 20000 covers an 8k-rung outlier row.
