@@ -16,7 +16,7 @@ SETS=("$@"); [ ${#SETS[@]} -gt 0 ] || SETS=(1st_1_10 1st_3_10 1st_7_10 2st_1_16 
 for tag in recipe base; do
   for s in "${SETS[@]}"; do
     for g in 0 1; do
-      name="gfkv-$tag-${s//_/-}-g$g"
+      name="gfkv-$tag-${s//_/-}-g$g${GFKV_SUFFIX:-}"
       out=$(timeout 300 $PY research/ffn_compute/flop_scaling/beaker_bench_launch.py --cluster ${GFKV_CLUSTER:-ai2/jupiter} \
         --script research/token_routing/online_router/grad_fidelity2.py --name "$name" --extra \
         "--ckpt ${CK[$tag]} --tag $tag --shard $W/ds64/fast8k/shards/mt4f1952 --fit-shard $W/ds64/fast8k/shards/mt4s1464 \
