@@ -155,12 +155,16 @@ class InitMethod(StrEnum):
 
     nanochat = "nanochat"
     """
-    The initialization used by `nanochat <https://github.com/karpathy/nanochat>`_, which follows
-    the spectral condition for feature learning (`Yang et al., 2023
-    <https://arxiv.org/abs/2310.17813>`_). Every weight matrix mapping ``fan_in`` features to
-    ``fan_out`` features is initialized from a truncated normal distribution with
+    The initialization `nanochat <https://github.com/karpathy/nanochat>`_ used until January 2026,
+    which follows the spectral condition for feature learning (`Yang et al., 2023
+    <https://arxiv.org/abs/2310.17813>`_). nanochat has since replaced it with a uniform
+    ``1/√d_model`` init and tuned constants (`48abd7d8
+    <https://github.com/karpathy/nanochat/commit/48abd7d8>`_ and later commits); this method
+    keeps the spectral version. Every weight matrix mapping ``fan_in`` features to ``fan_out``
+    features is initialized from a truncated normal distribution with
     ``std = 1/√fan_in · min(1, √(fan_out/fan_in))`` (see :func:`nanochat_std`), with no depth
-    scaling. Fused matrices use the shape of each fused projection, depthwise convolutions use
+    scaling. Unlike nanochat, the output projections and the LM head are not zero-initialized.
+    Fused matrices use the shape of each fused projection, depthwise convolutions use
     ``std = 1/√kernel_size``, and embeddings use a normal distribution with ``std = 1.0``.
     The base ``init_std`` and ``embedding_init_std`` are ignored.
     """
