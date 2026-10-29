@@ -518,7 +518,9 @@ def do_launch(args, mode):
     for arm in args.arms.split(","):
         for budget in args.budgets.split(","):
             variant, data, largs, extra = arm_args(args.task, arm, budget)
-            name = run_name(args.task, arm, budget)
+            # --seed N: a seed replicate named <arm>sd<N> (collectors strip sd<N> and average seed copies)
+            label = f"{arm}sd{args.seed}" if args.seed else arm
+            name = run_name(args.task, label, budget)
             if name in st["runs"] and mode == "launch" and not args.force:
                 print(f"[skip] {name} already launched ({st['runs'][name].get('ex')})")
                 continue
@@ -527,7 +529,7 @@ def do_launch(args, mode):
                    "--run-name", name, "--exact-run-name", "--num-nodes", str(NODES),
                    "--num-gpus", str(GPUS), "--epochs", str(budget_epochs(budget)), "--lr", str(args.lr),
                    "--cluster", CLUSTER, "--wandb-group", args.wandb_group, "--priority", "urgent",
-                   "--no-follow", "--no-compile"] + largs + (["--extra-args", extra] if extra else []) + [mode]
+                   "--no-follow", "--no-compile"] + (["--seed", str(args.seed)] if args.seed else []) + largs + (["--extra-args", extra] if extra else []) + [mode]
             print(" ".join(cmd), flush=True)
             rc, out = sh(cmd)
             _log(name, mode, out)
@@ -754,6 +756,7 @@ def main():
                     "untouched; a run not in state.json is previewed as a --task run)")
     ap.add_argument("--eval-step-dir", action="store_true",
                     help="eval: read <run>/step<steps_expected> (no post-fit export); also scores FAILED runs")
+    ap.add_argument("--seed", type=int, default=0, help="launch: training seed (run named <arm>sd<seed>; 0 = default)")
     ap.add_argument("mode", choices=["launch", "dry_run", "eval", "parity", "status"])
     args = ap.parse_args()
     global LR_TAG
