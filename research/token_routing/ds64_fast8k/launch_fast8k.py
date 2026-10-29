@@ -304,6 +304,13 @@ ARM_EXTRA.update({
                           "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
                           "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
                           "--st-otr-early-lora-blocks 32"),
+    # hill-climb winner (router session, 3 seeds mt4s1464: 0.864 vs 0.852): stage-2 adaptive budget = each doc's top
+    # tokens covering 70% of predicted gradient mass, capped at 50% of the stage input (needs router 8ce5fd22a+)
+    **{f"lora64all32m70c50{t}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                                 "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                                 "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                                 "--st-otr-early-lora-blocks 32 --st-otr-later-mass-target 0.7 --st-otr-later-max-keep-frac 0.5"
+                                 + x) for t, x in (("", ""), ("f16", " --st-otr-min-per-doc 16"))},
     # second stage at block 12 instead of 16 (same budgets)
     "lora64r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                         "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
