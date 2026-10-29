@@ -5,7 +5,12 @@
   "track": "SFT 4-task",
   "who": "side session (kv-only-context)",
   "title": "KV-only context for dropped tokens, to allow dropping after block 1–3",
-  "result": "Started 10-29: fidelity probe first (splits after 1 / 3 / 7), then a mt4f3904 screen if block 1 or 3 recovers."
+  "result": "Started 10-29: fidelity probe first (splits after 1 / 3 / 7), then a mt4f3904 screen if block 1 or 3 recovers.",
+  "match": [
+   "kvo",
+   "kvonly",
+   "kv-only"
+  ]
  },
  {
   "date": "2026-10-29",
@@ -21,7 +26,11 @@
   "track": "Model scale",
   "who": "side session (Qwen3 generalization)",
   "title": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?",
-  "result": "Started 10-29."
+  "result": "Started 10-29.",
+  "match": [
+   "q3",
+   "qwen3"
+  ]
  },
  {
   "date": "2026-10-29",
@@ -29,7 +38,14 @@
   "track": "Model scale",
   "who": "side session (scale ablation)",
   "title": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models",
-  "result": "Started 10-29."
+  "result": "Started 10-29.",
+  "match": [
+   "tds08b",
+   "tds2b",
+   "sca-",
+   "08b",
+   "-2b-"
+  ]
  },
  {
   "date": "2026-10-29",
@@ -45,7 +61,10 @@
   "track": "SFT 4-task",
   "who": "main (tokdrop)",
   "title": "Pyramid keep: 50% after block 3 → 20% after 7 → 7% after 16 (recipe otherwise)",
-  "result": "Seed 0 on fresh 3,904 rows: 0.908 at 0.83× the recipe's FLOPs, a tie (≈1.2×). Seeds 1–2 and the 1,952 / 7,808-row pools are training or evaluating."
+  "result": "Seed 0 on fresh 3,904 rows: 0.908 at 0.83× the recipe's FLOPs, a tie (≈1.2×). Seeds 1–2 and the 1,952 / 7,808-row pools are training or evaluating.",
+  "match": [
+   "p50at3"
+  ]
  },
  {
   "date": "2026-10-29",

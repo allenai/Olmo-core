@@ -175,6 +175,9 @@ ol.log li:last-child { border-bottom: 0; }
 .st.running { border-color: var(--c2); color: var(--c2); } .st.done { border-color: var(--c3); color: var(--c3); }
 .st.dropped, .st.failed { border-color: var(--c1); color: var(--c1); } .st.proposed, .st.held { border-color: var(--c5); color: var(--c5); }
 .st.partial { border-color: var(--c4); color: var(--c4); }
+.cnow { border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); padding: 12px 14px; display: grid; gap: 8px; margin-bottom: 10px; }
+.cnow .tbl { max-height: 260px; overflow: auto; }
+.lm .cp { border-color: var(--c2); color: var(--c2); }
 .lr { color: var(--fg); font-size: .9rem; max-width: 90ch; margin: 0; }
 @media (max-width: 560px) { ol.log li { grid-template-columns: 1fr; } }
 @media (max-width: 980px) {
@@ -249,6 +252,7 @@ ol.log li:last-child { border-bottom: 0; }
     <div class="chips" id="logTrack" role="group" aria-label="Filter by track"></div>
     <input type="search" id="logQ" placeholder="Search the log" aria-label="Search the log">
   </div>
+  <div id="computeNow"></div>
   <p class="note" id="logCount"></p>
   <ol class="log" id="logList"></ol>
 </section>
@@ -542,7 +546,7 @@ __LORA2X2__
     document.querySelectorAll(".part").forEach(p => io.observe(p)); } catch (e) {}
   if (location.hash) set(location.hash.slice(1)); else set("summary"); })();
 </script>
-<script>const D_LOG = __LOG__;</script>
+<script>const D_LOG = __LOG__; const D_COMPUTE = __COMPUTE__;</script>
 <script>
 (() => { const L = (typeof D_LOG !== "undefined") ? D_LOG : []; const list = document.getElementById("logList"); if (!list) return;
   const order = ["running", "proposed", "held", "partial", "done", "dropped", "failed"];
@@ -552,10 +556,24 @@ __LORA2X2__
   function chips(host, vals, sel) { const h = document.getElementById(host);
     vals.forEach(v => { const b = document.createElement("button"); b.type = "button"; b.textContent = v + " (" + L.filter(e => e.status === v || e.track === v).length + ")";
       b.setAttribute("aria-pressed", "false"); b.onclick = () => { sel.has(v) ? sel.delete(v) : sel.add(v); b.setAttribute("aria-pressed", sel.has(v)); draw(); }; h.appendChild(b); }); }
+  const C = (typeof D_COMPUTE !== "undefined" && D_COMPUTE) ? D_COMPUTE : { jobs: [] };
+  const byEntry = {}; C.jobs.forEach(j => { const k = j.entry || "(unlinked)"; (byEntry[k] = byEntry[k] || []).push(j); });
+  const gp = j => j.gpus == null ? "CPU" : j.gpus + " GPU";
+  function summ(js) { const run = js.filter(j => j.state === "RUNNING"), q = js.filter(j => j.state !== "RUNNING");
+    const where = [...new Set(js.map(j => j.cluster))].join(", ");
+    return `${where}: ${run.length} running (${run.reduce((a, j) => a + (j.gpus || 0), 0)} GPUs), ${q.length} queued`; }
+  (() => { const host = document.getElementById("computeNow"); if (!host) return;
+    const run = C.jobs.filter(j => j.state === "RUNNING"), q = C.jobs.filter(j => j.state !== "RUNNING");
+    const when = C.generated_at ? new Date(C.generated_at).toLocaleString() : "unknown";
+    host.innerHTML = `<div class="cnow"><h3>Compute now <span class="note">(snapshot ${esc(when)}, refreshed at every hub update)</span></h3>
+      <p class="lr"><b>${run.length} jobs running on ${run.reduce((a, j) => a + (j.gpus || 0), 0)} GPUs, ${q.length} queued</b> (${q.reduce((a, j) => a + (j.gpus || 0), 0)} GPUs requested).</p>
+      <div class="tbl"><table><tr><th>job</th><th>log entry</th><th>where</th><th class="n">GPUs</th><th>state</th><th class="n">min</th></tr>
+      ${C.jobs.map(j => `<tr><td class="mono">${esc(j.name)}</td><td>${esc(j.entry || "–")}</td><td>${esc(j.cluster)}${j.node ? " · " + esc(j.node) : ""}</td><td class="n">${gp(j)}</td><td>${j.state === "RUNNING" ? "running" : "queued"}</td><td class="n">${j.elapsed_min}</td></tr>`).join("")}
+      </table></div></div>`; })();
   function draw() { const rows = L.filter(e => (!st.size || st.has(e.status)) && (!tr.size || tr.has(e.track)) &&
       (!q || (e.title + " " + e.result + " " + e.who + " " + e.track).toLowerCase().includes(q)));
     list.innerHTML = rows.map(e => `<li><span class="ld">${esc(e.date)}</span><div><div class="lt">${esc(e.title)}</div>
-      <div class="lm"><span class="st ${esc(e.status)}">${esc(e.status)}</span><span>${esc(e.track)}</span><span>${esc(e.who)}</span></div>
+      <div class="lm"><span class="st ${esc(e.status)}">${esc(e.status)}</span><span>${esc(e.track)}</span><span>${esc(e.who)}</span>${byEntry[e.title] ? `<span class="cp">${esc(summ(byEntry[e.title]))}</span>` : ""}</div>
       <p class="lr">${esc(e.result)}</p></div></li>`).join("") || '<li><span></span><p class="lr">No entries match.</p></li>';
     document.getElementById("logCount").textContent = rows.length + " of " + L.length + " entries"; }
   chips("logStatus", statuses, st); chips("logTrack", tracks, tr);
@@ -874,7 +892,11 @@ def main():
         lora2x2 = ""
         data["lr2"] = {}
     log = sorted(json.load(open(a.log)), key=lambda e: e["date"], reverse=True)
-    html = PAGE.replace("__LOG__", json.dumps(log).replace("</", "<\\/")).replace("__LORA2X2__", lora2x2).replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
+    try:
+        compute = json.load(open(__file__.rsplit("/", 1)[0] + "/compute_now.json"))
+    except FileNotFoundError:
+        compute = {"generated_at": None, "jobs": []}
+    html = PAGE.replace("__LOG__", json.dumps(log).replace("</", "<\\/")).replace("__COMPUTE__", json.dumps(compute).replace("</", "<\\/")).replace("__LORA2X2__", lora2x2).replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
     for k in ("f4fresh", "f4orig", "f11"):
         for s in data[k]:
