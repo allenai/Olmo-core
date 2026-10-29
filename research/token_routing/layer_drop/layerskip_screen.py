@@ -76,9 +76,9 @@ def main():
         rec["mean_delta"] = sum(ds) / len(ds) if len(ds) == len(CELLS) else None
         rec["mean_score"] = sum(c["score"] for c in cells.values()) / len(cells)
         # the recipe arms: also vs the recipe itself on the same data (its own baseline)
-        m = re.match(r"(f8k-mt4-lora64all32r20to7)-(sk3|sk2027)-(.*)$", run)
+        m = re.match(r"(f8k-mt4-lora64all32r20to7)-([a-z0-9]+?)(sd\d+)?-((?:s|f)\d+-.*)$", run)
         if m:
-            base = f"{m.group(1)}-{m.group(3)}"
+            base = f"{m.group(1)}{m.group(3) or ''}-{m.group(4)}"
             bs = {(p_["task"], p_["rung"]): p_["score"] for p_ in d["points"] if p_["run"] == base} \
                 or {k: x for k, (x, _) in _ops_scores(base).items()}
             if len(bs) >= len(CELLS):
@@ -86,6 +86,15 @@ def main():
                 rec["recipe_base_pf"] = d["runs"].get(base, {}).get("pf")
                 rec["delta_vs_recipe"] = {f"{t}@{r}": cells[f"{t}@{r}"]["score"] - bs[(t, r)] for t, r in CELLS}
                 rec["mean_delta_vs_recipe"] = sum(rec["delta_vs_recipe"].values()) / len(CELLS)
+        if "-gs" in run:
+            # selected-layer histogram over training (GradLayerSelectCallback's final line)
+            import subprocess
+
+            log = subprocess.run([os.path.expanduser("~/.local/bin/beaker"), "experiment", "logs", v["ex"]],
+                                 capture_output=True, text=True, timeout=300).stdout
+            hm = re.findall(r"\[grad-select\] final selected_frac \[([^\]]*)\]", log)
+            if hm:
+                rec["selected_frac"] = [float(x) for x in hm[-1].split(",")]
         out.append(rec)
         print(f"{run}: PF {pf:.0f}  s/step {rec['s_per_step'] or float('nan'):.2f}  mean {rec['mean_score']:.3f}  "
               f"mean Δ vs dense {rec['mean_delta'] if rec['mean_delta'] is None else round(rec['mean_delta'], 3)}  "
