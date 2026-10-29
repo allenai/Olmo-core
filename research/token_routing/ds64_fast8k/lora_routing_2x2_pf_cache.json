@@ -1,0 +1,396 @@
+{
+ "f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05": {
+  "pf": 345.3306,
+  "steps": 488,
+  "wall": 2345.818,
+  "ex": "01M5VH5APW70Y48FW01Y7W3BVF"
+ },
+ "f8k-mt4-lora64all32r20to7-f3904-tde-lr1e-05": {
+  "pf": 688.13414,
+  "steps": 976,
+  "wall": 4879.699,
+  "ex": "01M5VH6FK7J23RHG272XB796M5"
+ },
+ "f8k-mt4-lora64all32r20to7-f7808-tde-lr1e-05": {
+  "pf": 1373.34262,
+  "steps": 1952,
+  "wall": 9689.217,
+  "ex": "01M5VH7FE3H2ER7VKEV2J50KBE"
+ },
+ "f8k-mt4-denselora64all-f1952-tde-lr1e-05": {
+  "pf": 1142.95434,
+  "steps": 488,
+  "wall": 5665.63,
+  "ex": "01M5VJ9PJ6K1AEY2B88GPQV1MJ"
+ },
+ "f8k-mt4-denselora64all-f3904-tde-lr1e-05": {
+  "pf": 2286.39814,
+  "steps": 976,
+  "wall": 11189.357,
+  "ex": "01M5VJAFD8D68WRVF0W82PC4VK"
+ },
+ "f8k-mt4-denselora64all-s1464-tde-lr1e-05": {
+  "pf": 861.67083,
+  "steps": 366,
+  "wall": 4224.738,
+  "ex": "01M5VJB7N8V32VQE2MK5GM7Q6H"
+ },
+ "f8k-mt4-denselora64all-f1952-tde-lr5e-06": {
+  "pf": 1142.95434,
+  "steps": 488,
+  "wall": 5627.497,
+  "ex": "01M5VJCA287GR61PKYDZXHHVKJ"
+ },
+ "f8k-mt4-dense-f1952-tde-lr1e-05": {
+  "pf": 1531.25242,
+  "steps": 488,
+  "wall": 5341.217,
+  "ex": "01M5VJFG3DAR7DVYHBRB1Q2X2N"
+ },
+ "f8k-mt4-dense-s488st31-tde-lr1e-05": {
+  "pf": 101.94703,
+  "steps": 31,
+  "wall": 329.35,
+  "ex": "01M5VJH2M1XA180E0PHXWCACF9"
+ },
+ "f8k-mt4-dense-s488st61-tde-lr1e-05": {
+  "pf": 196.87821,
+  "steps": 61,
+  "wall": 661.892,
+  "ex": "01M5VJHV8G994SEPCYZ8SEH9TM"
+ },
+ "f8k-mt4-dense-f1952-tde-lr2e-05": {
+  "pf": 1531.25242,
+  "steps": 488,
+  "wall": 5347.696,
+  "ex": "01M5VJJP0DM0QT06TJSZTJ892V"
+ },
+ "f8k-mt4-dense-f3904-tde-lr2e-05": {
+  "pf": 3063.15168,
+  "steps": 976,
+  "wall": 10636.252,
+  "ex": "01M5VJKFS361EY3DBY8FGW8MCT"
+ },
+ "f8k-mt4-dense-s488st31-tde-lr2e-05": {
+  "pf": 101.94703,
+  "steps": 31,
+  "wall": 329.99,
+  "ex": "01M5VJM8WGH8J84BBBBESPCN2N"
+ },
+ "f8k-mt4-dense-s488st61-tde-lr2e-05": {
+  "pf": 196.87821,
+  "steps": 61,
+  "wall": 656.783,
+  "ex": "01M5VJN3KSPC4H8VWVF7F7MB5C"
+ },
+ "f8k-mt4-dense-s1464-tdx-lr1e-05": {
+  "pf": 1151.46015,
+  "steps": 366,
+  "wall": 3987.573,
+  "ex": "01M5X7WV8KH5FVNKGF48M8V7AR"
+ },
+ "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06": {
+  "pf": 467.24154,
+  "steps": 488,
+  "wall": 2271.825,
+  "ex": "01M5X7YM7RKTNPVXG8PB7QS57S"
+ },
+ "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05": {
+  "pf": 467.24154,
+  "steps": 488,
+  "wall": 2273.575,
+  "ex": "01M5X7ZMDW540KXCMEK19Y7RRD"
+ },
+ "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05": {
+  "pf": 933.29264,
+  "steps": 976,
+  "wall": 4702.717,
+  "ex": "01M5X80MSQGBVPQJTAY2E3GNF0"
+ },
+ "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05": {
+  "pf": 352.59488,
+  "steps": 366,
+  "wall": 1703.372,
+  "ex": "01M5X81JQYFFZXC6ZTTRN7V6HW"
+ },
+ "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06": {
+  "pf": 343.40922,
+  "steps": 488,
+  "wall": 2339.156,
+  "ex": "01M5X82FHR5A0Q5ZSGRV7PKTNK"
+ },
+ "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06": {
+  "pf": 685.87849,
+  "steps": 976,
+  "wall": 4893.252,
+  "ex": "01M5X83AM09KZC9KNNF1GG68N3"
+ },
+ "f8k-mt11-dense-s240-tdx-lr1e-05": {
+  "pf": 229.66009,
+  "steps": 165,
+  "wall": 1762.042,
+  "ex": "01M5X84AE16QJFHAZZ7GEPH135"
+ },
+ "f8k-mt11-dense-s480-tdx-lr1e-05": {
+  "pf": 480.75235,
+  "steps": 330,
+  "wall": 3533.248,
+  "ex": "01M5X8562K6MVNY2MN45G4VBER"
+ },
+ "f8k-mt11-dense-s720-tdx-lr1e-05": {
+  "pf": 712.7924,
+  "steps": 495,
+  "wall": 5310.684,
+  "ex": "01M5X860NCMJGSYQQ7R7R4V935"
+ },
+ "f8k-mt11-denselora64all-s240-tdx-lr5e-06": {
+  "pf": 170.02691,
+  "steps": 165,
+  "wall": 1873.951,
+  "ex": "01M5X86XKJNQWJR9NXPG38XVZ6"
+ },
+ "f8k-mt11-denselora64all-s480-tdx-lr5e-06": {
+  "pf": 356.05324,
+  "steps": 330,
+  "wall": 3772.376,
+  "ex": "01M5X87YAR9YV2DBNBB4AB2511"
+ },
+ "f8k-mt11-denselora64all-s720-tdx-lr5e-06": {
+  "pf": 527.82442,
+  "steps": 495,
+  "wall": 5643.976,
+  "ex": "01M5X88V026DGWDJYWDM4A9S9N"
+ },
+ "f8k-mt11-denselora64all-s240-tdx-lr1e-05": {
+  "pf": 170.02691,
+  "steps": 165,
+  "wall": 1878.289,
+  "ex": "01M5X89PKAVDYAFKT58KRNK87H"
+ },
+ "f8k-mt11-denselora64all-s480-tdx-lr1e-05": {
+  "pf": 356.05324,
+  "steps": 330,
+  "wall": 3770.723,
+  "ex": "01M5X8APTQ6FNXSTQ2AZTM3W18"
+ },
+ "f8k-mt11-denselora64all-s720-tdx-lr1e-05": {
+  "pf": 527.82442,
+  "steps": 495,
+  "wall": 5638.708,
+  "ex": "01M5X8BPFBEC3S7R2NK0CHP48J"
+ },
+ "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06": {
+  "pf": 100.31188,
+  "steps": 165,
+  "wall": 690.799,
+  "ex": "01M5X8CKN1CG0E4W8GM8JADN5S"
+ },
+ "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06": {
+  "pf": 207.68957,
+  "steps": 330,
+  "wall": 1373.422,
+  "ex": "01M5X8DGNTG0FVG9B3CZK4AVNA"
+ },
+ "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05": {
+  "pf": 100.31188,
+  "steps": 165,
+  "wall": 697.107,
+  "ex": "01M5X8EEBPC999KNK8BTJ63MT7"
+ },
+ "f8k-mt4-denselora64all-s1464-tdx-lr5e-06": {
+  "pf": 859.4932,
+  "steps": 366,
+  "wall": 4206.305,
+  "ex": "01M5X7XNBE09RNVDG626GX8Q4Q"
+ },
+ "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05": {
+  "pf": 207.68957,
+  "steps": 330,
+  "wall": 1386.462,
+  "ex": "01M5X8F9W132YZA2J120ZVCMR6"
+ },
+ "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05": {
+  "pf": 307.78574,
+  "steps": 495,
+  "wall": 2050.1,
+  "ex": "01M5X8G5PWGAV03AW2218ADPN9"
+ },
+ "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06": {
+  "pf": 75.02396,
+  "steps": 165,
+  "wall": 718.037,
+  "ex": "01M5X8H0D8XFYSTQJAKNPRDYEP"
+ },
+ "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06": {
+  "pf": 155.27,
+  "steps": 330,
+  "wall": 1433.666,
+  "ex": "01M5X8HSY9ZAWFA0YJJ76GJJYQ"
+ },
+ "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06": {
+  "pf": 230.10591,
+  "steps": 495,
+  "wall": 2115.742,
+  "ex": "01M5X8JMPZSB6X2MK0Q7J15MWR"
+ },
+ "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05": {
+  "pf": 75.02396,
+  "steps": 165,
+  "wall": 708.419,
+  "ex": "01M5X8KDRWRYAAYWDERGV2J1HE"
+ },
+ "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05": {
+  "pf": 155.27,
+  "steps": 330,
+  "wall": 1417.133,
+  "ex": "01M5X8M7WRBB642CYCFKP2QBYC"
+ },
+ "f8k-mt4-densesd1-f1952-tdx-lr5e-06": {
+  "pf": 1528.71563,
+  "steps": 488,
+  "wall": 5305.16,
+  "ex": "01M5YC4MTVJD5535E8CVRXKA0S"
+ },
+ "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05": {
+  "pf": 1141.06269,
+  "steps": 488,
+  "wall": 5612.821,
+  "ex": "01M5YC5E7HHPJ7JW5806TDTVCQ"
+ },
+ "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05": {
+  "pf": 859.4932,
+  "steps": 366,
+  "wall": 4202.596,
+  "ex": "01M5YC6809Y0GSHF43GQYJZA14"
+ },
+ "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06": {
+  "pf": 466.98573,
+  "steps": 488,
+  "wall": 2292.478,
+  "ex": "01M5YC75P67DA9QXY422FHAZYG"
+ },
+ "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05": {
+  "pf": 343.21318,
+  "steps": 488,
+  "wall": 2426.113,
+  "ex": "01M5YC7ZYPRBBB4GW8BM7C3VFA"
+ },
+ "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06": {
+  "pf": 259.03126,
+  "steps": 366,
+  "wall": 1769.084,
+  "ex": "01M5YC8TECQPE1BBA9T2ZWX39T"
+ },
+ "f8k-mt11-densesd1-s240-tdx-lr5e-06": {
+  "pf": 229.66009,
+  "steps": 165,
+  "wall": 1761.231,
+  "ex": "01M5YC9PRH7TTSG7QK5BG15Q21"
+ },
+ "f8k-mt11-densesd1-s480-tdx-lr5e-06": {
+  "pf": 480.75235,
+  "steps": 330,
+  "wall": 3533.695,
+  "ex": "01M5YCAHWMV0EA4JN46ZRQT7HC"
+ },
+ "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05": {
+  "pf": 170.02691,
+  "steps": 165,
+  "wall": 1873.211,
+  "ex": "01M5YCC7HZAH1RPZ9K1Y0GW6KX"
+ },
+ "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06": {
+  "pf": 356.05324,
+  "steps": 330,
+  "wall": 3773.888,
+  "ex": "01M5YCD42X3FZ6JQJA8QA0FDF7"
+ },
+ "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06": {
+  "pf": 527.82442,
+  "steps": 495,
+  "wall": 5644.549,
+  "ex": "01M5YCDXV0X1MSPV9PG9S6C12T"
+ },
+ "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06": {
+  "pf": 100.09844,
+  "steps": 165,
+  "wall": 706.753,
+  "ex": "01M5YCESS02PZYHJ5HQ5CTRY1V"
+ },
+ "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06": {
+  "pf": 207.75101,
+  "steps": 330,
+  "wall": 1383.143,
+  "ex": "01M5YCFMC6NZ9SE6DA2AF2V21W"
+ },
+ "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06": {
+  "pf": 307.7141,
+  "steps": 495,
+  "wall": 2092.76,
+  "ex": "01M5YCGF3C370BPNH9GRJD82EV"
+ },
+ "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06": {
+  "pf": 74.8604,
+  "steps": 165,
+  "wall": 732.216,
+  "ex": "01M5YGWPATQVR06WA9R5A3JKNA"
+ },
+ "f8k-mt11-densesd1-s720-tdx-lr5e-06": {
+  "pf": 712.7924,
+  "steps": 495,
+  "wall": 5326.73,
+  "ex": "01M5YCBB45ENT8NEF9GS2336E4"
+ },
+ "f8k-mt4-dense-f1952-tde-lr5e-06": {
+  "pf": 1531.25242,
+  "ex": "01M5QGZ7BXVERPKX365GRS0VH4"
+ },
+ "f8k-mt4-dense-f3904-tde-lr5e-06": {
+  "pf": 3063.15168,
+  "ex": "01M5QH036NM7RNSPY6V56CCG2G"
+ },
+ "f8k-mt4-dense-f5856-tde-lr5e-06": {
+  "pf": 4594.9259,
+  "ex": "01M5RX8TEC0VTPFG16BEPV6NXJ"
+ },
+ "f8k-mt4-dense-f7808-tde-lr5e-06": {
+  "pf": 6128.21971,
+  "ex": "01M5RXA2XQPHWS71B23GA21NPZ"
+ },
+ "f8k-mt4-dense-f3904-tde-lr1e-05": {
+  "pf": 3063.15168,
+  "ex": "01M5VJG9JFVG5EWQJFPF1JFR6X"
+ },
+ "f8k-mt4-lora64r20to7-f1952-tde-lr5e-06": {
+  "pf": 390.34892,
+  "ex": "01M5RFQFNF77Y1XRBKJNR5S3K4"
+ },
+ "f8k-mt4-lora64r20to7-f3904-tde-lr5e-06": {
+  "pf": 777.37867,
+  "ex": "01M5RFREDMSNY2GTN8KVE7Z2Y1"
+ },
+ "f8k-mt4-lora64r20to7-f7808-tde-lr5e-06": {
+  "pf": 1550.87874,
+  "ex": "01M5RFSE75MEGQ9SD42NNYE8ZV"
+ },
+ "f8k-mt4-lora64r20to10-f7808-tde-lr5e-06": {
+  "pf": 1639.24831,
+  "ex": "01M5RFWFY7BYBN45625M6HC4ZB"
+ },
+ "f8k-mt4-lora64r20to7-s1952-tde-lr5e-06": {
+  "pf": 393.40329,
+  "ex": "01M5RWMJNWFPM1WEP71NT25VSC"
+ },
+ "f8k-mt4-lora64r20to7ffn50e-s1952-tde-lr5e-06": {
+  "pf": 335.21686,
+  "ex": "01M5TN4968YDV48FRDGMT4185Y"
+ },
+ "f8k-mt4-denselora64all-f3904-tde-lr5e-06": {
+  "pf": 2286.39814,
+  "ex": "01M5VJD3NYTH12QRSVNCFBNFMX"
+ },
+ "f8k-mt4-r20to7M7de0-f7808-tde-lr5e-06": {
+  "pf": 1868.7472,
+  "ex": "01M5QK8R20JBEMNXE6N559Z78W"
+ }
+}

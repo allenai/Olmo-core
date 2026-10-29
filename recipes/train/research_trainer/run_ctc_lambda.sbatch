@@ -64,6 +64,7 @@ LR="${LR:-5e-5}"
 GLOBAL_BATCH="${GLOBAL_BATCH:-8}"
 MICRO_BATCH="${MICRO_BATCH:-1}"
 MAX_STEPS="${MAX_STEPS:-0}"
+# SAVE_CKPT_FLAG="" skips the model-only save (memory probes); unset keeps --save-checkpoint
 SEED="${SEED:-0}"
 # 40960-seq at 0.8B OOMs on 80GB A100 without these (validated: job 109705 OOM'd at step 1,
 # 77.7GB allocated -- 0.8B's default shard_degree=1/no-AC only fits 141GB H200). Force full AC +
@@ -140,6 +141,6 @@ MASTER_PORT=$((29000 + RANDOM % 1000))
   --global-batch "$GLOBAL_BATCH" --micro-batch-instances "$MICRO_BATCH" --seed "$SEED" \
   ${ACT_CKPT:+--activation-checkpointing "$ACT_CKPT"} \
   ${SHARD_DEGREE:+--shard-degree "$SHARD_DEGREE"} \
-  --save-checkpoint --no-compile \
+  ${SAVE_CKPT_FLAG---save-checkpoint} --no-compile \
   $MAXARG $EXTRA
 echo "=== DONE $(date '+%F %T')  rc=$? ==="

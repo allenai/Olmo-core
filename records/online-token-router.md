@@ -5,7 +5,7 @@ updated: 2026-10-22
 experiment: learned_router
 area: token_routing
 kind: plan
-status: active (mt4 ablations done: split M1-M12, target, exploration, de16, keep 5%, layer skip, s1952; per-task runs evaluating)
+status: active (overnight screen done: memory/FLOP arms, per-doc floor fixes strmatch; f16 promotion runs in flight)
 superseded_by: 
 artifact: https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1
 summary: Online train-time keep router (ridge refit each step on gradient norms) + mid-stack drop; on fresh data the mid-stack router beats dense-s976 on all 4 tasks at 0.61-0.80x its FLOPs (single seed); drop at block 8 (1 and 4 fail), gradient-norm target (activation-strength dh = random), exploration share 0-50% irrelevant.
@@ -479,6 +479,195 @@ contradiction at both budgets.
 moves 0.13 between seeds at s976, contradiction / nq stay within 0.01. Single-seed outlier differences below ≈ 0.15
 at s976 do not count. (s1464 repeat evaluating.)
 
+## Aggressive cuts (2026-10-23, overnight; Prasann: "much more aggressive cuts to computation")
+
+otr10M7 costs ≈ 0.39 × dense, and the FLOORS dominate: blocks 0-6 on every token (≈ 22% of dense), the full-context
+step every 8 (≈ 12%), router overhead (a few %), the routed blocks 7-31 at 10% (≈ 8%). New opt-in levers, each charged
+exactly what runs and covered by a CPU test (`src/test/nn/online_token_router_test.py`):
+
+| flag | what it does | FLOP charge |
+|---|---|---|
+| `--st-otr-early-nograd` | routed steps run blocks [0, L) under no_grad (a fresh leaf at the split keeps the gnorm hook); those blocks learn only on dense steps | blocks [0, L) forward-only (1/3) on routed steps |
+| `--st-otr-dense-tail-frac F` | the last F of the steps run uncompressed; with `--st-otr-dense-every 0` = routed, then a dense tail | dense steps charged in full |
+| `--st-otr-stages "3:0.5,7:0.1,16:0.03"` | pyramid: a chain of routers, each with its own ridge fit and targets at its own layer; keeps are fractions of the original body | stage s: Lk·Σ(blocks ≥ L_s at Lk) − L_in·Σ(blocks ≥ L_s at L_in) |
+| `--st-otr-merge-dropped` | each document's dropped tokens averaged into one unlabelled summary token after its last dropped token (causal) | summaries count as kept tokens, plus 2·D per dropped token |
+| `--st-otr-keep-first K` | each document's first K body tokens always kept (header ablation) | none |
+
+**Gradient-composition prior** (the grad-composition session, ⚠ 64 held-out mt4s1952 rows / task, full-context answer
+CE): blocks 0-6 carry 0.42-0.51 of the per-row parameter-gradient energy at base and 0.13-0.25 after 366 dense steps
+(0.29-0.34 of the minibatch-summed gradient), so freezing / no-grad early blocks gives up a real share of learning,
+largest at the start. Per-token importance is stable early and drifts late (Spearman of ||dL/dh||, base -> trained:
+L3~L7 0.88 -> 0.88, L7~L16 0.78 -> 0.60, L7~L24 0.57 -> 0.35; the last block is anti-correlated with L7, -0.19).
+For the pyramid: 0.93-0.96 of the later layer's G^2 sits inside the top 50% at L3 (the 3 -> 7 stage is nearly free),
+and the nested 50%@3 -> 10%@7 -> 3%@16 captures 0.69-0.81 of G24^2 vs 0.61-0.75 for top-3% at L7 alone (rescoring at
+16 is worth ≈ +0.08 of mass); random 0.03.
+
+**Revision (Prasann, 2026-10-23: "ideas which can save both on FLOPs and memory"; "validate at smaller scale first").**
+The dense tail is dropped and every arm runs WITHOUT full-context steps (`--st-otr-dense-every 0`); new
+`--st-otr-freeze-early` (embeddings + blocks [0, L) frozen: no grads, no optimizer state, forward-only every step);
+`online_router/peak_mem_gib` logged per step. Screen at mt4s488 (122 steps) first, promote only arms that tie or beat
+otr10M7-s488: Beaker `f8k-mt4-{otr10M7,otr10M7de0,ng0M7,frz0M7,pyr3de0,pyr3frz0,mrg05M7de0}-s488-tdb-lr2e-06`, Lambda
+`f8k-mt4s488-{frz0M7,ng0M7,pyr3frz0,mrg05M7de0}-lro-lr2e-06-lam`. The s1464 tail / de8-pyramid / de8-merge runs below were
+cancelled before starting.
+
+Runs (mt4s1464, LR 2e-6, seed 0): Lambda `f8k-mt4s1464-otr10M7{ng,tail,de0,ngtail}-lro-lr2e-06-lam`; Beaker
+`f8k-mt4-{pyr3,pyr3ng,pyr2,mrg05M7,mrg10M7}-s1464-tdb-lr2e-06`; plus the allocation / header ablation
+`f8k-mt4-otr10M7{,ds0,ds50,hdr8}-s1464-tdb` and the same on mt11s720. Results pending.
+
+### Screen results (2026-10-23; single seed; eval_size 500; all recorded with `ops result add --check`)
+
+**mt4s488 (122 steps), Lambda, 8k contra / nq / oolong / outlier.** Dense s488 at 31 steps (≈ 99 PF): 0.525-0.669 /
+0.82 / 0.50 / 0.23-0.28.
+
+| arm | PF (× 389 dense-eq) | peak GiB / GPU | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|---|
+| otr10M7 (de8, reference) | 152 (0.39) | 60.1 | 0.705 | 0.860 | 0.564 | 0.335 |
+| otr10M7de0 (no full steps) | 120 (0.31) | 60.1 | 0.663 | 0.846 | 0.542 | 0.343 |
+| ng0M7 (early blocks no-grad) | 73 (0.19) | 53.0 | 0.426 | 0.764 | 0.542 | 0.275 |
+| frz0M7 (early stack frozen) | 72 (0.19) | 47.7 | 0.415 | 0.744 | 0.537 | 0.271 |
+| **fa30M7** (freeze after 30 steps) | 84 (0.22) | 47.7 after step 31 | 0.589 | 0.852 | 0.556 | 0.264 |
+| fa61M7 (freeze after 61 steps) | 96 (0.25) | 47.7 after step 62 | 0.616 | 0.862 | 0.513 | 0.342 |
+| pyr3frz0 (pyramid + frozen 0-2) | 66 (0.17) | 53.4 | 0.336 | 0.842 | 0.511 | 0.265 |
+| mrg05M7de0 (merge, keep 5%) | 109 (0.28) | 60 | 0.551 | 0.810 | 0.517 | 0.314 |
+| otr10M7f8 (per-doc floor 8) | 160 (0.41) | | 0.783 | 0.858 | 0.580 | 0.348 |
+| otr15M7 (keep 0.15, control) | 165 (0.42) | | 0.744 | 0.864 | 0.580 | 0.377 |
+| otr10M7f16 (floor 16) | 180 (0.46) | | 0.815 | 0.866 | 0.605 | 0.333 |
+| otr20M7 (keep 0.20, control) | 177 (0.46) | | 0.780 | 0.888 | 0.575 | 0.292 |
+
+Beaker s488 copies agree (otr10M7 0.702 / 0.850 / 0.586 / 0.302; de0 0.679 / 0.848 / 0.561 / 0.317; pyr3de0 0.418 /
+0.858 / 0.506 / 0.333). Findings: (1) the early stack must keep learning -- cutting its gradient (no-grad or frozen from
+step 0) costs ≈ 0.24 contra and 0.08-0.1 nq for −40% PF and −7 to −12 GiB; consistent with the grad-composition prior
+(blocks 0-6 hold 0.42-0.51 of the gradient energy at base). (2) warmup-then-freeze recovers most of it: fa30M7 keeps
+nq at de0's level and contra at 0.59 for −30% PF and −12 GiB vs de0. (3) removing the full-context steps (de0) costs
+≈ 0.04 contra for −21% PF. (4) the pyramid loses contradiction (keeping 50% at block 3 starves it). (5) merge at 5% is
+not better than drop at 10%. (6) the per-document floor gains ≈ +0.035-0.04 contra over a keep-matched control.
+
+**mt11s720 (Beaker), 8k, mean over the 9 tasks (reorder@8k and rerank excluded):**
+
+| arm | PF (× dense) | strmatch | grouping | xabsence | contra | mean9 |
+|---|---|---|---|---|---|---|
+| otr10M7 | 295 (0.41) | 0.789 | 0.287 | 0.523 | 0.835 | 0.699 |
+| otr10M7f8 | 313 (0.44) | 0.800 | 0.277 | 0.561 | 0.833 | 0.699 |
+| **otr10M7f16** (seed 0) | 352 (0.49) | **0.922** | 0.270 | 0.595 | 0.864 | **0.724** |
+| **otr10M7f16** (seed 1) | 353 (0.49) | **0.907** | 0.277 | 0.631 | 0.874 | **0.735** |
+| **fa247f16M7** (freeze at half + floor 16, no full steps) | 258 (0.36) | **0.905** | 0.260 | 0.584 | 0.866 | 0.712 |
+| fa247f16M7 seed 1 | 258 (0.36) | 0.920 | 0.284 | 0.632 | 0.851 | 0.722 |
+| **fa247f16M7, LR 5e-6** | 258 (0.36) | **0.933** | 0.283 | 0.686 | 0.897 | **0.750** |
+| prog4712f16M7 (progressive freeze + floor 16), LR 5e-6 | 243 (0.34) | 0.928 | 0.273 | 0.671 | 0.893 | 0.731 |
+| prog4712f16M7pt (+ per-task routers), LR 5e-6 | 244 (0.34) | 0.951 | 0.309 | 0.637 | 0.901 | 0.737 |
+| lora16f16M7 (LoRA r16 early stack + floor 16), LR 5e-6 | 260 (0.36) | 0.827 | 0.254 | 0.588 | 0.907 | 0.716 |
+| **lora64f16M7 (LoRA r64 early stack + floor 16), LR 5e-6** | 265 (0.37) | **0.927** | 0.284 | **0.738** | 0.909 | **0.748** |
+| lora64fa371f16M7 (LoRA r64 + floor 16, frozen at 75%), LR 5e-6 | 253 (0.35) | 0.952 | 0.274 | 0.617 | 0.893 | 0.735 |
+| otr10M7f16sk3 (+ skip layers 20,24,28), LR 5e-6 | 286 (0.40) | 0.894 | 0.241 | 0.621 | 0.887 | 0.735 |
+| r20to7f16 (stages 7:0.2,16:0.07 + floor 16), LR 5e-6 | 310 (0.43) | 0.943 | 0.292 | 0.618 | 0.922 | 0.748 |
+| lora64fa371r20to7f16 (LoRA r64 + freeze 75% + two-stage + floor 16), LR 5e-6 | 260 (0.36) | 0.935 | 0.307 | 0.544 | 0.907 | 0.738 |
+| lora64fa371r20to10f16 (same, stage 2 at 10%), LR 5e-6 | 262 (0.36) | 0.907 | 0.322 | 0.607 | 0.901 | 0.738 |
+| lora64fa420r20to7f16 (LoRA r64 + two-stage + floor, freeze at 85%), LR 5e-6 | 265 (0.37) | 0.927 | 0.305 | 0.584 | 0.920 | 0.740 |
+| **lora64r20to7f16 (LoRA r64 + two-stage + floor, NO freeze), LR 5e-6**, seeds 0 / 1 | 273 (0.38) | **0.947 / 0.942** | 0.285 / 0.295 | **0.683 / 0.708** | 0.909 / 0.892 | **0.752 / 0.750** |
+| lora64r20to10f16 (same, stage 2 at 10%), LR 5e-6 | 274 (0.38) | 0.929 | 0.276 | 0.645 | 0.909 | 0.740 |
+| otr10M7hdr8 (first 8 tokens kept) | 314 (0.44) | 0.744 | 0.306 | 0.648 | 0.835 | 0.711 |
+| otr10M7ds0 / ds50 (global budget) | 293 | 0.770 / 0.769 | | | | 0.696 / 0.697 |
+| rnd10M7 (random) | 295 | 0.793 | 0.353 | 0.466 | 0.803 | 0.691 |
+| otr30M8 | 400 (0.56) | 0.845 | 0.301 | 0.628 | 0.876 | 0.728 |
+| dense-s720 | 1.0 | 0.974 | 0.361 | 0.555 | 0.873 | 0.741 |
+
+Strmatch: random = router (0.793 / 0.789) -- the loss is the cut, not the choice, as the fidelity probe showed (block 7,
+keep 0.3, trained otr10M8-s480: router 0.08 / oracle 0.55 / random 0.09 on strmatch vs 0.89 / 0.90 / 0.15 on grouping;
+⚠ 12 rows / task). A per-document floor of 16 tokens fixes it (0.922; `--check` flags the new high) and brings the mean
+to otr30M8's at 12% less compute; seed 1 replicates it (strmatch 0.907, mean 0.735; 2-seed mean 0.730 vs dense 0.741 at 0.49x). Combining both levers (fa247f16M7: early stack frozen after 247 of 495 steps, optimizer state released, 63.3 -> 50.9 GiB on H100; floor 16; no full steps) keeps the fix (strmatch 0.905) at 0.36x: mean 0.712, above otr10M7's 0.699 at 0.41x. Seed 1 replicates (strmatch 0.920, mean 0.722; 2-seed mean 0.717). At LR 5e-6 the same arm scores mean 0.750
+(strmatch 0.933, xabsence 0.686, contra 0.897) at 0.36x -- above dense-s720 at 2e-6 (0.741), but dense mt11 has only
+been run at 2e-6 in this table. **LR-matched dense exists (parent, Lambda `f8k-mt11s{240,480,720}-dense-lrg-lr5e-06-lam`,
+research/token_routing/ds64_fast8k/results/pareto_points.json): mean9 0.697 @ 232 PF, 0.750 @ 483 PF, 0.788 @ 715 PF.
+So fa247f16M7 at 5e-6 (0.750 at 258 PF) is +0.047 over dense interpolated to its PF and matches dense-s480 at 0.53x
+its FLOPs** (−0.038 vs dense on the same 720 rows/task; single seed, eval_size 500 per task). **New levers on mt11s720 at 5e-6 (seed 0, vs dense interpolated to their PF ≈ 0.699-0.703):** progressive
+freeze + floor 0.731 (+0.032), + per-task routers 0.737 (+0.038; strmatch +0.023 and grouping +0.036 over the shared
+router -- the tasks per-task routing was meant to help, single seed), LoRA r16 + floor 0.716 (+0.013; strmatch 0.827).
+None beats the single freeze fa247f16M7 (0.750, +0.047). **LoRA rank 64 + floor (lora64f16M7) ties it: mean9 0.748 at
+0.37x (+0.044 vs dense interpolated to 265 PF), strmatch 0.927, xabsence 0.738 -- the same mt11 quality as the best freeze
+arm with the ~48 GiB peak of the LoRA stack (vs 60 GiB for any warmup-then-freeze arm before its freeze).** Rank 16's
+strmatch collapse (0.827) was the rank, not LoRA. Freezing that LoRA stack at 75% (lora64fa371f16M7) gives mean9 0.735 at 0.35x (+0.034 vs dense
+interpolated to 253 PF): -0.013 vs unfrozen LoRA, almost all of it xabsence (0.617 vs 0.738; strmatch up to 0.952) --
+single seed, one task, so not a call that freezing hurts the 11-task mix. The parent's s1952 winners on mt11s720 (floor 16, seed 0): sk3 0.735 at 0.40x (+0.027 vs dense
+interpolated to 286 PF), r20to7 0.748 at 0.43x (+0.035 at 310 PF) -- both above dense at matched FLOPs, neither above
+fa247f16M7 (0.750 at 0.36x) or lora64f16M7 (0.748 at 0.37x), which reach the same mean9 for less compute. The mt4 best combination (LoRA r64 + freeze 75% +
+two-stage) on mt11s720 + floor: 0.738 at 0.36x (+0.035 vs dense interpolated to 260 PF) -- below fa247f16M7 / lora64f16M7.
+Both LoRA-then-freeze runs score low on xabsence (0.544 / 0.617 vs 0.738 unfrozen LoRA), so on this mix the FREEZE, not
+the two-stage drop, looks like the cost (single seed each). Stage 2 at 10% on mt11 gives the same 0.738 (xabsence 0.607):
+three LoRA-then-freeze runs on mt11 all sit at xabsence 0.54-0.62 vs 0.738 unfrozen. No-freeze / freeze-85% runs decide it. On mt4s1464 the freeze is free: LoRA r64 + two-stage without it
+(lora64r20to7) = 0.944 / 0.916 / 0.615 / 0.713 at 0.26x vs 0.938 / 0.922 / 0.610 / 0.765 frozen at 75% (0.24x). **The mt11
+freeze test settles it: freezing the LoRA stack costs xabsence on the 11-task mix whether early or late (freeze 75%:
+0.544, freeze 85%: 0.584, mean9 0.738 / 0.740), and without the freeze xabsence comes back (0.683) and LoRA r64 +
+two-stage + floor is the best mt11 point so far: mean9 0.752 at 0.38x, +0.046 vs dense interpolated to 273 PF. Universal
+recipe: LoRA r64 early stack + two-stage drop (7:0.2,16:0.07), NO freeze -- 0.26x on mt4 (= the frozen variant within
+noise), 0.38x on mt11 (+ floor 16); ~0.02x more than freezing, which is free only on mt4.** Recipe on mt4s1464, 2 seeds: 0.945 / 0.912 / 0.636 /
+0.726 at 0.26x, above the one-stage router (0.937 / 0.902 / 0.623 / 0.682 at 0.30x, 60 GiB) on every task at ~49 GiB.
+(Seed 1's contradiction@2k came from the eval log, 0.96 at 3 s.f.: the Lambda watcher recorded once all four multirung
+jsons existed, but a json can land after its first rung, and the checkpoint-dir delete then removed the node-local 2k
+output. The watcher now waits for both rungs in every json.) **mt11 recipe, seed 1: mean9 0.750 (xabsence 0.708) -> 2-seed 0.751 at
+0.38x, +0.045 vs dense interpolated to 273 PF: level with the best mt11 arm (fa247f16M7, 0.750 at 0.36x, 60 GiB peak) at
+the LoRA memory peak. Stage 2 at 10% does not carry to mt11 (0.740).** Global budget: no collapse (leak_auc 0.58 vs 0.49 per-document) but no gain.
+Promoted: otr10M7f8 / f16 to mt4s1464 (Lambda), f16 seed 1 on mt11s720. otr10M7f8 at mt4s1464 (467 PF): 0.931 / 0.892 /
+0.616 / 0.679 vs otr10M7 (2 seeds, ≈ 445 PF) 0.927 / 0.907 / 0.643 / 0.581 -- with more training the floor's mt4 gain
+vanishes (contra level; the rest within seed noise): it matters for tiny documents (strmatch) and early in training.
+otr10M7f16 at mt4s1464 (527 PF): 0.950 / 0.894 / 0.636 / 0.580 -- +0.023 contra for +18% PF, on the compute curve
+(otr30M8, 619 PF: 0.951 / 0.918 / 0.633 / 0.615), not above it.
+**Warmup-then-freeze at mt4s1464:** fa183M7 (no full steps, early stack frozen after 183 of 366 steps; 275 PF = 0.24x
+dense-eq; 47.7 GiB after the freeze) 0.898 / 0.884 / 0.647 / 0.556, vs otr10M7 (2 seeds, 445 PF = 0.39x) 0.927 / 0.907 /
+0.643 / 0.581: -38% PF and -12 GiB for the second half at -0.03 contra. Against the best-LR dense curve interpolated
+at 275 PF (≈ 0.885 / 0.897 / 0.569 / 0.28, between dense-s488 61 and 122 steps) it is level on contra / nq and ahead on
+oolong / outlier.
+**Freeze-point sweep + LR at mt4s1464 (Lambda, de0, no full steps), 8k contra / nq / oolong / outlier:**
+
+| run | PF (x 1154 dense-eq) | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| fa92M7 (freeze at 25%) | 240 (0.21) | 0.878 | 0.882 | 0.618 | 0.488 |
+| fa183M7 (50%), seeds 0 / 1 | 275 (0.24) | 0.898 / 0.881 | 0.884 / 0.890 | 0.647 / 0.666 | 0.556 / 0.491 |
+| fa275M7 (75%) | 311 (0.27) | 0.919 | 0.888 | 0.637 | 0.553 |
+| **fa183M7, LR 5e-6**, seeds 0 / 1 | 275 (0.24) | **0.920 / 0.927** | 0.884 / 0.916 | 0.624 / 0.593 | **0.622 / 0.691** |
+| fa92M7, LR 5e-6 | 240 (0.21) | 0.913 | 0.908 | 0.618 | 0.744 |
+| fa275M7, LR 5e-6, seeds 0 / 1 | 311 (0.27) | 0.936 / 0.923 | 0.896 / 0.888 | 0.626 / 0.630 | 0.664 / 0.627 |
+| otr05M7 de0 (keep 5%, no freeze), LR 5e-6 | 304 (0.26) | 0.906 | 0.890 | 0.589 | 0.460 |
+| otr10M7 de8, LR 2e-6 (2 seeds) | 445 (0.39) | 0.927 | 0.907 | 0.643 | 0.581 |
+| **otr10M7 de0 (no freeze), LR 5e-6**, seeds 0 / 1 | 346 (0.30) | **0.947 / 0.926** | 0.902 / 0.902 | 0.610 / 0.636 | 0.673 / 0.690 |
+| **otr10M7 de8, LR 5e-6**, seeds 0 / 1 | 445 (0.38) | **0.957 / 0.953** | 0.912 / 0.914 | 0.616 / 0.627 | 0.703 / 0.749 |
+| otr10M7 de16 (full step every 16), LR 5e-6, seeds 0 / 1 | 395 (0.34) | 0.939 / 0.952 | 0.918 / 0.906 | 0.607 / 0.643 | 0.709 / 0.741 |
+| fa275M7 de8 (freeze 75% + full step every 8), LR 5e-6, seeds 0 / 1 | 410 (0.35) | 0.957 / 0.933 | 0.918 / 0.908 | 0.625 / 0.643 | 0.652 / 0.684 |
+| fa183M7 de8 (freeze 50% + full step every 8), LR 5e-6, seeds 0 / 1 | 375 (0.32) | 0.941 / 0.950 | 0.904 / 0.916 | 0.618 / 0.633 | 0.513 / 0.699 |
+| dense-s1464, LR 5e-6 | ≈ 1154 (1.0) | 0.956 | 0.936 | 0.630 | 0.719 |
+
+A later freeze buys contradiction smoothly; LR 5e-6 (the 64k study's router LR) matches otr10M7 at 0.24x on two seeds:
+mean 0.924 / 0.900 / 0.609 / 0.657 vs 0.927 / 0.907 / 0.643 / 0.581 at 0.39x (outlier +0.08, oolong -0.03; outlier@2k
+0.68-0.69 is the known LR confound on that cell). At LR 5e-6 every freeze point (25 / 50 / 75%, 0.21-0.27x) is at or above otr10M7-at-2e-6 on contra / nq. **LR-matched references (5e-6, 2 seeds each) settle it: most of that gain is the LR, not the freeze.** otr10M7 de8 at
+5e-6 (0.38x), 2-seed mean 0.955 / 0.913 / 0.622 / 0.726 vs dense-s1464 0.956 / 0.936 / 0.630 / 0.719: **level with dense
+on contra / oolong / outlier at 0.38x, -0.023 on nq** -- the router's best point yet. Dropping full steps (de0, 0.30x)
+mean 0.937 / 0.902 / 0.623 / 0.682 (-0.018 contra, -0.044 outlier); freezing on top costs -0.007 / -0.010 / +0.005 /
+-0.036 at 75% (fa275 2-seed mean 0.930 / 0.892 / 0.628 / 0.646, 0.27x) and -0.013 contra at 50% (fa183 2-seed mean
+0.924, 0.24x). **At matched FLOPs, freezing beats a smaller budget:** keep 5% instead of 10% (otr05M7de0, 304 PF, 0.26x)
+scores 0.906 / 0.890 / 0.589 / 0.460, below both freeze arms on every task (outlier -0.19) -- with blocks 0-6 running on
+every token, halving the keep fraction saves only 42 PF, while freezing removes the early stack's backward.
+**Spacing the full steps and combining them with the freeze (LR 5e-6, 2-seed means):**
+
+| arm | x dense | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| otr10M7 de8 | 0.38 | 0.955 | 0.913 | 0.622 | 0.726 |
+| fa275M7 de8 | 0.35 | 0.945 | 0.913 | 0.634 | 0.668 |
+| **otr10M7 de16** | **0.34** | **0.946** | **0.912** | **0.625** | **0.725** |
+| fa183M7 de8 | 0.32 | 0.946 | 0.910 | 0.626 | 0.606 |
+| otr10M7 de0 | 0.30 | 0.937 | 0.902 | 0.623 | 0.682 |
+| fa275M7 de0 | 0.27 | 0.930 | 0.892 | 0.628 | 0.646 |
+| fa183M7 de0 | 0.24 | 0.924 | 0.900 | 0.609 | 0.657 |
+| dense-s1464 | 1.0 | 0.956 | 0.936 | 0.630 | 0.719 |
+
+A full step every 16 keeps every task of every-8 except -0.009 contra at 0.34x: the better point. Freeze + every-8
+lands on the same contra / nq / oolong at 0.32-0.35x; outlier there is too noisy to call (fa183de8 seeds 0.513 / 0.699,
+a 0.19 spread -- outlier@8k is the noisiest cell, so read single outlier numbers with care). PF of the freeze + full-step
+arms is exact: after the freeze every training forward (full steps included) runs blocks [0, L) forward-only and is
+charged 1/3 there. Contra / nq trade smoothly with
+PF along the whole ladder; at ≤ 0.30x it costs 0.02-0.03 contra. Running: de32 and fa275de16 (seed 0). At
+matched LR the ladder is one smooth curve: the full-context steps buy contra / outlier, freeze is a cheap
+compute+memory knob (-12 GiB after the freeze). Seed spread on de0 contra is 0.021, larger than the ±0.01 eval SE.
+The freeze point trades smoothly: fa30 / fa61 / no freeze = contra 0.589 / 0.616 / 0.663 at 84 / 96 / 120 PF.
+
 ## Long-context screen (ds64 setting) -- CANCELLED 2026-10-22
 
 Cancelled before any started (Prasann: reproduce the per-task numbers instead, since the mixed runs give fewer
@@ -532,3 +721,550 @@ All on mt4s488 (122 steps) unless noted, LR 2e-6, eval 8k + 2k × 500 per task, 
 
 **Decision rule.** Promote an arm only if it beats dense at matched PF on all four tasks at 8k by more than the
 seed noise, with `leak_auc` near 0.5 (or no worse than the tier67 rule) and `rank_corr_explore` > 0 throughout.
+
+## New levers, 2026-10-24 (code 076464355; all screens de0 -- no full-context steps, Prasann's rule)
+
+| flag | what | FLOP / memory charge |
+|---|---|---|
+| `--st-otr-mod-layers 8-31:2` | mixture-of-depths: router picks keep_frac of each document at block 8; listed blocks run on those (+ non-body) only, the rest pass the residual; every token reaches the head | each listed block at the kept length; targets over every body token (uncensored) |
+| `--st-otr-per-task-key-tokens 11` | one ridge router per task (key = the row's first 11 tokens = its prompt template; one key per mt4 / mt11 task file, nq + hotpotqa share one) | ~0.2 GB float64 Gram per task at F ~ 5150 |
+| `--st-otr-freeze-schedule 4:0.25,7:0.5,12:0.75` | progressive freeze (grads + Adam state released per stage) | frozen below the drop: 1/3; frozen at/above it: 2/3 (activation grad still needed for the target) |
+| `--st-otr-mass-target 0.8 --st-otr-max-keep-frac 0.2` | adaptive keep: per document the fewest top tokens covering 80% of predicted ‖g‖²; floor; per-row cap (peak memory) | realised keep |
+| `--st-otr-target-layer 16` | fit on ‖dL/dh‖ at block 16: exploration tokens on routed steps (uniform, kept, uncensored); every token under MoD | hook only |
+| `--st-otr-early-lora 16` | blocks [0, L) + embeddings frozen from step 0, rank-16 LoRA on every linear there (scale 32 = adapter LR multiplier); eval re-installs from config.json | blocks [0, L) at 2/3 + 6 r (in + out) per token |
+
+Screens in flight (Lambda, mt4s1464, LR 5e-6, seed 0, vs otr10M7de0 2-seed mean 0.937 / 0.902 / 0.623 / 0.682 at
+0.30x): otr10M7de0pt, mass80c20M7, lora16M7, prog4712M7, tl16M7, mod25L8. The per-task de16 run was cancelled under
+the no-full-step rule; de32 / fa275de16 (launched before it) are references only: otr10M7de32 (0.32x) 0.927 / 0.906 /
+0.616 / 0.558, fa275M7de16 (0.31x) 0.929 / 0.910 / 0.637 / 0.737 (seed 0 each, 8k, eval_size 500) -- neither beats the
+de0 two-seed mean at 0.30x by more than seed noise on contra / nq.
+
+**Screen results so far (8k contra / nq / oolong / outlier, eval_size 500, seed 0):**
+
+| arm | PF (x dense) | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| otr10M7de0 shared router (2 seeds, reference) | 346 (0.30) | 0.937 | 0.902 | 0.623 | 0.682 |
+| otr10M7de0pt (per-task routers) | 347 (0.30) | 0.941 | 0.890 | 0.616 | 0.773 |
+| mod25L8 (MoD, capacity 0.25, blocks 8-30 alternate) | 905 (0.78) | 0.957 | 0.928 | 0.622 | **0.468** |
+| mass80c20M7 (adaptive: 80% of predicted ‖g‖² per doc, row cap 20%) | 428 (0.37) | 0.941 | 0.918 | 0.585 | 0.571 |
+| prog4712M7 (freeze [0,4) @25%, [0,7) @50%, [0,12) @75%), seeds 0 / 1 | 253 (0.22) | 0.933 / 0.919 | 0.890 / 0.906 | 0.620 / 0.647 | 0.508 / 0.602 |
+| tl16M7 (router fit on ‖dL/dh‖ at block 16, exploration tokens) | 346 (0.30) | 0.919 | 0.910 | 0.628 | 0.726 |
+| **lora16M7** (blocks 0-6 + embeddings frozen from step 0, rank-16 LoRA, scale 32), seeds 0 / 1 | 278 (0.24) | 0.939 / 0.909 | 0.872 / 0.892 | 0.615 / 0.595 | 0.566 / 0.592 |
+| lora16x8M7 (rank 16, scale 8) | 278 (0.24) | 0.866 | 0.876 | 0.608 | 0.340 |
+| lora16x128M7 (rank 16, scale 128) | 278 (0.24) | 0.929 | 0.882 | 0.620 | 0.523 |
+| **lora64M7** (rank 64, scale 32; peak 48.4 GiB), seeds 0 / 1 | 286 (0.25) | 0.945 / 0.933 | 0.912 / 0.896 | 0.638 / 0.607 | 0.642 / 0.730 |
+| lora128M7 (rank 128, scale 32) | 297 (0.26) | 0.919 | 0.910 | 0.588 | 0.703 |
+| lora64k07M7 (rank 64, keep 7%) | 261 (0.23) | 0.929 | 0.892 | 0.620 | 0.650 |
+| lora64k05M7 (rank 64, keep 5%) | 244 (0.21) | 0.912 | 0.900 | 0.609 | 0.534 |
+| lora64M6 (rank 64, drop at block 6) | 270 (0.23) | 0.715 | 0.874 | 0.595 | 0.344 |
+| lora64M5 (rank 64, drop at block 5) | 253 (0.22) | 0.752 | 0.882 | 0.605 | 0.381 |
+| **lora64fa275M7** (rank 64, adapters + blocks 0-6 frozen at 75%), seeds 0 / 1 | 267 (0.23) | 0.931 / 0.937 | 0.898 / 0.904 | 0.608 / 0.636 | 0.756 / 0.717 |
+| lora64fa183M7 (rank 64, frozen at 50%) | 248 (0.21) | 0.924 | 0.900 | 0.607 | 0.527 |
+| dense-s1464 | 1154 (1.0) | 0.956 | 0.936 | 0.630 | 0.719 |
+
+Per-task routing is neutral on the 4-task mix at matched PF (outlier +0.09 is inside that cell's 0.19 seed spread);
+its case is the 11-task mix. MoD at capacity 0.25 is dense-level on contra / nq / oolong at 0.78x but loses outlier
+(-0.25), and 0.78x is not an aggressive cut. Adaptive keep spends more (0.37x: the 80% mass cover keeps more than 10% of most documents) and is
+no better than the fixed budget at less compute (de16, 0.34x: 0.946 / 0.912 / 0.625 / 0.725); oolong / outlier drop,
+so the predicted-mass cover does not pick the tokens those tasks need -- not a win at this setting. Progressive freeze is the best contra of the freeze family at the lowest PF (0.933 at 0.22x vs fa183
+0.924 at 0.24x and fa92 0.913 at 0.21x), level with no-freeze de0 (0.937, 0.30x) within seed noise; outlier 0.508 is
+low but that cell's seed spread is 0.19. **Seed 1 (0.919 / 0.906 / 0.647 / 0.602) takes the 2-seed mean to
+0.926 / 0.898 / 0.634 / 0.555 at 0.22x -- the same as single-step fa183 (0.924 / 0.900 / 0.609 / 0.657 at 0.24x) on
+contra / nq, +0.025 oolong, -0.10 outlier: seed 0's contra lead was noise.** Progressive freezing saves 0.02x and ends at
+41.5 GiB, but does not beat the single freeze. Fitting the router on block-16 gradients (tl16M7, exploration tokens only) is neutral at matched PF:
+contra -0.018 (the de0 seeds differ by 0.021), nq / oolong / outlier +0.005-0.04 -- the depth drift of importance does
+not show up as a better pick at this budget. **The LoRA early stack is the one lever that cuts PEAK memory: 48.1 GiB for the whole run vs 60.3 GiB for
+de0 and for every warmup-then-freeze arm before its freeze (prog4712M7 peaks at 60.3, ends at 41.5).** At 0.24x it holds
+contra (0.939 vs de0 0.937 at 0.30x), loses nq (-0.03) and outlier (-0.12, seed noise up to 0.19), seed 0 only. Its
+evals re-installed the adapters (logged in all four; checkpoint-side rebuild, since this run's config.json predates
+1f626f71d). **Seed 1 (0.909 / 0.892 / 0.595 / 0.592; adapters re-installed in all four evals) gives a 2-seed mean of 0.924 /
+0.882 / 0.605 / 0.579 at 0.24x: the same quality as the single freeze fa183 (0.924 / 0.900 / 0.609 / 0.657, 0.24x)
+within seed noise, at a 48 GiB instead of 60 GiB peak.** **LoRA sweep (seed 0): the scale only has to be large enough (8 loses 0.06 contra / 0.24 outlier; 32 and 128 are
+level), and RANK matters -- rank 64 (0.945 / 0.912 / 0.638 / 0.642 at 0.25x, 48.4 GiB peak) is at or above the de0
+reference (0.937 / 0.902 / 0.623 / 0.682 at 0.30x, 60.3 GiB) on contra / nq / oolong: about the same quality with 17%
+less compute and 12 GiB less peak memory.** **Seed 1 (0.933 / 0.896 / 0.607 / 0.730; adapters re-installed in all four
+evals, peak 48.4 GiB) confirms it: 2-seed mean 0.939 / 0.904 / 0.623 / 0.686 at 0.25x vs de0 0.937 / 0.902 / 0.623 /
+0.682 at 0.30x -- identical quality on every task, 17% less compute, 12 GiB (20%) less peak memory from step 0.** Rank
+saturates at 64: lora128M7 (0.919 / 0.910 / 0.588 / 0.703 at 0.26x, seed 0) is no better. Cutting the budget under LoRA r64 trades
+smoothly but saves little: 10% -> 7% -> 5% keep is 0.25x -> 0.23x -> 0.21x for contra 0.939 -> 0.929 -> 0.912 and
+outlier 0.686 -> 0.650 -> 0.534 (the 0.02-0.04x saved is small because blocks 0-6 still run on every token). LoRA at 5%
+beats no-LoRA at 5% (otr05M7de0: 0.906 / 0.890 / 0.589 / 0.460 at 0.26x) on every task at less compute. **Dropping before block 7
+still fails under LoRA r64 and LR 5e-6:** drop at 6 / 5 = contra 0.715 / 0.752, outlier 0.344 / 0.381, for 0.02-0.03x
+saved -- block 7 (the first full-attention block after the GDN prefix) must see every token, as the split-point curve
+showed at 2e-6. LoRA r64 + keep 10% at block 7 stays the point. **LoRA then freeze (5e1202e4b: the adapters freeze at
+freeze_after, after which blocks 0-6 run forward-only) trades smoothly at the LoRA peak (48.4 GiB throughout):** no freeze
+0.25x 0.939 / 0.904 / 0.623 / 0.686 (2 seeds) -> frozen at 75% 0.23x 0.931 / 0.898 / 0.608 / 0.756 -> at 50% 0.21x
+0.924 / 0.900 / 0.607 / 0.527 (seed 0 each). Frozen at 50% equals the plain warmup-then-freeze fa183 (0.924 / 0.900 /
+0.609 / 0.657 at 0.24x, 60 GiB peak) on contra / nq / oolong at less compute and 12 GiB less peak. (The fa275 oolong@2k
+row was missing from the Lambda results copy -- the node-local eval had it, 0.858 on 500 -- re-copied and added.) **Seed 1 of
+the 75% point (0.937 / 0.904 / 0.636 / 0.717) makes it the best compute + memory point: 2-seed mean 0.934 / 0.901 /
+0.622 / 0.737 at 0.23x and 48.4 GiB, vs the de0 router 0.937 / 0.902 / 0.623 / 0.682 at 0.30x and 60.3 GiB -- the same
+quality at 23% less compute and 20% less peak memory.** Running: lora64f16M7 and
+lora16f16M7 on mt11s720 at 5e-6 (Beaker; evals from an eval worktree at the fixed tip). **LoRA eval trap fixed (1f626f71d, 984825862):** SoftToken defined
+export_config twice, so the early_lora block never reached config.json and a DCP load silently drops adapter keys; the
+eval hook now rebuilds the block from the checkpoint (or refuses) and guards every checkpoint key. Lambda evals run the
+parent's checkout unless REPO_OVERRIDE is set (068d3f0ac); LoRA runs use OLMo-core-otr10.
+
+**Parent's mt4s1952 winners re-run at mt4s1464 (LR 5e-6, de0, 8k, eval_size 500):**
+
+| arm | PF (x dense) | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| otr10M7de0 (reference, 2 seeds) | 346 (0.30) | 0.937 | 0.902 | 0.623 | 0.682 |
+| otr10M7de0sk3 (+ --train-skip-layers 20,24,28), seeds 0 / 1 | 333 (0.29) | 0.915 / 0.900 | 0.898 / 0.920 | 0.618 / 0.615 | 0.639 / 0.537 |
+| **r20to7M7de0** (--st-otr-stages 7:0.2,16:0.07), seeds 0 / 1 | 355 (0.31) | 0.956 / 0.956 | 0.902 / 0.916 | 0.630 / 0.658 | 0.765 / 0.817 |
+| lora64fa275 (reference: LoRA r64 + freeze 75%, 2 seeds) | 267 (0.23) | 0.934 | 0.901 | 0.622 | 0.737 |
+| lora64fa275sk3M7 (+ sk3) | 254 (0.22) | 0.898 | 0.902 | 0.609 | 0.685 |
+| lora64ptM7 (LoRA r64 + per-task routers) | 287 (0.25) | 0.932 | 0.882 | 0.620 | 0.686 |
+| **lora64r20to7 (LoRA r64 + two-stage, NO freeze -- the universal recipe)**, seeds 0 / 1 | 296 (0.26) | 0.944 / 0.945 | 0.916 / 0.908 | 0.615 / 0.656 | 0.713 / 0.738 |
+| **lora64fa275r20to7** (+ stages 7:0.2,16:0.07; peak 48.9 GiB), seeds 0 / 1 | 276 (0.24) | 0.941 / 0.935 | 0.928 / 0.916 | 0.593 / 0.626 | 0.811 / 0.718 |
+
+sk3 2-seed mean 0.908 / 0.909 / 0.617 / 0.588: -0.03 contra and -0.09 outlier vs the plain router for 4% less compute
+-- past block 7 only the kept 10% run the upper blocks, so skipping three of them saves little. (The parent's
+s1952 result compared sk3 with the DENSE curve at matched PF, where it was within noise; against the same router it is
+a small loss here.) **The two-stage drop r20to7 is the strongest router quality so far, confirmed on two seeds: mean 0.956 / 0.909 /
+0.644 / 0.791 at 0.31x vs dense-s1464 0.956 / 0.936 / 0.630 / 0.719 -- equal contra, +0.014 oolong, +0.07 outlier, -0.027
+nq at 31% of dense compute; vs the one-stage router at the same compute +0.019 / +0.007 / +0.021 / +0.11.** (Peak 60.8
+GiB; on mt11s720 + floor 16 it does not beat the 0.36x arms.) **With the LoRA r64 + freeze-75% early stack (lora64fa275r20to7): 0.941 / 0.928 / 0.593 / 0.811 at 0.24x and
+48.9 GiB** -- vs LoRA + freeze alone +0.007 contra, +0.027 nq, +0.07 outlier, -0.03 oolong, for +0.01x. sk3 on top of
+LoRA costs contra (-0.036) for 0.01x; per-task routers on top of LoRA r64 are neutral (0.932 / 0.882 / 0.620 / 0.686 vs
+0.939 / 0.904 / 0.623 / 0.686 shared, 0.25x). **Seed 1 (0.935 / 0.916 / 0.626 / 0.718; adapters re-installed in all four evals) gives a 2-seed mean of 0.938 / 0.922
+/ 0.610 / 0.765 at 0.24x and 48.9 GiB: vs LoRA + freeze alone +0.004 contra, +0.021 nq, -0.012 oolong, +0.028 outlier for
++0.01x; vs the one-stage router (0.30x, 60.3 GiB) level on contra / oolong, better nq / outlier, at 80% of its compute and
+81% of its peak memory.**
+
+**Sweep around the combination (mt4s1464, LR 5e-6 unless noted, de0, seed 0; base 2-seed 0.938 / 0.922 / 0.610 / 0.765 at 0.24x):**
+
+| variant | PF (x dense) | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| **stage-2 keep 10% (7:0.2,16:0.10)**, seeds 0 / 1 | 293 (0.25) | **0.956 / 0.943** | 0.916 / 0.920 | 0.620 / 0.647 | 0.759 / 0.781 |
+| freeze at 85% (step 311) | 284 (0.25) | 0.953 | 0.916 | 0.618 | 0.730 |
+| stage-1 keep 30% (7:0.3,16:0.07) | 303 (0.26) | 0.955 | 0.912 | 0.616 | 0.716 |
+| **third stage (7:0.2,16:0.07,24:0.03)**, seeds 0 / 1 | 262 (0.23) | 0.943 / 0.951 | 0.914 / 0.918 | 0.622 / 0.622 | 0.759 / 0.761 |
+| LoRA rank 128 | 286 (0.25) | 0.943 | 0.916 | 0.597 | 0.745 |
+| LR 7.5e-6 | 276 (0.24) | 0.946 | 0.910 | 0.596 | 0.593 |
+| stage-1 keep 15% (7:0.15,16:0.07) | 264 (0.23) | 0.943 | 0.912 | 0.594 | 0.665 |
+| stage-2 keep 5% (7:0.2,16:0.05) | 263 (0.23) | 0.936 | 0.900 | 0.630 | 0.557 |
+
+More budget anywhere (stage 2 to 10%, stage 1 to 30%, or a later freeze) lifts contra to dense level (0.953-0.956) for
++0.01-0.02x; cutting either stage loses outlier; a third stage to 3% at block 24 is level with the base at 0.01x less;
+rank 128 and LR 7.5e-6 do not help. **Both winners hold on two seeds:** stage-2 10% = 0.950 / 0.918 / 0.634 / 0.770 at
+0.25x (vs dense-s1464 0.956 / 0.936 / 0.630 / 0.719: within 0.02 on contra / nq, above on oolong / outlier, at a quarter of
+dense compute and ~49 GiB peak); 3-stage = 0.947 / 0.916 / 0.622 / 0.760 at 0.23x (>= the base 0.938 / 0.922 / 0.610 /
+0.765 at 0.24x). mt11s720 versions: stage-2-10% + floor in eval; LoRA + two-stage with no freeze / freeze 85% training.
+
+**Universal recipe compute curve on mt4 (LR 5e-6, de0, 8k, eval_size 500; recipe s488 / s976 seed 0, s1464 2 seeds).**
+Dense PF = steps x 3.17 PF (mt4 per-step dense cost); dense at 31 / 61 steps are the partial-epoch s488 runs (lrb).
+
+| run | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| **recipe mt4s488** | 103 | 0.815 | 0.890 | 0.547 | 0.381 |
+| dense 31 steps | 98 | 0.639 | 0.800 | 0.500 | 0.209 |
+| **recipe mt4s976** | 199 | 0.879 | 0.916 | 0.600 | 0.376 |
+| dense 61 steps | 193 | 0.834 | 0.880 | 0.593 | 0.307 |
+| **recipe mt4s1464** | 296 | 0.945 | 0.912 | 0.636 | 0.726 |
+| dense mt4s488 (1 epoch) | 387 | 0.893 | 0.896 | 0.617 | 0.302 |
+| dense mt4s976 | 773 | 0.931 | 0.916 | 0.584 | 0.432 |
+| dense mt4s1464 | 1154 | 0.956 | 0.936 | 0.630 | 0.719 |
+
+At matched FLOPs the recipe leads dense at every point (98-103 PF: +0.18 contra, +0.09 nq, +0.17 outlier; 193-199
+PF: +0.045 / +0.036 / +0.007 / +0.07). FLOPs-to-match: dense reaches the recipe's s1464 contra (0.945) only between 773
+and 1154 PF (~3.5x) and its outlier (0.726) at ~1154 PF (~3.9x). On the same rows the recipe is behind dense on contra
+at s488 / s976 (it sees each row once at 0.26x the per-row cost) and level at s1464.
+
+**Universal recipe compute curve on mt11 (+ floor 16, LR 5e-6, de0, 8k, eval_size 500 per task; mean over the 9 graded
+tasks; recipe seed 0 except s720 = 2 seeds).** Dense = the parent's lrg / tdc runs at 5e-6.
+
+| rows / task | recipe PF | recipe mean9 | dense PF | dense mean9 |
+|---|---|---|---|---|
+| 240 | 90 | 0.653 | 232 | 0.697 |
+| 480 | 185 | 0.727 | 483 | 0.750 |
+| 720 | 273 | 0.751 | 715 | 0.788 |
+| 960 | 367 | 0.774 | 953 | 0.799 |
+
+At matched FLOPs the recipe leads dense along the curve: interpolated to 232 PF it is ~0.740 (+0.043), and at 367 PF
++0.049 (dense ~0.725 there). FLOPs-to-match: dense needs ~1.7-1.8x the recipe's compute on mt11 (vs ~3.5-3.9x on mt4).
+The s240 point gets a direct matched read from the parent's dense s240 at 32 / 64 steps (~45 / ~90 PF, launched).
+
+**Recipe + per-task routers on mt11s720 (2 seeds): 0.736 / 0.769, mean 0.753 vs recipe 0.751 -- neutral.** Grouping is
+up in both seeds (0.331 / 0.324 vs 0.290), but strmatch swings 0.778 / 0.937 across seeds. (Seed 0's nq eval failed on
+Beaker before starting and was resubmitted.)
+
+**Why mt11's FLOPs-to-match (~1.7x) is half mt4's (~3.5x): per-task Δ vs dense interpolated to the recipe's PF**
+(recipe s720 2-seed at 273 PF / s960 at 367 PF; 8k, eval_size 500 per task):
+
+| task | s720 Δ | s960 Δ |
+|---|---|---|
+| xabsence | +0.192 | +0.246 |
+| contradiction | +0.096 | +0.099 |
+| outlier | +0.107 | +0.075 |
+| strmatch | +0.030 | +0.025 |
+| hotpotqa | +0.021 | +0.015 |
+| oolong | +0.024 | -0.001 |
+| nq | +0.006 | -0.003 |
+| qdmatch_nq | -0.009 | +0.003 |
+| **grouping** | **-0.059** | **-0.025** |
+
+The gap is not spread out: four retrieval-style tasks (nq, qdmatch_nq, hotpotqa, oolong) are near their dense plateau at
+these FLOPs, so the recipe cannot gain there and they dilute the mean; grouping is the only task the recipe loses. mt4 has
+two such flat tasks out of four, mt11 four of nine. Per-task routers lift grouping (0.290 -> ~0.328, 2 seeds), which
+targets exactly that loss. More budget does not help on mt11s720 (one seed each, eval_size 500 per task):
+
+| variant | PF | mean9 | grouping | strmatch | xabsence | outlier |
+|---|---|---|---|---|---|---|
+| recipe: 7:0.2,16:0.07, 16-token floor (2 seeds) | 273 | 0.751 | 0.290 | | | |
+| stage 2 at 10% | | 0.740 | 0.276 | | | |
+| stage 1 at 30%, stage 2 at 10% | 285 | 0.743 | 0.307 | 0.879 | 0.638 | 0.651 |
+| floor 32 tokens | 364 | 0.747 | 0.291 | 0.968 | 0.597 | 0.621 |
+
+Every one is within the recipe's seed spread, and the floor-32 run costs 1.3x the compute. The recipe stays as is.
+
+
+## Memory vs train length (A', 2026-10-25): max T per method at a fixed 80 GB
+
+**Verdict.** At steady state, on 2 x A100-80GB with FSDP-2, full activation checkpointing and one row per GPU, the
+recipe's routed steps fit **~205k tokens (1.65x dense's ~124k)**. LoRA-all fits **~266k (2.15x)** and otr10M7de0
+**~177k (1.43x)**. **Today every method is capped near 165k (1.33x)** by two full-length dense passes that the router
+cannot shrink: the trainer's mock-batch dry run (step 0) and the router's warmup step 1 (no fitted weights yet, so it
+trains dense). All four methods OOM in step 0 at 196k and at 256k. Dense OOMs at 128k in step 2, once its Adam state
+exists. Removing those two passes is the cheapest max-T lever (B').
+
+**Method.** `--mem-probe-steps 3` (commit 8b8a79d15) reads the allocator totals every step: the memory held at the
+step start ("fixed": params, plus grads/Adam state once they exist), the forward+backward peak and the optimizer peak.
+It also logs whether the router routed that step and the op sites of step 3's forward+backward transient. Rows are real
+mt4s1464 examples concatenated to T (`make_long_rows.py`). Jobs 114613-114632 on Lambda node02, code `OLMo-core-otr14`.
+Raw output: `research/token_routing/online_router/memprobe/`.
+
+The first round (`--mem-snapshot`, 2026-10-24) was wrong in two ways:
+- It stopped after step 1, the router's dense warmup step, so its router-arm activation peaks are dense numbers.
+- It replays only allocations made inside its own trace, so it misses the params loaded before the trace.
+
+Its rows are kept in `memprobe1_snapshot_summary.txt` only for the record.
+
+**Steady routed step (step 3), GiB.** Columns: fixed state; forward+backward transient above the fixed state at
+32k / 64k / 128k; linear fit; max T at 79.25 GiB.
+
+| method | fixed | transient 32k / 64k / 128k | fit (T in k tokens) | max T | x dense |
+|---|---|---|---|---|---|
+| dense | 27.3 | 16.4 / 28.7 / OOM | 4.0 + 0.386 T | ~124k | 1.0 |
+| otr10M7de0 | 27.8 | 14.3 / 22.5 / 38.9 | 6.2 + 0.255 T | ~177k | 1.43 |
+| recipe (LoRA 0-6 + 7:0.2,16:0.07) | 22.9 | 13.5 / 21.5 / 37.3 | 5.6 + 0.248 T | ~205k | 1.65 |
+| LoRA-all + two-stage router | 13.2 | 10.1 / 16.1 / 32.0 | 0.2 + 0.248 T | ~266k | 2.15 |
+| any method, dense pass (dry run / warmup, no Adam yet) | 9.5-10.2 | 14.0-16.4 / 26.3-28.7 / 52.3-54.7 | ~0.4 T | ~162-170k | 1.33 |
+
+- Max T is extrapolated from the two longest points. It ignores allocator fragmentation, so real limits sit a few
+  percent lower.
+- The dense fit is exactly linear (0.386 GiB per 1k tokens on both intervals) and matches its observed OOM at 128k.
+- The dense-pass cap matches the observed OOMs at 196k for all four methods.
+- The optimizer peak (dense 60 GiB, recipe 48.6 GiB, LoRA-all 19 GiB, all independent of T) never binds above ~32k.
+
+**What binds.**
+- **Fixed state.** It is the params plus the grads and Adam state of the trained weights. LoRA on blocks 0-6 saves
+  4.7 GiB (frozen base weights carry no grads or Adam state). LoRA everywhere saves 14.6 GiB, worth ~60k tokens.
+- **Transient, dense.** Saved block inputs for all 32 blocks (residual_stream.py: 9.7 GiB at 64k), plus one block's
+  recompute working set (autograd/FLA buffers, FFN intermediate, RMSNorm).
+- **Transient, routed.** The slope falls only from 0.386 to ~0.25 GiB per 1k tokens, although only 10-20% of tokens
+  go past block 7. At 128k the routed peak is the recompute working set of a **full-length block below the drop layer**:
+  - otr10M7de0: unwind (autograd/FLA C++ buffers) 15.1 GiB, FFN 6.5, RMSNorm 4.8 + 2.4, GDN gate 2.9.
+  - recipe: unwind 14.4 GiB, LoRA hook 7.4, GDN chunk kernel 3.4.
+  
+  The saved residuals are only 1.8-3.6 GiB.
+
+**B' levers, in order of payoff.**
+1. Make the two dense passes routed: skip or route the dry run, and route the warmup step with a random keep at the
+   target fraction (uniform random, not a heuristic score) or warm up on short rows. This lifts the cap from ~165k to
+   the steady numbers above (recipe 1.65x, LoRA-all 2.15x).
+2. Chunk the recompute of blocks 0-6 along T (MLP and norms in chunks; the LoRA hook too). This attacks the dominant
+   routed transient.
+3. Widen the LoRA scope. LoRA-all is the largest fixed-state saving, but its matched-FLOP quality is still open (the
+   adapter-scope runs are in flight).
+4. Logits and CE only on loss positions. This matters only for short T: LoRA-all's 32k peak is the fused CE / LM head
+   at 6 GiB.
+
+With more GPUs (FSDP-8) the fixed state shrinks for every method, so dense's max T grows the most and these multiples
+narrow.
+
+### B' round 1 (2026-10-25): routed warmup, no dry run, chunked FFN
+
+**Verdict.** The two dense passes are gone. Sequence-chunked FFN recompute then lifts every method further. Max train
+length at 80 GB:
+
+| method | before | with routed warmup + `--skip-dry-run` | + `--ffn-chunk-tokens 8192` |
+|---|---|---|---|
+| dense | ~124k | (n/a) | **~148k** |
+| recipe | ~165k | ~205k | **~234k** (1.58x dense+chunk; 1.89x plain dense) |
+| LoRA-all + router | ~165k | ~266k | **~300k** (2.0x; 2.4x) |
+| otr10M7de0 | ~165k | ~177k | **~210k** (1.42x; 1.7x) |
+
+**New flags.**
+- `--st-otr-warmup-random` (c5676a12f): the warmup step routes at the normal budget with uniform random scores. It is
+  gold-blind and fit-free, and the targets come from the kept tokens. **Quality check (recipe + routed warmup + no
+  dry run, mt4s1464, one seed, eval_size 500): 0.947 / 0.924 / 0.614 / 0.699 at 291 PF, vs the recipe's 2-seed
+  0.945 / 0.912 / 0.636 / 0.726 at 296 PF.** The differences (oolong -0.02, outlier -0.03, nq +0.01) are within
+  single-seed noise, so the routed warmup is free.
+- `--skip-dry-run` (c5676a12f): the mock batch has no document markers, so it always ran dense at full length.
+- `--ffn-chunk-tokens N` (172f12f68): `h + FFN(norm(h))` runs over N-token chunks, each under its own checkpoint. It is
+  exact, verified by a CPU test of outputs and gradients. It adds one FFN forward recompute per chunked block, which is
+  not charged, as with full AC.
+
+**Probes, 3 steps, steady routed step; transient above the fixed state, GiB.**
+
+| method | 128k | 196k | 256k | fit (T in k tokens) |
+|---|---|---|---|---|
+| dense + chunk | 45.1 (fits at 72.7) | OOM at step 2; step 1 transient 66.5 | -- | 2.3 + 0.334 T |
+| recipe, routed warmup, no chunk | 37.3 | 52.6 (75.8, edge) | OOM at step 1 | |
+| recipe + chunk | 33.7 | 47.1 (70.3) | OOM at step 2 | 6.8 + 0.21 T |
+| LoRA-all, routed warmup, no chunk | 32.0 | 47.3 | 63.1 (77.4, edge) | |
+| LoRA-all + chunk | 28.3 | 41.7 | 55.6 (69.8) | ~0.21 T |
+| otr10M7de0 + chunk | -- | 48.0 (76.1, edge) | OOM at step 2 | |
+
+**What binds now.** The C++ autograd allocations with no Python frame ("unwind") are 22-32 GiB at 128k-256k and grow
+with T. They are the next target. The probe has to record C++ op names (`stacks="all"`) to say which backward kernels
+they are: the GDN chunk backward, attention backward, or the scatter back to full length at the drop layer. The chunked
+FFN outputs (5.5-7.4 GiB) are the block outputs, i.e. the residual stream that AC saves. The LoRA hook is down from 11
+to 3 GiB at 196k, because the FFN adapters are now chunked; the attention and GDN projections' adapters are not.
+
+### B' round 2 (2026-10-25): sequence-segmented GDN
+
+**Verdict.** With all four memory flags, the recipe trains on ~300k-token rows at 80 GB, against ~165k for dense with the
+same flags: **1.8x** (2.4x plain dense's ~124k). LoRA-all + router reaches **~400k (2.4x; 3.2x)**.
+
+**Diagnosis.** The 22-32 GiB "unwind" group was FLA's GDN backward: `chunk_gated_delta_rule_bwd` calls
+`chunk_gated_delta_rule_fwd_h`, which rebuilds the per-64-token chunk states h (T/64 x H x K x V) for the whole row at
+once. 28.7 GiB at 196k on the recipe.
+
+**Fix: `--gdn-segment-tokens 16384` (a558feb2b).** The GDN training forward runs over 16k-token segments that carry
+the recurrent state (`initial_state` / `output_final_state`). The kernel saves only its inputs, so backward rebuilds
+one segment's h at a time. There is no extra recompute. It is exact: a GPU test of outputs and gradients
+(`src/test/nn/gdn_segment_test.py`) passes. It is limited to unpacked rows without a cache; packed varlen falls back.
+
+**Max T with routed warmup + no dry run + chunked FFN (8192) + GDN segments (16384), 80 GB, steady routed step.**
+
+| method | fits (peak GiB) | OOM | max T | x dense (same flags) | x plain dense |
+|---|---|---|---|---|---|
+| dense | 128k (68.3), 160k (77.5, edge) | 196k | ~165k | 1.0 | 1.33 |
+| otr10M7de0 | 192k (64.3), 224k (69.9) | 256k (step 2) | ~250k | ~1.5 | ~2.0 |
+| recipe | 262k (71.6) | 320k (step 2) | ~300k | **~1.8** | **~2.4** |
+| LoRA-all + router | 262k (56.5), 393k (77.4) | 524k | ~400k | ~2.4 | ~3.2 |
+
+Per-1k-token slopes: dense 0.28, otr10M7de0 0.17, LoRA-all 0.16 GiB.
+
+**Wall-clock cost of the memory flags** (step-2 time, one sample each, 2 x A100):
+
+| run | without chunking | with chunking |
+|---|---|---|
+| recipe, 128k | 14.0 s | 15.5 s with chunked FFN |
+| recipe, 196k | 28.4 s | 28.0 s with chunked FFN |
+| LoRA-all, 262k | 48.7 s (at the memory edge, allocator retries) | 43.0 s with chunked FFN; 45.0 s with chunked FFN + segmented GDN |
+
+The cost is within ~10% either way. At 8k the flags are close to no-ops, since rows are at most ~10k tokens: the
+LoRA-all run with all four flags took 55:59 against 55:21-55:28 without them.
+
+**What binds now** (LoRA-all at 393k). The peak is spread across several terms:
+- LoRA hook outputs: 13 GiB. Each adapted projection allocates its out-sized `B(Ax)` plus the sum.
+- Saved block outputs (residual stream): 11.2 GiB.
+- The GDN kernel's saved inputs: 10.7 GiB.
+- GDN conv / q / k / v outputs: 3-5 GiB each.
+- RMSNorm: 3.7 GiB.
+
+Next candidates:
+- fuse the LoRA add (one `addmm` into the base output, no out-sized intermediate);
+- chunk the attention-side projections and norms like the FFN;
+- for dense and the router alike, offload the saved residual stream to CPU.
+
+## Adapter scope (B, 2026-10-25): LoRA on every block matches the recipe at LR 1e-5
+
+Setup: rank-64 LoRA on blocks [0, K) plus the two-stage router (7:0.2, 16:0.07), de0, mt4s1464, 8k, eval_size 500 per
+task. One seed each, except the K=7 recipe (2 seeds). Numbers are contra / nq / oolong / outlier.
+
+| K | LR | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|---|
+| 7 (recipe, 2 seeds) | 5e-6 | 296 | 0.945 | 0.912 | 0.636 | 0.726 |
+| 16 | 5e-6 | 278 | 0.948 | 0.912 | 0.643 | 0.695 |
+| 24 | 5e-6 | 269 | 0.919 | 0.898 | 0.630 | 0.667 |
+| 32 (all) | 5e-6 | 261 | 0.949 | 0.920 | 0.636 | 0.686 |
+| 32 (all), seed 0 | 1e-5 | 261 | 0.946 | 0.908 | 0.625 | 0.719 |
+| 32 (all), seed 1 | 1e-5 | 261 | 0.933 | 0.918 | 0.620 | 0.686 |
+| 32 (all), seed 2 | 1e-5 | 261 | 0.933 | 0.880 | 0.645 | 0.778 |
+| **32 (all), 3-seed mean** | **1e-5** | **261** | **0.937** | **0.902** | **0.630** | **0.728** |
+| dense, seed 1 (seed 0: 0.956 / 0.936 / 0.630 / 0.719) | 5e-6 | 1,154 | 0.959 | 0.928 | 0.651 | 0.685 |
+| dense, 2-seed mean | 5e-6 | 1,154 | 0.958 | 0.932 | 0.641 | 0.702 |
+| 7 (recipe), LR control | 1e-5 | 296 | 0.941 | 0.912 | 0.565 | 0.708 |
+| 32 (all), rank 128 | 5e-6 | 279 | 0.938 | 0.912 | 0.617 | 0.707 |
+| 32 (all) | 2e-5 | 261 | 0.935 | 0.916 | 0.626 | 0.653 |
+| 32 (all) + all four memory flags | 1e-5 | 257 | 0.948 | 0.914 | 0.597 | 0.813 |
+| 32 (all), stage 2 at 10% | 1e-5 | 275 | 0.944 | 0.910 | 0.619 | 0.593 |
+
+**3 seeds (2026-10-25): 0.937 / 0.902 / 0.630 / 0.728, vs the K=7 recipe's 0.945 / 0.912 / 0.636 / 0.726 at 296 PF:
+-0.008 / -0.010 / -0.006 / +0.002 at 0.88x its compute, i.e. the same quality.** Seed spread: outlier 0.686-0.778, nq
+0.880-0.918. **Against dense on the same 1,464 rows (2 seeds, 4.4x the compute): -0.021 / -0.030 / -0.011 / +0.026.**
+Earlier 2-seed reading: LoRA on all 32 blocks at LR 1e-5 runs at 0.88x the recipe's compute. At the same data it is slightly
+below the recipe: contra -0.005, nq +0.001, oolong -0.013, outlier -0.023. At matched FLOPs it is ahead of the recipe's
+compute curve, which interpolates to ~0.921 / 0.913 / 0.623 / 0.600 at 261 PF: contra +0.02, outlier +0.10, nq and
+oolong equal. Those deltas are matched-FLOP Δ on the primary tasks: **outlier +0.10, oolong 0.00.** The LR control shows the higher LR helps only the wide adapter scope. The recipe at LR 1e-5 loses oolong (0.565 vs
+0.636) and gains nothing elsewhere, so the K=7 recipe stays at 5e-6. **The full max-T config keeps quality.** LoRA-all with routed warmup, no dry run, chunked FFN and GDN segments, at
+8k, one seed: 0.948 / 0.914 / 0.597 / 0.813 at 257 PF. It is within the seed range on contra and nq; outlier is high
+(0.813 vs 0.719 / 0.686) and oolong lower (0.597 vs 0.625 / 0.620), both single-seed. Stage 2 at 10% gives no gain on LoRA-all: outlier 0.593 for 5% more compute. **Outlier is very noisy on mt4s1464:**
+across four LoRA-all runs at almost the same config and FLOPs it spans 0.593-0.813, so a single-seed outlier
+difference under ~0.1 is not a finding. For LoRA-all, LR 2e-5 overshoots (outlier 0.653), so **LR 1e-5 is the pick** (5e-6: 0.686, 1e-5: 0.703 over 2 seeds, 2e-5: 0.653).
+
+**LoRA-all compute curve on mt4** (LR 1e-5, one seed except 1,464 rows/task; eval_size 500 per task):
+
+| rows/task | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| 488 | 90 | 0.803 | 0.886 | 0.539 | 0.444 |
+| 976 | 176 | 0.886 | 0.920 | 0.600 | 0.351 |
+| 1,464 (2 seeds) | 261 | 0.940 | 0.913 | 0.623 | 0.703 |
+
+**Against dense at about the same compute:**
+- 90 vs 98 PF (dense 0.639 / 0.800 / 0.500 / 0.209): +0.16 / +0.09 / +0.04 / +0.24.
+- 176 vs 193 PF (dense 0.834 / 0.880 / 0.593 / 0.307): +0.05 / +0.04 / +0.01 / +0.04.
+
+**FLOPs-to-match at 1,464 rows:** dense needs its full 1,154 PF to reach this quality, **~4.4x**. The recipe's ratio
+is ~3.5-3.9x. The outlier dip at 976 rows (0.351) is also in the recipe (0.376) and in dense (0.432 at 976 vs 0.302
+at 488 and 0.719 at 1,464): outlier is non-monotone in data.
+It also has 14.6 GiB less fixed state, which gives ~400k max T against the recipe's ~300k. At LR 5e-6, K=32 loses only
+outlier (-0.04). K=24 dips below both of its neighbours, so the dip is probably seed noise. Rank 128 at K=32 (LR 5e-6)
+recovers part of the outlier gap (0.707 vs 0.686) for 7% more compute, but does not beat rank 64 at LR 1e-5. Next: a second seed of K=32 at LR 1e-5, then the mt11s720 read.
+
+### LoRA-all on mt11s720 (2026-10-25): +0.065 over dense at exactly matched FLOPs (2 seeds)
+
+**2 seeds: mean9 0.755 / 0.768, mean 0.762 at 232 PF, vs dense s240 0.697 at the same PF: +0.065.**
+
+Per-task Δ (2-seed mean minus dense):
+- xabsence +0.253
+- **outlier +0.156**
+- contradiction +0.106
+- strmatch +0.034
+- hotpotqa +0.028
+- nq +0.020
+- **oolong +0.007**
+- qdmatch_nq -0.006
+- grouping -0.018
+
+FLOPs-to-match: dense reaches 0.762 at ~556 PF, **~2.4x**. The recipe gets 0.751 (2 seeds) at 273 PF, 18% more compute.
+**LoRA-all is the new recipe:** better quality on mt11, more compute saved, and the longest max T (~400k). The seed-0
+table follows.
+
+Run: lora64K32r20to7f16 at LR 1e-5, mt11s720, one seed, eval_size 500 per task. Mean9 **0.755 at 232 PF (0.32x)**. The
+recipe gets 0.751 at 273 PF (5e-6, 2 seeds) and 0.753 at LR 1e-5 (273 PF), so the higher LR is neutral for the K=7
+recipe on mt11 too. The parent's dense s240 (f8k-mt11s240-dense-lrg-lr5e-06-lam) costs the same 232 PF and scores 0.697,
+so the read is direct, with no interpolation:
+
+| task | LoRA-all | dense s240 | Δ |
+|---|---|---|---|
+| xabsence | 0.716 | 0.487 | +0.229 |
+| outlier | 0.642 | 0.499 | **+0.143** |
+| contradiction | 0.890 | 0.793 | +0.097 |
+| strmatch | 0.944 | 0.905 | +0.039 |
+| hotpotqa | 0.917 | 0.881 | +0.036 |
+| nq | 0.906 | 0.884 | +0.022 |
+| qdmatch_nq | 0.883 | 0.887 | -0.004 |
+| grouping | 0.335 | 0.354 | -0.019 |
+| oolong | 0.561 | 0.584 | **-0.023** |
+| mean9 | 0.755 | 0.697 | +0.058 |
+
+**FLOPs-to-match:** dense reaches 0.755 at ~517 PF (between s480's 0.750 at 483 PF and s720's 0.788 at 715 PF),
+**~2.2x** LoRA-all's compute. The recipe's ratio is ~1.7x. LoRA-all also has the larger max T (~400k vs ~300k). Oolong is
+the one primary task it loses on mt11, -0.023 vs dense and -0.03 vs the recipe at 5e-6 (0.594); single seed.
+
+### Memory probes on Beaker H100 (2026-10-26): two-stage without LoRA, keep 20%; comparability with the A100 probes
+
+Setup: same probe (`--mem-probe-steps 3`, steady routed step), 2 x H100-80GB, FSDP-2, full AC, rows built at startup
+by `--long-rows-target` (c09282fe5). Raw output: `memprobe/bkprobe_summary.txt`.
+
+**Comparability.**
+- **Transients match the A100 numbers to 0.03 GiB:** dense 16.36 / 28.72 vs 16.37 / 28.72, otr10M7de0 14.30 / 22.53 vs
+  14.30 / 22.54 at 32k / 64k.
+- **Two Beaker-side differences.**
+  - The trainer's dry run leaves a T-proportional allocation resident on the Beaker image (+5.2 GiB at 32k, +10.3 at
+    64k on dense). It is absent with `--skip-dry-run`, which every new probe uses.
+  - Usable memory is ~8 GiB lower: Beaker OOMs at ~69-70 GiB allocated vs ~77 on the A100s, from non-PyTorch memory
+    and fragmentation. So the A100-equivalent max T below is computed from the fits at the A100 cap (79.25 GiB).
+
+**Steady routed step, GiB:**
+
+| arm | flags | fixed | transient 32k / 64k / 128k / 196k | GiB per 1k | Beaker | A100-equivalent max T |
+|---|---|---|---|---|---|---|
+| r20to7M7de0 (two-stage, no LoRA) | standard | 28.4-31.2 | 14.3 / 22.6 / 38.9 / -- | 0.255 | 128k fits (70.1) | ~165k |
+| otr20M7de0 (keep 20% after block 7) | standard | 28.6-30.1 | 14.3 / 22.5 / OOM / -- | ~0.26 | 128k OOM | ~160k |
+| r20to7M7de0 | + chunk + GDN seg | 31.7-33.5 | -- / -- / 26.6 / 36.2 | 0.150 | 196k at the edge (OOM on step 3), 256k OOM | ~255k |
+| otr20M7de0 | + chunk + GDN seg | 31.0-31.3 | -- / -- / 26.5 / 36.2 | 0.150 | 196k fits (67.5), 256k OOM | ~270k |
+
+These sit with otr10M7de0 (~177k standard / ~250k with the flags). They are below the LoRA arms (recipe ~300k,
+LoRA-all ~400k), whose fixed state is 5-15 GiB lower.
+
+## Partial MLP (2026-10-25): loses at matched FLOPs
+
+All runs are mt4s1464, LR 5e-6, de0, 8k, eval_size 500 per task; numbers are contra / nq / oolong / outlier.
+
+| run | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| recipe + f=0.5 on blocks 0-6 (fw50e) | 252 | 0.832 | 0.898 | 0.594 | 0.395 |
+| recipe curve interpolated to 252 PF | 252 | ~0.915 | ~0.914 | ~0.620 | ~0.567 |
+| Δ, fw50e minus recipe curve | | -0.08 | -0.02 | -0.03 | -0.17 |
+| recipe + f=0.5 on all blocks (fw50a) | 214 | 0.069 | 0.836 | 0.508 | 0.166 |
+
+| dense + f=0.5 on all blocks (densefw50a) | 865 | 0.368 | 0.852 | 0.521 | 0.300 |
+| dense, 1,464 rows/task | 1,154 | 0.956 | 0.936 | 0.630 | 0.719 |
+
+fw50a collapses. **The dense control shows partial MLP is itself the problem, not its interaction with the router:**
+dense loses 0.59 on contra and 0.42 on outlier at 0.75x dense's compute, and is far below dense's own 488-row point
+(387 PF: 0.893 / 0.896 / 0.617 / 0.302). The likely cause is the train/eval mismatch: training sees a random half of
+the neurons scaled by 1/f, and eval runs the full width. The thread is closed.
+
+## Partial MLP v2 (topk) on the LoRA-all recipe (2026-10-25): no gain at matched FLOPs; closed
+
+Setup: Beaker, mt4s1464, LoRA r64 on all 32 blocks + two-stage router, LR 1e-5, de0, one seed each, eval_size 500 per
+task, with a same-backend baseline.
+
+| arm | PF | contra | nq | oolong | outlier |
+|---|---|---|---|---|---|
+| LoRA-all baseline (Beaker) | 261 | 0.948 | 0.928 | 0.621 | 0.774 |
+| random f=0.9 | 247 | 0.929 | 0.908 | 0.636 | 0.689 |
+| topk f=0.75 | 228 | 0.936 | 0.920 | 0.571 | 0.648 |
+| random f=0.75 | 227 | 0.818 | 0.900 | 0.580 | 0.366 |
+| topk f=0.5 | 194 | 0.871 | 0.912 | 0.468 | 0.612 |
+
+- **topk vs random.** At f=0.75, topk beats random by a wide margin: contra +0.12, outlier +0.28.
+- **topk vs the baseline.** It still loses on the same data: tk75 is -0.01 / -0.01 / -0.05 / -0.13, and **oolong
+  falls (-0.05 at f=0.75, -0.15 at f=0.5)**.
+- **Matched FLOPs.** Against the LoRA-all compute curve, nothing beats the curve on the primary pair. Oolong is
+  -0.05 (tk75) / -0.14 (tk50). Outlier is within its ~±0.1 noise, and its curve has the non-monotone 976-row dip.
+- **Random f=0.9** sits on the curve, saving only 5%.
+
+Together with CPT's results (topk and random lose on both frozen and trainable bases and degrade with training),
+partial MLP is closed.
+
+## Known trap: intermittent end-of-run crash after mid-run saves (2026-10-25, CPT side)
+
+Reported by CPT Run Iteration (OLMo 3 7B, Beaker, 8 ranks). The crash is **not specific to freeze-early**:
+- **Failure.** Runs that did mid-run checkpoint saves (SAVE_INTERVAL 60) sometimes die right AFTER their final step:
+  - freeze-early + early-lora-start (51322b89c), B=4 and B=8 at 120 steps;
+  - plain K32 (6f274e339 tree, 64k, 240 steps, no freeze-early).
+
+  A rank hits a gloo `Connection reset by peer` in the trainer's bookkeeping thread (trainer.py `_error`) after
+  another rank died first; that rank's traceback was not captured. The final checkpoint is written.
+- **What survives.** Other SAVE=60 runs (K32 at 480 steps, topk at 120 steps) and runs with no mid-run save.
+- **Not deterministic.** Relaunching into the same dir resumes at the last step and exports cleanly (rc=0).
+- **Workaround.** Relaunch into the same dir.
+- **To debug.** Capture every rank's log to see the first failing rank. The suspect is the final save / teardown in a
+  process that already ran mid-run saves (async bookkeeping, e.g. old-checkpoint cleanup, on the gloo group).
+- **Hypothesis (CPT, 2026-10-26).** Every crashed run's final step was a multiple of `--save-interval` (120 / 240 /
+  480 with SAVE 60), so the interval save and the final checkpoint save fire on the same step. 48-step runs, with no
+  mid-run save before the end, never crashed. Two SAVE-60 runs ending on a multiple survived (K32-480, topk-120),
+  consistent with a race between the two saves (the post_train save against the interval save's async upload /
+  barrier) rather than a deterministic failure.
+- **Test (CPT, 2026-10-26).** K32 frozen-head seed 1, 120 steps, SAVE 70 (interval save at 70, final at 120) finished
+  cleanly through train, export and eval. Tally:
+  - ending on a multiple of SAVE: 8 of 10 crashed, including the SAVE-60 control K32fh-960 (gloo reset on rank 3);
+  - not on a multiple: 0 of 1 crashed;
+  - no mid-run save: 0 of ~20 crashed.
+
+  The non-multiple side is still small-n, but the pattern holds.
+- **Cause and fix (319d7442a).**
+  - Cause: when the last step is a save_interval multiple, `post_train_batch` starts an ASYNC save there. `post_train`
+    then only awaits it, because the step already counts as saved, so the save's gloo work overlaps teardown.
+  - Fix: `CheckpointerCallback._is_final_step()` makes that save synchronous, and `post_train` reuses it as the final
+    checkpoint. Tests: `src/test/train/callbacks/checkpointer_final_step_test.py`.
+  - The GPU check is pending: the next CPT run with a dividing SAVE.
+  **Practical workaround: pick SAVE so it does not divide the final step**, or relaunch into the same dir.

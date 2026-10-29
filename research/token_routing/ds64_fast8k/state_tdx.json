@@ -1,0 +1,2939 @@
+{
+ "runs": {
+  "f8k-mt4-dense-s1464-tdx-lr1e-05": {
+   "ex": "01M5X7WV8KH5FVNKGF48M8V7AR",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "s1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64all-s1464-tdx-lr5e-06": {
+   "ex": "01M5X7XNBE09RNVDG626GX8Q4Q",
+   "task": "mt4",
+   "arm": "denselora64all",
+   "budget": "s1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06": {
+   "ex": "01M5X7YM7RKTNPVXG8PB7QS57S",
+   "task": "mt4",
+   "arm": "r20to7M7de0",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05": {
+   "ex": "01M5X7ZMDW540KXCMEK19Y7RRD",
+   "task": "mt4",
+   "arm": "r20to7M7de0",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05": {
+   "ex": "01M5X80MSQGBVPQJTAY2E3GNF0",
+   "task": "mt4",
+   "arm": "r20to7M7de0",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05": {
+   "ex": "01M5X81JQYFFZXC6ZTTRN7V6HW",
+   "task": "mt4",
+   "arm": "r20to7M7de0",
+   "budget": "s1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06": {
+   "ex": "01M5X82FHR5A0Q5ZSGRV7PKTNK",
+   "task": "mt4",
+   "arm": "lora64all32r20to7",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06": {
+   "ex": "01M5X83AM09KZC9KNNF1GG68N3",
+   "task": "mt4",
+   "arm": "lora64all32r20to7",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05": {
+   "ex": "01M5X84AE16QJFHAZZ7GEPH135",
+   "task": "mt11",
+   "arm": "dense",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05": {
+   "ex": "01M5X8562K6MVNY2MN45G4VBER",
+   "task": "mt11",
+   "arm": "dense",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05": {
+   "ex": "01M5X860NCMJGSYQQ7R7R4V935",
+   "task": "mt11",
+   "arm": "dense",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06": {
+   "ex": "01M5X86XKJNQWJR9NXPG38XVZ6",
+   "task": "mt11",
+   "arm": "denselora64all",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06": {
+   "ex": "01M5X87YAR9YV2DBNBB4AB2511",
+   "task": "mt11",
+   "arm": "denselora64all",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06": {
+   "ex": "01M5X88V026DGWDJYWDM4A9S9N",
+   "task": "mt11",
+   "arm": "denselora64all",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05": {
+   "ex": "01M5X89PKAVDYAFKT58KRNK87H",
+   "task": "mt11",
+   "arm": "denselora64all",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05": {
+   "ex": "01M5X8APTQ6FNXSTQ2AZTM3W18",
+   "task": "mt11",
+   "arm": "denselora64all",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05": {
+   "ex": "01M5X8BPFBEC3S7R2NK0CHP48J",
+   "task": "mt11",
+   "arm": "denselora64all",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06": {
+   "ex": "01M5X8CKN1CG0E4W8GM8JADN5S",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06": {
+   "ex": "01M5X8DGNTG0FVG9B3CZK4AVNA",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05": {
+   "ex": "01M5X8EEBPC999KNK8BTJ63MT7",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05": {
+   "ex": "01M5X8F9W132YZA2J120ZVCMR6",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05": {
+   "ex": "01M5X8G5PWGAV03AW2218ADPN9",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06": {
+   "ex": "01M5X8H0D8XFYSTQJAKNPRDYEP",
+   "task": "mt11",
+   "arm": "lora64all32r20to7f16",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06": {
+   "ex": "01M5X8HSY9ZAWFA0YJJ76GJJYQ",
+   "task": "mt11",
+   "arm": "lora64all32r20to7f16",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06": {
+   "ex": "01M5X8JMPZSB6X2MK0Q7J15MWR",
+   "task": "mt11",
+   "arm": "lora64all32r20to7f16",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05": {
+   "ex": "01M5X8KDRWRYAAYWDERGV2J1HE",
+   "task": "mt11",
+   "arm": "lora64all32r20to7f16",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05": {
+   "ex": "01M5X8M7WRBB642CYCFKP2QBYC",
+   "task": "mt11",
+   "arm": "lora64all32r20to7f16",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-densesd1-f1952-tdx-lr5e-06": {
+   "ex": "01M5YC4MTVJD5535E8CVRXKA0S",
+   "task": "mt4",
+   "arm": "densesd1",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05": {
+   "ex": "01M5YC5E7HHPJ7JW5806TDTVCQ",
+   "task": "mt4",
+   "arm": "denselora64allsd1",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05": {
+   "ex": "01M5YC6809Y0GSHF43GQYJZA14",
+   "task": "mt4",
+   "arm": "denselora64allsd1",
+   "budget": "s1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06": {
+   "ex": "01M5YC75P67DA9QXY422FHAZYG",
+   "task": "mt4",
+   "arm": "r20to7M7de0sd1",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05": {
+   "ex": "01M5YC7ZYPRBBB4GW8BM7C3VFA",
+   "task": "mt4",
+   "arm": "lora64all32r20to7sd1",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06": {
+   "ex": "01M5YC8TECQPE1BBA9T2ZWX39T",
+   "task": "mt4",
+   "arm": "lora64all32r20to7sd1",
+   "budget": "s1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06": {
+   "ex": "01M5YC9PRH7TTSG7QK5BG15Q21",
+   "task": "mt11",
+   "arm": "densesd1",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06": {
+   "ex": "01M5YCAHWMV0EA4JN46ZRQT7HC",
+   "task": "mt11",
+   "arm": "densesd1",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06": {
+   "ex": "01M5YCBB45ENT8NEF9GS2336E4",
+   "task": "mt11",
+   "arm": "densesd1",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05": {
+   "ex": "01M5YCC7HZAH1RPZ9K1Y0GW6KX",
+   "task": "mt11",
+   "arm": "denselora64allsd1",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06": {
+   "ex": "01M5YCD42X3FZ6JQJA8QA0FDF7",
+   "task": "mt11",
+   "arm": "denselora64allsd1",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06": {
+   "ex": "01M5YCDXV0X1MSPV9PG9S6C12T",
+   "task": "mt11",
+   "arm": "denselora64allsd1",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06": {
+   "ex": "01M5YCESS02PZYHJ5HQ5CTRY1V",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16sd1",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06": {
+   "ex": "01M5YCFMC6NZ9SE6DA2AF2V21W",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16sd1",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06": {
+   "ex": "01M5YCGF3C370BPNH9GRJD82EV",
+   "task": "mt11",
+   "arm": "r20to7M7de0f16sd1",
+   "budget": "s720",
+   "steps_expected": 495,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06": {
+   "ex": "01M5YGWPATQVR06WA9R5A3JKNA",
+   "task": "mt11",
+   "arm": "lora64all32r20to7f16sd1",
+   "budget": "s240",
+   "steps_expected": 165,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05": {
+   "ex": "01M5YGXMDMN5P0636DWJ9ZMPEY",
+   "task": "mt11",
+   "arm": "lora64all32r20to7f16sd1",
+   "budget": "s480",
+   "steps_expected": 330,
+   "gpus": 2,
+   "state": "DONE",
+   "rc": 0
+  }
+ },
+ "evals": {
+  "f8k-mt4-dense-s1464-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y4BAR74TQXZ1EM7GWXMPF5",
+   "state": "DONE",
+   "train_run": "f8k-mt4-dense-s1464-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-dense-s1464-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y4C4A0W8ZV6FHQQHTK1G2C",
+   "state": "DONE",
+   "train_run": "f8k-mt4-dense-s1464-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-dense-s1464-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y4D0P604FMFTJ8AXNFP3DX",
+   "state": "DONE",
+   "train_run": "f8k-mt4-dense-s1464-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-dense-s1464-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y4DVKMC46VX1J8ER912WFY",
+   "state": "DONE",
+   "train_run": "f8k-mt4-dense-s1464-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y4ENJVWG6HXME3ZN1KXTYZ",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y4FF0A1NKG9BNWJAYBVP7C",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y4G9XZEXMMG9PXT2H3H769",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y4H3SEFJX0CJ8Q4XQX6CYK",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y4HXD3G1CQY5JR5NBRQZ1V",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y4JX1YM9RXZNAMBMV8AAG8",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y4KRVXPNJC1NPZENFWQ69Z",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y4MW3DWHW9QAW3165HJX73",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f1952-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y4NNVYB7YP3VF9HG7R7DKV",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y4PHECHYX9G0GJ1TQM0TZE",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y4QCR7CE85W75XHT71RX6P",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y4R73MR5EW2KZPKKNDPBP8",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-f3904-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y4SJ0928646RCAFKZ4F782",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y4TMJK66XJ6419VZS374Z2",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y4VTXQTMVNX202CD82NA85",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y4WMQC2T2MYN9ZQ9KTD58D",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0-s1464-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y4XFJ9RVJ8XKXPE4D05R51",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y4YBGVQKZBENQAP3MN9WM8",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y4Z5WHZQ1GFDVQCKH3R5M8",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y501334GSTVF1JYCTRN9E8",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f1952-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y50YJRJ4G22H7MV7SNTNDM",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y51RJY5H3ZYH2F1WS9KRY8",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y52JNRA51PJ7SN47HMGW9C",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y53E70JD35D1EXVY8QSZMQ",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7-f3904-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y54GKRH8NREP48M48WKH85",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y55BHPCTVN81WW3BPFWRR8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y5654656Q1TE43MN2QV872",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y56ZCN86YXH5YQBDZHMX64",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y57SQ8JSS2D99GRJPE97GK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y58PARRZRDAQ4S10NS8N76",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y59HE1FRWWFVRC98FXFN4W",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y5ABFKMBVGB7QG0Z64SCBA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y5B6YH4FNX3SYV3J47D8T4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s240-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y5C183T5M8Z5MDG2VZ97S3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s240-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y5CVFQM1KAERQYT2Y30RVM",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y5DMY13H2FB3QNNHCJK1A3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y5EFCHNTZ10G2HQHJJJR56",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y5F9E17V2KY2CK69C8STSQ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y5G2YJAEZ9QZGBGV6MMGYX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y5GXH3V743FT7KEM4WT4C8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y5HRZS5YSPF1JH383PZF75",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y5JJQGKS0SSVC9RTG0H6SG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y5KK1QTY9QNSP9D5T44RZ9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s480-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y5ME1XCAQVZ7P51Y36XMA9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s480-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y5N7AAJT9PH6KJN76HABGF",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y5P0KGWAQGF3Z2V6P2Q16R",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y5PVM2BPQBVFNCJD9FD2R7",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y5QP7V449S721ZR8YY96BQ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y5RG6NPBXR2SCWDSE0BB59",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y5SA4CFXN78F0V0MAY2Z2R",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y5T45A203EX39JBVHFP1QZ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y5TXQAFHSS5DYX17V8RW5C",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y5VRVF3N6JGAYK141YP3VE",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-dense-s720-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y5WNPRMMFTZRJ6W0CY4AX8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-dense-s720-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y5XF0G2YJ53BFMKE20XPQ6",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5Y5YA0B48DPJKBYWWEHZTN4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5Y5Z3W1N2J2DX5GFNAATNJ6",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y5ZW47M50SB5F0JF4S6AF7",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y60P3192XX3QPHE2H3F7M8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y61G4FGN54C18BBX9KK65Z",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5Y62BT1B7334ADXH7MS9H63",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evreorder": {
+   "ex": "01M5Y63F0MNVGFMY1VW3Y7KV57",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5Y649BTWPGGT6Y2VGD2Y5P4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5Y6535VKZMK3XS48MMJEMVF",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y65X7RYZVK7W6EXAE9E92G",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5Y66PASSGVSK3V39DFTWQRA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5Y67FTSM7VQBXA8EAJK4PV8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y689DBZZS6P3Y5ZK1QMCY2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y692ENZ51ACQKJ46K0AQHW",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y69VYW8Y0543QVYFANVN5Q",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5Y6AZH44QHF8F3VK68H6BFB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evreorder": {
+   "ex": "01M5Y6CBNFWGA1VQDTNRZ6AVYK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5Y6DTW8876KF65272AQ7GCX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5Y6F92QC8QNMRG8XRTV082N",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y6GVE1JMNYT1KXZDZ8175Y",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5Y6J84FJ1XS00GD8W6656NZ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5Y6M4ZDNJYN5A6WPKHF47R0",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y6NNKJDE1SZMYFNF1SM4KX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y6QK84TQ8GE1PHQYA99MA6",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y6T0RX0QM9SF5E3HZG26ZB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5Y6VTAVT3HXV8PA7P4QQ0H2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evreorder": {
+   "ex": "01M5Y6WS0CB6B272HH83DP5ZGK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5Y6Y7ENDBQHHHHT4HFCVMMG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5Y6ZDAC448YM1H4N9X2TFWQ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y70TVWMZ71D46ZR5JB1ZVF",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y72059AKAGTHP9HT3GA19M",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y73B26SWJQXRGV73DGS2Y1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y74MG6PZ9DMTWMGE6TDQE8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y75YPN30NRPEZEHHE5NFZ3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y770V9P5W7JAK53ZQ35EP4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y789RNED5ZGMAMJ68GRPK1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y7962TH3DCDVFJSV32B1VJ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y7AM81RZBGN8346QF2SN76",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s240-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y7BTDYQPJ1NSVDW1795J09",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s240-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y7D9Y8VV925JWE985FPHQG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y7EJV4AWC2G1X1F0CDD23T",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y7G6P2CNACJBDDJC2226SA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y7HDX7CDZFPK5AG8PHMXGR",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y7JY2ZSTNASD20FAXSX5JK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y7MG2K322T2W0YYF3SQS9Y",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y7NYXTZM5RXBKBFP3DRV0A",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y7Q58YR7Y0RET6N6Z4RYGA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y7RJC0J0PGWDX8HM109WEB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s480-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y7SV36WHECA80RSZ8B8WYD",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s480-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y7VD3DQT66JHA620735ZYH",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y7WJV4DNCPQ1M2N8G9KNDB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y7Y03P1E6QNDC37MC3M8AM",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y7Z53H9XWXVB61P72Y2P1J",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y808EN377CM7GFDNP816YP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y81290SHKHJ83KJQ3N91AC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y81X9G5RWSVP8CYP7RVFQF",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y82R973PNQA6715C3HKPR7",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y83J7KZ896PCBQWZ08DNEN",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64all-s720-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y84CPF0WX5513PMC92NB3E",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64all-s720-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y85GQJR417S3VT43S6P1M9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5Y869TQAVZQCJC1FPKMH2G5",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5Y873K9XDT889TX1HDEPRKG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y87YVA0Y5PXQ1G0842PEKY",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y88REJWEJ4NSN0ZF2SH01H",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y89KR9FS7W78HRR35YPN5T",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5Y8AEKAGVJNCRA2DKJGNM0Y",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evreorder": {
+   "ex": "01M5Y8B9JYZN39G9C7WA60H4AE",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5Y8C395W8CH7736XJ838TT5",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5Y8CY1AV6EPMBW34S7SAFMZ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y8DR6EA6MPA3C00YCDF67C",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5Y8EN52GQQ9V30J54K0S7QW",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5Y8FGGMAK2MGA6V5X9Q4V5Q",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y8GBPACV6K7F24CJCSSQFS",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y8H5G3THA940PQM1GN6AR7",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y8J0XSPQE0XXE18N56TQK2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5Y8JV20E95PWJ3K3S9SZ4A2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evreorder": {
+   "ex": "01M5Y8KNMHTVMD7TXXPXNYRRYF",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5Y8MJMV6KEF3GTNAH860E0A",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5Y8NK391BB4G6R5XAC18K6R",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y8PDQP1P7BK4JPR9TE3JM8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y8Q6Z997ME5Y82SZXCA5ZS",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y8R0K2HK10NHV3Z7MM30M1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y8S0ZBVF152XFZFQSGCW6G",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y8SVMZZ9KS0JQ3V7M7FN0H",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y8TNK2JPCKG2SAXE6A6J75",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y8VHGXF0FK4M8CTF7KDYEP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y8WMV6CRHD5HF2BHC5Q7MH",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y8XHQPMPAM2GTWC2G53PBD",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y8YNHBG8A3X02B4R1E0D0G",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s240-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y900HWJHXZNPZM1Y2MK5BR",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y91AC9DVKA7EA6N2T347F4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y92JWKBMFD8D30V16VEKN1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y93STTNRH3N2RMESBH5BV3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y955PWHXY6D5A23FW75QYK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y96EDXGP5HMAG92MB9KC6Z",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y97N1VXBWX2RQWDX0Z28T8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y9960EQ57N1VPJP83JQNP0",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y9ANEMQGSSNXETW3GPXXM0",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y9C3XFASTHZV23E9TRZHCK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s480-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evnq": {
+   "ex": "01M5Y9DC352KQXK2BHVB679EB9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5Y9E9P5AV4CKKER2R6A0S3C",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5Y9F5T9EHTESNR8XEE3MG0B",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5Y9G0KXK62QQYNX689FJDXK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evoolong": {
+   "ex": "01M5Y9GYC13FXWYP07BFNJA7P8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5Y9J00Y9VY3ET2XQ8DF37KP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5Y9JW9ECEG89FYCWVWE76K3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evreorder": {
+   "ex": "01M5Y9KR7J5BQ4FE0YAKH174F9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5Y9MJT1X4S3XGPC9KRCYBYZ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5Y9NPCY0XG32WHESDP14HJ5",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16-s720-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evnq": {
+   "ex": "01M5Y9PJBE4Q1GAYC9RES1CF7E",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5Y9QF5B2HQAHTFSGC4XNKTX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5Y9RBAWFB2K94EP6B26GNPQ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5Y9SFHN9S5PB3XX60VG1BQ6",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evoolong": {
+   "ex": "01M5Y9TFAEFF5SZCVJ5JZH5ADH",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5Y9VHDHPW69NTFCT66X4D82",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5Y9WD672F2JBE8GSSRPD9TS",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evreorder": {
+   "ex": "01M5Y9XDFBPNK1E6QE5FZGYRDV",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5Y9Y9JE9N7MYZDV19N7BMKF",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5Y9Z6EBS6C55B1EWFFSD8HT",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evnq": {
+   "ex": "01M5YA01D8K94NEM9Y0GAKSGJZ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YA0WSF0GSK2F0JK8MTB1C2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YA1QDEWE9JMSHXTK5GM0Z2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YA2HHHX9MSV8DYEY5EX9QB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YA3BGMM2PJKH2XXCV66F67",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YA44HGAPRG32JZAE3PWGVP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YA5AY0Z5B0N4H9KYCP9SGP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YA66CFSM4J5SRFRZJ7NVHP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YA6ZMBV65G8NYVMBQ4BEBC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YA7SE3WM65EDHSDNSVBC98",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evnq": {
+   "ex": "01M5YA8SY6AJ4KDBA5JMVZT634",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YA9S954W21ZM5KFA94S6YX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YAAQ9M60VP9NVDQXJQ79DC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YABHNE3KRGM3RJYBPH9YVN",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YACBNNX5642GW7W3MDDF7E",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YAD6K7PKN20SB2D5BM8788",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YAE0PG7QAQFNZ03HK4FZ7J",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YAEVDDK9MAK5TVNQ40AQMK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YAFP41KZ3A3T3QDTF1ER2Z",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YAGGTM15MWFPH46R05XC6N",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s720-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evnq": {
+   "ex": "01M5YAHC7XMR5ZT8E93RNNM6N2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5YAJ7XA02VK45VG6XE2WRDE",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5YAK1WAVFN6Z8FWH6WY703B",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5YAKVX1FWGABTJJMTCPG99W",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evoolong": {
+   "ex": "01M5YAN3F4NF3Q1HAZPF52KSY3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5YANXD2A8ZR6N8CSP5RDP91",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5YAPR5Y238YJJCX0GQY7NJQ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evreorder": {
+   "ex": "01M5YAQHNYFSKMF8QRF6V875F8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5YARDBTW4X0KH5ES95TE3KJ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5YAS8E3FTZQE61E5A15QV4V",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s240-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evnq": {
+   "ex": "01M5YAT1VE0Q1AXHY10VEBVRT1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5YATVKT7K3TAM7KQZGB29ZT",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5YAVPBG4S9R22TF2NGQ33FY",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5YAWFVVV486VCNCJMJS161J",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evoolong": {
+   "ex": "01M5YAX9TTHES7NT0QWJ2EDEC9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5YAY9FYR2TE5PFKTPMWJHKJ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5YAZ2ZACT80HV6HZKWGR2SA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evreorder": {
+   "ex": "01M5YAZXQNMTES8XESNREY8REN",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5YB0RVK7RFQ802Z05RTDVA3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5YB1J6VFKX1QJ3H3RATN6HZ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16-s480-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64all-s1464-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YBPRK7J2TQ7MN8Y1HZBGXQ",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64all-s1464-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64all-s1464-tdx-lr5e-06-evnq": {
+   "ex": "01M5YBQKD02EEETD0384CDVGWH",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64all-s1464-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64all-s1464-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YBRDT5W1Z52S8FMNR2CNS5",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64all-s1464-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64all-s1464-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YBSA8JT9P45JD57RJ5PAV8",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64all-s1464-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evnq": {
+   "ex": "01M5YG6SKTKFXG3SHS3QAQPW8B",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YG7JSC52E7VB2X27Y4B0FP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YG8CB31K7SMAPT4D7M3DVP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YG97Y9HKFSVE43WE74VBAE",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YGA145VKW3N3N8P4Z2N0EG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YGAVDB00Q5M1G88DPP2HEA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YGBTH64A3NQ26BPKE29PAZ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YGCTGN9CBN8RWF1D8JKW88",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YGDSCAA6JDB3YGTVH78WED",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YGEPKNFDAZ557S5W5R97SD",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s240-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evnq": {
+   "ex": "01M5YGFVD4DE6JPMS33DCSPCZR",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YGGQ4RE5RKP1B2M6ZV0W4H",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YGHJ92V2WQJW2DFRX62NR7",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YGJH5X2V7M21GYYYVVH0RH",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YGKH2HJ7MY6GAS7YKSXMAH",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YGMBXN4B4M7GBN9W1GNZGD",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YGN7YP003JW82D2SB7GTPX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YGPA6B5WPWY2B4GTB5CZ2T",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YGQKKWJNMB4P2FNGKEDD4F",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YGRZDA8M8DD1FRA2Y0XJNP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s480-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YGZXS2EQ2SP9EMR3YNXEAJ",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06-evnq": {
+   "ex": "01M5YH0SQXQ595Z1B7HD5YWPAK",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YH1NFZ731SJT1NAGS1NF2P",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YH2MKEJQKGG70QHZWQDCP3",
+   "state": "DONE",
+   "train_run": "f8k-mt4-r20to7M7de0sd1-f1952-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YH3YCAAQPHZ7NQ87GXC0FW",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06-evnq": {
+   "ex": "01M5YH5646KDB7SWCN4N67T0CS",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YH68Z8K2GRFE7T2PB4TTBH",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YH746BRVHN9EBD64RS1D5K",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-s1464-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evnq": {
+   "ex": "01M5YH810JM8CHYHZCS003BFRA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YH8VM887WYRX6DT333K1MT",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YH9YVYYWT077G8HQPRTPC7",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YHB4EN4Z2MHF38FZGCW0RJ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YHC5JGWX7SA44D74P10QHJ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YHD2SS1S3GR45N5R04BK1Q",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YHDYXEN158VT8FX3MN5JRP",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YHER4CCC75FCDH10QP0VCT",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YHFK1WGCRYMGTFNNE0JEJW",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s240-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YHGD507AGCP1RSK8564754",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s240-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evnq": {
+   "ex": "01M5YHH7Z9Y7YWAHHJRCMA4TR3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5YHJ437GEFTDJ6G926D7WNQ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5YHJYFED06N8WG3A0BF836R",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5YHKSFS5X0TTPYKBER8BPH4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evoolong": {
+   "ex": "01M5YHMN0R94TCG38TA6RZC7CS",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5YHNEM01939XJWY6X88PRW3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5YHP8JCWYPJD9PVGFVF87JX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evreorder": {
+   "ex": "01M5YHQ5FVT8MBTAGBFNM22VBV",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5YHR33DZE39ZD5Y4GP698EY",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5YHS31S9TS4HTYTCXDEH4FJ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s240-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evnq": {
+   "ex": "01M5YHT7MB94XG0MPN6085QWBY",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YHVFMYZ7WX2J8ZX9HBSGPG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YHWJKKEEMS223RYY79FKH5",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YHXSVF8ZRHA86103SRQ2Q2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YHYYPAXCBP5ZMT7A188J1X",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YJ06VHF09XHY7X9VHTV11F",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YJ1B7RDKM2MYGBVBDRCDTG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YJ2MH6PG2AF8C9H29574A1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YJ3RZDZCYH9M2NP3KTC2NB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YJ50SKX368E2N371M0TAD8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-r20to7M7de0f16sd1-s720-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5YK38C1GC75Y5N581KYH9RN",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05-evnq": {
+   "ex": "01M5YK4250P8DRCRZTTSDTHAZA",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5YK4WW40EC3QPHPJTR9HKS1",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05-evoolong": {
+   "ex": "01M5YK5TGP3T8CEPY4AQDQ6FFV",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-s1464-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5YK6MKQMKPS20VY1K3Q2J79",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05-evnq": {
+   "ex": "01M5YK7DMJ4XQH9T7BHG4N8N9F",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5YK88Z33T54QYA5PFYF78ND",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05-evoolong": {
+   "ex": "01M5YK92PHCSJ3VK2K9SWVEJRT",
+   "state": "DONE",
+   "train_run": "f8k-mt4-lora64all32r20to7sd1-f1952-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evnq": {
+   "ex": "01M5YK9WR4FBFPEZFZQGGHW4C7",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YKAR0578T4E2BSXGQ9YQGY",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YKBHK1JVMZGFYW8A3Y87HT",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YKCB00N0DM32N2YRQZRJHE",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YKD5RNZCJD1K2DB8QXR575",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YKDZGRTK9J8XW4JSTGKTQV",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YKESQQM18WYEVMZAP3WFTX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YKFP1EWC8QDBFYMY6KTPHW",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YKGEV9HE72RBFERPFEEWB1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s480-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YKH9354BPP99K48PTZ4WDS",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s480-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evnq": {
+   "ex": "01M5YKJ4E0NGCCHPC7VXHAYBH0",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YKJY7XENCFYW8FSCTNZ382",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YKKRRXYA6GKHYG3EB0GYDB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YKMKMZGVEPM0SGT2ZVMTQJ",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YKNCSJM69PFMHVXVC7DW2M",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YKPAZHXW486RENQNN14KYM",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YKQ8QSY9Q4AEXF8HNAF1H4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YKR1XW77BRFEWR6TRECY7Y",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YKRW1QN1MD8BR4Z3FT0M2P",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YKSQ4SYJ6YW10ZD5J4Y4X3",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s480-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evnq": {
+   "ex": "01M5YKTH2G970622RJS9DA8VCX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YKVAHZ4JG2HMTWP4BQFSHA",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YKW8QE83YDNSWJ9AS9DJQV",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YKX5W4CY676GQ1JF5YNG6Y",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YKY50822H0AK0TMAAH24PC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YKZ1HDA281NJ3VPYSFJXVC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YKZW9FM74YKA30220531PC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YM0P9S74KHGCCF8V7T5YPC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YM1H6CZ4354S4ZQ3AMBZBM",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YM2CDEFD1F9XG0W6GHRRDS",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s240-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evnq": {
+   "ex": "01M5YM361AM4YZVKVAHXN7BRY4",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evhotpotqa": {
+   "ex": "01M5YM3YQ5PB8CQM6T9GGZ62DG",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evqdmatch_nq": {
+   "ex": "01M5YM4SHYGRDXNBZFGYE50D64",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5YM5MMW2NHQ4WWP0GBA9J43",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evoolong": {
+   "ex": "01M5YM6FC05RZCMGHPTJV3HZDS",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5YM7B9CBH8RGE0XZBD0D3N1",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evxabsence": {
+   "ex": "01M5YM85H231K4DTVQV9V0M9Q2",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evreorder": {
+   "ex": "01M5YM8YHBT163PH6EG4RZ87J9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evstrmatch": {
+   "ex": "01M5YM9TFKW3SA5N7CCZW81HKR",
+   "state": "DONE",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05-evgrouping": {
+   "ex": "01M5YPNWRH9E35HP4J2XQHKAGD",
+   "state": "FAILED",
+   "train_run": "f8k-mt11-lora64all32r20to7f16sd1-s480-tdx-lr1e-05",
+   "task": "grouping",
+   "rc": 5
+  },
+  "f8k-mt4-densesd1-f1952-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YN906R2TD080AX67V2SJ0V",
+   "state": "DONE",
+   "train_run": "f8k-mt4-densesd1-f1952-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-densesd1-f1952-tdx-lr5e-06-evnq": {
+   "ex": "01M5YN9V4ZVKPRN019G2YP156Z",
+   "state": "DONE",
+   "train_run": "f8k-mt4-densesd1-f1952-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-densesd1-f1952-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YNAN2EWCZ5R8XTMPBSHG77",
+   "state": "DONE",
+   "train_run": "f8k-mt4-densesd1-f1952-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-densesd1-f1952-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YNBG47A7Q0SSQ7PE52BQCG",
+   "state": "DONE",
+   "train_run": "f8k-mt4-densesd1-f1952-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M5YNCA90R7C1F22395N3GW2B",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05-evnq": {
+   "ex": "01M5YND41BRMA8TNTMPH7CCWC0",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05-evoutlier": {
+   "ex": "01M5YNE2XEVHCYHC0BC2G71YX0",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05-evoolong": {
+   "ex": "01M5YNEWJC3RNHA28YQFAN2XJ1",
+   "state": "DONE",
+   "train_run": "f8k-mt4-denselora64allsd1-f1952-tdx-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evnq": {
+   "ex": "01M5YNFRXG6P5P34H2KHDDYZC0",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YNGNF5EJDTK9DKW8XF2RBW",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YNHG6NFZAC209FJ221XHWX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YNJ9WSRJ5VSS91SY5Z6GR9",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YNK6BN9Y6Z420SEVKCDGYK",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YNM08FHJJFDP9M7P7345J6",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YNMST5W7CW3TY3DBMXMVAC",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YNNN3EAR0ZJKB84QR0FR08",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YNPE5EY4PY1C0DET9AEYH8",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YNQ8674CGBVJ3XTGAGD784",
+   "state": "DONE",
+   "train_run": "f8k-mt11-denselora64allsd1-s720-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evnq": {
+   "ex": "01M5YS7SH5QQ3YTA1YK4891MGR",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evhotpotqa": {
+   "ex": "01M5YS8KJHQWBBQD8CPWAXK3BD",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "hotpotqa",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evqdmatch_nq": {
+   "ex": "01M5YS9DM19JHQYB16RMQPGZ1D",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "qdmatch_nq",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evoutlier": {
+   "ex": "01M5YSA98TDM39A9YSN8XDMZTB",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evoolong": {
+   "ex": "01M5YSB3MFHP9J4201E2VBT6TF",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evcontradiction": {
+   "ex": "01M5YSBWV51SZJCP8AEZFBDY6Z",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "contradiction",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evxabsence": {
+   "ex": "01M5YSCR2TBT0H6TKYD9HREP1A",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "xabsence",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evreorder": {
+   "ex": "01M5YSDHPF4EDNADHHEAAD6Y33",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "reorder",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evstrmatch": {
+   "ex": "01M5YSECR0ENRRN7RPFP5RRHJX",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "strmatch",
+   "rc": 0
+  },
+  "f8k-mt11-densesd1-s720-tdx-lr5e-06-evgrouping": {
+   "ex": "01M5YSF8QN2P03V1N1W4JTCKP5",
+   "state": "DONE",
+   "train_run": "f8k-mt11-densesd1-s720-tdx-lr5e-06",
+   "task": "grouping",
+   "rc": 0
+  }
+ },
+ "parity": {}
+}
