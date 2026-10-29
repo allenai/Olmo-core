@@ -21,7 +21,7 @@ for tag in recipe base; do
         --script research/token_routing/online_router/grad_fidelity2.py --name "$name" --extra \
         "--ckpt ${CK[$tag]} --tag $tag --shard $W/ds64/fast8k/shards/mt4f1952 --fit-shard $W/ds64/fast8k/shards/mt4s1464 \
          --row-offset $((32 * g)) --rows-per-task 32 --fit-offset 0 --fit-rows 32 --settings $s \
-         --modes plain,kv,kvdet,kva,kvadet --rules oracle,router,random --k 4 --kb 4" 2>&1 | grep SUBMITTED)
+         --modes plain,kv,kvdet,kva,kvadet --rules oracle,router,random --k 4 --kb 4 --selftest" 2>&1 | grep SUBMITTED)
       id=$(sed -n 's/.*id=\([^ ]*\).*/\1/p' <<<"$out")
       echo "$name $id" | tee -a research/token_routing/online_router/gfkv_jobs.txt
       $OPS register --run-id "$name" --experiment tokdrop_lr --cluster beaker --job-id "$id" \
