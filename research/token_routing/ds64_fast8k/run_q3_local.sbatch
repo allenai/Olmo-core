@@ -64,36 +64,48 @@ if [ ! -f $ROOT/ckpts/$RUN/flops.json ] || ! find $ROOT/ckpts/$RUN -name .metada
     recipes/train/research_trainer/train_ctc_suite.py "${ARGS[@]}"
   rc=$?; echo "=== TRAIN rc=$rc $(date '+%F %T') ==="; [ $rc -eq 0 ] || exit $rc
 fi
-[ -n "${NO_EVAL:-}" ] && exit 0
-RUN_DIR=$ROOT/ckpts/$RUN
-CKPT=$(for d in $(find "$RUN_DIR" -name .metadata -path '*model_and_optim*' 2>/dev/null); do dirname "$(dirname "$d")"; done | sort -V | tail -1)
-[ -n "$CKPT" ] || { echo "FATAL: no complete model_and_optim under $RUN_DIR"; exit 3; }
-mkdir -p "$ROOT/weka_stub/checkpoints/prasanns/_eval_bundle"
+mkdir -p "$ROOT/weka_stub/checkpoints/prasanns/_eval_bundle" $ROOT/pending_evals
 export LADDER_GEN_BATCH="${LADDER_GEN_BATCH:-32}" LADDER_GEN_BATCH_TOKENS="${LADDER_GEN_BATCH_TOKENS:-196608}"
 E=$ROOT/eval
 final=0
-for TASK in ${EVAL_TASKS:-contradiction nq outlier oolong}; do
-  case $TASK in
-    contradiction) KEY=contra; R8=_eval_bundle_eval500_v3/contra/contradiction_eval_pubmed_realistic_n190_k3.jsonl
-                   R2=_eval_bundle_eval500_v3/contra/contradiction_eval_pubmed_realistic_n100_k3.jsonl ;;
-    nq|outlier) KEY=$TASK; R8=outlier_lengthmix/eval_rungs/$TASK/rung_8192.jsonl; R2=outlier_lengthmix/eval_rungs/$TASK/rung_2048.jsonl ;;
-    oolong) KEY=oolong; R8=_eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx8192_spliteval.jsonl
-            R2=_eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx2048_spliteval.jsonl ;;
-  esac
-  OUT_DIR=$RUN_DIR/eval
-  [ -s $OUT_DIR/${KEY}_multirung.json ] && { echo "[skip] $TASK already scored"; continue; }
-  # built BEFORE the env prefix below, which rebinds TASK to the runner's key (contra): the ladder looks rung files
-  # up by its own task name (contradiction)
-  FILES="{\"$TASK\": {\"8k\": \"$E/$R8\", \"2k\": \"$E/$R2\"}}"
-  echo "=== EVAL $RUN $TASK $(date '+%F %T') ==="
-  RUN="$RUN" TASK="$KEY" VARIANT=docchunk STEP='' CKPT="$CKPT" EVAL_OUT_DIR="$OUT_DIR" \
-    PROMPT_FORMAT=chat QUERY_POSITION=after MAX_TEST=500 MAX_LENGTH=20000 BATCH_SIZE=8 NGPU=$NGPU \
-    LADDER_XLONG=0 COT_MODE=none LADDER_VERSION=v2 TOKENIZER=$ROOT/tok REQUIRE_EVAL_SIZE=1 \
-    DC_RUNG_FILES="$FILES" DC_RUNGS=8k,2k \
-    WEKA_LLM="$ROOT/weka_stub" RESULTS="$ROOT/eval_results" REPO="$CODE" \
-    bash recipes/eval/legacy_native/run_beaker_multirung_eval.sh
-  rc=$?; echo "=== EVAL $TASK rc=$rc ==="; [ $rc -eq 0 ] || final=$rc
+scored() {  # a result counts only with a nonzero eval_size on every rung (a failed ladder writes a stub JSON)
+  python -c "import json,sys;n=json.load(open(sys.argv[1])).get('_meta',{}).get('eval_size') or {};sys.exit(0 if n and all(n.values()) else 1)" "$1" 2>/dev/null
+}
+eval_run() {  # eval_run <run> [tasks]: the fast8k ladder (8k + 2k, 500 rows, no-cot, query after) of each mt4 task
+  local R=$1 RUN_DIR=$ROOT/ckpts/$1 CKPT TASK KEY R8 R2 FILES OUT_DIR rc
+  CKPT=$(for d in $(find "$RUN_DIR" -name .metadata -path '*model_and_optim*' 2>/dev/null); do dirname "$(dirname "$d")"; done | sort -V | tail -1)
+  [ -n "$CKPT" ] || { echo "FATAL: no complete model_and_optim under $RUN_DIR"; final=3; return; }
+  for TASK in ${2:-contradiction nq outlier oolong}; do
+    case $TASK in
+      contradiction) KEY=contra; R8=_eval_bundle_eval500_v3/contra/contradiction_eval_pubmed_realistic_n190_k3.jsonl
+                     R2=_eval_bundle_eval500_v3/contra/contradiction_eval_pubmed_realistic_n100_k3.jsonl ;;
+      nq|outlier) KEY=$TASK; R8=outlier_lengthmix/eval_rungs/$TASK/rung_8192.jsonl; R2=outlier_lengthmix/eval_rungs/$TASK/rung_2048.jsonl ;;
+      oolong) KEY=oolong; R8=_eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx8192_spliteval.jsonl
+              R2=_eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx2048_spliteval.jsonl ;;
+    esac
+    OUT_DIR=$RUN_DIR/eval
+    scored $OUT_DIR/${KEY}_multirung.json && { echo "[skip] $R $TASK already scored"; continue; }
+    # built BEFORE the env prefix below, which rebinds TASK to the runner's key (contra): the ladder looks rung files
+    # up by its own task name (contradiction)
+    FILES="{\"$TASK\": {\"8k\": \"$E/$R8\", \"2k\": \"$E/$R2\"}}"
+    echo "=== EVAL $R $TASK $(date '+%F %T') ==="
+    RUN="$R" TASK="$KEY" VARIANT=docchunk STEP='' CKPT="$CKPT" EVAL_OUT_DIR="$OUT_DIR" \
+      PROMPT_FORMAT=chat QUERY_POSITION=after MAX_TEST=500 MAX_LENGTH=20000 BATCH_SIZE=8 NGPU=$NGPU \
+      LADDER_XLONG=0 COT_MODE=none LADDER_VERSION=v2 TOKENIZER=$ROOT/tok REQUIRE_EVAL_SIZE=1 \
+      DC_RUNG_FILES="$FILES" DC_RUNGS=8k,2k \
+      WEKA_LLM="$ROOT/weka_stub" RESULTS="$ROOT/eval_results" REPO="$CODE" \
+      bash recipes/eval/legacy_native/run_beaker_multirung_eval.sh
+    rc=$?; echo "=== EVAL $TASK rc=$rc ==="; [ $rc -eq 0 ] || final=$rc
+  done
+  mkdir -p /scratch/users/prasann/q3recipe_results/$R && cp $RUN_DIR/eval/*.json /scratch/users/prasann/q3recipe_results/$R/ 2>/dev/null
+}
+[ -n "${NO_EVAL:-}" ] || eval_run $RUN "${EVAL_TASKS:-}"
+# pending_evals/<run>: re-score another finished run here (e.g. one whose eval failed); claimed with mv so two
+# chains never take the same one
+for f in $ROOT/pending_evals/*; do
+  [ -e "$f" ] || continue
+  mv "$f" "$f.claimed.$$" 2>/dev/null || continue
+  echo "=== PENDING EVAL $(basename $f) ==="; eval_run "$(basename $f)"; rm -f "$f.claimed.$$"
 done
-mkdir -p /scratch/users/prasann/q3recipe_results/$RUN && cp $RUN_DIR/eval/*.json /scratch/users/prasann/q3recipe_results/$RUN/ 2>/dev/null
 echo "=== DONE rc=$final $(date '+%F %T') ==="
 exit $final
