@@ -17,7 +17,7 @@ for tag in recipe base; do
   for s in "${SETS[@]}"; do
     for g in 0 1; do
       name="gfkv-$tag-${s//_/-}-g$g"
-      out=$(timeout 300 $PY research/ffn_compute/flop_scaling/beaker_bench_launch.py --cluster ai2/jupiter \
+      out=$(timeout 300 $PY research/ffn_compute/flop_scaling/beaker_bench_launch.py --cluster ${GFKV_CLUSTER:-ai2/jupiter} \
         --script research/token_routing/online_router/grad_fidelity2.py --name "$name" --extra \
         "--ckpt ${CK[$tag]} --tag $tag --shard $W/ds64/fast8k/shards/mt4f1952 --fit-shard $W/ds64/fast8k/shards/mt4s1464 \
          --row-offset $((32 * g)) --rows-per-task 32 --fit-offset 0 --fit-rows 32 --settings $s \

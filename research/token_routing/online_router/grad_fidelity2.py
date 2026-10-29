@@ -271,6 +271,7 @@ def worker(a):
     OP.HIDDEN_LAYERS = tuple(sorted(set(OP.HIDDEN_LAYERS) | set(layers)))
     OP.TARGET_LAYERS = {**OP.TARGET_LAYERS, **{f"gnorm@L{L}": L for L in layers}}
     OP.FEATURE_SETS = {**OP.FEATURE_SETS, **{f"L{L}+q": (L, True, False) for L in layers}}
+    log(f"gpu: {torch.cuda.get_device_name(0)}; weka ckpt dir exists: {os.path.isdir(a.ckpt)}")
     torch.manual_seed(0)
     model, lora = load_model(a.ckpt)
     fit = OP.load_rows(a.fit_shard or a.shard, a.fit_rows, a.fit_offset, None)
