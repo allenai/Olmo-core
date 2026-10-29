@@ -7,7 +7,7 @@ area: token_routing
 kind: result
 status: complete (screen); fresh-pool FLOP curves not run (awaiting Prasann)
 superseded_by: 
-artifact: 
+artifact: https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt
 summary: Fixed / random / gradient-ranked whole-block skipping on Qwen3.5-4B, mt4 fast8k, matched FLOPs. Dense - skip 20-27, LayerDrop on 16-29 and update-only top-25% ties dense at 0.78-0.89x FLOPs over 2 seeds (s1464 and f3904; no clear win). Forward-skip of the top 25-50% collapses. On the recipe (whole-model LoRA + two-stage router) layer skipping never helps - it saves at most 8% FLOPs there.
 ---
 # Layer skipping on the fast8k mt4 screen
