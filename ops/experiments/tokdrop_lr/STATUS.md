@@ -11,6 +11,7 @@ records:
   - records/layer-skip-screen.md (branch claude/train-layerskip-35010b, unmerged)
   - records/online-token-router.md (router branch claude/online-router-1bc01a: hill-climb + gradient fidelity v2)
 results:
+experiment_log: research/token_routing/ds64_fast8k/experiment_log.json (standing rule 2026-10-29: keep current, every session; renders in the hub's Experiment log)
 artifacts:
   - https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (overview, v20, the summary page)
   - https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5
