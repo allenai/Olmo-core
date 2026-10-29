@@ -63,8 +63,10 @@ SETTINGS = {
 # sees it, so attention layers project it to K/V and GDN layers feed its frozen input into the recurrent state; its
 # own block output is discarded (h = where(alive, block(h), h)), positions stay original. kvdet: the same, but the
 # frozen context is detached, so no gradient flows back through dropped tokens into blocks < L (later blocks' K/V
-# projections still get their gradient from the dropped tokens).
-MODES = ("plain", "kv", "kvdet")
+# projections still get their gradient from the dropped tokens). kva / kvadet: the same at the full-attention blocks
+# only; GDN blocks run on the kept tokens alone (gathered, scattered back), so their recurrent state never sees a
+# dropped token -- the cheap variant (the dropped tokens' GDN projections dominate kv's cost).
+MODES = ("plain", "kv", "kvdet", "kva", "kvadet")
 
 
 def split_setting(s):
@@ -192,11 +194,18 @@ def grad_pass(model, row, stages, mode="plain"):
         elif i in at:
             alive = torch.zeros(T, dtype=torch.bool, device=dev)
             alive[at[i]] = True
-            if mode == "kvdet":  # freeze the dropped tokens' context as a constant
+            alive_idx = at[i]
+            if mode in ("kvdet", "kvadet"):  # freeze the dropped tokens' context as a constant
                 h = torch.where(alive[None, :, None], h, h.detach())
         kw = {**abk, **pbk.get(i, {})}
+        ctx = mode != "plain" and stages and i >= stages[0][0]
+        if ctx and mode in ("kva", "kvadet") and hasattr(block.attention, "w_a"):  # GDN block: kept tokens only
+            kwk = {**kw, "position_ids": alive_idx[None]}
+            hn = checkpoint(lambda hh, b=block, k=kwk: b(hh, **k), h[:, alive_idx], use_reentrant=False)
+            h = h.index_copy(1, alive_idx, hn)
+            continue
         hn = checkpoint(lambda hh, b=block, k=kw: b(hh, **k), h, use_reentrant=False)
-        h = hn if mode == "plain" or not stages or i < stages[0][0] else torch.where(alive[None, :, None], hn, h)
+        h = torch.where(alive[None, :, None], hn, h) if ctx else hn
     ce = F.cross_entropy(model.lm_head(h, **lmk)[0].float(), tgt)
     ce.backward()
     return float(ce)
