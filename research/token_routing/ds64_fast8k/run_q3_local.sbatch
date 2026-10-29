@@ -54,7 +54,10 @@ RUN=${ARGS[0]}; ARGS=("${ARGS[@]:1}")
 echo "=== q3recipe host=$(hostname) RUN=$RUN NGPU=$NGPU CODE=$CODE $(date '+%F %T') ==="
 echo "    train_ctc_suite.py ${ARGS[*]}"
 [ -f $ROOT/base/model_and_optim/.metadata ] || { echo "FATAL: base not staged"; exit 3; }
-if [ ! -f $ROOT/ckpts/$RUN/config.json ] || [ -n "${FORCE_TRAIN:-}" ]; then
+# trained = the end-of-fit flops.json + a complete model export (config.json alone is written at the START of fit, so
+# a preempted/requeued run must train again; the trainer auto-resumes from its own save folder)
+if [ ! -f $ROOT/ckpts/$RUN/flops.json ] || ! find $ROOT/ckpts/$RUN -name .metadata -path '*model_and_optim*' | grep -q . \
+   || [ -n "${FORCE_TRAIN:-}" ]; then
   python -m torch.distributed.run --nproc_per_node=$NGPU --master_port=$((29000 + RANDOM % 1000)) \
     recipes/train/research_trainer/train_ctc_suite.py "${ARGS[@]}"
   rc=$?; echo "=== TRAIN rc=$rc $(date '+%F %T') ==="; [ $rc -eq 0 ] || exit $rc
@@ -77,11 +80,14 @@ for TASK in ${EVAL_TASKS:-contradiction nq outlier oolong}; do
   esac
   OUT_DIR=$RUN_DIR/eval
   [ -s $OUT_DIR/${KEY}_multirung.json ] && { echo "[skip] $TASK already scored"; continue; }
+  # built BEFORE the env prefix below, which rebinds TASK to the runner's key (contra): the ladder looks rung files
+  # up by its own task name (contradiction)
+  FILES="{\"$TASK\": {\"8k\": \"$E/$R8\", \"2k\": \"$E/$R2\"}}"
   echo "=== EVAL $RUN $TASK $(date '+%F %T') ==="
   RUN="$RUN" TASK="$KEY" VARIANT=docchunk STEP='' CKPT="$CKPT" EVAL_OUT_DIR="$OUT_DIR" \
     PROMPT_FORMAT=chat QUERY_POSITION=after MAX_TEST=500 MAX_LENGTH=20000 BATCH_SIZE=8 NGPU=$NGPU \
     LADDER_XLONG=0 COT_MODE=none LADDER_VERSION=v2 TOKENIZER=$ROOT/tok REQUIRE_EVAL_SIZE=1 \
-    DC_RUNG_FILES="{\"$TASK\": {\"8k\": \"$E/$R8\", \"2k\": \"$E/$R2\"}}" DC_RUNGS=8k,2k \
+    DC_RUNG_FILES="$FILES" DC_RUNGS=8k,2k \
     WEKA_LLM="$ROOT/weka_stub" RESULTS="$ROOT/eval_results" REPO="$CODE" \
     bash recipes/eval/legacy_native/run_beaker_multirung_eval.sh
   rc=$?; echo "=== EVAL $TASK rc=$rc ==="; [ $rc -eq 0 ] || final=$rc
