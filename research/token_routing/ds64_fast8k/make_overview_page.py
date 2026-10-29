@@ -376,6 +376,16 @@ __LORA2X2__
   </table></div>
   <p class="note">LoRA saves FLOPs but little time today because its adapter hooks are unfused; routing loses time to gather/scatter and unpacked rows. Comparisons are against pad-free dense on the same cluster; layer-skip timings are same-node H200 A/Bs.</p>
 </section>
+<section>
+  <h2>Per-layer skipping overhead: token vs chunk (microbenchmark)</h2>
+  <div class="figs">
+    <figure><h3>Time vs a full layer, 32k tokens</h3><div class="chart"><canvas id="skb32" aria-label="skip overhead 32k"></canvas></div>
+      <figcaption>Forward + backward of one real Qwen3.5-4B block (GDN = block 0, full attention = block 3), 1 H200, bf16, random weights, one row. "Ideal" = the block on the kept tokens with no gather (what dropping a token for all later layers costs per layer); the others gather the kept tokens, run the block and scatter back into the full-length stream, as per-layer skipping must at every layer.</figcaption></figure>
+    <figure><h3>Time vs a full layer, 8k tokens</h3><div class="chart"><canvas id="skb8" aria-label="skip overhead 8k"></canvas></div>
+      <figcaption>Same at 8k. Timings here are noisy (10 iterations; a few gathered runs come out faster than "ideal"), but the main point is robust: at 8k the shortened block saves far less than its FLOPs.</figcaption></figure>
+  </div>
+  <p class="note"><b>Reading:</b> the gather / scatter itself is cheap: at 32k it adds 1–5% of a full layer's time per layer (token level: 4.7% on GDN, 1% on attention; 100- or 128-token chunks: ≈2.5% and ≈1%). Chunking halves the overhead on GDN but there is little to win. The real wall-clock loss is short sequences running inefficiently: at 8k, keeping 25% of tokens makes a GDN block only 30% faster and an attention block 64% faster (vs ≈75–80% fewer FLOPs for both), while at 32k the savings match the FLOPs (GDN 0.26× time at 25% kept; attention 0.12×, close to quadratic). So per-layer and chunked skipping are not limited by data movement; they are limited by the same small-kernel inefficiency as the router, and their quality cost (mixture-of-depths: −0.25 outlier) remains. Script: <code>research/token_routing/chunk_skip_bench/bench_skip_overhead.py</code>; results: <code>results_h200.json</code>.</p>
+</section>
 </div>
 <div class="part" id="mechanism">
 <div class="parthead"><span class="eyebrow">6 · Mechanism</span><h2 class="ptitle">Where the gradient lives, and what the router gets right</h2><p class="verdict">Blocks 0–6 must see every token; the router is near a perfect predictor, but token choice matters far less than where and how much is dropped.</p></div>
@@ -616,6 +626,18 @@ function draw() {
         plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
         scales: { x: { ticks: { color: css("--muted"), font: { size: 10 } }, grid: { display: false } },
                   y: { min: 0, title: { display: true, text: "× cheaper than the recipe (best case)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
+  (() => { if (!window.Chart) return; const R = D.skipbench || [];
+    [["skb32", 32768], ["skb8", 8192]].forEach(([id, T]) => { const el = document.getElementById(id); if (!el) return;
+      const rows = R.filter(r => r.T === T);
+      const labs = rows.map(r => (r.block.startsWith("gdn") ? "GDN" : "attention") + ", keep " + Math.round(r.keep * 100) + "%");
+      const ser = [["ideal_ms", "ideal (no gather)", "--dense"], ["tok_ms", "per-token skip", "--c1"], ["chunk100_ms", "100-token chunks", "--c2"], ["chunk128_ms", "128-token chunks", "--c3"]];
+      new Chart(el, { type: "bar", data: { labels: labs, datasets: ser.map(([k, l, c]) => ({ label: l, data: rows.map(r => +(r[k] / r.full_ms).toFixed(3)), backgroundColor: css(c) })).concat([
+          { type: "line", label: "keep fraction (linear-FLOPs ideal)", data: rows.map(r => r.keep), borderColor: css("--muted"), borderDash: [4, 4], pointRadius: 0, fill: false }]) },
+        options: { responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } },
+            tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(2)}× full-layer time` } } },
+          scales: { x: { ticks: { color: css("--muted"), font: { size: 10 } }, grid: { display: false } },
+                    y: { min: 0, title: { display: true, text: "time / full-layer time", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); }); })();
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
@@ -830,6 +852,10 @@ def main():
         data["gc"] = None
     data["early"] = EARLY_SHARE
     data["cptctx"] = CPT_CTX
+    try:
+        data["skipbench"] = json.load(open(__file__.rsplit("/", 2)[0] + "/chunk_skip_bench/results_h200.json"))
+    except FileNotFoundError:
+        data["skipbench"] = []
     try:
         from make_lora_routing_section import section as lora2x2_section
         lr2 = json.load(open(a.lora2x2))

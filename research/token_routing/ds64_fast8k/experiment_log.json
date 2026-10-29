@@ -1,11 +1,11 @@
 [
  {
   "date": "2026-10-29",
-  "status": "running",
+  "status": "done",
   "track": "Wall-clock",
   "who": "main (tokdrop)",
   "title": "Per-layer skipping overhead: token-level vs 100/128-token chunks (microbenchmark)",
-  "result": "Real Qwen3.5-4B GDN and attention blocks, T = 8k / 32k, keep 25% / 50%, fwd + bwd, 1 GPU on mooney."
+  "result": "Gather/scatter adds only 1–5% of a full layer per layer at 32k (token 4.7% GDN / 1% attention; 100–128-token chunks ≈2.5% / 1%). The real loss is short sequences: at 8k, keeping 25% makes a GDN block only 30% faster (attention 64%); at 32k time tracks FLOPs. Chunking barely matters for speed. 1 H200 (sneetches), timing noisy at 8k."
  },
  {
   "date": "2026-10-29",
