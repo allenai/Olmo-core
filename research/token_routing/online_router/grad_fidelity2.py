@@ -56,7 +56,23 @@ SETTINGS = {
     "1st_5_10": [(5, 0.1)],
     "2st_3_16": [(3, 0.2), (16, 0.07)],
     "2st_5_16": [(5, 0.2), (16, 0.07)],
+    "2st_1_16": [(1, 0.2), (16, 0.07)],
 }
+# Context modes (a setting "S@mode"; bare "S" = plain). plain: dropped tokens are deleted (gathered out) before the
+# block. kv: KV-only context -- a dropped token stops updating (hidden frozen at its h_L), but every later block still
+# sees it, so attention layers project it to K/V and GDN layers feed its frozen input into the recurrent state; its
+# own block output is discarded (h = where(alive, block(h), h)), positions stay original. kvdet: the same, but the
+# frozen context is detached, so no gradient flows back through dropped tokens into blocks < L (later blocks' K/V
+# projections still get their gradient from the dropped tokens).
+MODES = ("plain", "kv", "kvdet")
+
+
+def split_setting(s):
+    base, _, mode = s.partition("@")
+    mode = mode or "plain"
+    assert base in SETTINGS and mode in MODES, s
+    return base, mode
+
 DET_RULES = ("router", "oracle", "first_last")
 STO_RULES = ("random", "router_explore")
 EXPLORE = 0.1
@@ -145,10 +161,11 @@ def cos(a, b):
 
 
 # ---------------------------------------------------------------- passes
-def grad_pass(model, row, stages):
+def grad_pass(model, row, stages, mode="plain"):
     """Answer-CE forward + backward with parameter gradients. ``stages``: [(layer, kept positions (sorted, original
-    indexing, nested))]; before block ``layer`` the hidden state is gathered to that stage's positions (original RoPE
-    positions kept)."""
+    indexing, nested))]; plain: before block ``layer`` the hidden state is gathered to that stage's positions (original
+    RoPE positions kept). kv / kvdet: the row stays full length and from block ``layer`` on only that stage's positions
+    update (see MODES)."""
     from torch.utils.checkpoint import checkpoint
 
     dev = "cuda"
@@ -157,7 +174,7 @@ def grad_pass(model, row, stages):
     T = ids.numel()
     pred_full = torch.nonzero(lm[1:], as_tuple=True)[0]
     tgt = ids[pred_full + 1]
-    fin = stages[-1][1] if stages else torch.arange(T, device=dev)
+    fin = stages[-1][1] if stages and mode == "plain" else torch.arange(T, device=dev)
     pred = torch.searchsorted(fin, pred_full)
     assert bool((fin[pred] == pred_full).all()), "an answer-predicting position was dropped"
     x = ids[None]
@@ -167,13 +184,19 @@ def grad_pass(model, row, stages):
     h = model.embeddings(x)
     for key, block in model.blocks.items():
         i = int(key)
-        if i in at:
+        if i in at and mode == "plain":
             idx = torch.searchsorted(cur, at[i])
             h = h[:, idx]
             cur = at[i]
             abk = {**abk, "position_ids": cur[None]}
+        elif i in at:
+            alive = torch.zeros(T, dtype=torch.bool, device=dev)
+            alive[at[i]] = True
+            if mode == "kvdet":  # freeze the dropped tokens' context as a constant
+                h = torch.where(alive[None, :, None], h, h.detach())
         kw = {**abk, **pbk.get(i, {})}
-        h = checkpoint(lambda hh, b=block, k=kw: b(hh, **k), h, use_reentrant=False)
+        hn = checkpoint(lambda hh, b=block, k=kw: b(hh, **k), h, use_reentrant=False)
+        h = hn if mode == "plain" or not stages or i < stages[0][0] else torch.where(alive[None, :, None], hn, h)
     ce = F.cross_entropy(model.lm_head(h, **lmk)[0].float(), tgt)
     ce.backward()
     return float(ce)
@@ -198,7 +221,8 @@ def doc_topk_subset(score, doc, cand, rel):
 
 
 def select(rule, setting, ctx, gen):
-    """Stage sets (original positions) for one draw of ``rule`` under ``setting``."""
+    """Stage sets (original positions) for one draw of ``rule`` under ``setting`` (a SETTINGS key or "S@mode")."""
+    setting = split_setting(setting)[0]
     b, body_pos, doc, n = ctx["b"], ctx["body_pos"], ctx["doc"], ctx["n"]
     nonbody = torch.nonzero(~b, as_tuple=True)[0]
     surv = torch.ones(n, dtype=torch.bool, device=b.device)
@@ -232,7 +256,9 @@ def select(rule, setting, ctx, gen):
 # ---------------------------------------------------------------- worker
 def worker(a):
     settings = [s for s in a.settings.split(",") if s]
-    layers = sorted({L for s in settings for L, _ in SETTINGS[s]})
+    modes = [m for m in a.modes.split(",") if m]
+    settings = [s if m == "plain" else f"{s}@{m}" for s in settings for m in modes]
+    layers = sorted({L for s in settings for L, _ in SETTINGS[split_setting(s)[0]]})
     OP.HIDDEN_LAYERS = tuple(sorted(set(OP.HIDDEN_LAYERS) | set(layers)))
     OP.TARGET_LAYERS = {**OP.TARGET_LAYERS, **{f"gnorm@L{L}": L for L in layers}}
     OP.FEATURE_SETS = {**OP.FEATURE_SETS, **{f"L{L}+q": (L, True, False) for L in layers}}
@@ -267,7 +293,8 @@ def worker(a):
     log(f"fit {len(fit)} rows for layers {layers} in {time.time() - t0:.0f}s")
     del stats
     views = Views(model, lora=bool(lora))
-    rules = list(DET_RULES) + list(STO_RULES)
+    rules = [r for r in a.rules.split(",") if r] if a.rules else list(DET_RULES) + list(STO_RULES)
+    assert set(rules) <= set(DET_RULES) | set(STO_RULES), rules
     KB = min(a.k, a.kb)
 
     def zeros():
@@ -276,6 +303,19 @@ def worker(a):
     def nb(rule):
         return KB if rule in STO_RULES else 1
 
+    if a.selftest:  # kv / kvdet with nothing dropped must reproduce the full pass (and plain with everything kept)
+        row = test[0]
+        T = int(row["ids"].shape[0])
+        for p in model.parameters():
+            p.requires_grad_(True)
+        ce0 = grad_pass(model, row, [])
+        g0 = views.take()
+        for mode in MODES:
+            ce1 = grad_pass(model, row, [(1, torch.arange(T, device="cuda"))], mode)
+            g1 = views.take()
+            c = cos(g1["all"], g0["all"])
+            log(f"selftest {mode}: keep-all at block 1 dCE={ce1 - ce0:+.2e} grad cos={c:.6f}")
+            assert abs(ce1 - ce0) < 1e-3 and c > 0.999, (mode, ce1 - ce0, c)
     bsum = {(s, r, k): zeros() for s in settings for r in rules for k in range(nb(r))}
     asum = {(s, r, k): zeros() for s in settings for r in rules for k in range(nb(r))}
     bfull, afull = zeros(), zeros()
@@ -312,14 +352,16 @@ def worker(a):
         for s in settings:
             for rule in rules:
                 K = a.k if rule in STO_RULES else 1
-                gen = torch.Generator(device="cuda").manual_seed(zlib.crc32(f"{a.seed}/{a.tag}/{i}/{s}/{rule}".encode()))
+                # seeded by the BASE setting: every context mode sees the same draws (paired comparison)
+                sb, smode = split_setting(s)
+                gen = torch.Generator(device="cuda").manual_seed(zlib.crc32(f"{a.seed}/{a.tag}/{i}/{sb}/{rule}".encode()))
                 gsum = {v: None for v in views.spec}
                 sq = {v: 0.0 for v in views.spec}
                 cos1 = {v: [] for v in views.spec}
                 ces, kept = [], []
                 for k in range(K):
                     sets, kf = select(rule, s, ctx, gen)
-                    ces.append(grad_pass(model, row, sets) - ce_full)
+                    ces.append(grad_pass(model, row, sets, smode) - ce_full)
                     kept.append(kf)
                     g = views.take()
                     for v in g:
@@ -424,7 +466,8 @@ def driver(a):
                     "--row-offset", str(job["row_offset"]), "--rows-per-task", str(job["rows_per_task"]),
                     "--fit-offset", str(job.get("fit_offset", plan.get("fit_offset", 0))),
                     "--fit-rows", str(job.get("fit_rows", plan.get("fit_rows", 32))),
-                    "--k", str(job.get("k", plan.get("k", 8))), "--out", out]
+                    "--k", str(job.get("k", plan.get("k", 8))), "--modes", job.get("modes", plan.get("modes", "plain")),
+                    "--rules", job.get("rules", plan.get("rules", "")), "--out", out]
             cmds.append(" ".join(f"'{x}'" for x in args) + f" > {a.out_dir}/log_{jdx:02d}.txt 2>&1")
         env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gi))
         procs.append(subprocess.Popen(["bash", "-c", " ; ".join(cmds)], env=env))
@@ -462,6 +505,9 @@ def main():
     ap.add_argument("--rows-per-task", type=int, default=32)
     ap.add_argument("--fit-offset", type=int, default=0)
     ap.add_argument("--fit-rows", type=int, default=32)
+    ap.add_argument("--modes", default="plain", help="context modes for dropped tokens: plain,kv,kvdet (see MODES)")
+    ap.add_argument("--rules", default="", help="comma-separated subset of the rules (default all)")
+    ap.add_argument("--selftest", action="store_true", help="check the context modes against the full pass first")
     ap.add_argument("--k", type=int, default=8, help="draws per stochastic rule and row")
     ap.add_argument("--kb", type=int, default=4, help="draws kept for the batch / 8-batch sums")
     ap.add_argument("--ridge", type=float, default=0.01)
