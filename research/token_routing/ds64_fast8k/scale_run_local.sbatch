@@ -31,7 +31,10 @@ else
   X="--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,$S2:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks $NL --attn-backend flash_2"
 fi
 LRN=$($PY -c "print(f'{float(\"$LR\"):g}')")
-RUN=f8k-mt4-$AN-f$ROWS-tds$T-lr$LRN
+# MAX_STEPS (optional): cut the run at that many optimizer steps (the schedule follows --max-steps) -> f<rows>st<steps>,
+# the extra low-FLOP points of a dense curve
+MAX_STEPS="${MAX_STEPS:-}"
+RUN=f8k-mt4-$AN-f$ROWS${MAX_STEPS:+st$MAX_STEPS}-tds$T-lr$LRN
 BASE=$R/bases/q35-$T-base-markerfix/model_and_optim
 [ -f $BASE/.metadata ] || { echo "!!! no repaired base $BASE"; exit 1; }
 echo "[$(date +%T)] run=$RUN node=$(hostname) gpus=$CUDA_VISIBLE_DEVICES"
@@ -66,7 +69,7 @@ if [ ! -f $SAVE/config.json ]; then
     --task mt4 --data $D --variant $V --model-family qwen3_5 --model-scale $SCALE \
     --seq-len 12288 --epochs 1 --lr $LR --global-batch 16 --micro-batch-instances 2 --base-checkpoint $BASE \
     --work-dir $R/work/$RUN --save-folder $SAVE --run-name $RUN --wandb-group f8k-q35-$SCALE-local --no-compile \
-    --activation-checkpointing full --save-checkpoint --no-final-checkpoint $X > $R/logs/train_$RUN.log 2>&1
+    --activation-checkpointing full --save-checkpoint --no-final-checkpoint ${MAX_STEPS:+--max-steps $MAX_STEPS} $X > $R/logs/train_$RUN.log 2>&1
   rc=$?
   grep -aE "flop_meter/actual_pflops|reserved mem \(GiB\)" $R/logs/train_$RUN.log | tail -2
   echo "[$(date +%T)] train rc=$rc"; [ $rc = 0 ] && [ -f $SAVE/config.json ] || { tail -30 $R/logs/train_$RUN.log; exit 1; }

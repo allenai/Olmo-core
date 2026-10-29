@@ -109,7 +109,7 @@ def main():
                          wall=wall, ex=v["ex"], cells=ops_scores(run)))
     for d in sorted(os.listdir(f"{LOCAL}/runs")) if os.path.isdir(f"{LOCAL}/runs") else []:
         m = NAME.match(d)
-        if not m or m.group(3) or CAMPAIGNS.get("-" + m.group(4)) is None:
+        if not m or CAMPAIGNS.get("-" + m.group(4)) is None or (m.group(3) and m.group(1) != "dense"):
             continue
         pf, steps, mem, wall = local_train(d)
         if pf is None:
