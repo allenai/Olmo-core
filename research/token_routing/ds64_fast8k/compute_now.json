@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-10-29T22:35:41+00:00",
+ "generated_at": "2026-10-29T22:37:30+00:00",
  "jobs": [
   {
    "name": "f8k-mt4-lora64all32p50at3-f7808-tde-lr1e-05-04ee86ed",
@@ -7,7 +7,7 @@
    "node": "VPRAE5",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 103,
+   "elapsed_min": 105,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -16,7 +16,7 @@
    "node": "9SX1TN",
    "state": "RUNNING",
    "gpus": null,
-   "elapsed_min": 10,
+   "elapsed_min": 12,
    "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
   },
   {
@@ -25,7 +25,7 @@
    "node": "D9PF4E",
    "state": "RUNNING",
    "gpus": null,
-   "elapsed_min": 8,
+   "elapsed_min": 10,
    "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
   },
   {
@@ -34,7 +34,7 @@
    "node": "sneetches",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 1,
+   "elapsed_min": 3,
    "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   },
   {
@@ -43,7 +43,7 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 119,
+   "elapsed_min": 122,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -52,7 +52,7 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 119,
+   "elapsed_min": 121,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -61,7 +61,7 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 118,
+   "elapsed_min": 120,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -70,7 +70,7 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 118,
+   "elapsed_min": 120,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -79,7 +79,7 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 60,
+   "elapsed_min": 62,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -88,7 +88,7 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 59,
+   "elapsed_min": 62,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -97,7 +97,7 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 59,
+   "elapsed_min": 61,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
   },
   {
@@ -106,62 +106,8 @@
    "node": null,
    "state": "PENDING",
    "gpus": 2,
-   "elapsed_min": 58,
+   "elapsed_min": 61,
    "entry": "Pyramid keep: 50% after block 3 \u2192 20% after 7 \u2192 7% after 16 (recipe otherwise)"
-  },
-  {
-   "name": "f8k-mt4-dense-f1952st4-tds08b-lr1e-05-3cc2a141",
-   "cluster": "Beaker (jupiter)",
-   "node": null,
-   "state": "PENDING",
-   "gpus": 2,
-   "elapsed_min": 26,
-   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
-  },
-  {
-   "name": "f8k-mt4-lora64all24r20to7s12-f1952st4-tds08b-lr1e-05-532b2ea1",
-   "cluster": "Beaker (jupiter)",
-   "node": null,
-   "state": "PENDING",
-   "gpus": 2,
-   "elapsed_min": 26,
-   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
-  },
-  {
-   "name": "f8k-mt4-dense-f1952st4-tds2b-lr1e-05-df9c8f29",
-   "cluster": "Beaker (jupiter)",
-   "node": null,
-   "state": "PENDING",
-   "gpus": 2,
-   "elapsed_min": 25,
-   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
-  },
-  {
-   "name": "f8k-mt4-lora64all24r20to7s12-f1952st4-tds2b-lr1e-05-499856cc",
-   "cluster": "Beaker (jupiter)",
-   "node": null,
-   "state": "PENDING",
-   "gpus": 2,
-   "elapsed_min": 25,
-   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
-  },
-  {
-   "name": "f8k-mt4-dense-f1952st4-q3-lr5e-06-fe53acc7",
-   "cluster": "Beaker (jupiter)",
-   "node": null,
-   "state": "PENDING",
-   "gpus": 2,
-   "elapsed_min": 12,
-   "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
-  },
-  {
-   "name": "f8k-mt4-q3lora64all36r20at8-f1952st4-q3-lr1e-05-a403a28f",
-   "cluster": "Beaker (jupiter)",
-   "node": null,
-   "state": "PENDING",
-   "gpus": 2,
-   "elapsed_min": 12,
-   "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
   }
  ]
 }
