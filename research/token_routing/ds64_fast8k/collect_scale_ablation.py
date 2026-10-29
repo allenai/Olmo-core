@@ -60,6 +60,26 @@ def beaker_train(ex):
             max(mem) if mem else None, wall)
 
 
+LOCAL = "/net/sneetches/data/prasann/scale_abl"  # scale_run_local.sbatch (jsteinhardt) runs; /net read = small files only
+
+
+def local_train(run):
+    """(actual PF, last step, max reserved GiB, train seconds) of a finished LOCAL run (flops.json + train log)."""
+    import datetime as dt
+    fj, log = f"{LOCAL}/runs/{run}/flops.json", f"{LOCAL}/logs/train_{run}.log"
+    if not (os.path.exists(fj) and os.path.exists(f"{LOCAL}/runs/{run}/config.json") and os.path.exists(log)):
+        return None, None, None, None
+    txt = open(log, errors="replace").read()
+    mem = [float(x) for x in re.findall(r"gpu_memory/GPU reserved mem \(GiB\)[ =]+([0-9.]+)", txt)]
+    steps = re.findall(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\.\d+.*\[step=(\d+)/", txt, re.M)
+    wall = None
+    if len(steps) > 1:
+        t = [dt.datetime.fromisoformat(a) for a, _ in (steps[0], steps[-1])]
+        wall = (t[1] - t[0]).total_seconds()
+    return (json.load(open(fj))["actual_pflops"], max(int(b) for _, b in steps) if steps else None,
+            max(mem) if mem else None, wall)
+
+
 def need_pf(dpts, y):
     for (xa, ya), (xb, yb) in zip(dpts, dpts[1:]):
         if min(ya, yb) <= y <= max(ya, yb) and yb != ya:
@@ -87,6 +107,16 @@ def main():
         pf, steps, mem, wall = beaker_train(v["ex"])
         rows.append(dict(scale=scale, run=run, arm=arm, rows=int(n), lr=float(lr), pf=pf, steps=steps, mem=mem,
                          wall=wall, ex=v["ex"], cells=ops_scores(run)))
+    for d in sorted(os.listdir(f"{LOCAL}/runs")) if os.path.isdir(f"{LOCAL}/runs") else []:
+        m = NAME.match(d)
+        if not m or m.group(3) or CAMPAIGNS.get("-" + m.group(4)) is None:
+            continue
+        pf, steps, mem, wall = local_train(d)
+        if pf is None:
+            continue
+        arm, n, _, camp, lr = m.groups()
+        rows.append(dict(scale=CAMPAIGNS["-" + camp], run=d, arm=arm, rows=int(n), lr=float(lr), pf=pf, steps=steps,
+                         mem=mem, wall=wall, ex=f"local:{d}", cells=ops_scores(d)))
     P = json.load(open(PTS_4B))
     cells = {}
     for p in P["points"]:
