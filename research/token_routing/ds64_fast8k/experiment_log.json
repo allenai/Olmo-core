@@ -26,7 +26,7 @@
   "track": "Model scale",
   "who": "side session (Qwen3 generalization)",
   "title": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?",
-  "result": "Started 10-29.",
+  "result": "Recipe on fresh 1,952 rows/task: 395 PF = 0.219× Qwen3 dense's 1,806 PF (Qwen3.5: 0.225×), so the per-step cut is about the same with all-full attention; 22.5 GiB peak reserved per GPU. Scores pending (evals running on jsteinhardt).",
   "match": [
    "q3",
    "qwen3"
