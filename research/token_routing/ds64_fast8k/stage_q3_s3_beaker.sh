@@ -16,6 +16,15 @@ for IT in $ITEMS; do
   case $IT in
     base) SRC=$P/ctc_suite/bases/qwen3-4b-base-trainedmark ;;
     tok) SRC=$P/hf_tokenizers/Qwen3-4B-nothink ;;
+    evalfiles)  # the mt4 ladder rows (launch_fast8k.RUNGS), kept at their weka-relative paths under eval/
+      for f in outlier_lengthmix/eval_rungs/nq/rung_8192.jsonl outlier_lengthmix/eval_rungs/nq/rung_2048.jsonl \
+               outlier_lengthmix/eval_rungs/outlier/rung_8192.jsonl outlier_lengthmix/eval_rungs/outlier/rung_2048.jsonl \
+               _eval_bundle_eval500_v3/contra/contradiction_eval_pubmed_realistic_n190_k3.jsonl \
+               _eval_bundle_eval500_v3/contra/contradiction_eval_pubmed_realistic_n100_k3.jsonl \
+               _eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx8192_spliteval.jsonl \
+               _eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx2048_spliteval.jsonl; do
+        AWS_PROFILE=S3 aws s3 cp $P/$f $DST/eval/$f --only-show-errors || { echo "!!! FAILED $f"; exit 1; }
+      done; echo "SYNCED evalfiles"; continue ;;
     *) SRC=$P/ds64/fast8k/shards/$IT ;;
   esac
   [ -d $SRC ] || { echo "!!! missing $SRC"; exit 1; }
