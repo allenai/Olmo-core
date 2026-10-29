@@ -54,6 +54,8 @@ RUN=${ARGS[0]}; ARGS=("${ARGS[@]:1}")
 echo "=== q3recipe host=$(hostname) RUN=$RUN NGPU=$NGPU CODE=$CODE $(date '+%F %T') ==="
 echo "    train_ctc_suite.py ${ARGS[*]}"
 [ -f $ROOT/base/model_and_optim/.metadata ] || { echo "FATAL: base not staged"; exit 3; }
+# a Beaker twin of this run started first: touch $ROOT/skip/<run> and the chain moves on
+[ -f $ROOT/skip/$RUN ] && { echo "=== SKIP $RUN (Beaker twin) ==="; exit 0; }
 # trained = the end-of-fit flops.json + a complete model export (config.json alone is written at the START of fit, so
 # a preempted/requeued run must train again; the trainer auto-resumes from its own save folder)
 if [ ! -f $ROOT/ckpts/$RUN/flops.json ] || ! find $ROOT/ckpts/$RUN -name .metadata -path '*model_and_optim*' | grep -q . \
