@@ -47,7 +47,10 @@ W = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns"
 SCALE = os.environ.get("F2K_SCALE", "4b")
 # the SAME repaired base the ds64 arms use -- never a fresh Qwen3.5 (marker rows are untrained,
 # see CLAUDE.md "REPAIR THE BASE CHECKPOINT FIRST")
-BASE = {"4b": f"{W}/ctc_suite/bases/q35-4b-base-markerfix/model_and_optim",
+BASE = {"0.8b": f"{W}/ctc_suite/bases/q35-08b-base-markerfix/model_and_optim",  # fix_marker_embeddings_qwen35.py, 09-02
+        "2b": f"{W}/ctc_suite/bases/q35-2b-base-markerfix/model_and_optim",
+        "4b": f"{W}/ctc_suite/bases/q35-4b-base-markerfix/model_and_optim",
+        "9b": f"{W}/ctc_suite/bases/q35-9b-base-markerfix/model_and_optim",
         "27b": f"{W}/ctc_suite/bases/q35-27b-base-markerfix/model_and_optim"}[SCALE]
 SHARDS = f"{W}/ds64/fast2k/shards"
 CKPTS = f"{W}/ctc_suite/ckpts"

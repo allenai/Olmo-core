@@ -103,6 +103,11 @@ NODES = 1
 #: ~1.1-1.4x its nominal length once the markers and the query are added).
 SEQ_LEN = int(os.environ.get("F8K_SEQ_LEN", "12288"))
 SOFT_BACKEND = os.environ.get("F8K_SOFT_BACKEND", "flash_2")
+#: trainer flags appended to EVERY arm, dense included (model-scale ablation: "--activation-checkpointing full" so
+#: 0.8B, whose scale default is no AC, runs the same memory regime as 4B)
+TRAIN_EXTRA = os.environ.get("F8K_TRAIN_EXTRA", "")
+#: GPUs per eval job (1 for the small-model scale ablation)
+EVAL_NGPU = os.environ.get("F8K_EVAL_NGPU", "2")
 # jupiter only (2026-10-19): saturn is A100 (ask Prasann first), and Beaker GPU work goes to jupiter.
 CLUSTER = os.environ.get("F8K_CLUSTER", "ai2/jupiter-cirrascale-2")
 EVAL_CLUSTER = os.environ.get("F8K_EVAL_CLUSTER", CLUSTER)
@@ -319,6 +324,14 @@ ARM_EXTRA.update({
                              "--st-otr-early-lora-blocks 32")
        for tag, st in (("r20at1", "1:0.2,16:0.07"), ("r20at3", "3:0.2,16:0.07"), ("r20at5", "5:0.2,16:0.07"),
                        ("p50at3", "3:0.5,7:0.2,16:0.07"))},
+    # model-scale ablation (2026-10-29): the recipe on the 24-block Qwen3.5 0.8B / 2B (full attention at 3,7,..,23).
+    # Each stage sits at the block of the same type nearest the 4B depth fraction: stage 1 at 22% of depth -> the
+    # full-attention block 7 (5.3 rounds to 7, not 3), stage 2 at 50% -> block 12, the GDN block right after
+    # full-attention 11 (as 16 follows 15 at 4B). LoRA r64 / scale 32 on all 24 blocks.
+    "lora64all24r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                             "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                             "--st-otr-stages 7:0.2,12:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                             "--st-otr-early-lora-blocks 24"),
     # second stage at block 12 instead of 16 (same budgets)
     "lora64r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                         "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
@@ -518,6 +531,7 @@ def do_launch(args, mode):
     for arm in args.arms.split(","):
         for budget in args.budgets.split(","):
             variant, data, largs, extra = arm_args(args.task, arm, budget)
+            extra = f"{extra} {TRAIN_EXTRA}".strip()
             # --seed N: a seed replicate named <arm>sd<N> (collectors strip sd<N> and average seed copies)
             label = f"{arm}sd{args.seed}" if args.seed else arm
             name = run_name(args.task, label, budget)
@@ -587,7 +601,7 @@ def eval_cmd(ename, task, ckpt, suite):
     cmd = [sys.executable, "-u", EVAL_LAUNCHER, ename, EVAL_CLUSTER,
            "--task", TASK_KEY.get(task, task), "--variant", "docchunk", "--ckpt", ckpt,
            "--query-position", "both" if suite else "after", "--cot-mode", "none",
-           "--tokenizer", TOKENIZER, "--ngpu", "2", "--max-test", "500", "--priority", "urgent",
+           "--tokenizer", TOKENIZER, "--ngpu", EVAL_NGPU, "--max-test", "500", "--priority", "urgent",
            # >= the 8k rung's prompt + generation, with headroom: a --max-length BELOW the
            # prompt truncates it away and the run scores exactly 0.000 (records/ memory
            # "Goldgrad eval MAXLEN truncation bug"). 20000 covers an 8k-rung outlier row.
