@@ -2031,6 +2031,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-sbw-energy", type=float, default=0.95, help="sparse backward energy mode: coverage")
     ap.add_argument("--st-otr-sbw-rank", type=int, default=256, help="sparse backward sketch mode: exact SVD rank")
     ap.add_argument("--st-otr-sbw-sketch", type=int, default=256, help="sparse backward sketch mode: sketch width")
+    ap.add_argument("--st-otr-sbw-lora-all-rows", action="store_true",
+                    help="sparse backward (topk / energy): adapter weight gradients from every nonzero row of dy "
+                    "(exact given the arriving gradient, +4 r (in + out) per row); dx still from the selected rows only")
     ap.add_argument("--st-otr-sbw-start", type=int, default=0,
                     help="sparse backward only on adapted linears in blocks >= this (e.g. the drop layer)")
     ap.add_argument("--st-otr-early-lora-scale", type=float, default=32.0,

@@ -320,6 +320,10 @@ ARM_EXTRA.update({
        for t, x in (("", ""),
                     *((f"sbt{k}", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40)),
                     *((f"sbe{e}", f" --st-otr-sbw-mode energy --st-otr-sbw-energy {e / 100}") for e in (90, 95, 99)),
+                    *((f"sbt{k}a", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100} --st-otr-sbw-lora-all-rows")
+                      for k in (5, 10, 20)),
+                    *((f"sbe{e}a", f" --st-otr-sbw-mode energy --st-otr-sbw-energy {e / 100} --st-otr-sbw-lora-all-rows")
+                      for e in (90, 95, 99)),
                     *((f"sbs{k}", f" --st-otr-sbw-mode sample --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40)),
                     *((f"sk{r}", f" --st-otr-sbw-mode sketch --st-otr-sbw-rank {r} --st-otr-sbw-sketch {r}")
                       for r in (128, 256, 512)))},
