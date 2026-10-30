@@ -69,6 +69,26 @@ class FlopMeterCallback(Callback):
     _fpt_cache: Optional[Dict[int, int]] = None
     _examples: int = 0
 
+    #: cumulative accumulators carried across a preemption resume (2026-10-30): without them a resumed run's
+    #: flops.json would count only the steps after the resume
+    _RESUME_KEYS = ("_actual", "_dense", "_tokens", "_examples", "_overhead", "_ffn_cost_weighted",
+                    "_kv_keep_weighted", "_skip_keep_weighted", "_ld_run_frac_sum", "_ld_steps")
+
+    def state_dict(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for k in self._RESUME_KEYS:
+            v = getattr(self, k, None)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                out[k] = v
+        return out
+
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        for k, v in state_dict.items():
+            if k in self._RESUME_KEYS:
+                setattr(self, k, v)
+        log.info("[flop-meter] resumed accumulators: actual %.3f PF over %s tokens",
+                 float(state_dict.get("_actual", 0.0)) / 1e15, state_dict.get("_tokens"))
+
     def pre_train(self):
         if self.per_example:
             if self.pad_id is None:

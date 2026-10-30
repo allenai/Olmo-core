@@ -26,6 +26,54 @@ class OnlineRouterCallback(Callback):
     def _router(self):
         return getattr(self.trainer.train_module.model, "_online_token_router", None)  # type: ignore[union-attr]
 
+    #: the fit carried across a preemption resume (2026-10-30): without it a resumed run restarts the router with no
+    #: weights, i.e. one full-context warmup step mid-run and a fresh ridge accumulation
+    _STATE_KEYS = ("w", "XtX", "Xty", "n_seen", "step", "task_w", "task_XtX", "task_Xty", "task_seen", "frozen_blocks")
+
+    def state_dict(self) -> Dict[str, Any]:
+        import torch
+
+        router = self._router()
+        if router is None:
+            return {}
+
+        def cpu(v):
+            if torch.is_tensor(v):
+                return v.detach().cpu()
+            if isinstance(v, dict):
+                return {k: cpu(x) for k, x in v.items()}
+            return v
+
+        chain = [{k: cpu(getattr(r, k)) for k in self._STATE_KEYS if hasattr(r, k)} for r in router.chain()]
+        return {"chain": chain, "freeze_early": bool(router.cfg.freeze_early)}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        import torch
+
+        router = self._router()
+        if router is None or not state_dict.get("chain"):
+            return
+        model = self.trainer.train_module.model  # type: ignore[union-attr]
+        dev = next(model.parameters()).device
+
+        def to(v):
+            if torch.is_tensor(v):
+                return v.to(dev)
+            if isinstance(v, dict):
+                return {k: to(x) for k, x in v.items()}
+            return v
+
+        chain = router.chain()
+        if len(chain) != len(state_dict["chain"]):
+            raise RuntimeError(f"online router resume: {len(state_dict['chain'])} saved stages vs {len(chain)} built")
+        for r, d in zip(chain, state_dict["chain"]):
+            for k, v in d.items():
+                setattr(r, k, to(v))
+            r._pending = []
+        if get_rank() == 0:
+            log.info("[online-router] resumed the fit of %d stage(s) at router step %s", len(chain),
+                     state_dict["chain"][0].get("step"))
+
     def pre_train(self):
         router = self._router()
         if router is None:
