@@ -28,8 +28,8 @@ from olmo_core.launch.beaker_presets import get_preset
 from olmo_core.nn.attention import AttentionConfig
 from olmo_core.nn.attention.kda import KimiDeltaAttentionConfig
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
-from olmo_core.nn.hf.convert_checkpoint import _normalize_legacy_latent_moe_config
 from olmo_core.nn.transformer import OLMoDDPModelConfig
+from olmo_core.nn.transformer.config import normalize_legacy_config_dict
 from olmo_core.nn.vision import Molmo2TokenIds, MultimodalLMConfig
 from olmo_core.optim import CosWithWarmup, OptimGroupOverride, PerGroupScheduler
 from olmo_core.optim.multimodal_optimizer import MultimodalOLMoDDPOptimizerConfig
@@ -348,7 +348,7 @@ def _checkpoint_lm_config(checkpoint: str) -> dict:
     """The checkpoint's LM config as text mid-training uses it: legacy keys normalized and
     EMO routing cleared."""
     model = copy.deepcopy(_read_checkpoint_config(checkpoint)["model"])
-    _normalize_legacy_latent_moe_config(model)  # in place
+    normalize_legacy_config_dict(model)  # in place
     for block in [model.get("block"), *(model.get("block_overrides") or {}).values()]:
         router = (block or {}).get("routed_experts_router")
         if isinstance(router, dict) and "emo" in router:
