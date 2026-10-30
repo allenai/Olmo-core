@@ -144,6 +144,14 @@ def main():
         if a.simple == "plain":
             model(ids, labels=labels).loss.backward()
             print("SIMPLE_OK plain"); return
+        if a.simple == "nomv_early":
+            cap = {}
+            b0 = list(model.blocks.values())[0]
+            hd = b0.register_forward_hook(lambda m, i, o: cap.__setitem__("h", o))
+            out = model(ids, labels=labels)
+            hd.remove()
+            (cap["h"].float().sum()).backward()
+            print("SIMPLE_OK nomv_early"); return
         ctx = {"layer": 1, "repeat": False, "h7": None}
         model._mv_ctx = ctx
         out = model(ids, labels=labels)
@@ -153,6 +161,11 @@ def main():
         if a.simple == "late_then_early":
             out.loss.backward()
             torch.autograd.backward(h.view(h.shape), ctx["leaf"].grad)
+        elif a.simple == "early_loss":
+            (h * torch.ones_like(h)).sum().backward()
+            out.loss.backward()
+        elif a.simple == "nomv_early":
+            pass
         else:
             torch.autograd.backward(h.view(h.shape), torch.ones_like(h))
             out.loss.backward()
