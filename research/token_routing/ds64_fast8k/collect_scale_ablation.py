@@ -137,22 +137,32 @@ def main():
         r["pf_step"] = round(r["pf"] / r["steps"], 4) if r["pf"] and r["steps"] else None
         r["cells"] = {f"{t}@{g}": s for (t, g), s in r["cells"].items()}
     out = {"rows": rows, "ftm": []}
-    for scale in sorted({r["scale"] for r in rows}):
+    # seed replicates of one (scale, arm, lr, pf) point are averaged before any curve / FTM is computed
+    agg = {}
+    for r in rows:
+        if r["y"] is not None and r["pf"]:
+            agg.setdefault((r["scale"], r["arm"], r["lr"], round(r["pf"], -1), r["rows"]), []).append(r)
+    pts_all = [dict(scale=k[0], arm=k[1], lr=k[2], rows=k[4], pf=sum(x["pf"] for x in v) / len(v),
+                    y=round(sum(x["y"] for x in v) / len(v), 4), ys=[x["y"] for x in v], n_seeds=len(v),
+                    runs=[x["run"] for x in v]) for k, v in agg.items()]
+    out["points"] = pts_all
+    for scale in sorted({p["scale"] for p in pts_all}):
         dense = {}
-        for r in rows:
-            if r["scale"] == scale and r["arm"] == "dense" and r["y"] is not None and r["pf"]:
-                dense.setdefault(r["lr"], []).append((r["pf"], r["y"]))
-        for r in rows:
-            if r["scale"] != scale or r["arm"] != RECIPE[scale] or r["y"] is None or not r["pf"]:
+        for p in pts_all:
+            if p["scale"] == scale and p["arm"] == "dense":
+                dense.setdefault(p["lr"], []).append((p["pf"], p["y"]))
+        for p in sorted(pts_all, key=lambda p: (p["lr"], p["pf"])):
+            if p["scale"] != scale or p["arm"] != RECIPE[scale]:
                 continue
             for lr, pts in sorted(dense.items()):
                 if len(pts) < 2:
                     continue
                 pts = sorted(pts)
-                need = need_pf(pts, r["y"])
-                out["ftm"].append(dict(scale=scale, run=r["run"], rows=r["rows"], y=r["y"], pf=r["pf"], dense_lr=lr,
-                                       dense_pts=pts, ftm=round(need / r["pf"], 2) if need else None,
-                                       ftm_lower_bound=None if need else round(pts[-1][0] / r["pf"], 2)))
+                need = need_pf(pts, p["y"])
+                out["ftm"].append(dict(scale=scale, rows=p["rows"], recipe_lr=p["lr"], y=p["y"], ys=p["ys"], pf=p["pf"],
+                                       dense_lr=lr, dense_pts=pts, extrapolated=p["y"] < pts[0][1],
+                                       ftm=round(need / p["pf"], 2) if need else None,
+                                       ftm_lower_bound=None if need else round(pts[-1][0] / p["pf"], 2)))
     json.dump(out, open(a.out, "w"), indent=1)
     print(f"{'scale':5} {'run':58} {'y':>6} {'PF':>7} {'PF/step':>8} {'memGiB':>7}")
     for r in sorted(rows, key=lambda r: (r["scale"], r["arm"], r["lr"], r["rows"])):
@@ -160,7 +170,8 @@ def main():
               f"{r['pf'] or 0:7.0f} {r['pf_step'] or 0:8.3f} {r['mem'] or 0:7.1f}")
     for f in out["ftm"]:
         txt = f"{f['ftm']}x" if f["ftm"] else f">{f['ftm_lower_bound']}x"
-        print(f"FTM {f['scale']:5} f{f['rows']} recipe y={f['y']} vs dense lr{f['dense_lr']:g}: {txt}")
+        print(f"FTM {f['scale']:5} f{f['rows']} recipe lr{f['recipe_lr']:g} y={f['y']} (seeds {f['ys']}) vs dense "
+              f"lr{f['dense_lr']:g} ({len(f['dense_pts'])} pts): {txt}" + ("  [extrapolated below dense range]" if f["extrapolated"] else ""))
 
 
 if __name__ == "__main__":
