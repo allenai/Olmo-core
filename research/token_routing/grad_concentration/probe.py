@@ -98,13 +98,13 @@ def merged_task_index(shard, task):
     return names.index(task)
 
 
-def load_rows(tasks, n, offset, max_len, seen_shards):
+def load_rows(shards, tasks, n, offset, max_len, seen_shards):
     """``n`` rows per task from the single-task fresh pools, starting at ``offset`` (rows past the largest fresh run's
     prefix), dropping any row whose md5 appears in ``seen_shards`` (merged training shards)."""
     seen = {}
     rows = {}
     for task in tasks:
-        tok, msk, st, en = read_parts(f"{SHARDS}/{task}_fresh", "token_ids_part_*.npy", "labels_mask_*.npy")
+        tok, msk, st, en = read_parts(f"{shards}/{task}_fresh", "token_ids_part_*.npy", "labels_mask_*.npy")
         hs = set()
         for sh in seen_shards:
             try:
@@ -304,7 +304,8 @@ def main():
     ap.add_argument("--tasks", default="contradiction,nq,outlier,oolong")
     ap.add_argument("--rows", type=int, default=128, help="rows per task")
     ap.add_argument("--row-offset", type=int, default=7808, help="first fresh-pool row (mt4f7808 uses rows < 7808)")
-    ap.add_argument("--seen-shards", default=f"{SHARDS}/mt4f7808,{SHARDS}/mt4s1952")
+    ap.add_argument("--shards", default=SHARDS, help="shard root (weka on Beaker; a node-local copy on slurm)")
+    ap.add_argument("--seen-shards", default="mt4f7808,mt4s1952", help="merged training shards (under --shards)")
     ap.add_argument("--scopes", default="16,128", help="batch sizes (rows); must nest, largest = pass size")
     ap.add_argument("--sketch-dim", type=int, default=32768)
     ap.add_argument("--exact", default="b7.feed_forward.w2,b16.attention.w_out",
@@ -319,8 +320,11 @@ def main():
     scopes = [int(s) for s in a.scopes.split(",")]
     big = max(scopes)
     assert all(big % s == 0 and s % len(tasks) == 0 for s in scopes)
-    seen_shards = [s for s in a.seen_shards.split(",") if s and os.path.isdir(s)]
-    rows_by_task, seen = load_rows(tasks, a.rows, a.row_offset, a.max_len, seen_shards)
+    seen_shards = [os.path.join(a.shards, s) for s in a.seen_shards.split(",") if s]
+    missing = [s for s in seen_shards if not os.path.isdir(s)]
+    if missing:
+        raise SystemExit(f"seen-check shards missing: {missing}")
+    rows_by_task, seen = load_rows(a.shards, tasks, a.rows, a.row_offset, a.max_len, seen_shards)
     n_per = min(len(v) for v in rows_by_task.values())
     nbig = n_per * len(tasks) // big
     if a.max_batches:
