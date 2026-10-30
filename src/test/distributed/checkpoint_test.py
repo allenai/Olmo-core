@@ -11,6 +11,7 @@ from torch.distributed.tensor.parallel import (
     parallelize_module,
 )
 
+from olmo_core.distributed import checkpoint
 from olmo_core.distributed.checkpoint import (
     UnshardStrategy,
     async_save_model_and_optim_state,
@@ -493,3 +494,29 @@ def test_merge_state_dicts():
     }
     merge_state_dicts(state_dict, {"model": {"e": 3}})
     assert state_dict["model"]["e"] == 3
+
+
+def test_new_save_planner_with_plan_caching_support(monkeypatch):
+    # Simulate torch>=2.7, where 'DefaultSavePlanner' accepts 'enable_plan_caching'.
+    class ModernSavePlanner:
+        def __init__(
+            self, dedup_save_to_lowest_rank: bool = False, enable_plan_caching: bool = False
+        ):
+            self.dedup_save_to_lowest_rank = dedup_save_to_lowest_rank
+            self.enable_plan_caching = enable_plan_caching
+
+    monkeypatch.setattr(checkpoint, "DefaultSavePlanner", ModernSavePlanner)
+    planner = checkpoint._new_save_planner(enable_plan_caching=True)
+    assert planner.dedup_save_to_lowest_rank
+    assert planner.enable_plan_caching
+
+
+def test_new_save_planner_without_plan_caching_support(monkeypatch):
+    # Simulate torch<2.7, where 'DefaultSavePlanner' doesn't accept 'enable_plan_caching'.
+    class LegacySavePlanner:
+        def __init__(self, dedup_save_to_lowest_rank: bool = False):
+            self.dedup_save_to_lowest_rank = dedup_save_to_lowest_rank
+
+    monkeypatch.setattr(checkpoint, "DefaultSavePlanner", LegacySavePlanner)
+    planner = checkpoint._new_save_planner(enable_plan_caching=True)
+    assert planner.dedup_save_to_lowest_rank
