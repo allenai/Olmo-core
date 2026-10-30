@@ -7,7 +7,8 @@
    "budget": "f1952@4",
    "steps_expected": 4,
    "gpus": 2,
-   "state": "S"
+   "state": "FAILED",
+   "rc": null
   },
   "f8k-mt4-q3lora64all36r20at8-f1952st4-q3-lr1e-05": {
    "ex": "01M64W5V3075WWKFNDFTGBMHX5",
@@ -16,7 +17,8 @@
    "budget": "f1952@4",
    "steps_expected": 4,
    "gpus": 2,
-   "state": "S"
+   "state": "FAILED",
+   "rc": null
   },
   "f8k-mt4-dense-f7808-q3-lr5e-06": {
    "ex": "01M64XMF19Q9F6FZ1Q6TKWFXAP",
@@ -25,7 +27,7 @@
    "budget": "f7808",
    "steps_expected": 1952,
    "gpus": 2,
-   "state": "S"
+   "state": "R"
   },
   "f8k-mt4-dense-f3904-q3-lr5e-06": {
    "ex": "01M64XNAQ5ZWD9P261XYH9KC8T",
@@ -34,7 +36,7 @@
    "budget": "f3904",
    "steps_expected": 976,
    "gpus": 2,
-   "state": "S"
+   "state": "R"
   },
   "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05": {
    "ex": "01M64XP48R32THR7V4MM242CA7",
@@ -43,7 +45,7 @@
    "budget": "f7808",
    "steps_expected": 1952,
    "gpus": 2,
-   "state": "S"
+   "state": "R"
   },
   "f8k-mt4-q3lora64all36r20at8-f3904-q3-lr1e-05": {
    "ex": "01M64XQ6DHQB18BRXCMKRKHWT9",
@@ -52,7 +54,8 @@
    "budget": "f3904",
    "steps_expected": 976,
    "gpus": 2,
-   "state": "S"
+   "state": "FAILED",
+   "rc": null
   },
   "f8k-mt4-dense-f488-q3-lr5e-06": {
    "ex": "01M64XRG2YN27GR1PMEP14P798",
@@ -61,7 +64,8 @@
    "budget": "f488",
    "steps_expected": 122,
    "gpus": 2,
-   "state": "S"
+   "state": "DONE",
+   "rc": 0
   },
   "f8k-mt4-dense-f976-q3-lr5e-06": {
    "ex": "01M64XSNFEJ7AFKHEF58YA7JKH",
@@ -70,7 +74,8 @@
    "budget": "f976",
    "steps_expected": 244,
    "gpus": 2,
-   "state": "S"
+   "state": "DONE",
+   "rc": 0
   },
   "f8k-mt4-dense-f1464-q3-lr5e-06": {
    "ex": "01M64XTHJXV70HH7PPY6JJKPKA",
@@ -79,7 +84,7 @@
    "budget": "f1464",
    "steps_expected": 366,
    "gpus": 2,
-   "state": "S"
+   "state": "R"
   },
   "f8k-mt4-dense-f1952-q3-lr1e-05": {
    "ex": "01M64XV9VRWN8PA0E1G98210WA",
@@ -88,7 +93,7 @@
    "budget": "f1952",
    "steps_expected": 488,
    "gpus": 2,
-   "state": "S"
+   "state": "R"
   },
   "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05": {
    "ex": "01M64XW2393DNK6XJXXX3Q6T4F",
@@ -97,7 +102,8 @@
    "budget": "f1952",
    "steps_expected": 488,
    "gpus": 2,
-   "state": "S"
+   "state": "DONE",
+   "rc": 0
   },
   "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05": {
    "ex": "01M64XWVWZRK1CPS3N5Q3VZCRE",
@@ -106,9 +112,115 @@
    "budget": "f1952",
    "steps_expected": 488,
    "gpus": 2,
-   "state": "S"
+   "state": "DONE",
+   "rc": 0
   }
  },
- "evals": {},
+ "evals": {
+  "f8k-mt4-dense-f488-q3-lr5e-06-evcontradiction": {
+   "ex": "01M652HV5D6D6SPBG6GMZRAAQS",
+   "state": "R",
+   "train_run": "f8k-mt4-dense-f488-q3-lr5e-06",
+   "task": "contradiction"
+  },
+  "f8k-mt4-dense-f488-q3-lr5e-06-evnq": {
+   "ex": "01M652JN7XFC1GYZ2PN9YFK3H2",
+   "state": "DONE",
+   "train_run": "f8k-mt4-dense-f488-q3-lr5e-06",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-dense-f488-q3-lr5e-06-evoutlier": {
+   "ex": "01M652KZ66NGQTSP3HGWW7JHCM",
+   "state": "DONE",
+   "train_run": "f8k-mt4-dense-f488-q3-lr5e-06",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-dense-f488-q3-lr5e-06-evoolong": {
+   "ex": "01M652MRJ2ZN254YGKENXVX0NY",
+   "state": "DONE",
+   "train_run": "f8k-mt4-dense-f488-q3-lr5e-06",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05-evcontradiction": {
+   "ex": "01M652NV1H8ZP4DPBJD5HV9D5T",
+   "state": "R",
+   "train_run": "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05-evnq": {
+   "ex": "01M652PN4VWAMQ6YRZJXV7TG9X",
+   "state": "DONE",
+   "train_run": "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05-evoutlier": {
+   "ex": "01M652QF3H8N93JK25KDF5B15J",
+   "state": "DONE",
+   "train_run": "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05",
+   "task": "outlier",
+   "rc": 0
+  },
+  "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05-evoolong": {
+   "ex": "01M652R9PCDKQ0G8BHGKFSA5DJ",
+   "state": "DONE",
+   "train_run": "f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05-evcontradiction": {
+   "ex": "01M65375YA3P9RPA7T73A499G1",
+   "state": "R",
+   "train_run": "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05-evnq": {
+   "ex": "01M6537YWVYNT1X9FYKMA4QQDT",
+   "state": "DONE",
+   "train_run": "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05",
+   "task": "nq",
+   "rc": 0
+  },
+  "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05-evoutlier": {
+   "ex": "01M6538QS81WSK0EK7KV4R0S8K",
+   "state": "R",
+   "train_run": "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05-evoolong": {
+   "ex": "01M6539HWKE2Y2ZHT1N3PH32N0",
+   "state": "DONE",
+   "train_run": "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-dense-f976-q3-lr5e-06-evcontradiction": {
+   "ex": "01M65440G8B60BCTQT06JNZ0NB",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f976-q3-lr5e-06",
+   "task": "contradiction"
+  },
+  "f8k-mt4-dense-f976-q3-lr5e-06-evnq": {
+   "ex": "01M6544TACQW1SDE9R6W8N2NHX",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f976-q3-lr5e-06",
+   "task": "nq"
+  },
+  "f8k-mt4-dense-f976-q3-lr5e-06-evoutlier": {
+   "ex": "01M6545NGSG33W034Q08KGCCKS",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f976-q3-lr5e-06",
+   "task": "outlier"
+  },
+  "f8k-mt4-dense-f976-q3-lr5e-06-evoolong": {
+   "ex": "01M6546KAAS2846MJBAXMC2QTH",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f976-q3-lr5e-06",
+   "task": "oolong"
+  }
+ },
  "parity": {}
 }
