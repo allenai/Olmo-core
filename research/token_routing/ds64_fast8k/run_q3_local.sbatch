@@ -17,6 +17,10 @@ set -uo pipefail
 ROOT=/data/prasann/q3recipe
 CODE="${CODE:?set CODE=/data/prasann/q3recipe/code_<sha> (staged with git archive | srun tar -x)}"
 ARM="${ARM:?}"; BUDGET="${BUDGET:?}"; LR="${LR:?}"; SEED="${SEED:-0}"
+# Q3_SIZE (size ablation): 4b = the original study (base staged at $ROOT/base, run names -q3-); other sizes read
+# $ROOT/bases/qwen3-<size>-base-trainedmark and tag run names -q3<size without dot>- (e.g. -q317b-)
+Q3_SIZE="${Q3_SIZE:-4b}"
+if [ "$Q3_SIZE" = 4b ]; then BASE_DIR=$ROOT/base; SFX=-q3; else BASE_DIR=$ROOT/bases/qwen3-$Q3_SIZE-base-trainedmark; SFX=-q3${Q3_SIZE//./}; fi
 ENV=/data/prasann/conda/envs/corpus-reasoning-olmo
 export PATH="$ENV/bin:$PATH" PYTHONPATH="$CODE/src:$CODE/ctc/src" PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=ignore PYTHONUNBUFFERED=1
 export HOME=$ROOT/home TMPDIR=$ROOT/tmp TRITON_CACHE_DIR=$ROOT/triton_cache HF_HOME=$ROOT/hf_home
@@ -28,7 +32,7 @@ fi
 NGPU=${SLURM_GPUS_ON_NODE:-2}
 cd "$CODE"
 # launch_fast8k's own arm -> (variant, data, args, extra) mapping, paths rewritten to the node-local copies
-mapfile -t ARGS < <(F8K_FAMILY=qwen3 F8K_SUFFIX=-q3 F8K_NGPU=$NGPU python - "$ARM" "$BUDGET" "$LR" "$SEED" <<'PY'
+mapfile -t ARGS < <(F8K_FAMILY=qwen3 F8K_SUFFIX=$SFX F2K_SCALE=$Q3_SIZE F8K_NGPU=$NGPU BASE_DIR=$BASE_DIR python - "$ARM" "$BUDGET" "$LR" "$SEED" <<'PY'
 import os, shlex, sys
 arm, budget, lr, seed = sys.argv[1], sys.argv[2], float(sys.argv[3]), int(sys.argv[4])
 sys.path.insert(0, "research/token_routing/ds64_fast8k")
@@ -39,7 +43,7 @@ label = f"{arm}sd{seed}" if seed else arm
 name = L.run_name("mt4", label, budget) + "-sn"  # -sn: Berkeley-slurm copy, never collides with the Beaker run
 root = "/data/prasann/q3recipe"
 data = f"{root}/{os.path.basename(data)}"
-largs = [f"{root}/base/model_and_optim" if a == L.BASE else a for a in largs]
+largs = [f"{os.environ['BASE_DIR']}/model_and_optim" if a == L.BASE else a for a in largs]
 cmd = ["--task", "mt4", "--variant", variant, "--model-family", "qwen3", "--model-scale", L.SCALE, "--data", data,
        "--run-name", name, "--wandb-group", L.WANDB_GROUP, "--save-folder", f"{root}/ckpts/{name}",
        "--work-dir", f"{root}/work-{name}", "--epochs", str(L.budget_epochs(budget)), "--lr", str(lr),
@@ -53,7 +57,7 @@ RUN=${ARGS[0]}; ARGS=("${ARGS[@]:1}")
 [ -n "$RUN" ] || { echo "FATAL: arg build failed"; exit 2; }
 echo "=== q3recipe host=$(hostname) RUN=$RUN NGPU=$NGPU CODE=$CODE $(date '+%F %T') ==="
 echo "    train_ctc_suite.py ${ARGS[*]}"
-[ -f $ROOT/base/model_and_optim/.metadata ] || { echo "FATAL: base not staged"; exit 3; }
+[ -f $BASE_DIR/model_and_optim/.metadata ] || { echo "FATAL: base not staged at $BASE_DIR"; exit 3; }
 # a Beaker twin of this run started first: touch $ROOT/skip/<run> and the chain moves on
 [ -f $ROOT/skip/$RUN ] && { echo "=== SKIP $RUN (Beaker twin) ==="; exit 0; }
 # trained = the end-of-fit flops.json + a complete model export (config.json alone is written at the START of fit, so

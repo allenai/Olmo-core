@@ -339,6 +339,11 @@ ARM_EXTRA.update({
                                   f"--st-otr-stages {a}:0.2,18:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
                                   "--st-otr-early-lora-blocks 36")
        for a in (4, 8, 12)},
+    # Qwen3-0.6B / 1.7B (28 blocks): the 4B winner 12/24 of 36 scaled by depth -> 9/19 of 28, LoRA on all 28 blocks
+    "q3lora64all28r20at9s19": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                               "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 9 "
+                               "--st-otr-stages 9:0.2,19:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                               "--st-otr-early-lora-blocks 28"),
     # deeper split pairs (q3lora64all36r20at<a>s<b>: 20% from block a, 7% from block b); at12 beat at8/at4 on f1952
     **{f"q3lora64all36r20at{a}s{b}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                                       f"--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer {a} "

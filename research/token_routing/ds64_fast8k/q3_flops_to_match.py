@@ -31,7 +31,8 @@ EVHDR = re.compile(r"^=== EVAL (f8k-\S+) [a-z]+ ")  # a log's pending_evals sect
 LAD = re.compile(r"\[ladder:([a-z_]+)@(\d+k)\] ([a-z0-9_]+)=(-?[0-9.]+) \(n=(\d+)")
 STEP = re.compile(r"^(\S+ \S+)\s.*\[step=(\d+)/(\d+)")
 MEM = re.compile(r"gpu_memory/GPU (active|reserved) mem \(GiB\)=([0-9.]+)")
-NAME = re.compile(r"f8k-mt4-(.+)-f(\d+)(?:st(\d+))?-q3-lr([0-9.e-]+)(?:-sn)?$")
+NAME = re.compile(r"f8k-mt4-(.+)-f(\d+)(?:st(\d+))?-q3(\d*b)?-lr([0-9.e-]+)(?:-sn)?$")  # -q3- = 4B; -q317b- = 1.7B
+SIZE_OF = {None: "4b", "06b": "0.6b", "17b": "1.7b", "8b": "8b"}
 OPS = "/accounts/projects/berkeleynlp/prasann/bin/ops"
 BEAKER = os.path.expanduser("~/.local/bin/beaker")
 STATE = f"{HERE}/state_q3.json"
@@ -93,10 +94,11 @@ def collect(include_beaker=True):
         runs.update(beaker_runs(ops_results()))
     out = {}
     for run, r in runs.items():
-        arm, rows, cut, lr = NAME.match(run).groups()
+        arm, rows, cut, sz, lr = NAME.match(run).groups()
         cells = {f"{t}@{g}": r["scores"].get((t, g)) for t in TASKS for g in ("8k", "2k")}
         ok = all(cells.values()) and all(v[1] >= 500 for v in cells.values())
-        out[run] = dict(arm=arm, rows=int(rows), cut=int(cut or 0), lr=lr, pf=r.get("pf"), cluster=r.get("cluster", "sneetches"),
+        out[run] = dict(arm=arm, size=SIZE_OF.get(sz, sz), rows=int(rows), cut=int(cut or 0), lr=lr, pf=r.get("pf"),
+                        cluster=r.get("cluster", "sneetches"),
                         pf_dense_equiv=r.get("pf_dense_equiv"), steps=r["steps"], s_per_step=r.get("s_per_step"),
                         peak_active_gib=r["mem"].get("active"), peak_reserved_gib=r["mem"].get("reserved"),
                         cells={k: (v[0] if v else None) for k, v in cells.items()},
@@ -255,32 +257,37 @@ def main():
     if a.record:
         record_local(f"{HERE}/results_q3/local_rows.jsonl")
     runs = collect()
-    by = defaultdict(list)  # dense (rows, lr) -> scores
-    for r in runs.values():
-        if r["arm"] == "dense" and r["y"] is not None and not r["cut"]:
-            by[(r["rows"], r["lr"])].append((r["pf"], r["y"]))
-    best = {}
-    for (rows, lr), v in by.items():
-        pf, y = sum(p for p, _ in v) / len(v), sum(y for _, y in v) / len(v)
-        if rows not in best or y > best[rows][1]:
-            best[rows] = (pf, y, lr)
-    curve = dense_curve([(pf, y) for pf, y, _ in best.values()]) if len(best) >= 2 else None
-    cells = {}
-    for run, r in sorted(runs.items()):
-        if r["y"] is None or r["pf"] is None or r["cut"]:
-            continue
-        cells[run] = {k: r[k] for k in ("arm", "rows", "lr", "cluster", "pf", "y", "steps", "s_per_step", "peak_active_gib",
-                                        "peak_reserved_gib")}
-        cells[run]["pf_per_step"] = round(r["pf"] / r["steps"], 3) if r["steps"] else None
-        if curve:
-            cells[run].update(match(curve, r["pf"], r["y"]))
-    res = {"q3": {"dense_curve": curve, "dense_best_lr": {str(k): v for k, v in sorted(best.items())}, "cells": cells},
-           "q35": q35_reference(), "runs": runs}
+    res = {"sizes": {}, "q35": q35_reference(), "runs": runs}
+    for size in sorted({r["size"] for r in runs.values()}):
+        by = defaultdict(list)  # dense (rows, lr) -> scores
+        for r in runs.values():
+            if r["size"] == size and r["arm"] == "dense" and r["y"] is not None and not r["cut"]:
+                by[(r["rows"], r["lr"])].append((r["pf"], r["y"]))
+        best = {}
+        for (rows, lr), v in by.items():
+            pf, y = sum(p for p, _ in v) / len(v), sum(y for _, y in v) / len(v)
+            if rows not in best or y > best[rows][1]:
+                best[rows] = (pf, y, lr)
+        curve = dense_curve([(pf, y) for pf, y, _ in best.values()]) if len(best) >= 2 else None
+        cells = {}
+        for run, r in sorted(runs.items()):
+            if r["size"] != size or r["y"] is None or r["pf"] is None or r["cut"]:
+                continue
+            cells[run] = {k: r[k] for k in ("arm", "size", "rows", "lr", "cluster", "pf", "y", "steps", "s_per_step",
+                                            "peak_active_gib", "peak_reserved_gib")}
+            cells[run].update({k: r["cells"][k] for k in ("outlier@8k", "contradiction@8k")})
+            cells[run]["pf_per_step"] = round(r["pf"] / r["steps"], 3) if r["steps"] else None
+            if curve:
+                cells[run].update(match(curve, r["pf"], r["y"]))
+        res["sizes"][size] = {"dense_curve": curve, "dense_best_lr": {str(k): v for k, v in sorted(best.items())},
+                              "cells": cells}
+        print(f"Qwen3-{size} dense curve (rows/task: PF, y, lr):",
+              {k: (round(v[0]), v[1], v[2]) for k, v in sorted(best.items())})
+        for run, c in cells.items():
+            print(f"  {run:60s} PF {c['pf']:8.1f} y {c['y']:.4f} x dense {c.get('flag', '')}{c.get('x_dense')} "
+                  f"vs {c.get('vs_dense')} PF/step {c['pf_per_step']} peak act {c['peak_active_gib']} GiB")
+    res["q3"] = res["sizes"].get("4b")  # back-compat with the 4B-only layout
     json.dump(res, open(a.out, "w"), indent=1)
-    print("Qwen3-4B dense curve (rows/task: PF, y, lr):", {k: (round(v[0]), v[1], v[2]) for k, v in sorted(best.items())})
-    for run, c in cells.items():
-        print(f"  {run:60s} PF {c['pf']:8.1f} y {c['y']:.4f} x dense {c.get('flag', '')}{c.get('x_dense')} "
-              f"vs {c.get('vs_dense')} PF/step {c['pf_per_step']} peak act {c['peak_active_gib']} GiB")
     print("Qwen3.5-4B (recomputed):")
     for k, c in res["q35"]["cells"].items():
         print(f"  {k:16s} PF {c['pf']:8.1f} y {c['y']:.4f} x dense {c['flag']}{c['x_dense']} (record {c['stored_x']})")

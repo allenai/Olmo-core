@@ -48,7 +48,7 @@ SCALE = os.environ.get("F2K_SCALE", "4b")
 # the SAME repaired base the ds64 arms use -- never a fresh Qwen3.5 (marker rows are untrained,
 # see CLAUDE.md "REPAIR THE BASE CHECKPOINT FIRST")
 BASE = {"4b": f"{W}/ctc_suite/bases/q35-4b-base-markerfix/model_and_optim",
-        "27b": f"{W}/ctc_suite/bases/q35-27b-base-markerfix/model_and_optim"}[SCALE]
+        "27b": f"{W}/ctc_suite/bases/q35-27b-base-markerfix/model_and_optim"}.get(SCALE, "")  # other scales: set by the caller (fast8k F8K_FAMILY=qwen3)
 SHARDS = f"{W}/ds64/fast2k/shards"
 CKPTS = f"{W}/ctc_suite/ckpts"
 LEDGER = f"{REPO}/research/token_routing/ds64_fast2k/LAUNCH_LEDGER.tsv"
