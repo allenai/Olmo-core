@@ -27,7 +27,7 @@
    "budget": "f7808",
    "steps_expected": 1952,
    "gpus": 2,
-   "state": "S"
+   "state": "R"
   },
   "f8k-mt4-dense-f3904-q3-lr5e-06": {
    "ex": "01M64XNAQ5ZWD9P261XYH9KC8T",
@@ -346,7 +346,8 @@
    "budget": "f976",
    "steps_expected": 244,
    "gpus": 4,
-   "state": "S"
+   "state": "FAILED",
+   "rc": null
   },
   "f8k-mt4-dense-f3904-q38b-lr1e-05": {
    "ex": "01M673QPS223DR2DSB4HM641HW",
@@ -355,7 +356,7 @@
    "budget": "f3904",
    "steps_expected": 976,
    "gpus": 4,
-   "state": "S"
+   "state": "R"
   }
  },
  "evals": {
@@ -1006,27 +1007,29 @@
   },
   "f8k-mt4-dense-f3904-q38b-lr5e-06-evcontradiction": {
    "ex": "01M673PW7RBTN1Q8R34WZ4JCT0",
-   "state": "S",
+   "state": "R",
    "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
    "task": "contradiction"
   },
   "f8k-mt4-dense-f3904-q38b-lr5e-06-evnq": {
    "ex": "01M673QQN4SD4661H3BZ09TTTC",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
-   "task": "nq"
+   "task": "nq",
+   "rc": 0
   },
   "f8k-mt4-dense-f3904-q38b-lr5e-06-evoutlier": {
    "ex": "01M673S2DANAHHB9KPXBJTFQFS",
-   "state": "S",
+   "state": "R",
    "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
    "task": "outlier"
   },
   "f8k-mt4-dense-f3904-q38b-lr5e-06-evoolong": {
    "ex": "01M673TD7E9XD3299B49GJCKH4",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
-   "task": "oolong"
+   "task": "oolong",
+   "rc": 0
   }
  },
  "parity": {}
