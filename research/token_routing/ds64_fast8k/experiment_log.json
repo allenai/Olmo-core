@@ -57,9 +57,8 @@
   "title": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds",
   "result": "Preliminary (existing probe, per row, up to 366 steps): signal sharpens by ≈31–61 steps then spreads out; at 366 steps block 16 needs 15% of tokens for 95% (recipe keeps 7%). Full whole-update analysis on fresh checkpoints to 1,952 steps running.",
   "match": [
-   "gconc",
-   "grad-conc",
-   "gcon"
+   "gc-",
+   "gconc"
   ]
  },
  {
@@ -121,11 +120,12 @@
   "title": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models",
   "result": "Interim: at fixed small data the gain grows with scale: FLOPs-to-match ≈1.7× (0.8B) → ≈2.5× (2B) → ≈3.7–4.1× (4B) at 1,952 / 3,904 rows, same per-step cut (0.23–0.25×). Small models' lower dense ceiling flips it at large data (0.8B recipe passes dense's 0.743 plateau at 7,808 rows: >4.2×). Recipe noisier at 0.8B (±0.03). 9B and 2B 7,808-row points in flight.",
   "match": [
+   "-2b-",
+   "08b",
+   "sca-",
    "tds08b",
    "tds2b",
-   "sca-",
-   "08b",
-   "-2b-"
+   "tds9b"
   ]
  },
  {

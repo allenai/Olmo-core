@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-10-30T08:35:43+00:00",
+ "generated_at": "2026-10-30T09:35:43+00:00",
  "jobs": [
   {
    "name": "f8k-mt4-dense-f3904-q38b-lr5e-06-9f3a8165",
@@ -7,7 +7,7 @@
    "node": "CK6PFP",
    "state": "RUNNING",
    "gpus": 4,
-   "elapsed_min": 6,
+   "elapsed_min": 65,
    "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
@@ -16,7 +16,7 @@
    "node": "KVCFYZ",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 6,
+   "elapsed_min": 65,
    "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
   },
   {
@@ -25,7 +25,7 @@
    "node": "QCD6TJ",
    "state": "RUNNING",
    "gpus": 4,
-   "elapsed_min": 6,
+   "elapsed_min": 65,
    "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
@@ -34,161 +34,8 @@
    "node": "2NW3Z8",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 5,
+   "elapsed_min": 65,
    "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "f8k-mt4-dense-f488-q38b-lr5e-06-f271260c",
-   "cluster": "Beaker (jupiter)",
-   "node": "M0CM0X",
-   "state": "RUNNING",
-   "gpus": 4,
-   "elapsed_min": 5,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "sbwfid-base-sketch-80ed3c70",
-   "cluster": "Beaker (jupiter)",
-   "node": "CXK5Q0",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "dfce-dense-f7808-tde-lr5e-06-13f79a81",
-   "cluster": "Beaker (jupiter)",
-   "node": "2PPNRS",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": null
-  },
-  {
-   "name": "dfce-lora64all32r20to7-f3904-tde-lr1e-05-68759034",
-   "cluster": "Beaker (jupiter)",
-   "node": "CXK5Q0",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": null
-  },
-  {
-   "name": "dfce-lora64all32r20to7-f1952-tde-lr1e-05-9acd745c",
-   "cluster": "Beaker (jupiter)",
-   "node": "CXK5Q0",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": null
-  },
-  {
-   "name": "sbwfid-base-rows-96524df9",
-   "cluster": "Beaker (jupiter)",
-   "node": "CXK5Q0",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "dfce-lora64all32r20to7-f7808-tde-lr1e-05-5b129bb6",
-   "cluster": "Beaker (jupiter)",
-   "node": "CXK5Q0",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": null
-  },
-  {
-   "name": "sbwfid-end-rows-e816f648",
-   "cluster": "Beaker (jupiter)",
-   "node": "QE1YS2",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "sbwfid-mid-rows-76151845",
-   "cluster": "Beaker (jupiter)",
-   "node": "QE1YS2",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "f8k-mt4-q3lora64all28r20at9s19-f3904-q306b-lr1e-05-f27f2e2e",
-   "cluster": "Beaker (jupiter)",
-   "node": "CXK5Q0",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "dfce-dense-f5856-tde-lr5e-06-8d84b7b0",
-   "cluster": "Beaker (jupiter)",
-   "node": "KM2BZA",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": null
-  },
-  {
-   "name": "f8k-mt4-dense-f488-q306b-lr5e-06-1a52e558",
-   "cluster": "Beaker (jupiter)",
-   "node": "RC2S9P",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7slsbe95asd1-f1952-sbw-lr1e-05-c05dc654",
-   "cluster": "Beaker (jupiter)",
-   "node": "CAMZWT",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "sbwfid-end-sketch-c461da87",
-   "cluster": "Beaker (jupiter)",
-   "node": "QE1YS2",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7slsd1-f1952-sbw-lr1e-05-a71465e0",
-   "cluster": "Beaker (jupiter)",
-   "node": "CAMZWT",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "f8k-mt4-smk-f3904-tdf-lr1e-05-smoke12-1e270d05",
-   "cluster": "Beaker (jupiter)",
-   "node": "QE1YS2",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": null
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7slsbt20e7-f1952-sbw-lr1e-05-0700e3c3",
-   "cluster": "Beaker (jupiter)",
-   "node": "CAMZWT",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
   },
   {
    "name": "f8k-mt4-lora64all32r20to7-f7808-tdf-sd1-lr1e-05-09bd790e",
@@ -196,17 +43,8 @@
    "node": "KM2BZA",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 5,
+   "elapsed_min": 64,
    "entry": null
-  },
-  {
-   "name": "sbwfid-mid-sketch-ba6acefb",
-   "cluster": "Beaker (jupiter)",
-   "node": "QE1YS2",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
   },
   {
    "name": "f8k-mt4-lora64all32r20to7rl25-f3904-tdf-lr1e-05-c380114d",
@@ -214,26 +52,8 @@
    "node": "THB1CG",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 5,
+   "elapsed_min": 64,
    "entry": null
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7slsbt20-f3904-sbw-lr1e-05-56cfd4db",
-   "cluster": "Beaker (jupiter)",
-   "node": "KM2BZA",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7slsbe95a-f1952-sbw-lr1e-05-1eacebe6",
-   "cluster": "Beaker (jupiter)",
-   "node": "2628X7",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
   },
   {
    "name": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-lr1e-05-9d6b1d8a",
@@ -241,26 +61,8 @@
    "node": "0H60HD",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 5,
+   "elapsed_min": 64,
    "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7slsbt20-f1952-sbw-lr1e-05-44f7ea76",
-   "cluster": "Beaker (jupiter)",
-   "node": "KM2BZA",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "f8k-mt4-dense-f1952-q306b-lr1e-05-eb0fe551-9364",
-   "cluster": "Beaker (jupiter)",
-   "node": "2PPNRS",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
    "name": "f8k-mt4-lora64all32r20to7rl25-f7808-tdf-lr1e-05-1c32c507",
@@ -268,7 +70,7 @@
    "node": "0H60HD",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 5,
+   "elapsed_min": 64,
    "entry": null
   },
   {
@@ -277,26 +79,8 @@
    "node": "0H60HD",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 5,
+   "elapsed_min": 64,
    "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7slsbt20sd1-f1952-sbw-lr1e-05-e5aeb3ee",
-   "cluster": "Beaker (jupiter)",
-   "node": "2628X7",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "f8k-mt4-q3lora64all36r20at12s24-f1952-q38b-lr1e-05-ca38d55e",
-   "cluster": "Beaker (jupiter)",
-   "node": "RC2S9P",
-   "state": "RUNNING",
-   "gpus": 4,
-   "elapsed_min": 5,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
    "name": "f8k-mt4-lora64all32r20to7slsbe95a-f3904-sbw-lr1e-05-c741dd95",
@@ -304,98 +88,8 @@
    "node": "2628X7",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 5,
+   "elapsed_min": 64,
    "entry": "Backward compression with exact forward: token-sparse and sketched backward"
-  },
-  {
-   "name": "f8k-mt4-q3lora64all28r20at9s19-f1952-q306b-lr1e-05-f8429f7d",
-   "cluster": "Beaker (jupiter)",
-   "node": "2PPNRS",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "f8k-mt4-dense-f1464-q306b-lr5e-06-96d1f425",
-   "cluster": "Beaker (jupiter)",
-   "node": "2PPNRS",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 5,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "f8k-mt4-dense-f7808-tds9b-lr5e-06-aba89b0f",
-   "cluster": "Beaker (jupiter)",
-   "node": "GFHB0B",
-   "state": "RUNNING",
-   "gpus": 4,
-   "elapsed_min": 4,
-   "entry": null
-  },
-  {
-   "name": "f8k-mt4-dense-f976-q38b-lr5e-06-2ae4b17f",
-   "cluster": "Beaker (jupiter)",
-   "node": "GFHB0B",
-   "state": "RUNNING",
-   "gpus": 4,
-   "elapsed_min": 4,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "f8k-mt4-dense-f1464-q317b-lr5e-06-a4e3ae42",
-   "cluster": "Beaker (jupiter)",
-   "node": "ZBKTQ4",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 3,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "f8k-mt4-dense-f1952-q306b-lr5e-06-fa3ca38d",
-   "cluster": "Beaker (jupiter)",
-   "node": "ZBKTQ4",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 3,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "dfce-dense-f1952-tde-lr5e-06-961f23a7",
-   "cluster": "Beaker (jupiter)",
-   "node": "ZBKTQ4",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 3,
-   "entry": null
-  },
-  {
-   "name": "dfce-dense-f3904-tde-lr5e-06-6c8e251f",
-   "cluster": "Beaker (jupiter)",
-   "node": "GHN9X4",
-   "state": "RUNNING",
-   "gpus": 1,
-   "elapsed_min": 2,
-   "entry": null
-  },
-  {
-   "name": "f8k-mt4-dense-f976-q306b-lr5e-06-64153e06",
-   "cluster": "Beaker (jupiter)",
-   "node": "HTDDC1",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 2,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "f8k-mt4-dense-f3904-tds9b-lr5e-06-922c3b8a",
-   "cluster": "Beaker (jupiter)",
-   "node": "H4QNKS",
-   "state": "RUNNING",
-   "gpus": 4,
-   "elapsed_min": 1,
-   "entry": null
   },
   {
    "name": "f8k-mt4-dense-f3904-q306b-lr5e-06-019fdb0f",
@@ -403,35 +97,305 @@
    "node": "W4RCSR",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 1,
+   "elapsed_min": 60,
    "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
-   "name": "f8k-mt4-q3lora64all36r20at12s24-f3904-q38b-lr1e-05-111afc1d",
+   "name": "ev-outlier-f8k-mt4-dense-f488-q306b-lr5e-06-evoutlier-eec10cfd",
    "cluster": "Beaker (jupiter)",
-   "node": "W4RCSR",
+   "node": "GHN9X4",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 51,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-dense-f488-q306b-lr5e-06-evoolong-7f1b29ba",
+   "cluster": "Beaker (jupiter)",
+   "node": "HJRJ8C",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 50,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "f8k-mt4-lora64all32rnd20to7mv2-f1952-tdmv-lr1e-05-2852301a",
+   "cluster": "Beaker (jupiter)",
+   "node": "GHN9X4",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 39,
+   "entry": "Multiple views per row from cached block-7 states"
+  },
+  {
+   "name": "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05-676ef8f8",
+   "cluster": "Beaker (jupiter)",
+   "node": "92Y4CH",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 38,
+   "entry": "Multiple views per row from cached block-7 states"
+  },
+  {
+   "name": "f8k-mt4-lora64all32rnd20to7mv2-f3904-tdmv-lr1e-05-9d34d169",
+   "cluster": "Beaker (jupiter)",
+   "node": "VPRAE5",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 38,
+   "entry": "Multiple views per row from cached block-7 states"
+  },
+  {
+   "name": "f8k-mt4-lora64all32rnd20to7mv3-f3904-tdmv-lr1e-05-735e8f4f",
+   "cluster": "Beaker (jupiter)",
+   "node": "VPRAE5",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 37,
+   "entry": "Multiple views per row from cached block-7 states"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-dense-f488-q38b-lr5e-06-evoolong-5005c01d",
+   "cluster": "Beaker (jupiter)",
+   "node": "KVCFYZ",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 36,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-q3lora64all36r20at12s24-f1952-q38b-lr1e-05-evcontradiction-c3e650ec",
+   "cluster": "Beaker (jupiter)",
+   "node": "B7ZM8J",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 21,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbe95a-f1952-sbw-lr1e-05-evcontradiction-a0cde4de",
+   "cluster": "Beaker (jupiter)",
+   "node": "QCD6TJ",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 7,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbe95a-f1952-sbw-lr1e-05-evnq-379bdc83",
+   "cluster": "Beaker (jupiter)",
+   "node": "7W22V6",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 3,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-dense-f1464-q317b-lr5e-06-evcontradiction-90c526cc",
+   "cluster": "Beaker (jupiter)",
+   "node": "0MAVD7",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-dense-f1952-q306b-lr5e-06-evoolong-42708297",
+   "cluster": "Beaker (jupiter)",
+   "node": "VPRAE5",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-dense-f1464-q317b-lr5e-06-evnq-6deebfbd",
+   "cluster": "Beaker (jupiter)",
+   "node": "TYMFDX",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-dense-f1952-q306b-lr5e-06-evoutlier-a80b88a5",
+   "cluster": "Beaker (jupiter)",
+   "node": "CK6PFP",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbe95asd1-f1952-sbw-lr1e-05-evnq-1ebe58c9",
+   "cluster": "Beaker (jupiter)",
+   "node": "0MAVD7",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbe95asd1-f1952-sbw-lr1e-05-evcontradiction-7e6b02ad",
+   "cluster": "Beaker (jupiter)",
+   "node": "QCD6TJ",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbt20-f1952-sbw-lr1e-05-evcontradiction-75927d32",
+   "cluster": "Beaker (jupiter)",
+   "node": "TYMFDX",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-dense-f1464-q317b-lr5e-06-evoutlier-66044811",
+   "cluster": "Beaker (jupiter)",
+   "node": "TYMFDX",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-dense-f1464-q306b-lr5e-06-evnq-66d156ca",
+   "cluster": "Beaker (jupiter)",
+   "node": "RC2S9P",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32r20to7slsbt20-f1952-sbw-lr1e-05-evoutlier-71542a9e",
+   "cluster": "Beaker (jupiter)",
+   "node": "RC2S9P",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbt20-f1952-sbw-lr1e-05-evnq-9aaa0f41",
+   "cluster": "Beaker (jupiter)",
+   "node": "RC2S9P",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbt20e7-f1952-sbw-lr1e-05-evnq-1b19bcbb",
+   "cluster": "Beaker (jupiter)",
+   "node": "RTM0VQ",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsbe95asd1-f1952-sbw-lr1e-05-evoolong-b8a1a493",
+   "cluster": "Beaker (jupiter)",
+   "node": "TYMFDX",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-dense-f1464-q306b-lr5e-06-evoolong-7314767a",
+   "cluster": "Beaker (jupiter)",
+   "node": "RTM0VQ",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-dense-f1464-q306b-lr5e-06-evoutlier-dc18f455",
+   "cluster": "Beaker (jupiter)",
+   "node": "RTM0VQ",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbt20e7-f1952-sbw-lr1e-05-evcontradiction-d576a530",
+   "cluster": "Beaker (jupiter)",
+   "node": "RTM0VQ",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32r20to7slsbe95asd1-f1952-sbw-lr1e-05-evoutlier-41b63f9b",
+   "cluster": "Beaker (jupiter)",
+   "node": "0MAVD7",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-dense-f1464-q317b-lr5e-06-evoolong-ef79ed97",
+   "cluster": "Beaker (jupiter)",
+   "node": "RC2S9P",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-dense-f1952-q306b-lr1e-05-evcontradiction-9de23c94",
+   "cluster": "Beaker (jupiter)",
+   "node": "SMNYVY",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32r20to7slsbt20e7-f1952-sbw-lr1e-05-evoutlier-902c38d3",
+   "cluster": "Beaker (jupiter)",
+   "node": "SMNYVY",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsbt20-f1952-sbw-lr1e-05-evoolong-553eb51b",
+   "cluster": "Beaker (jupiter)",
+   "node": "SMNYVY",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsbe95a-f1952-sbw-lr1e-05-evoolong-5a7e4457",
+   "cluster": "Beaker (jupiter)",
+   "node": "PRY0PE",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "f8k-mt4-dense-f7808-tds9b-lr5e-06-aba89b0f",
+   "cluster": "Beaker (jupiter)",
+   "node": "6AN55R",
    "state": "RUNNING",
    "gpus": 4,
    "elapsed_min": 1,
-   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
-  },
-  {
-   "name": "q3chainG",
-   "cluster": "jsteinhardt / berkeleynlp slurm",
-   "node": "sneetches",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 78,
-   "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
-  },
-  {
-   "name": "q3chainH",
-   "cluster": "jsteinhardt / berkeleynlp slurm",
-   "node": "sneetches",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 78,
-   "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
+   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   },
   {
    "name": "gc-f1952",
@@ -439,8 +403,8 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
    "name": "gc-f3904",
@@ -448,8 +412,8 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
    "name": "gc-f5856",
@@ -457,8 +421,8 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
    "name": "gc-f7808",
@@ -466,8 +430,8 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
    "name": "gc-base",
@@ -475,8 +439,8 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
    "name": "gc-s-st31",
@@ -484,8 +448,8 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
    "name": "gc-s488",
@@ -493,8 +457,8 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
    "name": "gc-s1464",
@@ -502,44 +466,287 @@
    "node": "balrog",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 50,
-   "entry": null
+   "elapsed_min": 110,
+   "entry": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds"
   },
   {
-   "name": "f8k-mt4-dense-f1952st122-tds9b-lr5e-06",
+   "name": "f8k-mt4-dense-f3904-tds9b-lr5e-06",
    "cluster": "jsteinhardt / berkeleynlp slurm",
    "node": "sneetches",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 30,
-   "entry": null
+   "elapsed_min": 38,
+   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   },
   {
-   "name": "f8k-mt4-dense-f1952st244-tds9b-lr5e-06",
+   "name": "f8k-mt4-lora64all32r20to7sd1-f1952-tds9b-lr1e-05",
    "cluster": "jsteinhardt / berkeleynlp slurm",
    "node": "sneetches",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 30,
-   "entry": null
+   "elapsed_min": 9,
+   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   },
   {
-   "name": "q3chainI",
-   "cluster": "jsteinhardt / berkeleynlp slurm",
+   "name": "ev-nq-f8k-mt4-dense-f1952-q306b-lr1e-05-evnq-00307fe7",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 13,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsbt20e7-f1952-sbw-lr1e-05-evoolong-bd15785f",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 13,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-dense-f1952-q306b-lr1e-05-evoutlier-37511269",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 12,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbt20sd1-f1952-sbw-lr1e-05-evcontradiction-9b389be7",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 12,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-dense-f1952-q306b-lr1e-05-evoolong-1d070940",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 12,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbt20sd1-f1952-sbw-lr1e-05-evnq-da440e8b",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 12,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-q3lora64all28r20at9s19-f3904-q306b-lr1e-05-evcontradiction-46c92a78",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 11,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32r20to7slsbt20sd1-f1952-sbw-lr1e-05-evoutlier-eb8a540e",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 11,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-q3lora64all28r20at9s19-f3904-q306b-lr1e-05-evnq-c633d792",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 11,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsbt20sd1-f1952-sbw-lr1e-05-evoolong-cbde8863",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 11,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsd1-f1952-sbw-lr1e-05-evcontradiction-90f1fdde",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 10,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-q3lora64all28r20at9s19-f3904-q306b-lr1e-05-evoutlier-b6bea198-a4b6",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 10,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsd1-f1952-sbw-lr1e-05-evnq-b16a9a08",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 10,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-q3lora64all28r20at9s19-f3904-q306b-lr1e-05-evoolong-4c572152",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 10,
+   "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32r20to7slsd1-f1952-sbw-lr1e-05-evoutlier-9affb224",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 9,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsd1-f1952-sbw-lr1e-05-evoolong-f8ba0470",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 9,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "f8k-mt4-lora64all32r20to7slsbt20de2-f1952-sbw-lr1e-05-f262bcb7",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 2,
+   "elapsed_min": 7,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "f8k-mt4-lora64all32r20to7slsbt20de4-f1952-sbw-lr1e-05-44870132",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 2,
+   "elapsed_min": 6,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbt20-f3904-sbw-lr1e-05-evcontradiction-9072ed72",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 5,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbt20-f3904-sbw-lr1e-05-evnq-f004e065",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 4,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32r20to7slsbt20-f3904-sbw-lr1e-05-evoutlier-218e5a29",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 3,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsbt20-f3904-sbw-lr1e-05-evoolong-8fa4f976",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 3,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbt40-f1952-sbw-lr1e-05-evcontradiction-7a130dfe",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbt40-f1952-sbw-lr1e-05-evnq-2a43c3b2",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 2,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32r20to7slsbt40-f1952-sbw-lr1e-05-evoutlier-790e83d4",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 1,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32r20to7slsbt40-f1952-sbw-lr1e-05-evoolong-62e67020",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 1,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7slsbe99-f1952-sbw-lr1e-05-evcontradiction-ed2c6c34",
+   "cluster": "Beaker (jupiter)",
+   "node": null,
+   "state": "PENDING",
+   "gpus": 1,
+   "elapsed_min": 1,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
+  },
+  {
+   "name": "f8k-mt4-dense-f3904-tds9b-lr5e-06-922c3b8a",
+   "cluster": "Beaker (jupiter)",
    "node": null,
    "state": "PENDING",
    "gpus": 4,
-   "elapsed_min": 80,
-   "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
+   "elapsed_min": 0,
+   "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   },
   {
-   "name": "q3chainJ",
-   "cluster": "jsteinhardt / berkeleynlp slurm",
+   "name": "ev-nq-f8k-mt4-lora64all32r20to7slsbe99-f1952-sbw-lr1e-05-evnq-9afe0c49",
+   "cluster": "Beaker (jupiter)",
    "node": null,
    "state": "PENDING",
-   "gpus": 2,
-   "elapsed_min": 80,
-   "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
+   "gpus": 1,
+   "elapsed_min": 0,
+   "entry": "Backward compression with exact forward: token-sparse and sketched backward"
   }
  ]
 }
