@@ -28,18 +28,20 @@
  },
  {
   "date": "2026-10-30",
-  "status": "running",
+  "status": "partial",
   "track": "Next (≥5×)",
   "who": "overnight agent (large-data fix)",
   "title": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening",
-  "result": "Decay is mostly dense's ceiling (dense flat from 3,904 rows; recipe gap ≈0.01 nats, no trend). Recipe seed 1 at 7,808 rows reads 2.8× vs 2.2× (seed noise). ReLoRA: null at both sizes. Late widening 35/15%: CE −0.0069±0.0022 vs recipe and −0.0060 vs uniform keep at equal FLOPs, f1 unchanged; 50/25%: CE −0.0045. Pending: late widening + uniform keep at 7,808 (preempted, resumable). Branch claude/tokdrop-decay-fix.",
+  "result": "Late keep-widening (35%/15% in last third) at 7,808 rows: f1 0.934, CE 0.1365 — beats the recipe vs both seeds (f1 +0.009/+0.007; CE −0.0091±0.0027/−0.0056±0.0025) and matches dense's best at 24% of its FLOPs (FTM >4.1× f1, >3.1× CE). Uniform keep at same FLOPs: f1 +0.008/+0.005 but CE not robust. 1 seed; seed 1 of lw35 launched. Earlier: decay was mostly dense's ceiling + seed noise; ReLoRA null. Branch claude/tokdrop-decay-fix.",
   "match": [
    "tdf",
    "dfce",
    "rl25",
    "lw35",
    "lw50",
-   "r25to10"
+   "r25to10",
+   "lw35sd1",
+   "lw35-f7808-tdf-sd1"
   ]
  },
  {
