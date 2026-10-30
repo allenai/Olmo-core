@@ -1,0 +1,171 @@
+<title>Multi-View Block-7 Cache</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: a single reading column (lab notebook page); verdict band, then chart, tables, notes. */
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --fg: #1d2421; --muted: #5d6b65; --rule: #d9dfdb;
+  --recipe: #2f6f9f; --dense: #8a8f8c; --mv: #c2551f; --good: #2e7d4f; --bad: #b23a3a; --warn: #9a6a00;
+  --display: "Fraunces", Georgia, serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141917; --panel: #1b2220; --fg: #e3e8e5; --muted: #9aa8a1; --rule: #2e3834;
+  --recipe: #6fb0e0; --dense: #a3aaa6; --mv: #f08a52; --good: #5cc28a; --bad: #ec7a7a; --warn: #e0b04a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141917; --panel: #1b2220; --fg: #e3e8e5; --muted: #9aa8a1; --rule: #2e3834;
+  --recipe: #6fb0e0; --dense: #a3aaa6; --mv: #f08a52; --good: #5cc28a; --bad: #ec7a7a; --warn: #e0b04a; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 48px; }
+main { max-width: 860px; margin: 0 auto; display: grid; gap: 28px; }
+h1 { font: 600 2rem/1.15 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 600 1.15rem/1.3 var(--body); margin: 0 0 10px; text-wrap: balance; }
+.eyebrow { font: 500 .72rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0 0 10px; max-width: 68ch; }
+.verdict { background: var(--panel); border: 1px solid var(--rule); border-left: 4px solid var(--bad); border-radius: 6px; padding: 16px 18px; }
+.verdict p:last-child { margin-bottom: 0; }
+.pill { display: inline-block; font: 500 .72rem var(--mono); padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.run { color: var(--warn); } .pill.lose { color: var(--bad); } .pill.win { color: var(--good); } .pill.tie { color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: .9rem; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 .72rem var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: .85em; }
+svg text { fill: var(--muted); font: 11px var(--mono); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .85rem; color: var(--muted); }
+.sw { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 6px; }
+ul { margin: 0; padding-left: 20px; } li { margin-bottom: 6px; max-width: 70ch; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.grid2 > div { min-width: 0; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">tokdrop_lr · overnight idea · 2026-10-30 · branch claude/multiview-h7cache</div>
+    <h1>Multi-view training from a cached block-7 state</h1>
+  </header>
+
+  <section class="verdict" id="verdict"></section>
+
+  <section>
+    <h2>Score vs training FLOPs</h2>
+    <p>mt4 8-cell mean (contradiction, nq, outlier, oolong × 8k and 2k rungs, 500 eval rows each, no-cot). Log PF axis. The decisive bar is the recipe curve, interpolated in log PF at the multi-view run's own metered FLOPs, plus 0.01.</p>
+    <div class="scroll"><svg id="chart" viewBox="0 0 820 360" width="100%" role="img" aria-label="8-cell mean vs actual PF"></svg></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--recipe)"></span>recipe (router, k = 1), f1952 / f3904 / f7808</span>
+      <span><span class="sw" style="background:var(--dense)"></span>fresh dense</span>
+      <span><span class="sw" style="background:var(--mv)"></span>multi-view (random choice), labelled k / rows</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Runs</h2>
+    <div class="scroll"><table id="runs"></table></div>
+    <p style="margin-top:8px;color:var(--muted);font-size:.85rem">eval_size 500 per cell; per-cell binomial SE 0.006 to 0.021, so the 8-cell mean carries about ±0.005 from eval noise. Seed-to-seed spread of the recipe at f3904 is about ±0.01 (sk3 vs sk3sd1: 0.903 vs 0.914), so a single seed resolves differences of roughly 0.015.</p>
+  </section>
+
+  <section>
+    <h2>Per-cell scores</h2>
+    <div class="scroll"><table id="cells"></table></div>
+  </section>
+
+  <section class="grid2">
+    <div>
+      <h2>What runs</h2>
+      <ul>
+        <li>View 1: the ordinary routed forward with the graph split at block 7; h7 is cached detached.</li>
+        <li>Views 2..k: blocks 7-31 + head only, from the cached h7, each with a fresh random 20% / 7% subset of every document's tokens. A full optimizer step on the late parameters between views.</li>
+        <li>Then one backward through blocks 0-6 with the mean of the k views' dL/dh7, and the trainer's normal step.</li>
+        <li>Mean, not last view: each view's dL/dh7 is an independent draw for a different subset, so averaging lowers variance at no extra FLOPs.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>FLOP meter check</h2>
+      <p>Repeat views log no example lengths and are charged late blocks + head at the kept length only. On identical rows (6 Beaker steps): dense-equivalent 19.694 PF for both, actual 5.981 PF at k = 1 and 7.438 PF at k = 2. So a second view costs 0.089× dense per step, about 54% of a whole routed step.</p>
+      <p>Full run: k = 2 at f1952 metered 483.0 PF (0.310× dense) vs the recipe's 345 PF.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Limits</h2>
+    <ul>
+      <li>One seed per cell. Views use random token choice (it ties the router at f3904: 0.914 vs 0.915); the recipe curve uses the router. The k = 1 random-choice run at f1952 on the same code path is the direct control.</li>
+      <li>Repeated views see the same answer labels, so the late stack gets a partial second epoch per row.</li>
+      <li>Three Beaker runs were preempted and restarted from step 0; their FLOP totals come from the final, uninterrupted attempt.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Where things live</h2>
+    <ul>
+      <li>Code: <code>src/olmo_core/nn/multiview.py</code> (flag <code>--st-otr-views k</code>), model split in <code>Transformer._run_blocks</code>, repeat-view FLOP charge in <code>OnlineTokenRouter.mid_compact</code>; tests <code>src/test/nn/multiview_test.py</code>.</li>
+      <li>FSDP2 trap and CPU repro: <code>research/token_routing/multiview/fsdp_cpu_repro.py</code>. A backward started from a block output never fires the root module's pre-backward, and the pooled projector (root parameters) feeds block 0.</li>
+      <li>Launch / collect: <code>research/token_routing/multiview/launch_mv.py</code>, <code>collect_mv.py</code>, state in <code>state.json</code>; numbers in <code>ops result show --train-run &lt;run&gt;</code>.</li>
+      <li>Record: <code>records/multiview-cached-h7.md</code>; experiment state: <code>ops exp show tokdrop_lr</code>.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+const RECIPE = [[345, 0.883], [688, 0.915], [1373, 0.924]];
+const DENSE = [[1531, 0.888], [3063, 0.926], [4595, 0.928], [6128, 0.931]];
+// multi-view runs: pf = flop_meter actual_pflops (null while running); cells from ops results
+const RUNS = [
+  {k: 2, rows: 1952, pf: 483.0, cells: {"contradiction@8k": 0.954, "contradiction@2k": 0.984, "nq@8k": 0.930, "nq@2k": 0.978, "outlier@8k": 0.887, "outlier@2k": 0.867, "oolong@8k": 0.639, "oolong@2k": 0.844}},
+  {k: 3, rows: 1952, pf: null, cells: null},
+  {k: 1, rows: 1952, pf: null, cells: null},
+  {k: 2, rows: 3904, pf: null, cells: null},
+  {k: 3, rows: 3904, pf: null, cells: null},
+];
+const RECIPE_CELLS = {"contradiction@8k": 0.959, "contradiction@2k": 0.977, "nq@8k": 0.912, "nq@2k": 0.970, "outlier@8k": 0.862, "outlier@2k": 0.880, "oolong@8k": 0.648, "oolong@2k": 0.856};
+const CELLS = ["contradiction@8k", "contradiction@2k", "nq@8k", "nq@2k", "outlier@8k", "outlier@2k", "oolong@8k", "oolong@2k"];
+const VERDICT = {cls: "run", head: "In progress: first result does not beat the recipe",
+  body: ["k = 2 views at 1,952 rows/task scores 0.885 (8-cell mean) at 483 PF. The recipe interpolated at 483 PF scores 0.899, so multi-view is 0.014 behind it at matched FLOPs, and only 0.002 above the recipe at the same 1,952 rows (0.883 at 345 PF). The second view of each row bought almost nothing that fresh rows would not buy more cheaply.",
+         "Still running: k = 3 at f1952, k = 1 control at f1952 (same code path, random choice), k = 2 and k = 3 at f3904."]};
+
+const mean = c => c ? CELLS.reduce((s, k) => s + c[k], 0) / CELLS.length : null;
+function interp(curve, pf) {
+  const x = Math.log(pf), xs = curve.map(p => Math.log(p[0]));
+  let i = x <= xs[1] ? 0 : (x >= xs[xs.length - 2] ? xs.length - 2 : xs.findIndex((v, j) => v <= x && x <= xs[j + 1]));
+  const t = (x - xs[i]) / (xs[i + 1] - xs[i]);
+  return [curve[i][1] + t * (curve[i + 1][1] - curve[i][1]), x < xs[0] || x > xs[xs.length - 1]];
+}
+const f3 = v => v == null ? "–" : v.toFixed(3);
+
+document.getElementById("verdict").innerHTML = `<div class="eyebrow">verdict</div><h2>${VERDICT.head}</h2>` + VERDICT.body.map(p => `<p>${p}</p>`).join("");
+document.getElementById("verdict").style.borderLeftColor = `var(--${VERDICT.cls === "win" ? "good" : VERDICT.cls === "lose" ? "bad" : "warn"})`;
+
+// runs table
+let h = `<tr><th>run</th><th>views</th><th>rows/task</th><th>actual PF</th><th>× recipe PF</th><th>mean8</th><th>recipe @ PF</th><th>Δ vs recipe</th><th>status</th></tr>`;
+for (const r of RUNS) {
+  const m = mean(r.cells), base = r.rows === 1952 ? 345 : 688;
+  const ri = r.pf ? interp(RECIPE, r.pf) : [null, false];
+  const d = (m != null && ri[0] != null) ? m - ri[0] : null;
+  const st = m == null ? `<span class="pill run">running</span>` : d >= 0.01 ? `<span class="pill win">beats</span>` : d <= -0.01 ? `<span class="pill lose">behind</span>` : `<span class="pill tie">tie</span>`;
+  h += `<tr><td class="mono">mv${r.k}-f${r.rows}</td><td>${r.k}</td><td>${r.rows.toLocaleString()}</td><td>${r.pf ? r.pf.toFixed(0) : "–"}</td><td>${r.pf ? (r.pf / base).toFixed(2) : "–"}</td><td>${f3(m)}</td><td>${f3(ri[0])}${ri[1] ? "*" : ""}</td><td>${d == null ? "–" : (d >= 0 ? "+" : "") + d.toFixed(3)}</td><td>${st}</td></tr>`;
+}
+document.getElementById("runs").innerHTML = h;
+
+// cells table
+let c = `<tr><th>cell</th><th>recipe f1952</th>` + RUNS.filter(r => r.cells).map(r => `<th>mv${r.k}-f${r.rows}</th>`).join("") + `</tr>`;
+for (const k of CELLS) c += `<tr><td>${k}</td><td>${f3(RECIPE_CELLS[k])}</td>` + RUNS.filter(r => r.cells).map(r => `<td>${f3(r.cells[k])}</td>`).join("") + `</tr>`;
+c += `<tr><td><b>mean</b></td><td><b>${f3(mean(RECIPE_CELLS))}</b></td>` + RUNS.filter(r => r.cells).map(r => `<td><b>${f3(mean(r.cells))}</b></td>`).join("") + `</tr>`;
+document.getElementById("cells").innerHTML = c;
+
+// chart
+const svg = document.getElementById("chart"), W = 820, H = 360, L = 56, R = 20, T = 16, B = 40;
+const x0 = Math.log(250), x1 = Math.log(8000), y0 = 0.86, y1 = 0.94;
+const X = pf => L + (Math.log(pf) - x0) / (x1 - x0) * (W - L - R), Y = v => T + (y1 - v) / (y1 - y0) * (H - T - B);
+let s = "";
+for (const v of [0.86, 0.88, 0.90, 0.92, 0.94]) s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--rule)"/><text x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(2)}</text>`;
+for (const p of [300, 500, 1000, 2000, 4000, 7000]) s += `<line x1="${X(p)}" x2="${X(p)}" y1="${H - B}" y2="${H - B + 5}" stroke="var(--muted)"/><text x="${X(p)}" y="${H - B + 18}" text-anchor="middle">${p}</text>`;
+s += `<text x="${(L + W - R) / 2}" y="${H - 4}" text-anchor="middle">actual training PF (log)</text>`;
+const line = (pts, col) => `<polyline fill="none" stroke="${col}" stroke-width="2" points="${pts.map(p => X(p[0]) + "," + Y(p[1])).join(" ")}"/>` + pts.map(p => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="${col}"/>`).join("");
+s += line(DENSE, "var(--dense)") + line(RECIPE, "var(--recipe)");
+// +0.01 bar along the recipe
+s += `<polyline fill="none" stroke="var(--recipe)" stroke-dasharray="4 4" stroke-width="1" points="${RECIPE.map(p => X(p[0]) + "," + Y(p[1] + 0.01)).join(" ")}"/>`;
+s += `<text x="${X(1373) + 6}" y="${Y(0.934) + 4}">recipe +0.01</text>`;
+for (const r of RUNS) { const m = mean(r.cells); if (m == null || !r.pf) continue;
+  s += `<rect x="${X(r.pf) - 5}" y="${Y(m) - 5}" width="10" height="10" fill="var(--mv)"/><text x="${X(r.pf) + 9}" y="${Y(m) + 14}">k${r.k} f${r.rows}</text>`; }
+svg.innerHTML = s;
+</script>

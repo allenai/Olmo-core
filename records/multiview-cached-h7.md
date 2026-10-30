@@ -7,7 +7,7 @@ area: token_routing
 kind: result
 status: in progress (implementation + smoke done; k in {2, 3} x f1952 / f3904 runs in flight)
 superseded_by:
-artifact: (pending)
+artifact: https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ
 summary: Run blocks 0-6 once per row, cache h7, take k optimizer steps on blocks 7-31 each with a fresh random 20%/7% token subset, then one early-stack backward on the mean dL/dh7. Cost per row 0.10 + 0.12k x dense; goal = beat the recipe at matched FLOPs by >= 0.01 (mt4 8-cell mean).
 ---
 
@@ -73,9 +73,22 @@ Same data, same dense-equivalent (every row charged once); the second view adds 
 routed step, as planned (0.12 of 0.225). Expected full-run cost: k = 2 about 1.54x the recipe's PF, k = 3 about 2.08x
 (f1952: ~530 / ~715 PF; f3904: ~1,060 / ~1,430 PF).
 
-## Runs
+## Runs (Beaker jupiter, 2 H100, commit 1f57a5feb, state `research/token_routing/multiview/state.json`)
 
-(filled in as they land; see the experiment STATUS.md and `research/token_routing/multiview/`)
+| run | views | rows/task | actual PF | 8-cell mean | recipe @ same PF | delta |
+|---|---|---|---|---|---|---|
+| f8k-mt4-lora64all32rnd20to7mv2-f1952-tdmv-lr1e-05 (01M660BDJE2ZQA3YE2AQQS20FA) | 2 | 1,952 | 483.0 | 0.885 | 0.899 | -0.014 |
+| ...mv3-f1952 (01M660CBN2GSBT9AQ954ZB1HGK) | 3 | 1,952 | running | | | |
+| ...mv1-f1952 (01M6662Z9T213KKGJC8M3ZA215), same-code-path k = 1 control | 1 | 1,952 | running | | | |
+| ...mv2-f3904 (01M660D44KG044R94YW2CYDC8T) | 2 | 3,904 | running | | | |
+| ...mv3-f3904 (01M660DX5J61G6CSZ21MXAF1X3) | 3 | 3,904 | running | | | |
+
+eval_size 500 per cell, no-cot, query after; cells (8k / 2k) for mv2-f1952: contradiction 0.954 / 0.984, nq 0.930 /
+0.978, outlier 0.887 / 0.867, oolong 0.639 / 0.844 (recipe f1952: 0.959 / 0.977, 0.912 / 0.970, 0.862 / 0.880,
+0.648 / 0.856). Single seed; run-to-run noise of the recipe is about +-0.01 on the mean.
+
+First read: the second view of each row is worth almost nothing (+0.002 over the recipe at the same rows for 1.40x
+the FLOPs), so at matched FLOPs it trails the recipe's fresh rows.
 
 ## Comparison target
 
