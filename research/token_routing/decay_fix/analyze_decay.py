@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--extra-runs", default="", help="more method runs (pf from --pf name=PF if not in points)")
     ap.add_argument("--pf", action="append", default=[], help="name=PFLOPs override")
     ap.add_argument("--json-out", default="")
+    ap.add_argument("--f1-json", default="", help="extra {run: {task_rung: f1}} (record_ladder.py results/f1_points.json)")
     a = ap.parse_args()
     P = json.load(open(a.points))
     pf = {k: v["pf"] for k, v in P["runs"].items()}
@@ -63,6 +64,9 @@ def main():
     f1 = {}
     for p in P["points"]:
         f1.setdefault(p["run"], {})[f"{p['task']}_{p['rung']}"] = p["score"]
+    if a.f1_json and os.path.exists(a.f1_json):
+        for k, v in json.load(open(a.f1_json)).items():
+            f1.setdefault(k, {}).update(v)
     ce = {}
     for path in a.ce:
         d = json.load(open(path))
