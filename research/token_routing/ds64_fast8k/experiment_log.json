@@ -1,5 +1,55 @@
 [
  {
+  "date": "2026-10-30",
+  "status": "running",
+  "track": "Next (≥5×)",
+  "who": "overnight agent (sparse-backward)",
+  "title": "Backward compression with exact forward: token-sparse and sketched backward",
+  "result": "Started 10-30 from the brainstorm's top idea: backward is ≈0.118 of the recipe's 0.225; cutting it 3–5× at parity would give ≈0.12–0.14× per step (≈6–7× dense at small data). Probe first, then 1,952 / 3,904-row screens.",
+  "match": [
+   "sbw",
+   "sparsebw",
+   "skbw",
+   "sparse-backward"
+  ]
+ },
+ {
+  "date": "2026-10-30",
+  "status": "running",
+  "track": "Next (≥5×)",
+  "who": "overnight agent (large-data fix)",
+  "title": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening",
+  "result": "Started 10-30: tests whether the 4.1→2.2× decay is the dense eval ceiling or the method, and whether ReLoRA (zero FLOPs) or widening late keep restores ≥3.5× at 7,808 rows.",
+  "match": [
+   "relora",
+   "widen",
+   "rlr",
+   "lw35"
+  ]
+ },
+ {
+  "date": "2026-10-30",
+  "status": "running",
+  "track": "Next (≥5×)",
+  "who": "overnight agent (multi-view)",
+  "title": "Multiple views per row from cached block-7 states",
+  "result": "Started 10-30: run blocks 0–6 once, take k = 2–3 steps on blocks 7–31 with fresh random keeps (random ties the router); cost ≈0.10 + 0.12k per row. Screens at 1,952 / 3,904 rows.",
+  "match": [
+   "mview",
+   "multiview",
+   "mv2",
+   "mv3"
+  ]
+ },
+ {
+  "date": "2026-10-30",
+  "status": "done",
+  "track": "Next (≥5×)",
+  "who": "brainstorm agent (Opus)",
+  "title": "Brainstorm: 10 ambitious ideas ranked (backward compression, large-data fix, multi-view rows, stochastic early backward, contextual-sparse early MLPs, answer-only LM head, keep schedule, length curriculum, local attention at 64k)",
+  "result": "Key constraint found: the forward floor is ≈0.10× dense with an exact forward split at block 7, so ≥5× needs the backward (≈half the cost) cut 2–5×. Top 3 launched overnight. Odds: ≈25% to reach ≥5× at small data and ≥3.5× at 7,808 rows; <5% for 10× at large data on this setup."
+ },
+ {
   "date": "2026-10-29",
   "status": "running",
   "track": "Mechanism",
