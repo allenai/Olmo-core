@@ -599,6 +599,16 @@ __LORA2X2__
   </table></div>
   <p class="note">Ceilings are back-of-envelope estimates, not measurements. Prasann (10-29): pursue only ideas whose ceiling is at least ≈5× over dense.</p>
 </section>
+<section>
+  <h2>Multiple views per row from cached block-7 states (in progress)</h2>
+  <div class="tbl"><table>
+    <tr><th>run (1,952 rows/task, 1 seed)</th><th class="n">views k</th><th class="n">PF</th><th class="n">8-cell</th><th class="n">outlier@8k</th><th class="n">recipe at same PF</th><th class="n">Δ</th></tr>
+    <tr><td>recipe (router)</td><td class="n">1</td><td class="n">345</td><td class="n">0.883</td><td class="n">0.862</td><td class="n">–</td><td class="n">–</td></tr>
+    <tr><td>multi-view control (random keep)</td><td class="n">1</td><td class="n">343</td><td class="n">0.853</td><td class="n">0.812</td><td class="n">0.883</td><td class="n">−0.030</td></tr>
+    <tr><td>multi-view</td><td class="n">2</td><td class="n">483</td><td class="n">0.885</td><td class="n">0.887</td><td class="n">0.899</td><td class="n">−0.014</td></tr>
+  </table></div>
+  <p class="note"><b>Interim: no win yet.</b> Each row runs blocks 0–6 once; blocks 7–31 run k times from the cached block-7 state, each with a fresh random 20%/7% keep, and blocks 0–6 get the mean of the k gradients. Each extra view costs ≈0.089× dense per step (k=2 = 1.40× the recipe's FLOPs). k=2 trails the recipe's FLOP curve by 0.014 (eval_size 500 per cell, no-cot). It beats its own random-keep k=1 control by +0.032, but that control is 0.030 below the router recipe (mostly outlier@2k), so a seed replicate is needed to tell which baseline is right. Running: k=3 at 1,952 rows (needs ≥0.922 to win), k=2 and k=3 at 3,904 rows (need ≥≈0.930). Branch <code>claude/multiview-h7cache</code>, record <code>records/multiview-cached-h7.md</code>, detail page https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ.</p>
+</section>
 </div>
 <div class="part" id="provenance">
 <div class="parthead"><span class="eyebrow">9 · Provenance</span><h2 class="ptitle">Data, code, caveats and detail pages</h2><p class="verdict">Every number traces to ops results, records and the files listed here.</p></div>
