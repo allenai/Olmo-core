@@ -1,0 +1,10 @@
+{
+ "smoke-f1952-s0of1": {
+  "ex": "01M67EVC9JS68XN2JD5EQ55WYA",
+  "commit": "36d0edc57f29729d8e39dd794a2c74cbe46696b3",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label smoke-f1952 --rows 4 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --max-batches 1",
+  "label": "f1952",
+  "shard": 0,
+  "num_shards": 1
+ }
+}

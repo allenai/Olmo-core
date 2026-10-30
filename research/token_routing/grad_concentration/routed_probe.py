@@ -405,11 +405,25 @@ def adam_factors(ckpt_dir, lins, eps=1e-8):
     Returns {name: (exp(a) (out,), exp(b) (in,))} and per-linear fit diagnostics."""
     from olmo_core.distributed.checkpoint import get_checkpoint_metadata, load_keys
 
-    md = get_checkpoint_metadata(ckpt_dir)
-    keys = [k for k in md.state_dict_metadata if k.endswith("exp_avg_sq")]
-    log(f"adam: {len(keys)} exp_avg_sq keys, e.g. {keys[:2]}")
+    import glob as _glob
+    run = ckpt_dir[:-len("/model_and_optim")] if ckpt_dir.rstrip("/").endswith("model_and_optim") else ckpt_dir
+    cands = [ckpt_dir] + sorted(_glob.glob(f"{run}/step*/model_and_optim"),
+                                key=lambda q: -int(q.split("/step")[-1].split("/")[0]))
+    keys = []
+    for c in cands:
+        try:
+            md = get_checkpoint_metadata(c)
+        except Exception as exc:  # noqa: BLE001
+            log(f"adam: {c}: {exc}")
+            continue
+        allk = list(md.state_dict_metadata)
+        keys = [k for k in allk if k.endswith("exp_avg_sq")]
+        log(f"adam: {c}: {len(allk)} keys, {len(keys)} exp_avg_sq (e.g. {(keys or allk)[:2]})")
+        if keys:
+            ckpt_dir = c
+            break
     if not keys:
-        raise SystemExit(f"no exp_avg_sq in {ckpt_dir}")
+        return None, {"source": "none", "searched": cands}
     out, diag = {}, {}
     for ln in lins:
         pname = f"blocks.{ln.block}.{ln.name.split('.', 1)[1]}.weight"
@@ -427,6 +441,43 @@ def adam_factors(ckpt_dir, lins, eps=1e-8):
         diag[ln.name] = dict(r2_log=r2, cos_D=float((D * Dh).sum() / (D.norm() * Dh.norm())))
         out[ln.name] = (torch.exp(a).cpu(), torch.exp(b).cpu())
         del v, L, fit, D, Dh
+    diag["_source"] = {"source": "checkpoint exp_avg_sq", "dir": ckpt_dir}
+    return out, diag
+
+
+def estimate_adam_factors(model, lins, batches, eps=1e-8):
+    """No optimizer state saved: estimate Adam's second moment from the probe's own dense minibatch gradients
+    (16-row batches, mean answer CE per step as in training), Adafactor-style: row / column sums of E[G^2] give
+    v_ij ~ R_i C_j / sum(R), so D ~ R_i^-1/2 C_j^-1/2 (global scale irrelevant to cosines)."""
+    Rs = {ln.name: torch.zeros(ln.mod.out_features, device="cuda", dtype=torch.float64) for ln in lins}
+    Cs = {ln.name: torch.zeros(ln.mod.in_features, device="cuda", dtype=torch.float64) for ln in lins}
+    for ln in lins:
+        ln.mod.weight.requires_grad_(True)
+    tap = argparse.Namespace(cur={})
+    nb = 0
+    for bi, R in enumerate(batches):
+        n_ans = sum(int(r["pred"].numel()) for r in R)
+        for r in R:
+            loss, _, _ = run_row(model, tap, r, ckpt=True)
+            (loss / n_ans).backward()
+        for ln in lins:
+            g = ln.mod.weight.grad.double().square()
+            Rs[ln.name] += g.sum(1)
+            Cs[ln.name] += g.sum(0)
+            ln.mod.weight.grad = None
+        nb += 1
+        log(f"[adam-est] batch {bi + 1}/{len(batches)}")
+    for ln in lins:
+        ln.mod.weight.requires_grad_(False)
+    out, diag = {}, {}
+    for ln in lins:
+        Rv, Cv = Rs[ln.name] / nb, Cs[ln.name] / nb
+        tot = Rv.sum()
+        a = (Rv + eps * eps * Cv.numel()).rsqrt()
+        b = (Cv / tot.clamp(min=1e-300) + eps * eps).rsqrt()
+        out[ln.name] = (a.float().cpu(), b.float().cpu())
+        diag[ln.name] = dict(r2_log=float("nan"), cos_D=float("nan"))
+    diag["_source"] = {"source": f"estimated from {nb} dense 16-row batches (Adafactor row/col sums of E[G^2])"}
     return out, diag
 
 
@@ -468,9 +519,23 @@ def main():
         adam, adam_diag = blob["factors"], blob["diag"]
     elif a.adam_ckpt:
         adam, adam_diag = adam_factors(P.find_ckpt(a.adam_ckpt), lins)
-    if adam_diag:
-        r2 = [d["r2_log"] for d in adam_diag.values()]
-        cd = [d["cos_D"] for d in adam_diag.values()]
+        if adam is None:
+            log(f"adam: no optimizer state found ({adam_diag})")
+            if not a.only_adam_factors:
+                raise SystemExit("no optimizer state: run --only-adam-factors (estimates from batches) first")
+    if adam is None and a.only_adam_factors:
+        tasks_ = a.tasks.split(",")
+        seen_ = [os.path.join(a.shards, s_) for s_ in a.seen_shards.split(",") if s_]
+        rbt, _ = P.load_rows(a.shards, tasks_, a.rows, a.row_offset, 12288, seen_)
+        per_ = a.batch // len(tasks_)
+        nb_ = min(len(v) for v in rbt.values()) // per_
+        if a.max_batches:
+            nb_ = min(nb_, a.max_batches)
+        batches = [[prep_row(rr, t) for t in tasks_ for rr in rbt[t][J * per_:(J + 1) * per_]] for J in range(nb_)]
+        adam, adam_diag = estimate_adam_factors(model, lins, batches)
+    if adam_diag and any(isinstance(d, dict) and "r2_log" in d for d in adam_diag.values()):
+        r2 = [d["r2_log"] for k, d in adam_diag.items() if not k.startswith("_")]
+        cd = [d["cos_D"] for k, d in adam_diag.items() if not k.startswith("_")]
         log(f"adam factor fit: log-R2 median {np.median(r2):.3f} (min {min(r2):.3f}); cos(D, fit) median "
             f"{np.median(cd):.4f} (min {min(cd):.4f})")
     if a.only_adam_factors:

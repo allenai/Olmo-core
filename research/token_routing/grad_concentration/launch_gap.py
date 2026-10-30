@@ -64,6 +64,7 @@ def main():
     ap.add_argument("--minutes", type=int, default=120)
     ap.add_argument("--no-adam", action="store_true")
     ap.add_argument("--analyze", action="store_true")
+    ap.add_argument("--adam-only", action="store_true", help="one job per label: Adam factors -> GAP_DIR/adam_<label>.pt")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
     st = load()
@@ -73,6 +74,15 @@ def main():
         submit("research/token_routing/grad_concentration/analyze_gap.py", extra, a.cluster, 60,
                f"gradgap-{key}-{a.labels.replace(',', '-')}", key + "-" + a.labels, st, {})
         return
+    if a.adam_only:
+        for lab in a.labels.split(","):
+            ck = CKPTS[lab][0]
+            key = f"{a.prefix}adam-{lab}"
+            extra = (f"--ckpt {ck} --label {lab} --rows {a.rows} --adam-ckpt {ck} "
+                     f"--only-adam-factors {GAP_DIR}/adam_{lab}.pt {a.extra}").strip()
+            submit("research/token_routing/grad_concentration/routed_probe.py", extra, a.cluster, 40,
+                   f"gradgap-{key}", key, st, {"label": lab})
+        return
     for lab in a.labels.split(","):
         ck = CKPTS[lab][0]
         only = [int(x) for x in a.shards_only.split(",")] if a.shards_only else range(a.num_shards)
@@ -81,7 +91,7 @@ def main():
             if key in st and not a.force:
                 print(f"[skip] {key} {st[key]['ex']}")
                 continue
-            adam = "" if a.no_adam else f"--adam-ckpt {ck}"
+            adam = "" if a.no_adam else f"--adam-factors {GAP_DIR}/adam_{lab}.pt"
             extra = (f"--ckpt {ck} --label {a.prefix}{lab} --rows {a.rows} --num-shards {a.num_shards} --shard {sh} "
                      f"--save-dir {GAP_DIR} {adam} {a.extra}").strip()
             submit("research/token_routing/grad_concentration/routed_probe.py", extra, a.cluster, a.minutes,
