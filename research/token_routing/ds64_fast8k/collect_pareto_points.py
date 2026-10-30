@@ -97,8 +97,11 @@ def _ops_scores(run):
     # keep the largest eval per (task, rung) and never let a sub-500 probe shadow the 500-row suite eval
     best = {}
     for r in rows:
-        if str(r.get("metric", "")).startswith("gradcomp_") or r.get("experiment") == "grad_composition":
+        m = str(r.get("metric", ""))
+        if m.startswith("gradcomp_") or r.get("experiment") == "grad_composition":
             continue  # gradient statistics, not task scores
+        if m.startswith("answer_") or "_ce" in m or m.endswith("top1"):
+            continue  # teacher-forced answer CE / top-1 probes (decay diagnosis) share train runs; not task scores
         k = (r["task"], r["rung"])
         if k not in best or (r["eval_size"] or 0) > best[k][1]:
             best[k] = (r["value"], r["eval_size"] or 0)

@@ -832,7 +832,7 @@ function draw() {
         scales: { x: { title: { display: true, text: "step cost / dense step", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } },
                   y: { title: { display: true, text: "8-cell mean (eval_size 500/cell)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   (() => { const e = document.getElementById("mvpar"); if (!e || !window.Chart) return;
-    const ds = [["recipe", [[345, 0.883], [688, 0.915], [1373, 0.926]], "--c1", true],
+    const ds = [["recipe", [[345, 0.883], [688, 0.915], [1373, 0.924]], "--c1", true],
                 ["multi-view k=2", [[483, 0.885], [966, 0.908]], "--c3", false],
                 ["multi-view k=3", [[623, 0.842], [1245, 0.906]], "--c6", false],
                 ["k=1 random control", [[343, 0.853]], "--muted", false]];
