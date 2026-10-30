@@ -38,7 +38,7 @@
   "track": "Model scale",
   "who": "side session (scale ablation)",
   "title": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models",
-  "result": "First point: 0.8B dense on fresh 1,952 rows scores 0.708 (8-cell mean) vs 0.888 at 4B; the gap is mostly outlier@8k (0.246 vs 0.817) and contradiction. The lower ceiling must be weighed against any FLOPs-to-match ratio. 2B dense and the 0.8B recipe pending.",
+  "result": "Interim: at fixed small data the gain grows with scale: FLOPs-to-match ≈1.7× (0.8B) → ≈2.5× (2B) → ≈3.7–4.1× (4B) at 1,952 / 3,904 rows, same per-step cut (0.23–0.25×). Small models' lower dense ceiling flips it at large data (0.8B recipe passes dense's 0.743 plateau at 7,808 rows: >4.2×). Recipe noisier at 0.8B (±0.03). 9B and 2B 7,808-row points in flight.",
   "match": [
    "tds08b",
    "tds2b",
