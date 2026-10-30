@@ -147,6 +147,29 @@ def summarize(lab, d, A, steps, rows_seen):
     return out
 
 
+def noise_scale(d, A):
+    """Gradient noise scale B = tr(Sigma) / |G|^2 in rows (McCandlish et al. 2018, App. A), from the full-update norms
+    of the 16-row steps and their enclosing 128-row batch (rows = summed-CE row gradients). Needs every 128-row batch to
+    be one task; sharded runs mix tasks in their 128-row batch (between-task spread would read as noise) -> None.
+    Also r = mean |mean_16|^2 / |mean_128|^2 (1 = all signal, 8 = all noise)."""
+    if "16|down0_all|full" not in A or "128|down0_all|full" not in A:
+        return None
+    nb = A["128|down0_all|full"].shape[0]
+    tasks = [r["task"] for r in d["rows"]]
+    if len(tasks) != nb * 128 or any(len(set(tasks[i * 128:(i + 1) * 128])) > 1 for i in range(nb)):
+        return None
+    out = {}
+    for name, sel in (("whole", slice(None)), ("blocks0-6", slice(0, 14)), ("blocks7-15", slice(14, 32)),
+                      ("blocks16-31", slice(32, 64))):
+        a = A["16|down0_all|full"][:, sel].sum(1).reshape(nb, 8).mean(1) / 16 ** 2
+        b = A["128|down0_all|full"][:, sel].sum(1) / 128 ** 2
+        tr = (a - b) / (1 / 16 - 1 / 128)
+        g2 = b - tr / 128
+        out[name] = {"ratio_16_over_128": [float(x) for x in a / b], "B_noise_rows": [float(x) for x in tr / g2],
+                     "tasks": [tasks[i * 128] for i in range(nb)]}
+    return out
+
+
 def flop_bound(S, splits, targets=(0.9, 0.95), kind="down"):
     """min over single splits L of the FLOP ratio reaching whole-model cos >= t (body view, non-body kept).
     kind: down = batch-global oracle; rowq / docq = each row / document keeps its own top-k share (router-like)."""
@@ -199,6 +222,7 @@ def main():
             o["scopes"][s]["flop_bound"] = flop_bound(o["scopes"][s], d["splits"])
             for kind in ("rowq", "docq"):
                 o["scopes"][s][f"flop_bound_{kind}"] = flop_bound(o["scopes"][s], (7, 16), kind=kind)
+        o["noise_scale"] = noise_scale(d, A)
         allout.append(o)
         print(f"== {lab} ({o['steps']} steps, CE {o['ce_mean']:.3f}, {o['eval_size_rows']} rows) "
               f"sketch val {json.dumps(o['sketch_validation'])}")
@@ -212,6 +236,10 @@ def main():
             print(f"  bs{s} recipe oracle whole cos {S['recipe_oracle']['whole_cos'][0]:.3f} "
                   f"(down7 {S['recipe_oracle']['down7_cos'][0]:.3f}), random {S['recipe_random']['whole_cos'][0]:.3f}; "
                   f"bound speedup @.9 {S['flop_bound']['0.9']['best_speedup']}, @.95 {S['flop_bound']['0.95']['best_speedup']}")
+        if o["noise_scale"]:
+            w = o["noise_scale"]["whole"]
+            print(f"  noise scale (rows, per task): {[round(x) for x in w['B_noise_rows']]}  "
+                  f"|g16|^2/|g128|^2 {[round(x, 2) for x in w['ratio_16_over_128']]} (1 = signal, 8 = noise)")
     json.dump(allout, open(a.out, "w"), indent=1)
     print(f"wrote {a.out}")
     plot = plot_data(allout)
@@ -225,7 +253,8 @@ def plot_data(allout):
     P = {"stages": [{"label": o["label"], "steps": o["steps"], "rows_seen_per_task": o["rows_seen_per_task"],
                      "pool": "fresh" if o["label"].startswith("f") else "base" if o["label"] == "base" else "orig",
                      "ce_mean": round(o["ce_mean"], 4), "eval_size_rows": o["eval_size_rows"]} for o in allout],
-         "targets": list(TARGETS), "trend": {}, "curves": {}, "recipe": {}, "bounds": {}, "own_block_part": {}}
+         "targets": list(TARGETS), "trend": {}, "curves": {}, "recipe": {}, "bounds": {}, "own_block_part": {},
+         "noise_scale": {o["label"]: o["noise_scale"] for o in allout}}
     r4 = lambda x: None if x is None or not np.isfinite(x) else round(float(x), 5)  # noqa: E731
     for o in allout:
         for s, S in o["scopes"].items():
