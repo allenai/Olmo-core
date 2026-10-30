@@ -195,6 +195,7 @@ ol.log li:last-child { border-bottom: 0; }
   <a href="#log"><span>☰</span>Experiment log</a>
   <a href="#sft4"><span>2</span>SFT 4-task</a>
   <a href="#sft11"><span>3</span>SFT 11-task + long context</a>
+  <a href="#models"><span>3b</span>Qwen3 + model scale</a>
   <a href="#cpt"><span>4</span>CPT</a>
   <a href="#memory"><span>5</span>Memory + wall-clock</a>
   <a href="#mechanism"><span>6</span>Mechanism</a>
@@ -331,6 +332,29 @@ __LORA2X2__
       <figcaption>Dev CE of whole-model LoRA minus dense at the same step count, full-row scoring (more negative = better). The gap is ≈1.4–1.5× larger at 64k than at 32k and about the same at 128k as at 64k. On the far half of each row alone (32k–64k, 64k–128k positions) it is essentially the same.</figcaption></figure>
   </div>
   <p class="note" id="lenNote"><b>Reading:</b> at 2k the router barely beats dense (Δ ≈ 0.001–0.004; these tasks are near their ceiling at 2k). The gain rises to +0.015–0.033 at 8k and +0.03–0.05 at 16k–32k, then stays at +0.02–0.04 at 64k; dense FLOPs to match go from ≈1.1–1.3× at 2k to ≈1.4–1.9× at 8k–32k and ≈1.3–1.6× at 64k. So the advantage grows with eval length up to ~16–32k and holds at 64k, rather than growing without bound (1/2- and 1-epoch points are one seed). In CPT (full-row scoring), LoRA's lead over dense is ≈1.4–1.5× larger when training at 64k than at 32k, and about the same at 128k as at 64k: it grows to 64k and then stops.</p>
+</section>
+</div>
+<div class="part" id="models">
+<div class="parthead"><span class="eyebrow">3b · Other models</span><h2 class="ptitle">Does the recipe generalize? Qwen3 and model scale</h2><p class="verdict">On all-full-attention Qwen3-4B the recipe still wins, but by less: ≈2.1× dense FLOPs-to-match at 1,952 rows vs ≈4.6× on Qwen3.5 (interim, 1 seed). Model-scale results are in progress.</p></div>
+<section>
+  <h2>Qwen3-4B (36 full-attention layers)</h2>
+  <div class="figs">
+    <figure><h3>Qwen3-4B: mean score vs training FLOPs</h3><div class="chart"><canvas id="q3par" aria-label="Qwen3 Pareto"></canvas></div>
+      <figcaption>4-task fresh pools, 8-cell mean, eval_size 500, no-cot, 1 seed. Dense at its better LR per size. Recipe arms are named by drop depths: keep 20% after block a, 7% after block b (of 36). Routing-only = the 12/24 split without LoRA (full fine-tuning).</figcaption></figure>
+    <figure><h3>Dense FLOPs to match: Qwen3 vs Qwen3.5</h3><div class="chart"><canvas id="q3ftm" aria-label="FLOPs to match Qwen3 vs Qwen3.5"></canvas></div>
+      <figcaption>Qwen3: best split per size (12/24 at 1,952 rows; 8/18 at 3,904 and 7,808, where the values are lower bounds until dense at 3,904 / 7,808 is scored). Qwen3.5: the recipe (7/16).</figcaption></figure>
+  </div>
+  <div class="tbl" style="margin-top:14px"><table>
+    <tr><th>Qwen3 run</th><th class="n">rows/task</th><th class="n">PF</th><th class="n">8-cell mean</th><th class="n">outlier@8k</th><th class="n">contra@8k</th><th class="n">dense FLOPs to match</th><th class="n">peak GiB</th></tr>
+    <tr><td>dense</td><td class="n">488 / 976 / 1,464 / 1,952</td><td class="n">437 / 878 / 1,317 / 1,761</td><td class="n">0.591 / 0.724 / 0.761 / 0.807</td><td class="n">0.12 / 0.28 / 0.35 / 0.62</td><td class="n">0.48 / 0.81 / 0.90 / 0.94</td><td class="n">1.0×</td><td class="n">55.8</td></tr>
+    <tr><td>recipe, split 4/18</td><td class="n">1,952</td><td class="n">292</td><td class="n">0.574</td><td class="n">0.257</td><td class="n">0.281</td><td class="n">≤1.5×</td><td class="n">19.5</td></tr>
+    <tr><td>recipe, split 8/18 (proportional)</td><td class="n">1,952 / 3,904 / 7,808</td><td class="n">395 / 789 / 1,578</td><td class="n">0.647 / 0.819 / 0.906</td><td class="n">0.22 / 0.64 / 0.95</td><td class="n">0.67 / 0.88 / 0.95</td><td class="n">1.49 / ≥2.23 / ≥1.12×</td><td class="n">19.5</td></tr>
+    <tr><td>recipe, split 12/18</td><td class="n">1,952 / 3,904</td><td class="n">498 / 996</td><td class="n">0.725 / 0.854</td><td class="n">0.35 / 0.76</td><td class="n">0.81 / 0.94</td><td class="n">1.78 / ≥1.77×</td><td class="n">19.5</td></tr>
+    <tr><td><b>recipe, split 12/24</b></td><td class="n">1,952</td><td class="n">518</td><td class="n">0.743</td><td class="n">0.403</td><td class="n">0.849</td><td class="n"><b>2.09×</b></td><td class="n">19.5</td></tr>
+    <tr><td>recipe, split 16/24 · 16/27</td><td class="n">1,952</td><td class="n">621 · 631</td><td class="n">0.721 · 0.717</td><td class="n">0.30 · 0.31</td><td class="n">0.89 · 0.91</td><td class="n">1.39 · 1.34×</td><td class="n">19.7</td></tr>
+    <tr><td>routing only (12/24, no LoRA, LR 5e-6)</td><td class="n">1,952</td><td class="n">718</td><td class="n">0.719</td><td class="n">0.279</td><td class="n">0.836</td><td class="n">1.19×</td><td class="n">57.0</td></tr>
+  </table></div>
+  <p class="note"><b>Reading:</b> the per-row FLOP cut is the same as on Qwen3.5 (0.22× at split 8/18, 0.29× at 12/24); attention is only ≈20–25% of Qwen3's FLOPs at 8k, so its quadratic saving barely moves the ratio. The difference is accuracy at matched data: −0.16 vs dense at 1,952 rows (split 8/18) against −0.006 on Qwen3.5, mostly outlier and contradiction, shrinking with data (outlier@8k 0.22 → 0.64 → 0.95). Early drops hurt more on Qwen3, so the best split sits deeper (12/24, one and two thirds of depth). Unlike the Qwen3.5 2×2, LoRA matters here: routing alone is 1.19× vs 2.09× with LoRA, and LoRA's frozen base is the memory win (19.5 vs 57 GiB). Still running: dense at 3,904 / 7,808, split 12/24 at 3,904, dense + LoRA-all at 1,952. Single-seed noise ≈ ±0.01–0.02 on the mean. JSON: <code>research/token_routing/ds64_fast8k/q3_flops_to_match.json</code> (branch <code>claude/qwen3-recipe-c876d1</code>).</p>
 </section>
 </div>
 <div class="part" id="cpt">
@@ -471,6 +495,14 @@ __LORA2X2__
     <tr><td>Qwen3.5-2B, forward only</td><td class="n">337</td><td class="n">709</td><td class="n">0.97</td><td class="n">564</td><td class="n">1.22</td></tr>
   </table></div>
   <p class="note"><b>Verdict: not worth it.</b> The recipe is 688 PF, of which ≈313 PF (45%) is blocks 0–6 at full length; a 4B that drops from block 0 costs ≈372 PF. Even a nearly free selector keeping 7% from block 0 reaches only ≈2.6× over the recipe (≈8× dense), and only if the score does not drop. Measured early drops already lose 0.04–0.08 at this budget, and random token choice scores like the router (0.914 vs 0.915), so better selection cannot recover it: at its realistic score a block-0 drop with the 0.8B is ≈1.9× dense, below the recipe's ≈3×. Cost model: <code>research/token_routing/ds64_fast8k/small_model_cost.py</code> on branch <code>claude/small-model-select-0a941a</code>.</p>
+</section>
+<section>
+  <h2>KV-only context for dropped tokens: fidelity probe</h2>
+  <div class="figs">
+    <figure><h3>8-batch gradient cosine, plain drop vs KV-only context (recipe checkpoint)</h3><div class="chart"><canvas id="kvcos" aria-label="KV-only fidelity"></canvas></div>
+      <figcaption>Cosine of the 8-batch (128-row) accumulated update with the full-pass update, router selection, trained parameters, recipe checkpoint. "1st @ b" = one-stage keep 10% after block b; "2st @ b" = keep 20% after block b then 7% after 16. ⚠ eval_size 256 (64 rows/task).</figcaption></figure>
+  </div>
+  <p class="note"><b>Verdict: fails; no training screen.</b> Letting dropped tokens stay as frozen key/value context closes only ≈10–35% of the gap to the block-7 split on the trained recipe checkpoint: after block 1 the 8-batch cosine goes 0.00 → 0.03 (one stage) and −0.00 → 0.04 (two stage); after block 3, 0.04 → 0.11 and 0.12 → 0.15; against 0.24–0.45 at block 7. Even a perfect token picker plus KV-only context stays at 0.06 / 0.14 after blocks 1 / 3. On the base model it recovers more (≈40–65%), but training moves the model away from that. Branch <code>claude/kv-only-context-9ee75b</code>, table <code>research/token_routing/online_router/gfkv_table.md</code>.</p>
 </section>
 </div>
 <div class="part" id="next">
@@ -656,6 +688,23 @@ function draw() {
             tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(2)}× full-layer time` } } },
           scales: { x: { ticks: { color: css("--muted"), font: { size: 10 } }, grid: { display: false } },
                     y: { min: 0, title: { display: true, text: "time / full-layer time", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); }); })();
+  (() => { if (!window.Chart) return; const Q = D.q3 || {}; const el = document.getElementById("q3par");
+    if (el && Q.dense_curve) { const cells = Object.values(Q.cells || {}); const arms = {};
+      cells.filter(c => c.arm !== "dense").forEach(c => { (arms[c.arm] = arms[c.arm] || []).push(c); });
+      const lab = a => a === "q3r20at12s24" ? "routing only 12/24 (no LoRA)" : "recipe " + a.replace("q3lora64all36r20at", "").replace("s", "/") + (a.includes("s2") ? "" : "/18");
+      plot("q3par", [{ label: "dense", dense: true, pts: Q.dense_curve.map(p => ({ x: p[0], y: p[1] })) }].concat(
+        Object.entries(arms).map(([a, cs], i) => ({ label: lab(a), col: COL[(i % 7) + 1], pts: cs.sort((x, y) => x.pf - y.pf).map(c => ({ x: c.pf, y: c.y, note: c.rows + " rows/task" })) }))), "8-cell mean"); }
+    const e2 = document.getElementById("q3ftm"); if (e2) new Chart(e2, { type: "bar", data: { labels: ["1,952 rows", "3,904 rows", "7,808 rows"], datasets: [
+        { label: "Qwen3.5-4B (recipe 7/16)", data: [4.63, 3.82, 2.18], backgroundColor: css("--c2") },
+        { label: "Qwen3-4B (best split; 3,904 / 7,808 are lower bounds)", data: [2.09, 2.23, 1.12], backgroundColor: css("--c1") }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { ticks: { color: css("--muted") }, grid: { display: false } }, y: { min: 0, title: { display: true, text: "dense FLOPs to match (×)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } });
+    const e3 = document.getElementById("kvcos"); if (e3) new Chart(e3, { type: "bar", data: { labels: ["1st @ 1", "1st @ 3", "1st @ 7", "2st @ 1", "2st @ 3", "2st @ 7"], datasets: [
+        { label: "plain drop", data: [0.000, 0.040, 0.244, -0.003, 0.116, 0.453], backgroundColor: css("--c6") },
+        { label: "KV-only context", data: [0.028, 0.108, 0.314, 0.042, 0.148, 0.471], backgroundColor: css("--c2") },
+        { label: "perfect picker + KV-only", data: [0.060, 0.140, 0.466, 0.154, 0.188, 0.580], backgroundColor: css("--c3") }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { ticks: { color: css("--muted") }, grid: { display: false } }, y: { title: { display: true, text: "8-batch gradient cosine", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
@@ -870,6 +919,10 @@ def main():
         data["gc"] = None
     data["early"] = EARLY_SHARE
     data["cptctx"] = CPT_CTX
+    try:
+        data["q3"] = json.load(open(__file__.rsplit("/", 1)[0] + "/q3_flops_to_match.json"))["q3"]
+    except FileNotFoundError:
+        data["q3"] = {}
     try:
         data["skipbench"] = json.load(open(__file__.rsplit("/", 2)[0] + "/chunk_skip_bench/results_h200.json"))
     except FileNotFoundError:
