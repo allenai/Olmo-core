@@ -2,6 +2,19 @@
  {
   "date": "2026-10-29",
   "status": "running",
+  "track": "Mechanism",
+  "who": "side session (grad-concentration)",
+  "title": "Gradient concentration across training stages: tokens needed for 70 / 90 / 95% of the update, and speedup bounds",
+  "result": "Preliminary (existing probe, per row, up to 366 steps): signal sharpens by ≈31–61 steps then spreads out; at 366 steps block 16 needs 15% of tokens for 95% (recipe keeps 7%). Full whole-update analysis on fresh checkpoints to 1,952 steps running.",
+  "match": [
+   "gconc",
+   "grad-conc",
+   "gcon"
+  ]
+ },
+ {
+  "date": "2026-10-29",
+  "status": "running",
   "track": "Model scale",
   "who": "side session (Qwen3 generalization)",
   "title": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)",

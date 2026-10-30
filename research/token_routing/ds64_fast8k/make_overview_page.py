@@ -475,6 +475,19 @@ __LORA2X2__
     <li><b>In CPT every token is a label</b> and importance is flat (top 10% hold 0.62); early blocks learn mostly as context for later tokens (0.95 of block-0 gradient). So dropping tokens removes most of the learning signal, while freezing weights behind adapters does not. ⚠ 48 rows × 32k.</li>
   </ul>
 </section>
+<section>
+  <h2>Is the learning signal less concentrated later in training? (preliminary)</h2>
+  <div class="tbl"><table>
+    <tr><th>dense checkpoint</th><th class="n">block 0: share of body tokens for 70 / 90 / 95%</th><th class="n">block 7</th><th class="n">block 16</th><th class="n">block 24</th></tr>
+    <tr><td>4-task, base</td><td class="n">3 / 18 / 33%</td><td class="n">≤1 / 7 / 17%</td><td class="n">≤1 / 2 / 5%</td><td class="n">≤1 / ≤1 / ≤1%</td></tr>
+    <tr><td>4-task, 31 steps</td><td class="n">≤1 / 9 / 19%</td><td class="n">≤1 / 6 / 13%</td><td class="n">≤1 / ≤1 / 3%</td><td class="n">≤1%</td></tr>
+    <tr><td>4-task, 61 steps</td><td class="n">≤1 / 8 / 16%</td><td class="n">≤1 / 5 / 10%</td><td class="n">≤1 / ≤1 / 4%</td><td class="n">≤1%</td></tr>
+    <tr><td>4-task, 122 steps</td><td class="n">2 / 12 / 26%</td><td class="n">≤1 / 5 / 13%</td><td class="n">≤1 / ≤1 / 4%</td><td class="n">≤1%</td></tr>
+    <tr><td>4-task, 366 steps</td><td class="n">3 / 15 / 29%</td><td class="n">≤1 / 9 / 19%</td><td class="n">≤1 / 6 / 15%</td><td class="n">≤1 / ≤1 / 4%</td></tr>
+    <tr><td>11-task, base / 165 / 330 / 495 steps (90%)</td><td class="n">19 / 17 / 18 / 18%</td><td class="n">5 / 9 / 9 / 10%</td><td class="n">2 / 2 / 2 / 2%</td><td class="n">≤1%</td></tr>
+  </table></div>
+  <p class="note">Share of each row's document-body tokens (top-ranked by the true gradient) holding 70 / 90 / 95% of ‖dL/dh_b‖² at block b; median over tasks; ⚠ 64 rows/task (11-task: 32–42); "≤1%" = below the probe's resolution. <b>Reading:</b> the signal sharpens in the first ≈30–60 steps, then spreads out again, most in the deeper blocks: at 366 steps block 16 needs 15% of tokens for 95%, while the recipe keeps 7% there. This is per row and per block; the whole-update (summed parameter gradient) version across later checkpoints (488–1,952 steps on fresh data) and its speedup bounds are running in a side session.</p>
+</section>
 </div>
 <div class="part" id="ruledout">
 <div class="parthead"><span class="eyebrow">7 · Ruled out</span><h2 class="ptitle">What did not work</h2><p class="verdict">Router-quality tweaks, layer skipping and earlier drops all land at ≤1.3× over the recipe or lose.</p></div>
@@ -901,8 +914,10 @@ def ftm_rows(S):
              "lora64M7": "Router + adapters 0–6", "lora64r20to10": "Adapters 0–6 + two-stage 20%→10%"}
     out = [f'<tr><td>Dense</td><td class="n">{p["rows"]}</td><td class="n">{p["x"]:.0f}</td><td class="n">{p["y"]:.3f}</td>'
            f'<td class="n">{p["o"]:.3f}</td><td class="n">1.0×</td></tr>' for p in dense]
+    lr_of = {"lora64all32r20to7": "1e-05", "lora64all32p50at3": "1e-05"}
+    names = {"lora64all32r20to7": "Whole-model LoRA + two-stage (LR 1e-5)", "lora64all32p50at3": "Pyramid 50%→20%→7% at blocks 3/7/16 (whole-model LoRA, LR 1e-5)", **names}
     for arm, label in names.items():
-        for p in pick(S, "mt4", "f", arm):
+        for p in pick(S, "mt4", "f", arm, lr_of.get(arm, "5e-06")):
             txt = f'&gt;{x1 / p["x"]:.1f}×' if p["y"] > max(y for _, y in dpts) else f'{need_pf(p["y"]) / p["x"]:.1f}×'
             out.append(f'<tr><td>{label}</td><td class="n">{p["rows"]}</td><td class="n">{p["x"]:.0f}</td><td class="n">{p["y"]:.3f}</td>'
                        f'<td class="n">{p["o"]:.3f}</td><td class="n"><b>{txt}</b></td></tr>')
@@ -941,7 +956,9 @@ def main():
            {"label": "Router + freeze at 50% + floor", "dense": False, "p": pick(S, "mt11", "s", "fa247f16M7")},
            {"label": "Two-stage + floor", "dense": False, "p": pick(S, "mt11", "s", "r20to7f16")},
            {"label": "Router keep 10% + floor", "dense": False, "p": pick(S, "mt11", "s", "otr10M7de0f16")}]
-    data = {"f4fresh": [{"label": l, "dense": dn, "p": pick(S, "mt4", "f", arm)} for l, arm, dn in f4fresh],
+    f4fresh_extra = [{"label": "Whole-model LoRA + two-stage (LR 1e-5)", "dense": False, "p": pick(S, "mt4", "f", "lora64all32r20to7", "1e-05")},
+                     {"label": "Pyramid 50%→20%→7% at 3/7/16 (whole-model LoRA, LR 1e-5)", "dense": False, "p": pick(S, "mt4", "f", "lora64all32p50at3", "1e-05")}]
+    data = {"f4fresh": [{"label": l, "dense": dn, "p": pick(S, "mt4", "f", arm)} for l, arm, dn in f4fresh] + f4fresh_extra,
             "f4orig": f4orig, "f11": f11, "m64": m64_data(a.m64),
             "cptlen": {"32k": [(48, -0.0031), (120, -0.0034), (240, -0.0023), (480, -0.0012)], "64k": [(120, -0.0050), (240, -0.0030), (480, -0.0017)],
                        "128k": [(48, -0.0035), (120, -0.0041)]},
