@@ -37,6 +37,10 @@ class OnlineRouterCallback(Callback):
         import torch
 
         router0 = self._router()
+        sbw = getattr(self.trainer.train_module.model, "_sparse_backward", None)  # type: ignore[union-attr]
+        if sbw is not None and int(getattr(sbw.cfg, "dense_every", 0) or 0) > 0:
+            # periodic exact backward: this step runs the dense VJPs (charged as such: no sparse-backward credit)
+            sbw.enabled = self.trainer.global_step % int(sbw.cfg.dense_every) != 0
         de = int(getattr(router0.cfg, "diag_every", 0) or 0)
         self._diag_batch = batch if de > 0 and self.trainer.global_step % de == 0 else None
         fa = int(getattr(router0.cfg, "freeze_after", 0) or 0)

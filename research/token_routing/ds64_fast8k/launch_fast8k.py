@@ -325,6 +325,9 @@ ARM_EXTRA.update({
                     *((f"sbe{e}a", f" --st-otr-sbw-mode energy --st-otr-sbw-energy {e / 100} --st-otr-sbw-lora-all-rows")
                       for e in (90, 95, 99)),
                     *((f"sbs{k}", f" --st-otr-sbw-mode sample --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40)),
+                    # exact backward every N-th step (no gradient component dropped on every step)
+                    *((f"sbt{k}de{n}", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100} --st-otr-sbw-dense-every {n}")
+                      for k in (20,) for n in (2, 4)),
                     # compress only blocks 0-6 (below the drop layer): the router's target dL/dh_7 stays exact
                     *((f"sbt{k}e7", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100} --st-otr-sbw-end 7")
                       for k in (10, 20)),

@@ -67,6 +67,9 @@ class SparseBackwardConfig:
     """... and in blocks < end_block."""
     min_rows: int = 1
     """Never keep fewer rows than this per call (topk / energy)."""
+    dense_every: int = 0
+    """If > 0, every ``dense_every``-th optimizer step runs the EXACT backward (the compressed one otherwise), so no
+    component of the gradient is dropped on every step. Driven by the online router callback."""
     lora_all_rows: bool = False
     """Adapter weight gradients from EVERY nonzero row (exact given the arriving dy; ~4 r (in + out) per row, a few %
     of the VJP), while the input gradient ``dx`` is still computed for the selected rows only."""

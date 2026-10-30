@@ -2034,6 +2034,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-sbw-lora-all-rows", action="store_true",
                     help="sparse backward (topk / energy): adapter weight gradients from every nonzero row of dy "
                     "(exact given the arriving gradient, +4 r (in + out) per row); dx still from the selected rows only")
+    ap.add_argument("--st-otr-sbw-dense-every", type=int, default=0,
+                    help="sparse backward: every N-th optimizer step runs the exact backward. 0 = never")
     ap.add_argument("--st-otr-sbw-end", type=int, default=0,
                     help="sparse backward only on adapted linears in blocks < this (e.g. 7 = below the drop layer, so the "
                     "router's target dL/dh at the drop layer stays exact). 0 = every block")
