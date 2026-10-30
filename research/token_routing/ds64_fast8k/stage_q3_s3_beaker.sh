@@ -25,11 +25,12 @@ for IT in $ITEMS; do
                _eval_bundle_eval500_v2_clean/oolong/oolong_test_synth_ctx2048_spliteval.jsonl; do
         AWS_PROFILE=S3 aws s3 cp $P/$f $DST/eval/$f --only-show-errors || { echo "!!! FAILED $f"; exit 1; }
       done; echo "SYNCED evalfiles"; continue ;;
+    ckpt:*) SRC=$P/ctc_suite/ckpts/${IT#ckpt:}; IT=ckpts/${IT#ckpt:} ;;  # a Beaker-trained run, for a local eval
     *) SRC=$P/ds64/fast8k/shards/$IT ;;
   esac
   [ -d $SRC ] || { echo "!!! missing $SRC"; exit 1; }
   echo "--- $IT: $SRC ($(du -sh $SRC | cut -f1)) $(date +%T)"; ls $SRC | head
-  AWS_PROFILE=S3 aws s3 sync $SRC $DST/$IT/ --only-show-errors && echo "SYNCED $IT" || { echo "!!! FAILED $IT"; exit 1; }
+  AWS_PROFILE=S3 aws s3 sync $SRC $DST/$IT/ --only-show-errors --exclude "*/step*/*" --exclude "wandb/*" && echo "SYNCED $IT" || { echo "!!! FAILED $IT"; exit 1; }
 done
 echo TRANSFER_DONE
 EOW
