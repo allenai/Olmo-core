@@ -537,6 +537,7 @@ def main():
     torch.manual_seed(0)
     torch.backends.cuda.matmul.allow_tf32 = False
     t00 = time.time()
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 
     model = P.build_model(P.find_ckpt(a.ckpt), a.attn_backend)
     lins = P.list_linears(model)

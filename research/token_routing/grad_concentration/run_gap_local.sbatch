@@ -17,7 +17,7 @@ OUTROOT=/data/prasann/gradgap
 SRC=${SRC:?set SRC}; LABEL=${LABEL:?set LABEL}; CKNAME=${CKNAME:?set CKNAME}
 PY=/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python
 CODE=$OUTROOT/code_${SLURM_JOB_ID}
-mkdir -p "$CODE" "$OUTROOT/logs" "$ROOT/ckpts" "$OUTROOT/tmp"
+mkdir -p "$CODE" "$OUTROOT/logs" "$ROOT/ckpts" "$OUTROOT/tmp" "$OUTROOT/results"
 (cd "$SRC" && tar -c --exclude=.git --exclude='results*' src research/token_routing/grad_concentration \
   research/token_routing/olmo3_cptdrop/s3_sync.py) | tar -x -C "$CODE"
 export TMPDIR=$OUTROOT/tmp TRITON_CACHE_DIR=$OUTROOT/tmp/triton HF_HOME=$OUTROOT/hf_cache PYTHONPATH="$CODE/src"

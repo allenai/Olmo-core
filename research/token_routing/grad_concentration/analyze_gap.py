@@ -150,6 +150,11 @@ def metrics_from_blocks(M, B):
         for nm_, X in (("dense", "D"), ("res_true", "Rt"), ("res_attr", "Ra"), ("routed", "R")):
             v[f"bias_share_{nm_}"] = eip(X, X) / float(dg(X, X).mean())
             v[f"pair_cos_{nm_}"] = ms(xcos(X, X))
+        # routed-vs-routed consistency (does routing give a consistent direction of its own?)
+        adj = [(b, b + 1) for b in range(B - 1)]
+        for nm_, X in (("dense", "D"), ("routed", "R"), ("attr", "A")):
+            XX = C(X, X)
+            v[f"adj_cos_{nm_}"] = ms([XX[b, c] / math.sqrt(XX[b, b] * XX[c, c]) for b, c in adj])
         v["exp_cos_res_true_vs_D"] = ecos("Rt", "D")
         v["exp_cos_res_attr_vs_D"] = ecos("Ra", "D")
         # bias-only cosine bound: the routed update with its mean residual removed would be the dense one, so the
@@ -379,7 +384,7 @@ def main():
             if space not in res:
                 continue
             print(f"  [{space}] sel: attr_cos | routed_cos | cosE ratio attr/routed | exp_cos attr/routed | "
-                  f"bias_share res_true / dense")
+                  f"bias_share res_true / dense | pair cos R-R / D-D | bias_share routed / dense")
             for s in sels:
                 v = res[space][s]["whole"]
 
@@ -387,7 +392,8 @@ def main():
                     x = v.get(k)
                     return "nan" if x is None else (f"{x[0]:.3f}" if isinstance(x, list) else f"{x:.3f}")
                 print(f"    {s:18s} {f('attr_cos')} | {f('routed_cos')} | {f('attr_cos_E_ratio')}/{f('routed_cos_E_ratio')}"
-                      f" | {f('exp_cos_attr')}/{f('exp_cos_routed')} | {f('bias_share_res_true')}/{f('bias_share_dense')}")
+                      f" | {f('exp_cos_attr')}/{f('exp_cos_routed')} | {f('bias_share_res_true')}/{f('bias_share_dense')}"
+                      f" | {f('pair_cos_routed')}/{f('pair_cos_dense')} | {f('bias_share_routed')}/{f('bias_share_dense')}")
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     json.dump(allout, open(a.out, "w"), indent=1)
     print(f"wrote {a.out}")
