@@ -1994,6 +1994,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-keep-sched", default="",
                     help="online router: 'a:b' multiplies the first stage's keep linearly from a to b over training "
                     "(later stages keep their absolute budgets)")
+    ap.add_argument("--st-otr-late-keep", default="",
+                    help="online router: 'f:k0,k1' -- after round(f x max_steps) steps every stage keeps the ABSOLUTE "
+                    "share k_i of the body (one per stage, e.g. 0.667:0.35,0.15 = late keep-widening); charged")
+    ap.add_argument("--st-otr-relora-frac", type=float, default=0.0,
+                    help="ReLoRA merge-and-restart of the early-LoRA adapters every this fraction of max_steps "
+                    "(merge B.A into the frozen base, re-init, reset Adam state, re-warm LR). 0 = off")
+    ap.add_argument("--st-otr-relora-rewarm", type=int, default=20,
+                    help="ReLoRA: steps of linear LR re-warm after each restart")
     ap.add_argument("--st-otr-warmup-random", action="store_true",
                     help="online router: warmup steps route at the normal budget with uniform random scores instead "
                     "of training the full context (no full-length pass; bounds peak memory / max train length)")

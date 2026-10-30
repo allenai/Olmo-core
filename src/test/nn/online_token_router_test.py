@@ -1685,3 +1685,76 @@ def test_nonfinite_targets_are_dropped_from_the_fit():
     r._current = None
     r.begin_step(2, model=m)
     assert r.w is not None and bool(torch.isfinite(r.w).all())
+
+
+def test_late_keep_widens_every_stage_after_the_window():
+    """late_keep "0.5:0.5,0.4" on stages 1:0.25,2:0.1: before step round(0.5 T) the configured keeps; after it stage 0
+    keeps 50% and stage 1 keeps 0.4 / 0.5 of what enters it, and the realised kept rows grow (charged)."""
+    model, router = _mid_model(4, stages="1:0.25,2:0.1", dense_every=0, late_keep="0.5:0.5,0.4")
+    chain = router.chain()
+    for r in chain:
+        r.total_steps = 6
+    ids, cid, labels = _row(B=1)
+    fr = {}
+    for n in range(1, 7):
+        model.zero_grad(set_to_none=True)
+        for r in chain:
+            r.begin_step(n, model=model)
+        m = {}
+        for r in chain:
+            m.update(r.metrics())
+        out = model(ids, labels=labels)
+        out.loss.backward()
+        assert torch.isfinite(out.loss)
+        fr[n] = (chain[0].late_keep_frac(), chain[1].late_keep_frac())
+    assert fr[3] == (None, None)
+    assert fr[4] == (pytest.approx(0.5), pytest.approx(0.8))
+    m0 = chain[0].metrics()
+    assert m0.get("online_router/late_keep_on", 1.0) == pytest.approx(1.0)
+
+
+def test_late_keep_validate():
+    OnlineRouterConfig(stages="7:0.2,16:0.07", late_keep="0.667:0.35,0.15").validate()
+    for bad in ("0.667:0.35", "0.667:0.15,0.35", "1.5:0.35,0.15", "0.667"):
+        with pytest.raises(ValueError):
+            OnlineRouterConfig(stages="7:0.2,16:0.07", late_keep=bad).validate()
+
+
+def test_relora_merge_preserves_function_and_resets_adapters_cpu():
+    """merge_and_reinit_lora: after training the adapters a little, the merge leaves the model output unchanged (B = 0
+    after it), moves the update into the base weight, re-draws A, zeros B and resets the adapters' AdamW state."""
+    from olmo_core.nn.early_lora import install_early_lora, merge_and_reinit_lora
+
+    model, router = _mid_model(3, drop_layer=1, dense_every=0, early_lora=2)
+    mods = install_early_lora(model, 3, 2, scale=8.0)
+    params = [p for p in model.parameters() if p.requires_grad]
+    opt = torch.optim.AdamW(params, lr=1e-2)
+    ids, cid, labels = _row(B=1)
+    model.eval()
+    for _ in range(3):
+        opt.zero_grad()
+        model(ids, labels=labels).loss.backward()
+        opt.step()
+    with torch.no_grad():
+        ref = model(ids, labels=labels).loss
+    w0 = mods[0].weight.detach().clone()
+    a0 = mods[0].lora_A.detach().clone()
+    assert mods[0].lora_B.abs().sum() > 0 and opt.state[mods[0].lora_A]
+    out = merge_and_reinit_lora(model, opt, seed=1, restart=1)
+    assert out["flops"] == pytest.approx(sum(2.0 * m.out_features * 2 * m.in_features for m in mods))
+    assert out["rel_delta"] > 0
+    with torch.no_grad():
+        after = model(ids, labels=labels).loss
+    assert torch.allclose(after, ref, atol=1e-5), (after, ref)
+    assert not torch.equal(mods[0].weight, w0)
+    assert not torch.equal(mods[0].lora_A, a0) and float(mods[0].lora_B.abs().sum()) == 0.0
+    st = opt.state[mods[0].lora_B]
+    assert float(st["exp_avg"].abs().sum()) == 0.0 and float(st["exp_avg_sq"].abs().sum()) == 0.0
+    assert float(st["step"]) == 0.0
+    bound = 1.0 / math.sqrt(mods[0].in_features)
+    assert float(mods[0].lora_A.abs().max()) <= bound
+    # training continues from the merged point
+    opt.zero_grad()
+    model(ids, labels=labels).loss.backward()
+    opt.step()
+    assert float(mods[0].lora_B.abs().sum()) > 0

@@ -35,7 +35,7 @@ import torch.nn.functional as F
 
 log = logging.getLogger(__name__)
 
-__all__ = ["install_early_lora", "lora_flop_adjust_per_token", "early_lora_flops_per_token", "early_lora_flops_per_block", "enable_from_config_block", "lora_block_from_checkpoint"]
+__all__ = ["install_early_lora", "merge_and_reinit_lora", "lora_flop_adjust_per_token", "early_lora_flops_per_token", "early_lora_flops_per_block", "enable_from_config_block", "lora_block_from_checkpoint"]
 
 
 def _lora_hook(mod: nn.Linear, inp, out):
@@ -114,6 +114,80 @@ def install_early_lora(model: Any, n_blocks: int, rank: int, scale: float = 32.0
     log.info("[early-lora] blocks [%d, %d) (base frozen from 0): %d linears, rank %d, scale %g, %.1fM adapter params",
              start, n_blocks, len(mods), rank, scale, n / 1e6)
     return mods
+
+
+def _local(x: torch.Tensor) -> torch.Tensor:
+    from olmo_core.distributed.utils import get_local_tensor
+
+    return get_local_tensor(x)
+
+
+@torch.no_grad()
+def merge_and_reinit_lora(model: Any, optim: Any = None, *, seed: int = 0, restart: int = 0) -> Dict[str, float]:
+    """ReLoRA merge-and-restart (tokdrop decay fix, 2026-10-30): fold every adapter into its frozen base weight,
+    ``W <- W + scale * B A``, then re-initialise the adapter (``A`` kaiming-uniform, ``B`` = 0) and reset its AdamW
+    state (moments and step count), so the next segment of training adds a FRESH rank-r update on top of the merged
+    weights. The model function is unchanged by the merge itself (``B`` = 0 after it).
+
+    Works on plain tensors and on FSDP2 ``Shard(0)`` DTensors: ``W`` (out, in) and ``B`` (out, r) are both sharded on
+    ``out`` with the same chunk boundaries, so each rank adds ``B_local @ A_full`` to ``W_local`` (``A`` is all-gathered,
+    r x in). Every rank must call this (the all-gather is a collective), and each rank re-draws its own rows of ``A``
+    from a generator seeded by (seed, restart, rank, module) so no two shards are identical copies.
+
+    Returns stats incl. ``flops`` = this rank's merge cost (2 out_local r in per adapter), for the FLOP meter."""
+    import torch.distributed as dist
+    from torch.distributed.tensor import DTensor
+
+    st = getattr(model, "_early_lora", None)
+    if not st:
+        raise RuntimeError("merge_and_reinit_lora: the model has no early LoRA adapters")
+    rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
+    flops, dnorm, wnorm, n_state = 0.0, 0.0, 0.0, 0
+    w_dtype = None
+    for j, m in enumerate(st["modules"]):
+        A, B, W = m.lora_A, m.lora_B, m.weight
+        A_full = A.full_tensor() if isinstance(A, DTensor) else A
+        Bl, Wl, Al = _local(B), _local(W), _local(A)
+        if Bl.shape[0] != Wl.shape[0]:
+            raise RuntimeError(f"merge_and_reinit_lora: B and W local shards disagree ({tuple(Bl.shape)} vs "
+                               f"{tuple(Wl.shape)}); expected both Shard(0) over out_features")
+        w_dtype = Wl.dtype
+        if Bl.numel() and Wl.numel():
+            delta = float(st["scale"]) * (Bl.float() @ A_full.float())
+            dnorm += float(delta.pow(2).sum())
+            wnorm += float(Wl.float().pow(2).sum())
+            Wl.add_(delta.to(Wl.dtype))
+            flops += 2.0 * Bl.shape[0] * Bl.shape[1] * A_full.shape[1]
+        # fresh adapter: A ~ kaiming_uniform(a=sqrt(5)) = U(-1/sqrt(in), 1/sqrt(in)), B = 0
+        if Al.numel():
+            g = torch.Generator(device=Al.device).manual_seed(
+                (int(seed) * 1_000_003 + int(restart) * 7919 + rank * 104_729 + j) % (2**62))
+            bound = 1.0 / math.sqrt(m.in_features)
+            Al.copy_(torch.rand(Al.shape, generator=g, device=Al.device, dtype=torch.float32)
+                     .mul_(2 * bound).sub_(bound).to(Al.dtype))
+        Bl.zero_()
+        if optim is not None:
+            for p in (A, B):
+                state = optim.state.get(p)
+                if not state:
+                    continue
+                for k, v in state.items():
+                    if torch.is_tensor(v):
+                        _local(v).zero_() if isinstance(v, DTensor) else v.zero_()
+                n_state += 1
+    if optim is not None:
+        # the skip-step optimizer compares each step's loss / grad norm with a rolling history; a fresh adapter starts a
+        # new regime, so start the history over (no step can be skipped until it refills)
+        for attr in ("_losses", "_grad_norms"):
+            if isinstance(getattr(optim, attr, None), list):
+                getattr(optim, attr).clear()
+    t = torch.tensor([dnorm, wnorm], dtype=torch.float64, device=_local(st["modules"][0].weight).device)
+    if dist.is_available() and dist.is_initialized():
+        dist.all_reduce(t)
+    log.info("[relora] restart %d: merged %d adapters into the base (|dW|/|W| = %.3e, base dtype %s), re-initialised "
+             "them and reset %d optimizer states", restart, len(st["modules"]), math.sqrt(float(t[0]) / max(1e-30, float(t[1]))),
+             w_dtype, n_state)
+    return {"flops": flops, "rel_delta": math.sqrt(float(t[0]) / max(1e-30, float(t[1]))), "n_state": float(n_state)}
 
 
 def early_lora_flops_per_token(model: Any) -> float:

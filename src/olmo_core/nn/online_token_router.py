@@ -254,6 +254,11 @@ class OnlineRouterConfig:
     on the CTC mixes N = 11 identifies every task file, except the two retrieval files that share one template), and
     each task keeps its own ridge statistics and weights. The pooled fit scores a task until its own fit exists. The
     keys are synchronised across ranks every step. 0 = one shared router."""
+    late_keep: str = ""
+    """Late keep-widening (tokdrop decay fix, 2026-10-30), ``"f:k0,k1,..."``: once the step passes ``round(f x
+    total_steps)`` every stage keeps the ABSOLUTE share ``k_i`` of the row's body tokens instead of its configured one
+    (one ``k`` per stage, non-increasing; e.g. ``"0.667:0.35,0.15"`` widens the recipe's 20% / 7% to 35% / 15% for the
+    last third). The FLOP meter charges the realised kept lengths, so the extra compute is paid. Empty = off."""
     samples_per_row: int = 2048
     proj_dim: int = 0
     """Random-project the hidden features to this many dims (0: use all d_model dims)."""
@@ -306,6 +311,17 @@ class OnlineRouterConfig:
                              "leave feature_layer at 0")
         if self.warmup_steps < 1:
             raise ValueError("online router warmup_steps must be >= 1 (the first fit needs targets)")
+        if self.late_keep:
+            f, ks = parse_late_keep(self.late_keep)
+            n_st = len(parse_stages(self.stages)) if self.stages else None
+            if not 0.0 <= f < 1.0 or any(not 0.0 < k <= 1.0 for k in ks) or any(b > a for a, b in zip(ks, ks[1:])):
+                raise ValueError(f"online router late_keep needs f in [0, 1) and non-increasing keeps in (0, 1], "
+                                 f"got {self.late_keep!r}")
+            if n_st is not None and len(ks) != n_st:
+                raise ValueError(f"online router late_keep {self.late_keep!r} needs one keep per stage ({n_st})")
+            if self.keep_sched or self.later_mass_target or self.keep_mode != "topk":
+                raise ValueError("online router late_keep is exclusive with keep_sched / later_mass_target / "
+                                 "keep_mode threshold")
         if self.mod_layers:
             ml = parse_mod_layers(self.mod_layers)
             if self.drop_layer != ml[0]:
@@ -543,6 +559,14 @@ def parse_stages(spec: str) -> List[Tuple[int, float]]:
     return out
 
 
+def parse_late_keep(spec: str) -> Tuple[float, List[float]]:
+    """``"f:k0,k1"`` -> (f, [k0, k1]) (see :attr:`OnlineRouterConfig.late_keep`)."""
+    f, sep, ks = spec.partition(":")
+    if not sep or not ks.strip():
+        raise ValueError(f"late_keep spec must be 'f:k0[,k1...]', got {spec!r}")
+    return float(f), [float(k) for k in ks.split(",")]
+
+
 def parse_freeze_schedule(spec: str) -> List[Tuple[int, float]]:
     """``"4:0.25,7:0.5"`` -> ``[(4, 0.25), (7, 0.5)]`` (blocks frozen, share of the optimizer steps)."""
     out = []
@@ -714,6 +738,21 @@ class OnlineTokenRouter:
         T = max(1, int(self.total_steps or 1))
         t = min(1.0, max(0.0, (self.step - 1) / max(1, T - 1)))
         return float(a) + (float(b) - float(a)) * t
+
+    def late_keep_frac(self) -> Optional[float]:
+        """late_keep: this stage's keep fraction (relative to the tokens entering it) once the late window is on,
+        else None. Stage i keeps ``k_i`` of the ORIGINAL body = ``k_i / k_{i-1}`` of what enters it."""
+        if not self.cfg.late_keep:
+            return None
+        f, ks = parse_late_keep(self.cfg.late_keep)
+        if not self.total_steps:
+            raise RuntimeError("online router late_keep needs total_steps (OnlineRouterCallback sets it)")
+        if self.step <= int(round(f * self.total_steps)):
+            return None
+        i = self.stage_idx
+        if i >= len(ks):
+            raise RuntimeError(f"online router late_keep {self.cfg.late_keep!r} has no keep for stage {i}")
+        return ks[0] if i == 0 else min(1.0, ks[i] / ks[i - 1])
 
     def dense_now(self) -> bool:
         """Whether this step trains uncompressed (warmup or a periodic dense step)."""
@@ -968,6 +1007,10 @@ class OnlineTokenRouter:
             m_ = self.keep_mult()
             kf = min(1.0, kf * m_) if self.stage_idx == 0 else min(1.0, kf / m_)
             self._stat("keep_mult", m_)
+        lk = self.late_keep_frac()
+        if lk is not None:
+            kf = lk
+        self._stat("late_keep_on", float(lk is not None))
         if dense and c.dense_keep_frac < 1.0 and self.w is not None and self.step > c.warmup_steps:
             # the periodic "dense" step routes at dense_keep_frac instead of the full context (bounded peak memory)
             dense, kf = False, c.dense_keep_frac
