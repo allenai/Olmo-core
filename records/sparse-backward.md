@@ -5,10 +5,10 @@ updated: 2026-10-30
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (probe smoke done; Beaker probes + training screens launched overnight 10-30)
+status: negative so far (row-sparse backward fails in training; de2/de4 and some evals pending 10-30 04:00)
 superseded_by: 
 artifact: (pending: the tokdrop_lr hub, https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt, gets a section when results land)
-summary: Recipe (LoRA-all r64 + two-stage router) with each frozen linear's input-gradient + LoRA VJPs computed only for the token rows of dy that matter. Exact forward. Row-sparse backward brings the step from 0.223 (0.206 with the answer-only head) to 0.108-0.128x dense; deterministic top-k / energy keep cos 0.85-0.99 to the exact LoRA gradient over 8 rows (base ckpt, eval_size 8 probe); the unbiased 1/p sampler diverges (variance compounds over ~300 sequential VJPs). Training screens at f1952 / f3904 in flight.
+summary: Recipe with each frozen linear's input-gradient + LoRA VJPs computed only for the token rows of dy that matter (exact forward). Cuts the step to 0.110-0.125x dense (recipe 0.204-0.221) and keeps cos 0.85-0.96 to the exact LoRA gradient, but fails in training - contradiction / outlier collapse, 8-cell mean 0.51-0.63 vs 0.88 at f1952; unbiased sampler and residual sketch diverge, truncated SVD is poor. Periodic exact steps (de2/de4) pending.
 ---
 
 # Backward compression with an exact forward
@@ -110,4 +110,36 @@ f1952 final (`f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05`, 488 steps; the recip
 - Training CE (routed, answer tokens; same data order for seed 0): the recipe falls 0.32 -> 0.20 -> 0.11 (steps 10-40 /
   50-100 / 200-488); every compressed arm stalls at 0.35-0.40 from ~step 40 (sbt20, sbe95a, and also the
   high-fidelity sbt40 / sbe99); sbt20e7 (blocks 0-6 only) reaches 0.21.
-- RESULTS_PLACEHOLDER
+Results so far (03:55 10-30; 8-cell mean = 4 tasks x {8k, 2k}, every cell eval_size 500, no-cot, binomial SE per
+cell 0.005-0.02; step/dense = the finished run's `actual_over_dense` from flops.json, router overhead included):
+
+| arm (mt4, LR 1e-5) | rows | step / dense | train CE last 20 | 8-cell mean | contra 8k/2k | nq 8k/2k | outlier 8k/2k | oolong 8k/2k |
+|---|---|---|---|---|---|---|---|---|
+| recipe (tde, seed 0, reference) | f1952 | 0.221 | - | 0.883 | 0.959/0.977 | 0.912/0.970 | 0.862/0.880 | 0.648/0.856 |
+| recipe + answer-only head `sl` sd1 | f1952 | 0.204 | 0.078 | 0.880 | 0.948/0.970 | 0.914/0.972 | 0.865/0.874 | 0.641/0.856 |
+| sbt20 | f1952 | 0.113 | 0.333 | 0.514 | 0.173/0.279 | 0.832/0.930 | 0.203/0.284 | 0.567/0.840 |
+| sbt20 sd1 | f1952 | 0.113 | 0.248 | 0.630 | 0.646/0.729 | 0.776/0.928 | 0.227/0.303 | 0.594/0.835 |
+| sbe95a | f1952 | 0.110 | 0.310 | 0.534 | 0.131/0.192 | 0.852/0.942 | 0.185/0.594 | 0.564/0.811 |
+| sbe95a sd1 | f1952 | 0.110 | 0.298 | 0.514 | 0.165/0.261 | 0.824/0.936 | 0.221/0.263 | 0.599/0.840 |
+| sbt20e7 (blocks 0-6 only) | f1952 | 0.147 | 0.176 | 0.614 | 0.557/0.709 | 0.830/0.932 | 0.159/0.262 | 0.615/0.848 |
+| sbt40 | f1952 | 0.125 | 0.145 | pending (4/8) | pending | 0.870/0.952 | pending | 0.582/0.831 |
+| sbe99 | f1952 | 0.116 | 0.151 | pending (4/8) | pending | 0.914/0.960 | pending | 0.582/0.819 |
+| sbt20, exact every 2nd step (de2) | f1952 | 0.158 | 0.110 | pending | | | | |
+| sbt20, exact every 4th step (de4) | f1952 | 0.136 | 0.152 | pending | | | | |
+| recipe (tde, reference) | f3904 | 0.221 | - | 0.915 | 0.977/0.988 | 0.918/0.976 | 0.970/0.972 | 0.663/0.858 |
+| sbt20 | f3904 | 0.113 | 0.195 | pending (6/8) | 0.798/0.823 | 0.834/0.922 | pending | 0.612/0.829 |
+| sbe95a | f3904 | 0.110 | 0.236 | pending | | | | |
+
+**Verdict so far: the row-sparse backward does not survive training.** It cuts the step to 0.110-0.125x dense as
+designed (1.6-1.9x cheaper than the recipe, measured), and per-step it keeps cos 0.85-0.96 to the exact LoRA gradient,
+but the deterministic truncation is the same every step: training CE stalls at 0.3 (recipe 0.08), and the tasks that
+need the early layers to re-encode context tokens collapse (contradiction 0.96 -> 0.13-0.65, outlier 0.86 -> 0.16-0.23
+at 8k), while nq / oolong lose 0.03-0.08. Matched-data deficit at f1952 is 0.25-0.37 on the 8-cell mean, and at f3904
+sbt20 is already 0.18 behind on contradiction 8k: the kill criterion (> 0.01 at 3,904 rows) is hit. Higher fidelity
+(sbt40 / sbe99, cos 0.95-0.96) trains much better (CE 0.15) but still loses 0.07 on oolong 8k (beyond the 0.021 SE).
+Periodic exact steps (de2 / de4) are the open thread: de2 trains to CE 0.11 at 0.158x.
+
+- Per-step gradient fidelity did not predict training here either: cos 0.85 per 32 rows (sbt20) collapses
+  contradiction, the unbiased estimators that would fix the bias diverge, and a 0.96-cosine variant still loses.
+- Free exact saving found on the way: the custom backward skips rows whose dy is exactly zero (`sbt100`: identical
+  gradients, 0.206 vs 0.213 step over 40 steps), ~3%.
