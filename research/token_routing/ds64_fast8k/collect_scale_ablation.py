@@ -131,6 +131,8 @@ def main():
                          steps=steps or r["steps"], mem=mem, wall=wall or r.get("train_seconds"), ex=r.get("beaker_ex"),
                          cells=cells.get(run, {})))
     for r in rows:
+        r["seed"] = int(re.search(r"sd(\d+)$", r["arm"]).group(1)) if re.search(r"sd\d+$", r["arm"]) else 0
+        r["arm"] = re.sub(r"sd\d+$", "", r["arm"])  # seed replicates count as the same arm
         r["y"] = round(sum(r["cells"][c] for c in CELLS) / 8, 4) if all(c in r["cells"] for c in CELLS) else None
         r["pf_step"] = round(r["pf"] / r["steps"], 4) if r["pf"] and r["steps"] else None
         r["cells"] = {f"{t}@{g}": s for (t, g), s in r["cells"].items()}
