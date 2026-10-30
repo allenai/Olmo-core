@@ -537,9 +537,19 @@ def load_state():
 
 
 def save_state(st):
+    """Write state, MERGED with what is on disk under a lock: two launcher processes (e.g. a launch and a watcher's
+    eval sweep) each hold an older copy, and a plain overwrite silently dropped the other's new runs (2026-10-30)."""
+    import fcntl
     st.setdefault("parity", {})
-    json.dump(st, open(STATE + ".tmp", "w"), indent=1)
-    os.replace(STATE + ".tmp", STATE)
+    with open(STATE + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        disk = json.load(open(STATE)) if os.path.exists(STATE) else {}
+        for kind in ("runs", "evals", "parity"):
+            merged = dict(disk.get(kind, {}))
+            merged.update(st.get(kind, {}))  # this process's entries win for keys it holds
+            st[kind] = merged
+        json.dump(st, open(STATE + ".tmp", "w"), indent=1)
+        os.replace(STATE + ".tmp", STATE)
 
 
 def _log(name, mode, out):

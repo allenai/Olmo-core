@@ -27,7 +27,7 @@
    "budget": "f7808",
    "steps_expected": 1952,
    "gpus": 2,
-   "state": "R"
+   "state": "S"
   },
   "f8k-mt4-dense-f3904-q3-lr5e-06": {
    "ex": "01M64XNAQ5ZWD9P261XYH9KC8T",
@@ -206,7 +206,8 @@
    "budget": "f3904",
    "steps_expected": 976,
    "gpus": 4,
-   "state": "R"
+   "state": "DONE",
+   "rc": 0
   },
   "f8k-mt4-dense-f488-q38b-lr5e-06": {
    "ex": "01M65T6Z0539W802WD82GVWB6K",
@@ -337,6 +338,24 @@
    "gpus": 4,
    "state": "FAILED",
    "rc": null
+  },
+  "f8k-mt4-dense-f976-q38b-lr1e-05": {
+   "ex": "01M673PW5AV4QBJM30CXB7ATP7",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f976",
+   "steps_expected": 244,
+   "gpus": 4,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f3904-q38b-lr1e-05": {
+   "ex": "01M673QPS223DR2DSB4HM641HW",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 4,
+   "state": "S"
   }
  },
  "evals": {
@@ -580,15 +599,17 @@
   },
   "f8k-mt4-dense-f488-q306b-lr5e-06-evoutlier": {
    "ex": "01M65ZNW4WE1NG3R6QBC8HHS00",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f488-q306b-lr5e-06",
-   "task": "outlier"
+   "task": "outlier",
+   "rc": 0
   },
   "f8k-mt4-dense-f488-q306b-lr5e-06-evoolong": {
    "ex": "01M65ZPQ08FJRNCTSXSAFTCEJA",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f488-q306b-lr5e-06",
-   "task": "oolong"
+   "task": "oolong",
+   "rc": 0
   },
   "f8k-mt4-dense-f488-q38b-lr5e-06-evcontradiction": {
    "ex": "01M660DEZ58YBYTCNJV888JS1Y",
@@ -982,6 +1003,30 @@
    "train_run": "f8k-mt4-dense-f3904-q317b-lr5e-06",
    "task": "oolong",
    "rc": 0
+  },
+  "f8k-mt4-dense-f3904-q38b-lr5e-06-evcontradiction": {
+   "ex": "01M673PW7RBTN1Q8R34WZ4JCT0",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
+   "task": "contradiction"
+  },
+  "f8k-mt4-dense-f3904-q38b-lr5e-06-evnq": {
+   "ex": "01M673QQN4SD4661H3BZ09TTTC",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
+   "task": "nq"
+  },
+  "f8k-mt4-dense-f3904-q38b-lr5e-06-evoutlier": {
+   "ex": "01M673S2DANAHHB9KPXBJTFQFS",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
+   "task": "outlier"
+  },
+  "f8k-mt4-dense-f3904-q38b-lr5e-06-evoolong": {
+   "ex": "01M673TD7E9XD3299B49GJCKH4",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q38b-lr5e-06",
+   "task": "oolong"
   }
  },
  "parity": {}
