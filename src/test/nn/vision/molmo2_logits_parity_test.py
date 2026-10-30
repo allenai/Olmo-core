@@ -21,49 +21,18 @@ installed. We feed already-shaped tensors to HF's lower-level forward
 paths instead.
 """
 
-
 import pytest
 import torch
 
-from olmo_core.nn.vision import MultimodalLM
-from olmo_core.nn.vision.molmo2_loader import (
-    ensure_default_rope_registered,
-    molmo2_config_from_hf_config,
-    molmo2_hf_state_dict_to_multimodal_lm,
-    reinit_rope_buffers,
-    retie_word_embeddings,
-)
 from olmo_core.testing import requires_gpu
 
 transformers = pytest.importorskip("transformers")
 
-from ._molmo2_common import MOLMO2_VARIANTS, _hf_cache_has  # noqa: F401 (re-exported)
-
-
-def _build_ours(model_id: str, device, dtype):
-    """Load HF Molmo2, build our model + converted weights. Returns
-    (hf_model on CPU, ours on `device` with `dtype`, our config)."""
-    ensure_default_rope_registered()
-    from transformers import AutoModelForImageTextToText
-
-    ensure_default_rope_registered()
-    try:
-        hf = AutoModelForImageTextToText.from_pretrained(
-            model_id, trust_remote_code=True, local_files_only=True
-        )
-    except Exception as e:  # noqa: BLE001
-        pytest.skip(f"Could not load {model_id}: {e}")
-    reinit_rope_buffers(hf)
-    cfg = molmo2_config_from_hf_config(hf.config)
-    converted = molmo2_hf_state_dict_to_multimodal_lm(hf.state_dict(), cfg)
-    ours = MultimodalLM(cfg, init_device="meta")
-    ours.to_empty(device=torch.device("cpu"))
-    ours.load_state_dict(converted, strict=False)
-    retie_word_embeddings(ours)  # `to_empty` breaks the tied-embedding share (Molmo2-4B)
-    del converted
-    ours = ours.to(device=device, dtype=dtype).eval()
-    return hf, ours, cfg
-
+from ._molmo2_common import (  # noqa: E402, F401 (re-exported)
+    MOLMO2_VARIANTS,
+    _build_ours,
+    _hf_cache_has,
+)
 
 # ---------------------------------------------------------------------------
 # Token embedding parity
@@ -101,6 +70,7 @@ def test_molmo2_embedding_parity(model_id: str):
         our_e = ours.lm.embeddings(ids)
 
     diff = (hf_e.float() - our_e.float()).abs().max().item()
+    print(f"[parity] {model_id} embedding max|diff|={diff:.3e}")
     assert diff < 1e-3, f"{model_id}: embedding diff = {diff:.3e}"
 
 
@@ -156,6 +126,9 @@ def test_molmo2_lm_forward_parity(model_id: str):
     diff = (hf_last - our_last).abs().max().item()
     hf_argmax = int(hf_last.argmax().item())
     our_argmax = int(our_last.argmax().item())
+    print(
+        f"[parity] {model_id} LM-only logits max|diff|={diff:.3e} argmax_match={hf_argmax == our_argmax}"
+    )
     assert hf_argmax == our_argmax, (
         f"{model_id}: LM argmax mismatch — HF={hf_argmax} ours={our_argmax}, "
         f"max abs diff = {diff:.3e}"
@@ -269,6 +242,10 @@ def test_molmo2_full_pipeline_logit_parity(model_id: str):
     diff = (hf_last - our_last).abs().max().item()
     hf_argmax = int(hf_last.argmax().item())
     our_argmax = int(our_last.argmax().item())
+    print(
+        f"[parity] {model_id} full-pipeline logits max|diff|={diff:.3e} "
+        f"argmax_match={hf_argmax == our_argmax}"
+    )
     assert hf_argmax == our_argmax, (
         f"{model_id}: full-pipeline argmax mismatch — HF={hf_argmax} "
         f"ours={our_argmax}, max abs diff = {diff:.3e}"

@@ -41,11 +41,6 @@ def _get_activation(name: str) -> Callable[[torch.Tensor], torch.Tensor]:
     return _ACTIVATIONS[name]
 
 
-def _vit_activation_checkpoint_function(cfg: VisionEncoderConfig) -> Callable:
-    preserve_rng_state = (cfg.attention_dropout != 0.0) or (cfg.residual_dropout != 0.0)
-    return partial(checkpoint, preserve_rng_state=preserve_rng_state, use_reentrant=False)
-
-
 class ViTAttention(nn.Module):
     """Multi-head dot-product attention for a vision transformer block."""
 
@@ -268,7 +263,11 @@ class VisionTransformer(nn.Module):
 
     def apply_activation_checkpointing(self) -> None:
         """Per-block activation checkpointing (mm_olmo ``VitConfig.activation_checkpointing``)."""
-        self._activation_checkpoint_fn = _vit_activation_checkpoint_function(self.cfg)
+        # Replay dropout masks on recompute only when the ViT actually uses dropout.
+        preserve_rng_state = self.cfg.attention_dropout != 0.0 or self.cfg.residual_dropout != 0.0
+        self._activation_checkpoint_fn = partial(
+            checkpoint, preserve_rng_state=preserve_rng_state, use_reentrant=False
+        )
 
     def apply_compile(self) -> None:
         """``torch.compile`` each ViT block (mm_olmo ``compile_vit: blocks``).

@@ -8,7 +8,7 @@ import torch
 
 from olmo_core.kernels import symm_mem_vdev2d as symm_mem_vdev2d_kernels
 
-from ...moe.utils import wait_stream_no_compile
+from ...moe.utils import run_on_stream_no_compile, wait_stream_no_compile
 from .checkpointing import get_rowwise_checkpoint_state
 from .comm import (
     _DispatchRowwiseAutograd,
@@ -92,6 +92,41 @@ def _rowwise_regular_combine_put_enabled(block: "OLMoDDPTransformerBlock") -> bo
     )
 
 
+def _shared_forward1(
+    block: OLMoDDPTransformerBlock,
+    moe_inp: torch.Tensor,
+    *,
+    use_rowwise_fp8: bool,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    assert block.shared_experts is not None
+    if use_rowwise_fp8:
+        assert block.rowwise_fp8 is not None
+        return shared_experts_forward1_rowwise_fp8(
+            block, moe_inp, use_fast_accum=block.rowwise_fp8.use_fast_accum
+        )
+    return block.shared_experts.forward1(moe_inp)
+
+
+def _shared_forward2(
+    block: OLMoDDPTransformerBlock,
+    up: torch.Tensor,
+    gate: torch.Tensor,
+    weights: Optional[torch.Tensor],
+    output_shape: torch.Size,
+    *,
+    use_rowwise_fp8: bool,
+) -> torch.Tensor:
+    assert block.shared_experts is not None
+    if use_rowwise_fp8:
+        assert block.rowwise_fp8 is not None
+        shared_out = shared_experts_forward2_rowwise_fp8(
+            block, up, gate, output_shape, use_fast_accum=block.rowwise_fp8.use_fast_accum
+        )
+    else:
+        shared_out = block.shared_experts.forward2(up, gate, output_shape)
+    return block._mix_shared_out(shared_out, weights, output_shape)
+
+
 def combined_forward_ep_no_sync_rowwise(
     block: OLMoDDPTransformerBlock,
     x: torch.Tensor,
@@ -154,20 +189,21 @@ def combined_forward_ep_no_sync_rowwise(
         other_stream=torch.cuda.current_stream(),
     )
 
-    with torch.cuda.stream(self.get_dense_stream()):
-        if self.shared_experts_router:
-            (
-                local_x_global_shared_expert_weights,
-                _,
-                _,
-                _,
-            ) = self.shared_experts_router(
-                moe_inp,
-                True,
-                loss_div_factor=loss_div_factor,
-            )
-        else:
-            local_x_global_shared_expert_weights = None
+    if self.shared_experts_router:
+        (
+            local_x_global_shared_expert_weights,
+            _,
+            _,
+            _,
+        ) = run_on_stream_no_compile(
+            self.get_dense_stream(),
+            self.shared_experts_router,
+            moe_inp,
+            True,
+            loss_div_factor=loss_div_factor,
+        )
+    else:
+        local_x_global_shared_expert_weights = None
 
     routed_in_shape = routed_moe_inp.size()
     routed_moe_inp = routed_moe_inp.view(-1, routed_in_shape[-1])
@@ -554,16 +590,13 @@ def combined_forward_ep_no_sync_rowwise(
             rowwise_stage_debug_sync("rowwise:combine-put-meta", routed_moe_inp.device)
 
     if self.shared_experts is not None:
-        with torch.cuda.stream(self.get_dense_stream()):
-            if use_rowwise_fp8:
-                assert rowwise_fp8_cfg is not None
-                shared_out_up, shared_out_gate = shared_experts_forward1_rowwise_fp8(
-                    self,
-                    moe_inp,
-                    use_fast_accum=rowwise_fp8_cfg.use_fast_accum,
-                )
-            else:
-                shared_out_up, shared_out_gate = self.shared_experts.forward1(moe_inp.view(B, S, D))
+        shared_out_up, shared_out_gate = run_on_stream_no_compile(
+            self.get_dense_stream(),
+            _shared_forward1,
+            self,
+            moe_inp.view(B, S, D),
+            use_rowwise_fp8=use_rowwise_fp8,
+        )
     else:
         shared_out_up, shared_out_gate = None, None
 
@@ -815,25 +848,16 @@ def combined_forward_ep_no_sync_rowwise(
         assert shared_out_up is not None
         assert shared_out_gate is not None
 
-        with torch.cuda.stream(self.get_dense_stream()):
-            if use_rowwise_fp8:
-                assert rowwise_fp8_cfg is not None
-                shared_out = shared_experts_forward2_rowwise_fp8(
-                    self,
-                    shared_out_up,
-                    shared_out_gate,
-                    attn_res_out.shape,
-                    use_fast_accum=rowwise_fp8_cfg.use_fast_accum,
-                )
-            else:
-                shared_out = self.shared_experts.forward2(
-                    shared_out_up, shared_out_gate, attn_res_out.shape
-                )
-            mixed_shared_out = self._mix_shared_out(
-                shared_out,
-                local_x_global_shared_expert_weights,
-                attn_res_out.shape,
-            )
+        mixed_shared_out = run_on_stream_no_compile(
+            self.get_dense_stream(),
+            _shared_forward2,
+            self,
+            shared_out_up,
+            shared_out_gate,
+            local_x_global_shared_expert_weights,
+            attn_res_out.shape,
+            use_rowwise_fp8=use_rowwise_fp8,
+        )
     else:
         mixed_shared_out = None
 

@@ -14,8 +14,9 @@ import torch
 from olmo_core.nn.hf.convert import (
     convert_olmo3moe_state_from_hf,
     convert_olmo3moe_state_to_hf,
+    iter_olmo3moe_state_to_hf,
 )
-from olmo_core.nn.hf.convert_checkpoint import _normalize_legacy_latent_moe_config
+from olmo_core.nn.transformer.config import normalize_legacy_config_dict
 from olmo_core.testing.utils import requires_fla, requires_gpu, requires_triton
 
 
@@ -36,12 +37,10 @@ def _fake_config():
 
 def test_legacy_kda_kernel_flag_is_normalized():
     config = {"block": {"sequence_mixer": {"use_cute_kernel": True}}}
-    _normalize_legacy_latent_moe_config(config)
+    normalize_legacy_config_dict(config)
     assert config == {"block": {"sequence_mixer": {"use_experimental_kernels": True}}}
     with pytest.raises(ValueError, match="legacy and current"):
-        _normalize_legacy_latent_moe_config(
-            {"use_cute_kernel": True, "use_experimental_kernels": False}
-        )
+        normalize_legacy_config_dict({"use_cute_kernel": True, "use_experimental_kernels": False})
 
 
 def _synthetic_hf_state(config):
@@ -182,5 +181,52 @@ def test_legacy_latent_moe_dimension_is_normalized():
             }
         }
     }
-    _normalize_legacy_latent_moe_config(config)
+    normalize_legacy_config_dict(config)
     assert config["block"]["latent_moe"] == {"latent_dim": 320, "bias": False}
+
+
+def _reassemble_fused_experts(fused):
+    """Expand stacked per-layer expert tensors back into per-expert HF names."""
+    per_expert = {}
+    for name, tensor in fused.items():
+        if name.endswith("mlp.experts.gate_up_proj.weight"):
+            prefix = name[: -len("experts.gate_up_proj.weight")]
+            hidden = tensor.shape[1] // 2
+            for e in range(tensor.shape[0]):
+                per_expert[f"{prefix}experts.{e}.gate_proj.weight"] = tensor[e, :hidden]
+                per_expert[f"{prefix}experts.{e}.up_proj.weight"] = tensor[e, hidden:]
+        elif name.endswith("mlp.experts.down_proj.weight"):
+            prefix = name[: -len("experts.down_proj.weight")]
+            for e in range(tensor.shape[0]):
+                per_expert[f"{prefix}experts.{e}.down_proj.weight"] = tensor[e]
+        else:
+            per_expert[name] = tensor
+    return per_expert
+
+
+def test_olmo3moe_fused_expert_export_is_the_per_expert_export_stacked():
+    config = _fake_config()
+    hf = _synthetic_hf_state(config)
+    olmo = convert_olmo3moe_state_from_hf(config, hf)
+
+    per_expert = convert_olmo3moe_state_to_hf(config, olmo)
+    fused = dict(iter_olmo3moe_state_to_hf(config, olmo, fused_experts=True))
+
+    assert len(fused) < len(per_expert)
+    n_experts = config.n_routed_experts
+    moe_hidden = config.moe_intermediate_size
+    routed_dim = getattr(config, "latent_moe_dim", None) or config.hidden_size
+    stacked = [name for name in fused if name.endswith("mlp.experts.gate_up_proj.weight")]
+    assert stacked and all(
+        fused[name].shape == (n_experts, 2 * moe_hidden, routed_dim) and fused[name].is_contiguous()
+        for name in stacked
+    )
+    down = [name for name in fused if name.endswith("mlp.experts.down_proj.weight")]
+    assert down and all(
+        fused[name].shape == (n_experts, routed_dim, moe_hidden) and fused[name].is_contiguous()
+        for name in down
+    )
+    reassembled = _reassemble_fused_experts(fused)
+    assert set(reassembled) == set(per_expert)
+    for key, tensor in per_expert.items():
+        assert torch.equal(reassembled[key], tensor), f"fused layout mismatch for '{key}'"

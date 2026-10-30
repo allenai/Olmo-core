@@ -13,7 +13,7 @@ from __future__ import annotations
 import string
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 
@@ -258,6 +258,7 @@ class SftFormatter:
         import numpy as np
 
         pts = example.get("points")
+        xy: Any
         if pts is None:
             xy = []
         elif isinstance(pts, dict) and "x" in pts and "y" in pts:
@@ -449,7 +450,7 @@ class SftFormatter:
             prompt, output = self._format_multi_image_points(example, rng, is_training)
             if is_training and (output is None or not str(output).strip()):
                 raise ValueError("No valid output in example")
-            return [[(prompt, output)]]
+            return [[(prompt, cast(str, output))]]  # eval examples may have no output
         elif "prompt" in example:
             # mm_olmo honors an explicit "prompt" before any templating
             # (data_formatter.py:1753-1755).
@@ -524,7 +525,7 @@ class SftFormatter:
 
         prefix = self.style_prefix(style)
         user_text = (f"{prefix} " if prefix and prompt else prefix) + prompt
-        return [[(user_text, output)]]
+        return [[(user_text, cast(str, output))]]  # eval examples may have no output
 
     def format_turns(
         self,

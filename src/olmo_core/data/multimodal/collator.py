@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 from olmo_core.config import Config
+from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID
 
 from .packing import _PackedImageParts
 
@@ -87,10 +88,16 @@ class MultimodalCollator:
     def __call__(self, examples: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
         max_len = max(len(ex["input_ids"]) for ex in examples)
         if self.pad_sequence_length is not None:
-            # Truncate over-long examples to the fixed length (tail-cut). The image block
-            # is always at the front, so <im_patch> tokens (and their pooled-row count) are
-            # preserved; only trailing branch/response tokens are dropped.
+            # Truncate over-long examples to the fixed length (tail-cut). Only trailing
+            # branch/response tokens may go: cutting an <im_patch> token would leave more
+            # pooled features than image tokens, which the model rejects, so refuse early.
             max_len = self.pad_sequence_length
+            for ex in examples:
+                if np.any(ex["input_ids"][max_len:] == IM_PATCH_ID):
+                    raise ValueError(
+                        f"pad_sequence_length={max_len} would truncate <im_patch> tokens "
+                        "(the image block must fit entirely within the sequence)"
+                    )
         max_crops = max(ex["images"].shape[0] for ex in examples)
         max_pool = max(ex["pooled_patches_idx"].shape[0] for ex in examples)
         n_patches = examples[0]["images"].shape[1]

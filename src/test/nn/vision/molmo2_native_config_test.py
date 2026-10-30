@@ -5,6 +5,8 @@ released ``allenai/Molmo2-4B`` repo. That is only safe while it produces exactly
 :func:`molmo2_config_from_hf_config` produces, so this test pins the two together.
 """
 
+from typing import Any, cast
+
 import pytest
 
 from olmo_core.nn.vision import MultimodalLMConfig
@@ -58,14 +60,16 @@ def test_native_config_matches_hf_derived(model_id: str, factory_name: str):
 
 def test_rope_theta_defaults_match_the_released_checkpoints():
     """Molmo2-4B is the only released variant whose base differs from its Qwen3 backbone's."""
-    assert MultimodalLMConfig.molmo2_4B().lm.block.sequence_mixer.rope.theta == 5_000_000
-    assert MultimodalLMConfig.molmo2_8B().lm.block.sequence_mixer.rope.theta == 1_000_000
+    assert cast(Any, MultimodalLMConfig.molmo2_4B().lm.block).sequence_mixer.rope.theta == 5_000_000
+    assert cast(Any, MultimodalLMConfig.molmo2_8B().lm.block).sequence_mixer.rope.theta == 1_000_000
     # Both must accept the base-Qwen3 value used when initialising from scratch.
     for factory in (MultimodalLMConfig.molmo2_4B, MultimodalLMConfig.molmo2_8B):
-        assert factory(rope_theta=1_000_000).lm.block.sequence_mixer.rope.theta == 1_000_000
+        assert (
+            cast(Any, factory(rope_theta=1_000_000).lm.block).sequence_mixer.rope.theta == 1_000_000
+        )
     # The small variants have no release; their default is their Qwen3 backbone's base.
     for factory in (MultimodalLMConfig.molmo2_0_6B, MultimodalLMConfig.molmo2_1_7B):
-        assert factory().lm.block.sequence_mixer.rope.theta == 1_000_000
+        assert cast(Any, factory().lm.block).sequence_mixer.rope.theta == 1_000_000
 
 
 @pytest.mark.parametrize(
@@ -87,12 +91,10 @@ def test_native_config_shape(
     assert cfg.lm.n_layers == n_layers
     assert cfg.lm.block.feed_forward.hidden_size == ffn_hidden_size
     # The table is split: `vocab_size` is the base vocab, the 128 image-special tokens live
-    # in a separate `embeddings.extra_weight` block, and the LM head spans the base only —
-    # so no logit masking (`output_vocab_size`) is needed.
+    # in a separate `embeddings.extra_weight` block, and the LM head spans the base only.
     assert cfg.lm.vocab_size == 151_936
     assert cfg.lm.n_extra_vocab == 128
     assert cfg.lm.tie_word_embeddings is tied
-    assert cfg.output_vocab_size is None
     # The vision stack is shared across variants.
     assert cfg.vision.image_num_layers == 25  # SigLIP2 blocks 0..24 of 27
     assert cfg.vit_layers == (24, 18)

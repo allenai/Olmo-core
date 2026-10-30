@@ -1,5 +1,5 @@
 import os
-from typing import Optional, cast
+from typing import Callable, Optional, ParamSpec, TypeVar, cast
 
 import torch
 
@@ -88,6 +88,26 @@ def async_copy_to_cpu(
 @torch.compiler.disable  # helper runs eagerly
 def wait_stream_no_compile(this_stream: torch.cuda.Stream, other_stream: torch.cuda.Stream):
     this_stream.wait_stream(other_stream)
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+@torch.compiler.disable(recursive=False)
+def run_on_stream_no_compile(
+    stream: torch.cuda.Stream, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs
+) -> _R:
+    """Switch streams eagerly while allowing ``fn`` to be compiled.
+
+    Torch 2.13 compiled multistream backwards look up streams in a mutable
+    Dynamo registry. A subsequent compiled graph can replace that registry
+    before backward. Keeping the stream context outside the graph avoids that
+    lookup while retaining compiled math and asynchronous stream execution.
+    Callers remain responsible for ordering work between streams.
+    """
+    with torch.cuda.stream(stream):
+        return fn(*args, **kwargs)
 
 
 @torch.compiler.disable
