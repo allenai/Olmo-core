@@ -1,40 +1,13 @@
 {
- "generated_at": "2026-10-30T15:34:52+00:00",
+ "generated_at": "2026-10-30T16:34:43+00:00",
  "jobs": [
-  {
-   "name": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-lr1e-05-9d6b1d8a",
-   "cluster": "Beaker (jupiter)",
-   "node": "KM2BZA",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 133,
-   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
-  },
-  {
-   "name": "f8k-mt4-lora64all32rnd20to7mv2-f3904-tdmv-lr1e-05-9d34d169",
-   "cluster": "Beaker (jupiter)",
-   "node": "6AN55R",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 116,
-   "entry": "Multiple views per row from cached block-7 states"
-  },
-  {
-   "name": "f8k-mt4-lora64all32r20to7-f7808-tdf-sd1-lr1e-05-09bd790e",
-   "cluster": "Beaker (jupiter)",
-   "node": "6AN55R",
-   "state": "RUNNING",
-   "gpus": 2,
-   "elapsed_min": 116,
-   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
-  },
   {
    "name": "f8k-mt4-lora64all32rnd20to7mv3-f3904-tdmv-lr1e-05-735e8f4f",
    "cluster": "Beaker (jupiter)",
    "node": "E8YSG5",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 115,
+   "elapsed_min": 176,
    "entry": "Multiple views per row from cached block-7 states"
   },
   {
@@ -43,7 +16,7 @@
    "node": "E8YSG5",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 64,
+   "elapsed_min": 125,
    "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
   },
   {
@@ -52,7 +25,7 @@
    "node": "HJRJ8C",
    "state": "RUNNING",
    "gpus": 4,
-   "elapsed_min": 14,
+   "elapsed_min": 75,
    "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   },
   {
@@ -61,7 +34,52 @@
    "node": "FGYT58",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 14,
+   "elapsed_min": 74,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
+  },
+  {
+   "name": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-lr1e-05-9d6b1d8a",
+   "cluster": "Beaker (jupiter)",
+   "node": "RTM0VQ",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 51,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
+  },
+  {
+   "name": "f8k-mt4-lora64all32r25to10-f7808-tdf-lr1e-05-rs-1074d2e5",
+   "cluster": "Beaker (jupiter)",
+   "node": "CDQPDA",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 19,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
+  },
+  {
+   "name": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-lr1e-05-rs-8a9efcfc",
+   "cluster": "Beaker (jupiter)",
+   "node": "CDQPDA",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 19,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32r20to7-f7808-tdf-sd1-lr1e-05-evcontradiction-0e6d7bf6",
+   "cluster": "Beaker (jupiter)",
+   "node": "R83KT1",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 11,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
+  },
+  {
+   "name": "dfce-lora64all32r20to7-f7808-tdf-sd1-lr1e-05-838ac325",
+   "cluster": "Beaker (jupiter)",
+   "node": "N4X40N",
+   "state": "RUNNING",
+   "gpus": 1,
+   "elapsed_min": 6,
    "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
   }
  ]
