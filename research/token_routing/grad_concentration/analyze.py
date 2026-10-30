@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 
 import numpy as np
 
@@ -146,14 +147,17 @@ def summarize(lab, d, A, steps, rows_seen):
     return out
 
 
-def flop_bound(S, splits, targets=(0.9, 0.95)):
-    """min over single splits L of the FLOP ratio reaching whole-model cos >= t (body view, non-body kept)."""
+def flop_bound(S, splits, targets=(0.9, 0.95), kind="down"):
+    """min over single splits L of the FLOP ratio reaching whole-model cos >= t (body view, non-body kept).
+    kind: down = batch-global oracle; rowq / docq = each row / document keeps its own top-k share (router-like)."""
     res = {}
     for t in targets:
         best = None
         per = {}
         for L in splits:
-            e = S[f"down{L}_body"]
+            if f"{kind}{L}_body" not in S:
+                continue
+            e = S[f"{kind}{L}_body"]
             k = e[f"k_whole_cos{t}"][0]
             if not np.isfinite(k):
                 continue
@@ -177,15 +181,24 @@ def main():
     a = ap.parse_args()
     st = json.load(open(a.state))
     allout = []
-    for lab in sorted(os.listdir(a.results), key=lambda x: st.get(x, {}).get("steps", 0)):
-        p = os.path.join(a.results, lab, "probe.json")
-        if not lab.startswith(a.prefix) or not os.path.exists(p):
-            continue
-        d = json.load(open(p))
-        A = dict(np.load(os.path.join(a.results, lab, "probe_arrays.npz")))
+    # batch shards <label>-b<j> (one 128-row batch each) are merged into <label>
+    groups = {}
+    for x in sorted(os.listdir(a.results)):
+        if x.startswith(a.prefix) and os.path.exists(os.path.join(a.results, x, "probe.json")):
+            groups.setdefault(re.sub(r"-b\d+$", "", x), []).append(x)
+    for lab in sorted(groups, key=lambda x: (st.get(x, {}).get("steps") or 0)):
+        ds = [json.load(open(os.path.join(a.results, x, "probe.json"))) for x in groups[lab]]
+        As = [dict(np.load(os.path.join(a.results, x, "probe_arrays.npz"))) for x in groups[lab]]
+        d = ds[0]
+        d["rows"] = [r for dd in ds for r in dd["rows"]]
+        A = {k: np.concatenate([Ai[k] for Ai in As]) for k in As[0]}
+        if len(ds) > 1:
+            print(f"[merge] {lab}: {groups[lab]}")
         o = summarize(lab, d, A, st.get(lab, {}).get("steps"), st.get(lab, {}).get("rows_seen"))
         for s in o["scopes"]:
             o["scopes"][s]["flop_bound"] = flop_bound(o["scopes"][s], d["splits"])
+            for kind in ("rowq", "docq"):
+                o["scopes"][s][f"flop_bound_{kind}"] = flop_bound(o["scopes"][s], (7, 16), kind=kind)
         allout.append(o)
         print(f"== {lab} ({o['steps']} steps, CE {o['ce_mean']:.3f}, {o['eval_size_rows']} rows) "
               f"sketch val {json.dumps(o['sketch_validation'])}")
@@ -201,6 +214,49 @@ def main():
                   f"bound speedup @.9 {S['flop_bound']['0.9']['best_speedup']}, @.95 {S['flop_bound']['0.95']['best_speedup']}")
     json.dump(allout, open(a.out, "w"), indent=1)
     print(f"wrote {a.out}")
+    plot = plot_data(allout)
+    pd_path = os.path.join(os.path.dirname(a.out), "plot_data.json")
+    json.dump(plot, open(pd_path, "w"), indent=1)
+    print(f"wrote {pd_path}")
+
+
+def plot_data(allout):
+    """compact, plot-ready: per stage (in training order) k needed at each target, cos curves, recipe, bounds."""
+    P = {"stages": [{"label": o["label"], "steps": o["steps"], "rows_seen_per_task": o["rows_seen_per_task"],
+                     "pool": "fresh" if o["label"].startswith("f") else "base" if o["label"] == "base" else "orig",
+                     "ce_mean": round(o["ce_mean"], 4), "eval_size_rows": o["eval_size_rows"]} for o in allout],
+         "targets": list(TARGETS), "trend": {}, "curves": {}, "recipe": {}, "bounds": {}, "own_block_part": {}}
+    r4 = lambda x: None if x is None or not np.isfinite(x) else round(float(x), 5)  # noqa: E731
+    for o in allout:
+        for s, S in o["scopes"].items():
+            T = P["trend"].setdefault(s, {})
+            C = P["curves"].setdefault(s, {})
+            for r, e in S.items():
+                if not r.startswith(("down", "rowq", "docq", "rand")):
+                    continue
+                for view in ("cos", "whole_cos", "energy"):
+                    for t in TARGETS:
+                        key = f"k_{view}{t}"
+                        if key in e:
+                            T.setdefault(r, {}).setdefault(f"{view}{t}", []).append(
+                                {"label": o["label"], "k": r4(e[key][0]), "sd": r4(e[key][1])})
+                C.setdefault(r, {})[o["label"]] = {"k": [r4(x) for x in e["k"]], "cos": [r4(x) for x in e["cos"]],
+                                                   **({"whole_cos": [r4(x) for x in e["whole_cos"]]}
+                                                      if "whole_cos" in e else {})}
+            P["recipe"].setdefault(s, {})[o["label"]] = {
+                k: {"whole_cos": r4(S[k]["whole_cos"][0]), "sd": r4(S[k]["whole_cos"][1]),
+                    "kept_token_share": [r4(x) for x in S[k]["kept_token_share"]]} for k in ("recipe_oracle", "recipe_random")}
+            B = P["bounds"].setdefault(s, {})
+            for kind, fb in (("global", S["flop_bound"]), ("per_row", S["flop_bound_rowq"]),
+                             ("per_doc", S["flop_bound_docq"])):
+                for t, v in fb.items():
+                    B.setdefault(kind, {}).setdefault(t, []).append(
+                        {"label": o["label"], "best_split": v["best_split"], "flop_ratio": r4(v["best_ratio"]),
+                         "speedup": r4(v["best_speedup"]),
+                         "per_split": {str(L): {kk: r4(vv) for kk, vv in x.items()} for L, x in v["per_split"].items()}})
+            P["own_block_part"].setdefault(s, {})[o["label"]] = {
+                k: {f"k_cos{t}": r4(v[f"k_cos{t}"][0]) for t in TARGETS} for k, v in S["own_block_part"].items()}
+    return P
 
 
 if __name__ == "__main__":
