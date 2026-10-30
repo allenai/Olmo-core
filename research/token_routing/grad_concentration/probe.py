@@ -139,14 +139,14 @@ def body_mask(x):
 
 
 # ---------------------------------------------------------------------------------------------------------- model
-def build_model(ckpt):
+def build_model(ckpt, attn_backend="flash_2"):
     from olmo_core.distributed.checkpoint import load_model_and_optim_state
     from olmo_core.nn.attention import AttentionBackendName
     from olmo_core.nn.attention.fla_autotune import freeze_fla_length_autotune
     from olmo_core.nn.lm_head import LMLossImplementation
     from olmo_core.nn.transformer import TransformerConfig
 
-    cfg = TransformerConfig.qwen3_5_4B(vocab_size=248320, attn_backend=AttentionBackendName("flash_2"))
+    cfg = TransformerConfig.qwen3_5_4B(vocab_size=248320, attn_backend=AttentionBackendName(attn_backend))
     cfg.lm_head.loss_implementation = LMLossImplementation.default
     model = cfg.build(init_device="cpu")
     t0 = time.time()
@@ -339,11 +339,13 @@ def main():
     ap.add_argument("--row-offset", type=int, default=7808, help="first fresh-pool row (mt4f7808 uses rows < 7808)")
     ap.add_argument("--shards", default=SHARDS, help="shard root (weka on Beaker; a node-local copy on slurm)")
     ap.add_argument("--seen-shards", default="mt4f7808,mt4s1952", help="merged training shards (under --shards)")
-    ap.add_argument("--scopes", default="16,128", help="batch sizes (rows); must nest, largest = pass size")
+    ap.add_argument("--scopes", default="16,128", help="batch sizes (rows, ',' or ':'); must nest, largest = pass size")
     ap.add_argument("--sketch-dim", type=int, default=32768)
     ap.add_argument("--exact", default="b7.feed_forward.w2,b16.attention.w_out",
                     help="linears that also get exact fp32 accumulators (smallest scope only)")
     ap.add_argument("--max-len", type=int, default=12288)
+    ap.add_argument("--attn-backend", default="flash_2", help="full-attention blocks; 'torch' (SDPA) on A100 "
+                    "nodes whose flash-attn build is sm90-only")
     ap.add_argument("--no-ckpt", action="store_true", help="no per-block activation checkpointing (needs ~60 GB)")
     ap.add_argument("--max-batches", type=int, default=0, help="debug: stop after this many large batches")
     ap.add_argument("--out", required=True)
@@ -351,7 +353,7 @@ def main():
     torch.manual_seed(0)
     torch.backends.cuda.matmul.allow_tf32 = False
     tasks = a.tasks.split(",")
-    scopes = [int(s) for s in a.scopes.split(",")]
+    scopes = [int(s) for s in a.scopes.replace(":", ",").split(",")]
     big = max(scopes)
     assert all(big % s == 0 and s % len(tasks) == 0 for s in scopes)
     seen_shards = [os.path.join(a.shards, s) for s in a.seen_shards.split(",") if s]
@@ -373,7 +375,7 @@ def main():
     log(f"{len(order)} rows in {nbig} batches of {big}; scopes {scopes}; lengths "
         f"{min(len(r['ids']) for r in order)}-{max(len(r['ids']) for r in order)}")
 
-    model = build_model(find_ckpt(a.ckpt))
+    model = build_model(find_ckpt(a.ckpt), a.attn_backend)
     lins = list_linears(model)
     exact_names = [s for s in a.exact.split(",") if s]
     tap = Tap(lins, a.sketch_dim, exact_names)

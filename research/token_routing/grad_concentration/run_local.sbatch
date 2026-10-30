@@ -4,7 +4,7 @@
 # Code staged at $CODE first (login node):
 #   git archive HEAD | srun -p jsteinhardt --qos=preemptive_high -w sneetches -c1 --mem=2G -t 5 \
 #     bash --noprofile --norc -c 'mkdir -p $CODE && tar -x -C $CODE'
-#   sbatch -w sneetches -J gc-<label> --export=ALL,CODE=...,LABEL=<label>,CKNAME=<s3 dir name>[,EXTRA=...] run_local.sbatch
+#   sbatch -w sneetches -J gc-<label> --export=ALL,CODE=...,LABEL=<label>,CKNAME=<s3 dir name>[,EXTRA=...]  (no commas in EXTRA: --export splits on them) run_local.sbatch
 #SBATCH --partition=jsteinhardt
 #SBATCH --qos=preemptive_high
 #SBATCH --gres=gpu:1
@@ -27,10 +27,10 @@ s.ROOT = 'checkpoints/prasanns/_transfer/gradconc'; sys.argv = ['s3_sync', 'down
 (
   flock 9
   for S in contradiction_fresh nq_fresh outlier_fresh oolong_fresh mt4f7808 mt4s1952; do
-    [ -s "$ROOT/shards/$S/metadata.json" ] || s3down "$ROOT/shards/$S" "shards/$S"
+    s3down "$ROOT/shards/$S" "shards/$S"  # always: skips files by ETag, completes partial downloads
   done
 ) 9>"$ROOT/shards.lock"
-[ -s "$ROOT/ckpts/$CKNAME/model_and_optim/.metadata" ] || s3down "$ROOT/ckpts/$CKNAME" "$CKNAME"
+s3down "$ROOT/ckpts/$CKNAME" "$CKNAME"
 ls "$ROOT/ckpts/$CKNAME/model_and_optim" | head -3
 OPS_RUN_ID="gradconc-${LABEL}-${SLURM_JOB_ID}" OPS_EXPERIMENT=tokdrop_lr OPS_KIND=eval OPS_PARENT_RUN="$CKNAME" \
   OPS_CKPT_PATH="$ROOT/ckpts/$CKNAME" OPS_EXPECTED_MINUTES=${MINUTES:-150} OPS_FIRST_OUTPUT=1200 OPS_STALL=1800 \
