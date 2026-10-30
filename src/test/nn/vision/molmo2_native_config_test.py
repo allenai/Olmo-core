@@ -67,17 +67,28 @@ def test_rope_theta_defaults_match_the_released_checkpoints():
         assert (
             cast(Any, factory(rope_theta=1_000_000).lm.block).sequence_mixer.rope.theta == 1_000_000
         )
+    # The small variants have no release; their default is their Qwen3 backbone's base.
+    for factory in (MultimodalLMConfig.molmo2_0_6B, MultimodalLMConfig.molmo2_1_7B):
+        assert cast(Any, factory().lm.block).sequence_mixer.rope.theta == 1_000_000
 
 
 @pytest.mark.parametrize(
-    "factory_name, d_model, ffn_hidden_size, tied",
-    [("molmo2_4B", 2560, 9728, True), ("molmo2_8B", 4096, 12288, False)],
+    "factory_name, d_model, n_layers, ffn_hidden_size, tied",
+    [
+        ("molmo2_0_6B", 1024, 28, 3072, True),
+        ("molmo2_1_7B", 2048, 28, 6144, True),
+        ("molmo2_4B", 2560, 36, 9728, True),
+        ("molmo2_8B", 4096, 36, 12288, False),
+    ],
 )
-def test_native_config_shape(factory_name: str, d_model: int, ffn_hidden_size: int, tied: bool):
-    """Layout invariants that do not need the HF checkpoint cached."""
+def test_native_config_shape(
+    factory_name: str, d_model: int, n_layers: int, ffn_hidden_size: int, tied: bool
+):
+    """Layout invariants that do not need the HF checkpoint cached. The connector MLP is as wide
+    as the LM's feed-forward in every variant."""
     cfg = getattr(MultimodalLMConfig, factory_name)()
     assert cfg.lm.d_model == d_model
-    assert cfg.lm.n_layers == 36
+    assert cfg.lm.n_layers == n_layers
     assert cfg.lm.block.feed_forward.hidden_size == ffn_hidden_size
     # The table is split: `vocab_size` is the base vocab, the 128 image-special tokens live
     # in a separate `embeddings.extra_weight` block, and the LM head spans the base only.
@@ -91,3 +102,28 @@ def test_native_config_shape(factory_name: str, d_model: int, ffn_hidden_size: i
     assert cfg.connector.num_input_layers == len(cfg.vit_layers)
     assert cfg.connector.output_dim == cfg.lm.d_model
     assert cfg.connector.mlp_hidden_size == ffn_hidden_size
+
+
+def test_molmo2_vision_stack_wraps_an_external_lm_with_the_4b_vision_and_connector():
+    # An LM with a different d_model than Molmo2-4B's (Qwen3-8B: 4096 vs 2560) and a spare
+    # vocabulary row as the image-patch token.
+    lm = MultimodalLMConfig.molmo2_8B().lm
+    cfg = MultimodalLMConfig.molmo2_vision_stack(lm, image_patch_token_id=100278)
+    reference = MultimodalLMConfig.molmo2_4B()
+    assert cfg.lm is lm
+    assert cfg.vision == reference.vision
+    assert cfg.vit_layers == reference.vit_layers == (24, 18)
+    assert cfg.image_patch_token_id == 100278
+    assert cfg.connector.output_dim == 4096
+    assert cfg.connector.mlp_hidden_size == reference.connector.mlp_hidden_size == 9728
+    for field in (
+        "image_emb_dim",
+        "image_num_heads",
+        "image_num_key_value_heads",
+        "image_head_dim",
+        "num_input_layers",
+        "pooling_type",
+        "pooling_attention_mask",
+        "projector_type",
+    ):
+        assert getattr(cfg.connector, field) == getattr(reference.connector, field), field

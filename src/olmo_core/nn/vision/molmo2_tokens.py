@@ -11,6 +11,11 @@ preprocessor.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from olmo_core.config import Config
+
 # ── Preprocessor constants (SigLIP2-SO400M/14, 378×378, multi-crop) ──────────
 PATCH_SIZE = 14
 IMAGE_SIZE = 378  # 27 × 27 patches per crop
@@ -40,6 +45,111 @@ EOS_TOKEN_ID = (
 )
 IM_END_TURN_ID = 151645  # Qwen2.5 <|im_end|> (chat end-of-turn)
 
+IM_START_TOKEN = "<im_start>"
+IM_END_TOKEN = "<im_end>"
+IM_PATCH_TOKEN = "<im_patch>"
+IM_COL_TOKEN = "<im_col>"
+LOW_RES_IM_START_TOKEN = "<low_res_im_start>"
+IMAGE_PLACEHOLDER_TOKEN = "<|image|>"
+IM_END_TURN_TOKEN = "<|im_end|>"
+
+# Preserve the released Molmo2 ordering when these tokens need to be appended to another
+# tokenizer. The s002 tokenizer has 74 padded model-vocabulary rows, so these six additions
+# do not require resizing its embedding or LM-head tensors.
+IMAGE_SPECIAL_TOKENS = (
+    IM_START_TOKEN,
+    IM_END_TOKEN,
+    IM_PATCH_TOKEN,
+    IM_COL_TOKEN,
+    LOW_RES_IM_START_TOKEN,
+    IMAGE_PLACEHOLDER_TOKEN,
+)
+
+
+@dataclass
+class Molmo2TokenIds(Config):
+    """Token IDs used by Molmo2 image sequences and chat formatting."""
+
+    im_start_id: int = IM_START_ID
+    im_end_id: int = IM_END_ID
+    im_patch_id: int = IM_PATCH_ID
+    im_col_id: int = IM_COL_ID
+    low_res_im_start_id: int = LOW_RES_IM_START_ID
+    image_placeholder_id: int = IMAGE_PLACEHOLDER_ID
+    im_end_turn_id: int = IM_END_TURN_ID
+
+    @property
+    def image_token_ids(self) -> frozenset[int]:
+        """IDs that receive bidirectional image-token attention."""
+        return frozenset(
+            {
+                self.im_start_id,
+                self.im_end_id,
+                self.im_patch_id,
+                self.im_col_id,
+                self.low_res_im_start_id,
+            }
+        )
+
+
+DEFAULT_MOLMO2_TOKEN_IDS = Molmo2TokenIds()
+
+
+def prepare_molmo2_tokenizer(
+    tokenizer: Any,
+    *,
+    model_vocab_size: Optional[int] = None,
+) -> Molmo2TokenIds:
+    """Add Molmo2 image tokens to ``tokenizer`` and return their resolved IDs.
+
+    Existing tokens are retained at their current IDs. New image tokens are appended in
+    :data:`IMAGE_SPECIAL_TOKENS` order. ``<|im_end|>`` must already be supplied by the
+    tokenizer's chat vocabulary; it is not added because changing the chat template is a
+    separate model-format decision.
+
+    :param tokenizer: A Hugging Face-compatible tokenizer.
+    :param model_vocab_size: Optional fixed embedding-table size. When provided, reject an
+        adapted tokenizer that would require resizing model weights.
+    """
+    tokenizer.add_tokens(list(IMAGE_SPECIAL_TOKENS), special_tokens=True)
+
+    vocab = tokenizer.get_vocab()
+
+    def require_id(token: str) -> int:
+        if token not in vocab:
+            raise ValueError(f"Tokenizer does not contain required token {token!r}")
+        token_id = int(tokenizer.convert_tokens_to_ids(token))
+        if token_id < 0:
+            raise ValueError(f"Tokenizer returned invalid ID {token_id} for {token!r}")
+        return token_id
+
+    token_ids = Molmo2TokenIds(
+        im_start_id=require_id(IM_START_TOKEN),
+        im_end_id=require_id(IM_END_TOKEN),
+        im_patch_id=require_id(IM_PATCH_TOKEN),
+        im_col_id=require_id(IM_COL_TOKEN),
+        low_res_im_start_id=require_id(LOW_RES_IM_START_TOKEN),
+        image_placeholder_id=require_id(IMAGE_PLACEHOLDER_TOKEN),
+        im_end_turn_id=require_id(IM_END_TURN_TOKEN),
+    )
+    resolved_ids = [
+        token_ids.im_start_id,
+        token_ids.im_end_id,
+        token_ids.im_patch_id,
+        token_ids.im_col_id,
+        token_ids.low_res_im_start_id,
+        token_ids.image_placeholder_id,
+        token_ids.im_end_turn_id,
+    ]
+    if len(set(resolved_ids)) != len(resolved_ids):
+        raise ValueError(f"Molmo2 special tokens did not resolve to unique IDs: {resolved_ids}")
+    if model_vocab_size is not None and (max_token_id := max(vocab.values())) >= model_vocab_size:
+        raise ValueError(
+            f"Adapted tokenizer requires token ID {max_token_id:,d}, but the model "
+            f"vocabulary has only {model_vocab_size:,d} rows"
+        )
+    return token_ids
+
 
 def build_image_token_ids(
     resized_h: int,
@@ -47,6 +157,7 @@ def build_image_token_ids(
     h: int,
     w: int,
     low_res_col_tokens: bool = False,
+    token_ids: Optional[Molmo2TokenIds] = None,
 ) -> list[int]:
     """Return the expanded image token-ID sequence for a multi-crop image.
 
@@ -71,14 +182,15 @@ def build_image_token_ids(
 
     :returns: The flat list of image token IDs.
     """
-    tokens: list[int] = [LOW_RES_IM_START_ID]
+    ids = token_ids or DEFAULT_MOLMO2_TOKEN_IDS
+    tokens: list[int] = [ids.low_res_im_start_id]
     if low_res_col_tokens:
         for _ in range(resized_h):
-            tokens += [IM_PATCH_ID] * resized_w + [IM_COL_ID]
+            tokens += [ids.im_patch_id] * resized_w + [ids.im_col_id]
     else:
-        tokens += [IM_PATCH_ID] * (resized_h * resized_w)
-    tokens += [IM_END_ID, IM_START_ID]
+        tokens += [ids.im_patch_id] * (resized_h * resized_w)
+    tokens += [ids.im_end_id, ids.im_start_id]
     for _ in range(h):
-        tokens += [IM_PATCH_ID] * w + [IM_COL_ID]
-    tokens += [IM_END_ID]
+        tokens += [ids.im_patch_id] * w + [ids.im_col_id]
+    tokens += [ids.im_end_id]
     return tokens
