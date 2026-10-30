@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import torch
 
+from olmo_core.data.collator import DataCollator
 from olmo_core.data.utils import (
     InstancePacker,
     SegmentTree,
@@ -95,6 +96,28 @@ def test_melt_batch():
     assert new_batch["input_ids"].shape == (6, 4)
     assert new_batch["index"].tolist() == [0, 0, 0, 1, 1, 1]
     assert new_batch["metadata"] == [{"path": "x"}] * 3 + [{"path": "y"}] * 3
+
+
+@pytest.mark.parametrize(
+    "sequence_length,target_sequence_length", [(8, 4), (12, 4), (12, 3), (16, 2)]
+)
+def test_melt_batch_sequence_metadata_alignment(sequence_length, target_sequence_length):
+    items = [
+        {
+            "input_ids": list(range(start, start + sequence_length)),
+            "metadata": [{"token": token} for token in range(start, start + sequence_length)],
+        }
+        for start in (0, sequence_length)
+    ]
+    batch = DataCollator(pad_token_id=0)(items)
+    melted = melt_batch(batch, target_sequence_length)
+
+    assert [[entry["token"] for entry in metadata] for metadata in melted["metadata"]] == melted[
+        "input_ids"
+    ].tolist()
+    assert sum(melted["metadata"], []) == sum(batch["metadata"], [])
+    assert batch["input_ids"].shape == (2, sequence_length)
+    assert batch["metadata"] == [item["metadata"] for item in items]
 
 
 def test_get_document_lengths():

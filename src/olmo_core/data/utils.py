@@ -106,7 +106,9 @@ def melt_batch(batch: Dict[str, Any], target_sequence_length: int) -> Dict[str, 
                     if len(item) != current_sequence_length:
                         raise RuntimeError(f"unexpected item length for '{key}' in batch")
                     for i in range(ratio):
-                        new_batch[key].append(item[i * ratio : i * ratio + target_sequence_length])
+                        new_batch[key].append(
+                            item[i * target_sequence_length : (i + 1) * target_sequence_length]
+                        )
                 else:
                     for _ in range(ratio):
                         new_batch[key].append(item)
