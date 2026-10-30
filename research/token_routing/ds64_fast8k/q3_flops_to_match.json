@@ -146,6 +146,22 @@
     "flag": "",
     "vs_dense": 0.0
    },
+   "f8k-mt4-denselora64all-f1952-q3-lr1e-05-sn": {
+    "arm": "denselora64all",
+    "rows": 1952,
+    "lr": "1e-05",
+    "cluster": "sneetches",
+    "pf": 1219.0545265633905,
+    "y": 0.7791,
+    "steps": 488,
+    "s_per_step": 12.85,
+    "peak_active_gib": 22.38,
+    "peak_reserved_gib": 25.24,
+    "pf_per_step": 2.498,
+    "x_dense": 1.21,
+    "flag": "",
+    "vs_dense": 0.0248
+   },
    "f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05": {
     "arm": "q3lora64all36r20at12",
     "rows": 1952,
@@ -703,34 +719,34 @@
    "rows": 1952,
    "cut": 0,
    "lr": "1e-05",
-   "pf": null,
+   "pf": 1219.0545265633905,
    "cluster": "sneetches",
-   "pf_dense_equiv": null,
-   "steps": 363,
-   "s_per_step": 12.86,
+   "pf_dense_equiv": 1805.7438402149776,
+   "steps": 488,
+   "s_per_step": 12.85,
    "peak_active_gib": 22.38,
    "peak_reserved_gib": 25.24,
    "cells": {
-    "contradiction@8k": null,
-    "contradiction@2k": null,
-    "nq@8k": null,
-    "nq@2k": null,
-    "outlier@8k": null,
-    "outlier@2k": null,
-    "oolong@8k": null,
-    "oolong@2k": null
+    "contradiction@8k": 0.917,
+    "contradiction@2k": 0.971,
+    "nq@8k": 0.898,
+    "nq@2k": 0.966,
+    "outlier@8k": 0.455,
+    "outlier@2k": 0.615,
+    "oolong@8k": 0.586,
+    "oolong@2k": 0.825
    },
    "eval_size": {
-    "contradiction@8k": null,
-    "contradiction@2k": null,
-    "nq@8k": null,
-    "nq@2k": null,
-    "outlier@8k": null,
-    "outlier@2k": null,
-    "oolong@8k": null,
-    "oolong@2k": null
+    "contradiction@8k": 500,
+    "contradiction@2k": 500,
+    "nq@8k": 500,
+    "nq@2k": 500,
+    "outlier@8k": 500,
+    "outlier@2k": 500,
+    "oolong@8k": 500,
+    "oolong@2k": 500
    },
-   "y": null,
+   "y": 0.7791,
    "logs": [
     "/net/sneetches/data/prasann/joblogs/q3recipe_denselora64all-f1952-1e-5_chain4128508.log"
    ]
