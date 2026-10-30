@@ -151,7 +151,7 @@ def ops_results():
                          timeout=120).stdout
     res = {}
     for r in (json.loads(txt) if txt.strip().startswith("[") else []):
-        if "-q3-" in (r.get("train_run") or ""):
+        if re.search(r"-q3(\d*b)?-", r.get("train_run") or ""):
             res.setdefault((r["train_run"], r["task"], r["rung"]), (r["value"], r["eval_size"], r.get("metric")))
     return res
 
