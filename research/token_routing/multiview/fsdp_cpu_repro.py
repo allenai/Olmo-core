@@ -19,6 +19,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-fire", action="store_true", help="disable the explicit FSDP pre-backward firing")
     ap.add_argument("--views", type=int, default=2)
+    ap.add_argument("--simple", default="", help="late_then_early | early_then_late | plain")
     a = ap.parse_args()
     os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
     os.environ.setdefault("MASTER_PORT", "29533")
@@ -138,6 +139,24 @@ def main():
             finally:
                 phase["on"] = False
         torch.autograd.backward = bw
+    if a.simple:
+        model.zero_grad(set_to_none=True)
+        if a.simple == "plain":
+            model(ids, labels=labels).loss.backward()
+            print("SIMPLE_OK plain"); return
+        ctx = {"layer": 1, "repeat": False, "h7": None}
+        model._mv_ctx = ctx
+        out = model(ids, labels=labels)
+        model._mv_ctx = None
+        h = ctx["h7_attached"]
+        print("h requires_grad", h.requires_grad, "grad_fn", type(h.grad_fn).__name__, flush=True)
+        if a.simple == "late_then_early":
+            out.loss.backward()
+            torch.autograd.backward(h.view(h.shape), ctx["leaf"].grad)
+        else:
+            torch.autograd.backward(h.view(h.shape), torch.ones_like(h))
+            out.loss.backward()
+        print("SIMPLE_OK", a.simple); return
     model.zero_grad(set_to_none=True)
     tm = TM()
     MV.enable_multiview(tm, a.views)

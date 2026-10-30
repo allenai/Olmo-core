@@ -13,6 +13,6 @@ PY=/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python
 TESTS=("$@")
 [ ${#TESTS[@]} -eq 0 ] && TESTS=(src/test/nn/multiview_test.py src/test/nn/online_token_router_test.py recipes/train/variants_options_test.py)
 if [ "${MODE:-pytest}" = script ]; then
-  PYTHONPATH="$D/src:$D" timeout 900 "$PY" "${TESTS[@]}" 2>&1 | grep -v Warning | tail -40; exit 0
+  PYTHONPATH="$D/src:$D" timeout 900 "$PY" "${TESTS[@]}" 2>&1 | grep -v Warning | tail -${TAIL:-40}; exit 0
 fi
 PYTHONPATH="$D/src:$D" timeout 900 "$PY" -m pytest -x -q -p no:cacheprovider "${TESTS[@]}" 2>&1 | tail -60
