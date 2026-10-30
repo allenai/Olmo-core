@@ -155,9 +155,9 @@ def select_rows(norm2: torch.Tensor, cfg: SparseBackwardConfig, gen: Optional[to
 def _svd_factors(mod: nn.Linear, rank: int):
     """(U S (out, r), V (in, r)) of the frozen weight, cached on the module (fp32 SVD, stored in the weight dtype)."""
     f = getattr(mod, "_sbw_svd", None)
-    if f is not None and f[0].shape[1] == rank:
+    if f is not None:
         return f
-    W = mod.weight.detach().float()
+    W = mod.weight.detach().to(torch.float64 if mod.weight.dtype == torch.float64 else torch.float32)
     U, S, Vh = torch.linalg.svd(W, full_matrices=False)
     r = min(rank, S.numel())
     us = (U[:, :r] * S[:r]).to(mod.weight.dtype).contiguous()
