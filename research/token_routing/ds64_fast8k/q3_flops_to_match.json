@@ -799,6 +799,10 @@
     [
      2965.395832915593,
      0.7957
+    ],
+    [
+     5936.13454,
+     0.8999
     ]
    ],
    "dense_best_lr": {
@@ -816,6 +820,11 @@
      2965.395832915593,
      0.7957,
      "1e-05"
+    ],
+    "3904": [
+     5936.13454,
+     0.8999,
+     "5e-06"
     ]
    },
    "cells": {
@@ -856,6 +865,25 @@
      "x_dense": 0.46,
      "flag": "",
      "vs_dense": -0.0433
+    },
+    "f8k-mt4-dense-f3904-q38b-lr5e-06": {
+     "arm": "dense",
+     "size": "8b",
+     "rows": 3904,
+     "lr": "5e-06",
+     "cluster": "beaker",
+     "pf": 5936.13454,
+     "y": 0.8999,
+     "steps": 976,
+     "s_per_step": null,
+     "peak_active_gib": 52.14,
+     "peak_reserved_gib": 54.67,
+     "outlier@8k": 0.938,
+     "contradiction@8k": 0.975,
+     "pf_per_step": 6.082,
+     "x_dense": 1.0,
+     "flag": "",
+     "vs_dense": 0.0
     },
     "f8k-mt4-dense-f488-q38b-lr5e-06": {
      "arm": "dense",
@@ -948,8 +976,8 @@
      "outlier@8k": 0.816,
      "contradiction@8k": 0.941,
      "pf_per_step": 1.804,
-     "x_dense": 1.68,
-     "flag": ">=",
+     "x_dense": 2.74,
+     "flag": "",
      "vs_dense": 0.0813
     }
    }
@@ -3198,6 +3226,44 @@
    "y": 0.7524,
    "logs": [
     "beaker:01M65T5AH833C09636D6PH65FX"
+   ]
+  },
+  "f8k-mt4-dense-f3904-q38b-lr5e-06": {
+   "arm": "dense",
+   "size": "8b",
+   "rows": 3904,
+   "cut": 0,
+   "lr": "5e-06",
+   "pf": 5936.13454,
+   "cluster": "beaker",
+   "pf_dense_equiv": 5936.13454,
+   "steps": 976,
+   "s_per_step": null,
+   "peak_active_gib": 52.14,
+   "peak_reserved_gib": 54.67,
+   "cells": {
+    "contradiction@8k": 0.975,
+    "contradiction@2k": 0.993,
+    "nq@8k": 0.926,
+    "nq@2k": 0.974,
+    "outlier@8k": 0.938,
+    "outlier@2k": 0.883,
+    "oolong@8k": 0.662,
+    "oolong@2k": 0.848
+   },
+   "eval_size": {
+    "contradiction@8k": 500,
+    "contradiction@2k": 500,
+    "nq@8k": 500,
+    "nq@2k": 500,
+    "outlier@8k": 500,
+    "outlier@2k": 500,
+    "oolong@8k": 500,
+    "oolong@2k": 500
+   },
+   "y": 0.8999,
+   "logs": [
+    "beaker:01M65T65ADCKABEJF18STB3NRZ"
    ]
   },
   "f8k-mt4-dense-f488-q38b-lr5e-06": {

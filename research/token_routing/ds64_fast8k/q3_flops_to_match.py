@@ -116,8 +116,10 @@ def _beaker_log(ex, name):
     j = json.loads(subprocess.run([BEAKER, "experiment", "get", ex, "--format", "json"], capture_output=True, text=True,
                                   timeout=120).stdout or "{}")
     j = j[0] if isinstance(j, list) else j
-    st = (j.get("jobs") or [{}])[0].get("status", {})
-    log = subprocess.run([BEAKER, "experiment", "logs", ex], capture_output=True, text=True, timeout=600).stdout
+    job = (j.get("jobs") or [{}])[-1]  # the LATEST job: a preempted run's retry is a new job in the same experiment
+    st = job.get("status", {})
+    log = subprocess.run([BEAKER, "job", "logs", job["id"]] if job.get("id") else [BEAKER, "experiment", "logs", ex],
+                         capture_output=True, text=True, timeout=600).stdout
     if st.get("exited"):
         open(path, "w").write(log)
     return log
