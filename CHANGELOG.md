@@ -142,6 +142,7 @@ from the tag directly, or use v2.6.0 or later. Fixed in v2.6.0.
 
 ### Added
 
+- Changed Weka mounts to also mount `oe-adapt-default` when mounting `oe-training-default`
 - Added gradient dumping support to `GAPMonitorCallback`. Set `dump_gradients=True` to save raw gradient tensors during training. Supports full distributed checkpoints and preview mode (`dump_gradients_save_first_n`).
 - Added API reference and user guide for the `olmo_core.generate` module and interactive chat interface.
 - Added support for in-loop perplexity evals with context parallelism (CP) and tensor parallelism (TP).
