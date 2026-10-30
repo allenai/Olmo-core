@@ -136,3 +136,22 @@ requeued by Beaker; the trainer saves no mid-run checkpoint, so each restarts fr
   0.012, 2k -0.018 +- 0.009): lw35 at 3,904 rows has the CE of the recipe at 7,808 rows (0.1458 vs 0.1457) at 54% of
   its FLOPs. f1 does not move (0.9157 vs 0.9153; one 8-cell f1 run has SE ~0.004), so it does not yet clear the f1 bar.
   The uniform compute-matched control (uw25) decides whether "late" matters or only "more tokens".
+
+### Second wave (2026-10-30 afternoon; eval_size 500 per cell, no-cot, 1 seed)
+
+f1 now read from ops results (`analyze_decay.py --f1-ops`, `run_analysis.sh`): `ds64_fast8k/results/pareto_points.json`
+was regenerated after the answer_ce rows landed, and its collector (`collect_pareto_points._ops_scores`) keeps any
+metric per (task, rung), so the dense/recipe "scores" there became answer CE. **Fix needed in flopdrop_clean:** skip
+metrics starting with `answer_` there (as it already skips `gradcomp_`).
+
+| run | PFLOPs | 8-cell f1 | f1 FTM | CE 8-cell | CE FTM | CE vs recipe, same rows (paired) |
+|---|---|---|---|---|---|---|
+| uw25 f3904 (uniform 25%/9.7%) | 745 | 0.9140 | 3.3x | 0.1518 | 2.6x | -0.0009 +- 0.0022 |
+| lw35 f3904 (late 35%/15%) | 745 | 0.9157 | 3.4x | 0.1458 | 3.2x | -0.0069 +- 0.0022 |
+| lw50 f3904 (late 50%/25%) | 812 | 0.9195 | 3.4x | 0.1482 | 2.7x | -0.0045 +- 0.0023 |
+| rl25 f7808 (ReLoRA) | 1371 | 0.9245 | 2.2x | 0.1426 | 2.0x | -0.0030 +- 0.0022 |
+
+- At equal FLOPs (745 vs 745 PF) late widening beats the uniform wider keep by 0.0060 +- 0.0021 CE: it is the TIMING
+  (full-ish context in the last third), not the extra tokens. Widening further (lw50) buys nothing more.
+- ReLoRA at f7808: -0.003 +- 0.002 CE vs the recipe (unsat-4 -0.008 +- 0.004), f1 +0.000; gap to dense f7808 shrinks
+  from +0.008 to +0.005 +- 0.003. Within the recipe's seed noise until the seed-1 control lands.
