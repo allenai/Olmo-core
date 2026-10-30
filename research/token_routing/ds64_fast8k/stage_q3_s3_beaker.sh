@@ -30,7 +30,7 @@ for IT in $ITEMS; do
   esac
   [ -d $SRC ] || { echo "!!! missing $SRC"; exit 1; }
   echo "--- $IT: $SRC ($(du -sh $SRC | cut -f1)) $(date +%T)"; ls $SRC | head
-  AWS_PROFILE=S3 aws s3 sync $SRC $DST/$IT/ --only-show-errors --exclude "*/step*/*" --exclude "wandb/*" && echo "SYNCED $IT" || { echo "!!! FAILED $IT"; exit 1; }
+  AWS_PROFILE=S3 aws s3 sync $SRC $DST/$IT/ --only-show-errors --exclude "*/step*/*" --exclude "wandb/*" --no-follow-symlinks && echo "SYNCED $IT" || { echo "!!! FAILED $IT"; exit 1; }
 done
 echo TRANSFER_DONE
 EOW
