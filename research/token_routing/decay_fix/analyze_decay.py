@@ -54,10 +54,13 @@ def main():
     ap.add_argument("--extra-runs", default="", help="more method runs (pf from --pf name=PF if not in points)")
     ap.add_argument("--pf", action="append", default=[], help="name=PFLOPs override")
     ap.add_argument("--json-out", default="")
+    ap.add_argument("--pf-json", default="", help="{run: actual PFLOPs} (results/pf.json) for runs not in --points")
     ap.add_argument("--f1-json", default="", help="extra {run: {task_rung: f1}} (record_ladder.py results/f1_points.json)")
     a = ap.parse_args()
     P = json.load(open(a.points))
     pf = {k: v["pf"] for k, v in P["runs"].items()}
+    if a.pf_json and os.path.exists(a.pf_json):
+        pf.update(json.load(open(a.pf_json)))
     for kv in a.pf:
         k, v = kv.split("=")
         pf[k] = float(v)

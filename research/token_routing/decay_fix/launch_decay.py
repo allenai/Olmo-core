@@ -86,8 +86,16 @@ def load():
 
 
 def save(st):
-    json.dump(st, open(STATE + ".tmp", "w"), indent=1)
-    os.replace(STATE + ".tmp", STATE)
+    """Merge this process's entries into the on-disk state under a lock (two orchestrators can launch at once)."""
+    import fcntl
+
+    with open(STATE + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        disk = load()
+        for sec in ("runs", "evals", "ce"):
+            disk.setdefault(sec, {}).update(st.get(sec, {}))
+        json.dump(disk, open(STATE + ".tmp", "w"), indent=1)
+        os.replace(STATE + ".tmp", STATE)
 
 
 def run_name(arm, budget, seed=0):
