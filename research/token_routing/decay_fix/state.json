@@ -6,6 +6,48 @@
    "budget": "f3904",
    "seed": 0,
    "steps_expected": 12
+  },
+  "f8k-mt4-smk-f3904-tdf-lr1e-05-smoke12": {
+   "ex": "01M65WR29V6R753NA3QN05QTEV",
+   "arm": "smk",
+   "budget": "f3904",
+   "seed": 0,
+   "steps_expected": 12
+  },
+  "f8k-mt4-lora64all32r20to7rl25-f3904-tdf-lr1e-05": {
+   "ex": "01M65WY3GPRRDX43CGDNE3ECWT",
+   "arm": "lora64all32r20to7rl25",
+   "budget": "f3904",
+   "seed": 0,
+   "steps_expected": 976
+  },
+  "f8k-mt4-lora64all32r20to7rl25-f7808-tdf-lr1e-05": {
+   "ex": "01M65WZ0WNJV5BJZ7CNXE1X85N",
+   "arm": "lora64all32r20to7rl25",
+   "budget": "f7808",
+   "seed": 0,
+   "steps_expected": 1952
+  },
+  "f8k-mt4-lora64all32r20to7lw35-f3904-tdf-lr1e-05": {
+   "ex": "01M65WZZZS1KHWQ0VZ2TJ27S3M",
+   "arm": "lora64all32r20to7lw35",
+   "budget": "f3904",
+   "seed": 0,
+   "steps_expected": 976
+  },
+  "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-lr1e-05": {
+   "ex": "01M65X11FJ4QX8WAPXVA7CG8BD",
+   "arm": "lora64all32r20to7lw35",
+   "budget": "f7808",
+   "seed": 0,
+   "steps_expected": 1952
+  },
+  "f8k-mt4-lora64all32r20to7-f7808-tdf-sd1-lr1e-05": {
+   "ex": "01M65X26E7PMTRG4FGHRVJDDT4",
+   "arm": "lora64all32r20to7",
+   "budget": "f7808",
+   "seed": 1,
+   "steps_expected": 1952
   }
  },
  "evals": {},
