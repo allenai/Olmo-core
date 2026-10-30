@@ -114,7 +114,7 @@ const RUNS = [
   {k: 2, rows: 1952, pf: 483.0, cells: {"contradiction@8k": 0.954, "contradiction@2k": 0.984, "nq@8k": 0.930, "nq@2k": 0.978, "outlier@8k": 0.887, "outlier@2k": 0.867, "oolong@8k": 0.639, "oolong@2k": 0.844}},
   {k: 3, rows: 1952, pf: 622.6, cells: {"contradiction@8k": 0.948, "contradiction@2k": 0.984, "nq@8k": 0.922, "nq@2k": 0.986, "outlier@8k": 0.873, "outlier@2k": 0.651, "oolong@8k": 0.571, "oolong@2k": 0.798}},
   {k: 1, rows: 1952, pf: 343.4, cells: {"contradiction@8k": 0.954, "contradiction@2k": 0.977, "nq@8k": 0.926, "nq@2k": 0.974, "outlier@8k": 0.812, "outlier@2k": 0.690, "oolong@8k": 0.645, "oolong@2k": 0.848}},
-  {k: 2, rows: 3904, pf: null, cells: null},
+  {k: 2, rows: 3904, pf: 965.7, cells: {"contradiction@8k": 0.973, "contradiction@2k": 0.993, "nq@8k": 0.912, "nq@2k": 0.976, "outlier@8k": 0.973, "outlier@2k": 0.908, "oolong@8k": 0.673, "oolong@2k": 0.860}},
   {k: 3, rows: 3904, pf: null, cells: null},
 ];
 const RECIPE_CELLS = {"contradiction@8k": 0.959, "contradiction@2k": 0.977, "nq@8k": 0.912, "nq@2k": 0.970, "outlier@8k": 0.862, "outlier@2k": 0.880, "oolong@8k": 0.648, "oolong@2k": 0.856};
@@ -122,7 +122,7 @@ const CELLS = ["contradiction@8k", "contradiction@2k", "nq@8k", "nq@2k", "outlie
 const VERDICT = {cls: "lose", head: "No win at 1,952 rows: a second view barely helps and a third one hurts",
   body: ["k = 2 views at 1,952 rows/task scores 0.885 (8-cell mean) at 483 PF, 0.014 behind the recipe interpolated at that PF (0.899). k = 3 scores 0.842 at 623 PF, 0.068 behind the recipe there (0.910), and below both k = 2 and k = 1: oolong drops to 0.571 / 0.798 and outlier@2k to 0.651. Reusing a row's answer labels three times overfits.",
          "Against its same-code-path k = 1 control (random choice, 0.853 at 343 PF), k = 2 gains +0.032, but that control sits 0.030 below the router recipe at the same rows, mostly on outlier@2k. Even on that reading k = 3 reverses the gain, so more views per row is not a path to large-data FLOP savings.",
-         "Still running: k = 2 and k = 3 at 3,904 rows/task."]};
+         "At 3,904 rows/task, k = 2 scores 0.909 at 966 PF, 0.011 behind the recipe interpolated there (0.919), and below both the router recipe (0.915) and the random-choice recipe (0.914) at the same rows with one view. Still running: k = 3 at 3,904 rows/task."]};
 const mean = c => c ? CELLS.reduce((s, k) => s + c[k], 0) / CELLS.length : null;
 function interp(curve, pf) {
   const x = Math.log(pf), xs = curve.map(p => Math.log(p[0]));

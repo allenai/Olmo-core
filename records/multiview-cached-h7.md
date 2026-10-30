@@ -5,7 +5,7 @@ updated: 2026-10-30
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (3 of 5 scored: no win at f1952, k=3 overfits; f3904 runs training)
+status: in progress (4 of 5 scored: no win; mv3-f3904 training)
 superseded_by:
 artifact: https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ
 summary: Run blocks 0-6 once per row, cache h7, take k optimizer steps on blocks 7-31 each with a fresh random 20%/7% token subset, then one early-stack backward on the mean dL/dh7. Cost per row 0.10 + 0.12k x dense; goal = beat the recipe at matched FLOPs by >= 0.01 (mt4 8-cell mean).
@@ -80,7 +80,7 @@ routed step, as planned (0.12 of 0.225). Expected full-run cost: k = 2 about 1.5
 | f8k-mt4-lora64all32rnd20to7mv2-f1952-tdmv-lr1e-05 (01M660BDJE2ZQA3YE2AQQS20FA) | 2 | 1,952 | 483.0 | 0.885 | 0.899 | -0.014 |
 | ...mv3-f1952 (01M660CBN2GSBT9AQ954ZB1HGK) | 3 | 1,952 | 622.6 | 0.842 | 0.910 | -0.068 |
 | ...mv1-f1952 (01M6662Z9T213KKGJC8M3ZA215), same-code-path k = 1 control | 1 | 1,952 | 343.4 | 0.853 | 0.883 (extrap.) | -0.030 |
-| ...mv2-f3904 (01M660D44KG044R94YW2CYDC8T) | 2 | 3,904 | running | | | |
+| ...mv2-f3904 (01M660D44KG044R94YW2CYDC8T) | 2 | 3,904 | 965.7 | 0.909 | 0.919 | -0.011 |
 | ...mv3-f3904 (01M660DX5J61G6CSZ21MXAF1X3) | 3 | 3,904 | running | | | |
 
 eval_size 500 per cell, no-cot, query after; cells (8k / 2k) for mv2-f1952: contradiction 0.954 / 0.984, nq 0.930 /
@@ -90,6 +90,9 @@ eval_size 500 per cell, no-cot, query after; cells (8k / 2k) for mv2-f1952: cont
 mv3-f1952 cells (8k / 2k): contradiction 0.948 / 0.984, nq 0.922 / 0.986, outlier 0.873 / 0.651, oolong 0.571 /
 0.798. A third view hurts: below k = 2 and below the k = 1 control (oolong and outlier@2k fall), i.e. reusing a
 row's answer labels three times overfits.
+
+mv2-f3904 cells (8k / 2k): contradiction 0.973 / 0.993, nq 0.912 / 0.976, outlier 0.973 / 0.908, oolong 0.673 /
+0.860. Below the k = 1 recipe at the same rows (router 0.915, random 0.914) despite 1.40x the FLOPs.
 
 mv1-f1952 cells (8k / 2k): contradiction 0.954 / 0.977, nq 0.926 / 0.974, outlier 0.812 / 0.690, oolong
 0.645 / 0.848.
