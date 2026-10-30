@@ -57,11 +57,11 @@
  },
  {
   "date": "2026-10-29",
-  "status": "running",
+  "status": "done",
   "track": "SFT 4-task",
   "who": "main (tokdrop)",
   "title": "Pyramid keep: 50% after block 3 → 20% after 7 → 7% after 16 (recipe otherwise)",
-  "result": "3 seeds at 3,904 rows: 0.908 / 0.911 / 0.900 (mean 0.906) vs the recipe's 0.916 (2 seeds); 0.870 vs 0.883 at 1,952 rows; at 0.83× the recipe's FLOPs. A tie to slightly worse in FLOPs-to-match, well below the 5× bar. 7,808-row run pending.",
+  "result": "At 0.83× the recipe's FLOPs: 0.870 vs 0.883 (1,952 rows), 0.906 (3 seeds) vs 0.916 (3,904 rows), 0.925 vs 0.924 (7,808 rows). A tie overall in FLOPs-to-match, ≈1.2× at best, below the 5× bar. Not pursued.",
   "match": [
    "p50at3"
   ]
