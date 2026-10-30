@@ -118,7 +118,7 @@
   "track": "Model scale",
   "who": "side session (scale ablation)",
   "title": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models",
-  "result": "Interim: at fixed small data the gain grows with scale: FLOPs-to-match ≈1.7× (0.8B) → ≈2.5× (2B) → ≈3.7–4.1× (4B) at 1,952 / 3,904 rows, same per-step cut (0.23–0.25×). Small models' lower dense ceiling flips it at large data (0.8B recipe passes dense's 0.743 plateau at 7,808 rows: >4.2×). Recipe noisier at 0.8B (±0.03). 9B and 2B 7,808-row points in flight.",
+  "result": "Gain grows with scale at fixed data: FLOPs-to-match at 1,952 rows 1.73× (0.8B) / 2.42× (2B) / 4.08× (4B) / >4.42× (9B: recipe 0.902/0.903 at 632 PF beats dense 0.900 at 2,792); at 3,904 rows 1.88 / 3.22 / 3.68×. At large data the ratio tracks where dense saturates. Routing, not LoRA, carries the 0.8B crossing. 9B dense at 3,904 pending.",
   "match": [
    "-2b-",
    "08b",

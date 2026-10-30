@@ -335,7 +335,7 @@ __LORA2X2__
 </section>
 </div>
 <div class="part" id="models">
-<div class="parthead"><span class="eyebrow">3b · Other models</span><h2 class="ptitle">Does the recipe generalize? Qwen3 and model scale</h2><p class="verdict">On all-full-attention Qwen3-4B the recipe still wins, but by less: ≈2.1× dense FLOPs-to-match at 1,952 rows vs ≈4.6× on Qwen3.5 (interim, 1 seed). Across Qwen3.5 sizes the gain grows with scale at fixed data (≈1.7× at 0.8B → ≈2.5× at 2B → ≈3.7–4.1× at 4B).</p></div>
+<div class="parthead"><span class="eyebrow">3b · Other models</span><h2 class="ptitle">Does the recipe generalize? Qwen3 and model scale</h2><p class="verdict">On all-full-attention Qwen3-4B the recipe still wins, but by less: ≈2.1× dense FLOPs-to-match at 1,952 rows vs ≈4.6× on Qwen3.5 (interim, 1 seed). Across Qwen3.5 sizes the gain grows with scale at fixed data (≈1.7× at 0.8B → ≈2.4–3.2× at 2B → ≈3.7–4.1× at 4B → &gt;4.4× at 9B).</p></div>
 <section>
   <h2>Qwen3-4B (36 full-attention layers)</h2>
   <div class="figs">
@@ -367,15 +367,17 @@ __LORA2X2__
       <figcaption>Same setup as 0.8B (24 blocks).</figcaption></figure>
     <figure><h3>4B: mean score vs training FLOPs</h3><div class="chart"><canvas id="sc4" aria-label="4B Pareto"></canvas></div>
       <figcaption>Fresh pools, recipe 7/16 (of 32), for reference.</figcaption></figure>
+    <figure><h3>9B: mean score vs training FLOPs</h3><div class="chart"><canvas id="sc9" aria-label="9B Pareto"></canvas></div>
+      <figcaption>Qwen3.5-9B (32 blocks, recipe 7/16), 4 GPUs. Dense's cheapest points are runs cut at 122 / 244 steps.</figcaption></figure>
   </div>
   <div class="tbl" style="margin-top:14px"><table>
     <tr><th>size</th><th class="n">recipe FLOPs / step vs dense</th><th class="n">peak memory vs dense</th><th class="n">FTM, 1,952 rows</th><th class="n">FTM, 3,904 rows</th><th class="n">FTM, 7,808 rows</th><th class="n">dense ceiling (best mean)</th></tr>
-    <tr><td>0.8B</td><td class="n">0.241×</td><td class="n">0.60×</td><td class="n">1.73× (3 seeds)</td><td class="n">1.67×</td><td class="n">&gt;4.16×</td><td class="n">0.743</td></tr>
-    <tr><td>2B</td><td class="n">0.247×</td><td class="n">0.57×</td><td class="n">2.48× (2 seeds)</td><td class="n">2.52×</td><td class="n">running</td><td class="n">0.880 (5,856 rows)</td></tr>
+    <tr><td>0.8B</td><td class="n">0.241×</td><td class="n">0.60×</td><td class="n">1.73× (3 seeds)</td><td class="n">1.88× (2)</td><td class="n">&gt;4.16× (2)</td><td class="n">0.743</td></tr>
+    <tr><td>2B</td><td class="n">0.247×</td><td class="n">0.57×</td><td class="n">2.42× (2 seeds)</td><td class="n">3.22× (3)</td><td class="n">2.87×</td><td class="n">0.899 (7,808 rows)</td></tr>
     <tr><td>4B</td><td class="n">0.225×</td><td class="n">0.47×</td><td class="n">4.08×</td><td class="n">3.68×</td><td class="n">2.17×</td><td class="n">0.931</td></tr>
-    <tr><td>9B</td><td class="n">0.226×</td><td class="n">0.60×</td><td class="n" colspan="3">training / evaluating</td><td class="n">–</td></tr>
+    <tr><td>9B</td><td class="n">0.226×</td><td class="n">0.60×</td><td class="n">&gt;4.42× (2 seeds)</td><td class="n">dense pending</td><td class="n">–</td><td class="n">≥0.900</td></tr>
   </table></div>
-  <p class="note"><b>Reading:</b> at matched small data the recipe's gain grows with scale (≈1.7× → 2.5× → 3.7–4.1× from 0.8B to 4B at 1,952 / 3,904 rows), at the same per-step cut (≈0.23–0.25×). The lower ceilings cut the other way at large data: 0.8B dense plateaus at 0.743 (outlier@8k stuck near 0.3) while the frozen-base LoRA recipe keeps improving (0.806 at 7,808 rows), and at 4B dense's high ceiling (0.93) is what shrinks the multiplier to ≈2× at 7,808 rows. So compare scales at fixed small data. The recipe is less stable at 0.8B (contradiction@8k 0.38–0.76 across 3 seeds; ±0.03 on the mean). Higher LRs (dense 2e-5, recipe 3e-5) are worse at both small sizes, so LR is not the confound. Peak memory is not like-for-like across sizes (different GPU counts). 9B and the 2B 7,808-row points are in flight. JSON: <code>research/token_routing/ds64_fast8k/scale_ablation.json</code> (from <code>collect_scale_ablation.py</code>, branch <code>claude/recipe-scale-ablation-71d007</code>).</p>
+  <p class="note"><b>Reading:</b> at matched small data the recipe's gain grows with scale (≈1.7–1.9× → 2.4–3.2× → 3.7–4.1× → &gt;4.4× from 0.8B to 9B at 1,952 / 3,904 rows; the 9B recipe, 0.902 / 0.903 over 2 seeds at 632 PF, beats 9B dense at 1,952 rows, 0.900 at 2,792 PF), at the same per-step cut (≈0.23–0.25×). The lower ceilings cut the other way at large data: 0.8B dense plateaus at 0.743 (outlier@8k stuck near 0.3) while the frozen-base LoRA recipe keeps improving (0.806 at 7,808 rows), and at 4B dense's high ceiling (0.93) is what shrinks the multiplier to ≈2× at 7,808 rows. So compare scales at fixed small data. The recipe is less stable at 0.8B (contradiction@8k 0.38–0.76 across 3 seeds; ±0.03 on the mean). Higher LRs (dense 2e-5, recipe 3e-5) are worse at both small sizes, so LR is not the confound. Peak memory is not like-for-like across sizes (different GPU counts). Recipe seed variance shrinks with scale (0.8B ±0.03, 9B ±0.001). Routing, not LoRA, carries the 0.8B crossing (dense + LoRA-all alone: 0.757 at 961 PF vs the recipe's 0.807). 9B dense at 3,904 rows is in flight. JSON: <code>research/token_routing/ds64_fast8k/scale_ablation.json</code> (from <code>collect_scale_ablation.py</code>, branch <code>claude/recipe-scale-ablation-71d007</code>).</p>
 </section>
 </div>
 <div class="part" id="cpt">
@@ -740,13 +742,13 @@ function draw() {
       options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
         scales: { x: { ticks: { color: css("--muted") }, grid: { display: false } }, y: { title: { display: true, text: "8-batch gradient cosine", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   (() => { if (!window.Chart) return; const S = D.scale || { points: [] };
-    const e = document.getElementById("scftm"); if (e) new Chart(e, { type: "bar", data: { labels: ["0.8B", "2B", "4B"], datasets: [
-        { label: "1,952 rows/task", data: [1.73, 2.48, 4.08], backgroundColor: css("--c2") },
-        { label: "3,904 rows/task", data: [1.67, 2.52, 3.68], backgroundColor: css("--c3") },
-        { label: "7,808 rows/task (0.8B: lower bound)", data: [4.16, null, 2.17], backgroundColor: css("--c1") }] },
+    const e = document.getElementById("scftm"); if (e) new Chart(e, { type: "bar", data: { labels: ["0.8B", "2B", "4B", "9B"], datasets: [
+        { label: "1,952 rows/task (9B: lower bound)", data: [1.73, 2.42, 4.08, 4.42], backgroundColor: css("--c2") },
+        { label: "3,904 rows/task", data: [1.88, 3.22, 3.68, null], backgroundColor: css("--c3") },
+        { label: "7,808 rows/task (0.8B: lower bound)", data: [4.16, 2.87, 2.17, null], backgroundColor: css("--c1") }] },
       options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
         scales: { x: { ticks: { color: css("--muted") }, grid: { display: false } }, y: { min: 0, title: { display: true, text: "dense FLOPs to match (×)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } });
-    [["sc08", "0.8b"], ["sc2", "2b"], ["sc4", "4b"]].forEach(([id, sz]) => {
+    [["sc08", "0.8b"], ["sc2", "2b"], ["sc4", "4b"], ["sc9", "9b"]].forEach(([id, sz]) => {
       const pts = S.points.filter(p => p.scale === sz);
       const dense = pts.filter(p => p.arm === "dense" && p.lr === 5e-6).sort((a, b) => a.pf - b.pf);
       const rec = pts.filter(p => p.arm !== "dense" && p.lr === 1e-5).sort((a, b) => a.pf - b.pf);
