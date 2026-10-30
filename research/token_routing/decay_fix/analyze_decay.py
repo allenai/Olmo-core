@@ -55,6 +55,7 @@ def main():
     ap.add_argument("--pf", action="append", default=[], help="name=PFLOPs override")
     ap.add_argument("--json-out", default="")
     ap.add_argument("--pf-json", default="", help="{run: actual PFLOPs} (results/pf.json) for runs not in --points")
+    ap.add_argument("--f1-ops", action="store_true", help="read f1 / score from ops results (see below)")
     ap.add_argument("--f1-json", default="", help="extra {run: {task_rung: f1}} (record_ladder.py results/f1_points.json)")
     a = ap.parse_args()
     P = json.load(open(a.points))
@@ -70,6 +71,20 @@ def main():
     if a.f1_json and os.path.exists(a.f1_json):
         for k, v in json.load(open(a.f1_json)).items():
             f1.setdefault(k, {}).update(v)
+    methods0 = RECIPE + [r for r in a.extra_runs.split(",") if r]
+    if a.f1_ops:
+        # pareto_points.json's collector also picks up the answer_ce rows recorded against the same train run
+        # (2026-10-30), so read f1 / score straight from ops results
+        import subprocess
+
+        for run in DENSE + methods0:
+            out = subprocess.run(["/accounts/projects/berkeleynlp/prasann/bin/ops", "result", "show", "--train-run",
+                                  run, "--json"], capture_output=True, text=True, timeout=120).stdout
+            rows = json.loads(out) if out.strip().startswith("[") else []
+            got = {f"{r['task']}_{r['rung']}": r["value"] for r in rows
+                   if r.get("metric") in ("f1", "score") and (r.get("eval_size") or 0) >= 500}
+            if got:
+                f1[run] = got
     ce = {}
     for path in a.ce:
         d = json.load(open(path))
