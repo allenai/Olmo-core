@@ -16,6 +16,10 @@
    [
     1760.86186,
     0.8066
+   ],
+   [
+    3524.9307621684816,
+    0.876
    ]
   ],
   "dense_best_lr": {
@@ -38,6 +42,11 @@
     1760.86186,
     0.8066,
     "1e-05"
+   ],
+   "3904": [
+    3524.9307621684816,
+    0.876,
+    "5e-06"
    ]
   },
   "cells": {
@@ -88,6 +97,22 @@
     "x_dense": 0.99,
     "flag": "",
     "vs_dense": -0.001
+   },
+   "f8k-mt4-dense-f3904-q3-lr5e-06-sn": {
+    "arm": "dense",
+    "rows": 3904,
+    "lr": "5e-06",
+    "cluster": "sneetches",
+    "pf": 3524.9307621684816,
+    "y": 0.876,
+    "steps": 0,
+    "s_per_step": null,
+    "peak_active_gib": null,
+    "peak_reserved_gib": null,
+    "pf_per_step": null,
+    "x_dense": 1.0,
+    "flag": "",
+    "vs_dense": 0.0
    },
    "f8k-mt4-dense-f488-q3-lr5e-06": {
     "arm": "dense",
@@ -149,8 +174,8 @@
     "peak_active_gib": 19.46,
     "peak_reserved_gib": 22.43,
     "pf_per_step": 1.02,
-    "x_dense": 1.77,
-    "flag": ">=",
+    "x_dense": 2.84,
+    "flag": "",
     "vs_dense": 0.1184
    },
    "f8k-mt4-q3lora64all36r20at12s24-f1952-q3-lr1e-05-sn": {
@@ -181,8 +206,8 @@
     "peak_active_gib": 19.47,
     "peak_reserved_gib": 22.54,
     "pf_per_step": 1.061,
-    "x_dense": 1.7,
-    "flag": ">=",
+    "x_dense": 3.26,
+    "flag": "",
     "vs_dense": 0.1324
    },
    "f8k-mt4-q3lora64all36r20at16s24-f1952-q3-lr1e-05-sn": {
@@ -261,8 +286,8 @@
     "peak_active_gib": 19.46,
     "peak_reserved_gib": 22.35,
     "pf_per_step": 0.809,
-    "x_dense": 2.23,
-    "flag": ">=",
+    "x_dense": 2.52,
+    "flag": "",
     "vs_dense": 0.115
    },
    "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05": {
@@ -277,7 +302,7 @@
     "peak_active_gib": 19.58,
     "peak_reserved_gib": 22.39,
     "pf_per_step": 0.808,
-    "x_dense": 1.12,
+    "x_dense": 2.23,
     "flag": ">=",
     "vs_dense": 0.1169
    },
@@ -529,36 +554,37 @@
    "rows": 3904,
    "cut": 0,
    "lr": "5e-06",
-   "pf": null,
+   "pf": 3524.9307621684816,
    "cluster": "sneetches",
-   "pf_dense_equiv": null,
+   "pf_dense_equiv": 3524.9307621684816,
    "steps": 0,
    "s_per_step": null,
    "peak_active_gib": null,
    "peak_reserved_gib": null,
    "cells": {
-    "contradiction@8k": null,
-    "contradiction@2k": null,
-    "nq@8k": null,
-    "nq@2k": null,
-    "outlier@8k": null,
-    "outlier@2k": null,
-    "oolong@8k": null,
-    "oolong@2k": null
+    "contradiction@8k": 0.965,
+    "contradiction@2k": 0.977,
+    "nq@8k": 0.912,
+    "nq@2k": 0.964,
+    "outlier@8k": 0.848,
+    "outlier@2k": 0.803,
+    "oolong@8k": 0.693,
+    "oolong@2k": 0.846
    },
    "eval_size": {
-    "contradiction@8k": null,
-    "contradiction@2k": null,
-    "nq@8k": null,
-    "nq@2k": null,
-    "outlier@8k": null,
-    "outlier@2k": null,
-    "oolong@8k": null,
-    "oolong@2k": null
+    "contradiction@8k": 500,
+    "contradiction@2k": 500,
+    "nq@8k": 500,
+    "nq@2k": 500,
+    "outlier@8k": 500,
+    "outlier@2k": 500,
+    "oolong@8k": 500,
+    "oolong@2k": 500
    },
-   "y": null,
+   "y": 0.876,
    "logs": [
-    "/net/sneetches/data/prasann/joblogs/q3recipe_dense-f3904-5e-6_chain4127594.log"
+    "/net/sneetches/data/prasann/joblogs/q3recipe_dense-f3904-5e-6_chain4127594.log",
+    "/net/sneetches/data/prasann/joblogs/q3recipe_q3ev-dense-f3904_4129277.log"
    ]
   },
   "f8k-mt4-dense-f488-q3-lr5e-06-sn": {
@@ -680,8 +706,8 @@
    "pf": null,
    "cluster": "sneetches",
    "pf_dense_equiv": null,
-   "steps": 260,
-   "s_per_step": 12.85,
+   "steps": 363,
+   "s_per_step": 12.86,
    "peak_active_gib": 22.38,
    "peak_reserved_gib": 25.24,
    "cells": {
