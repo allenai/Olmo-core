@@ -325,6 +325,9 @@ ARM_EXTRA.update({
                     *((f"sbe{e}a", f" --st-otr-sbw-mode energy --st-otr-sbw-energy {e / 100} --st-otr-sbw-lora-all-rows")
                       for e in (90, 95, 99)),
                     *((f"sbs{k}", f" --st-otr-sbw-mode sample --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40)),
+                    # compress only blocks 0-6 (below the drop layer): the router's target dL/dh_7 stays exact
+                    *((f"sbt{k}e7", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100} --st-otr-sbw-end 7")
+                      for k in (10, 20)),
                     *((f"sk{r}", f" --st-otr-sbw-mode sketch --st-otr-sbw-rank {r} --st-otr-sbw-sketch {r}")
                       for r in (128, 256, 512)))},
     # hill-climb winner (router session, 3 seeds mt4s1464: 0.864 vs 0.852): stage-2 adaptive budget = each doc's top

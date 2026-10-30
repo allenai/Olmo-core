@@ -345,6 +345,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_sbw_sketch: int = 256
     st_otr_sbw_start: int = 0
     st_otr_sbw_lora_all_rows: bool = False
+    st_otr_sbw_end: int = 0
     st_otr_route_min_len: int = 0
     st_otr_warmup_random: bool = False
     st_otr_keep_mode: str = "topk"
@@ -1425,7 +1426,7 @@ class SoftToken(Variant):
                 install_sparse_backward(model, SparseBackwardConfig(
                     mode=o.st_otr_sbw_mode, frac=o.st_otr_sbw_frac, energy=o.st_otr_sbw_energy,
                     rank=o.st_otr_sbw_rank, sketch=o.st_otr_sbw_sketch, start_block=o.st_otr_sbw_start,
-                    lora_all_rows=o.st_otr_sbw_lora_all_rows))
+                    lora_all_rows=o.st_otr_sbw_lora_all_rows, end_block=(o.st_otr_sbw_end or (1 << 30))))
         elif o.st_otr_sbw_mode != "off":
             raise SystemExit("--st-otr-sbw-mode needs the online router with --st-otr-early-lora (frozen base + LoRA)")
         if online and o.st_otr_freeze_early:
