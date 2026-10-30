@@ -26,6 +26,7 @@ mkdir -p $TMPDIR $TRITON_CACHE_DIR $R/shards $R/runs $R/work $R/out
 cd $CODE
 NL=$($PY -c "print({'0.8b':24,'2b':24,'4b':32,'9b':32}['$SCALE'])")
 if [ $ARM = dense ]; then V=full; X=""; AN=dense
+elif [ $ARM = denselora ]; then V=full; X="--lora-rank 64 --lora-blocks 0 --lora-scale 32"; AN=denselora64all  # 2x2 control: LoRA, no routing
 else
   V=softtoken; S2=$([ $NL = 24 ] && echo 12 || echo 16); AN=$([ $NL = 24 ] && echo lora64all24r20to7s12 || echo lora64all32r20to7)
   X="--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,$S2:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks $NL --attn-backend flash_2"
