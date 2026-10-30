@@ -26,6 +26,7 @@ from olmo_core.config import Config
 from .grounding import normalize_points, pointing_answer
 from .qwen3_layout import branch_context_ids, image_prefix_ids
 from .sequence_builder import build_branched_sequence, example_rng
+from .sft_common import heldout_ids
 from .sft_formatter import SftFormatter
 
 __all__ = [
@@ -288,6 +289,10 @@ class PixMoCountDatasetConfig(Config):
     """Prompt family for the question text; stage 1 uses ``"none"`` (bare label)."""
     system_prompt: str = "demo_or_style_v2"
     """Prompt family for the style prefix; stage 1 uses ``"style_and_length_v2"``."""
+    heldout_paths: Tuple[str, ...] = (f"{PIXMO_DATASETS}/count",)
+    """Held-out sets (see :func:`~.sft_common.heldout_ids`): a train row whose ``image_sha256``
+    appears in a held-out split is dropped. PixMo-Count's own test split shares 15 images with its
+    train split. Pass ``()`` to skip the check on purpose."""
 
     def build(self, tokenizer) -> "PixMoCountDataset":
         return PixMoCountDataset(self, tokenizer)
@@ -298,7 +303,14 @@ class PixMoCountDataset:
         self.config = config
         self.tokenizer = tokenizer
         self._data = _load_split(f"{PIXMO_DATASETS}/count", "train")
-        self._n = len(self._data)
+        heldout = heldout_ids(config.heldout_paths, "image_sha256")
+        if heldout:
+            hashes = self._data.data.column("image_sha256").to_pylist()
+            self._index = np.array([i for i, h in enumerate(hashes) if h not in heldout])
+        else:
+            self._index = np.arange(len(self._data))
+        self.n_heldout_dropped = len(self._data) - len(self._index)
+        self._n = len(self._index)
 
     def __len__(self) -> int:
         return self._n * 2 if self.config.counting == "both" else self._n
@@ -308,7 +320,7 @@ class PixMoCountDataset:
             row_idx, style = i // 2, ("point_count" if i % 2 == 0 else "pointing")
         else:
             row_idx, style = i, ("point_count" if self.config.counting else "pointing")
-        row = self._data[row_idx]
+        row = self._data[int(self._index[row_idx])]
         label = row["label"]
         count = int(row["count"])
         pil = _open_image(row["image"])

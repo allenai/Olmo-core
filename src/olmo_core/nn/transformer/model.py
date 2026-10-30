@@ -41,6 +41,7 @@ from olmo_core.nn.residual_stream import ResidualStream
 from olmo_core.utils import get_default_device, mark_dynamic, move_to_device
 
 from ..attention import Attention, RingAttentionLoadBalancer, SequenceMixer
+from ..attention.backend import AttentionBackend
 from ..buffer_cache import BufferCache
 from ..functional import l2_normalize
 from ..layer_norm import LayerNormConfig
@@ -988,14 +989,17 @@ class Transformer(nn.Module):
         Whether any submodule applies dropout, and therefore whether activation checkpointing has
         to preserve the RNG state across recomputation.
 
-        Covers both :class:`~olmo_core.nn.residual_stream.ResidualStream` (whose ``masked_dropout``
-        drives Molmo2's ``response_residual_dropout``) and plain :class:`torch.nn.Dropout`.
+        Covers :class:`~olmo_core.nn.residual_stream.ResidualStream` (whose ``masked_dropout`` drives
+        Molmo2's ``response_residual_dropout``), plain :class:`torch.nn.Dropout`, and the attention
+        backends' own ``dropout_p``.
         """
         for module in self.modules():
             if isinstance(module, ResidualStream):
                 if module.p > 0.0 or module.masked_dropout > 0.0:
                     return True
             elif isinstance(module, nn.Dropout) and module.p > 0.0:
+                return True
+            elif isinstance(module, AttentionBackend) and module.dropout_p > 0.0:
                 return True
         return False
 

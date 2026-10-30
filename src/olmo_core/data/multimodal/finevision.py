@@ -180,8 +180,10 @@ class FineVisionDataset:
         keep = np.ones(len(self._data), dtype=bool)
         for column, threshold in active.items():
             if column not in self._data.column_names:
-                log.warning("FineVision: no %r column; ignoring that filter", column)
-                continue
+                raise ValueError(
+                    f"FineVision quality filter requested but {cfg.resolved_path()!r} has no "
+                    f"{column!r} column"
+                )
             values = np.array(
                 [-np.inf if v is None else float(v) for v in self._data[column]],
                 dtype=np.float64,

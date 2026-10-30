@@ -655,3 +655,22 @@ def test_pixmo_clocks_am_pm_labels(monkeypatch, hour, expected):
     }
     out = pixmo_clocks.format_pixmo_clocks_row(row, np.random.RandomState(0), aug=False)
     assert out["text"] == f"The time shown is {expected}"
+
+
+def test_finevision_rejects_quality_filter_without_its_column(tmp_path):
+    from olmo_core.data.multimodal import FineVisionDatasetConfig
+
+    d = tmp_path / "vwi3"
+    d.mkdir()
+    rows = [
+        {
+            "images": [{"bytes": _png_bytes(0), "path": None}],
+            "texts": [{"user": "<image>q", "assistant": "a"}],
+        }
+    ]
+    _write_parquet(str(d / "train-00000.parquet"), rows, ["images", "texts"])
+    tok = _FakeTokenizer()
+
+    with pytest.raises(ValueError, match="no 'relevance_min' column"):
+        FineVisionDatasetConfig(dataset_path=str(d), min_relevance=4).build(tok)
+    assert len(FineVisionDatasetConfig(dataset_path=str(d)).build(tok)) == 1
