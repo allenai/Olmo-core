@@ -38,7 +38,20 @@ MAX_STEPS="${MAX_STEPS:-}"
 SEED="${SEED:-}"  # optional seed replicate -> arm name <arm>sd<N> (launch_fast8k's convention)
 RUN=f8k-mt4-$AN${SEED:+sd$SEED}-f$ROWS${MAX_STEPS:+st$MAX_STEPS}-tds$T-lr$LRN
 BASE=$R/bases/q35-$T-base-markerfix/model_and_optim
-[ -f $BASE/.metadata ] || { echo "!!! no repaired base $BASE"; exit 1; }
+if [ ! -f $BASE/.metadata ]; then  # repair the staged model-only base once per node (mkdir lock), then audit it
+  SRC=$A/ctc_suite/bases/q35-$T-base-modelonly/model_and_optim
+  [ -f $SRC/.metadata ] || { echo "!!! no repaired base $BASE and no model-only base $SRC"; exit 1; }
+  if mkdir $R/bases/.fix-$T.lock 2>/dev/null; then
+    echo "[$(date +%T)] marker fix $SCALE: $SRC -> ${BASE%/model_and_optim}"
+    $PY recipes/data/fix_marker_embeddings_qwen35.py --base $SRC --out ${BASE%/model_and_optim} --model-scale $SCALE \
+      || { rmdir $R/bases/.fix-$T.lock; echo "!!! FIX FAILED"; exit 1; }
+    $PY recipes/data/fix_marker_embeddings.py --audit-only --base $BASE --family qwen3_5 --marker-set doc_start,doc_end,landmark,pad 2>&1 | tail -2
+    rmdir $R/bases/.fix-$T.lock
+  else
+    while [ -d $R/bases/.fix-$T.lock ]; do sleep 20; done
+  fi
+  [ -f $BASE/.metadata ] || { echo "!!! repaired base missing after fix: $BASE"; exit 1; }
+fi
 echo "[$(date +%T)] run=$RUN node=$(hostname) gpus=$CUDA_VISIBLE_DEVICES"
 
 # ---- fresh shard from S3 (one downloader per node: mkdir lock) ----
