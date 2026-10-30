@@ -276,6 +276,27 @@ ol.log li:last-child { border-bottom: 0; }
   </table></div>
   <p class="note">"Dense FLOPs to match" = training PF dense needs to reach the same 8-cell mean on its fresh curve (piecewise log-linear along dense at 1,952 / 3,904 / 5,856 / 7,808 rows/task) divided by the method's PF; "&gt;" when the method is above dense's best point (a lower bound).</p>
 </section>
+<section>
+  <h2>Why the multiplier falls with data: dense's ceiling, not the method</h2>
+  <div class="figs">
+    <figure><h3>Answer cross-entropy vs rows/task (lower is better)</h3><div class="chart"><canvas id="decayce" aria-label="answer CE vs rows"></canvas></div>
+      <figcaption>Teacher-forced answer cross-entropy on the eval rows (8 cells, eval_size 500 each, no-cot). Dense (LR 5e-6) stops improving at 3,904 rows/task; the recipe keeps improving and sits a constant ≈0.01 nats above dense at the same rows. Late keep-widening (35%/15% in the last third) halves that gap at 3,904 rows.</figcaption></figure>
+  </div>
+  <div class="tbl" style="margin-top:14px"><table>
+    <tr><th>recipe FLOPs-to-match, measured on</th><th class="n">1,952 rows</th><th class="n">3,904 rows</th><th class="n">7,808 rows</th></tr>
+    <tr><td>8-cell f1</td><td class="n">&lt;4.4×</td><td class="n">3.7×</td><td class="n">2.2×</td></tr>
+    <tr><td>unsaturated cells f1 (oolong + outlier)</td><td class="n">4.5×</td><td class="n">4.0×</td><td class="n">2.2×</td></tr>
+    <tr><td>answer cross-entropy (8 cells)</td><td class="n">&lt;4.4×</td><td class="n">2.7×</td><td class="n">1.8×</td></tr>
+    <tr><td>answer cross-entropy (oolong + outlier)</td><td class="n">&lt;4.4×</td><td class="n">2.7×</td><td class="n">1.7×</td></tr>
+  </table></div>
+  <div class="tbl" style="margin-top:10px"><table>
+    <tr><th>fix (3,904 rows, 1 seed)</th><th class="n">PF</th><th class="n">8-cell f1</th><th class="n">answer CE</th><th class="n">FLOPs-to-match on CE</th><th class="n">CE vs recipe</th></tr>
+    <tr><td>recipe</td><td class="n">688</td><td class="n">0.915</td><td class="n">0.1527</td><td class="n">2.7×</td><td class="n">–</td></tr>
+    <tr><td>ReLoRA merge-and-restart every 25%</td><td class="n">686</td><td class="n">0.917</td><td class="n">0.1553</td><td class="n">2.5×</td><td class="n">+0.0026 ± 0.0020</td></tr>
+    <tr><td>late keep-widening (35% / 15% in the last third)</td><td class="n">745</td><td class="n">0.916</td><td class="n">0.1458</td><td class="n">3.2×</td><td class="n">−0.0069 ± 0.0022</td></tr>
+  </table></div>
+  <p class="note"><b>Reading:</b> dense plateaus at 3,904 rows/task on every metric (cross-entropy f7808 − f3904 = −0.002 ± 0.004), so past that point FLOPs-to-match divides by a flat curve and a constant ≈0.01-nat gap (recipe − dense at the same rows: +0.010 / +0.014 / +0.008, no trend) turns into a falling ratio. The recipe is still improving (−0.007 ± 0.003 from 3,904 to 7,808 rows) but has not reached dense's plateau even with 2× the data. The gap sits on oolong (+0.016–0.024) and nq@8k / outlier@2k (+0.013–0.014); contradiction and outlier@8k are within ±0.003. ReLoRA does nothing; late widening halves the gap (matching the recipe's 7,808-row cross-entropy at 3,904 rows with 54% of the FLOPs) but does not move f1. Running: both fixes at 7,808 rows, a recipe seed-1 control, a uniform 25% / 9.7% keep at matched FLOPs (does "late" matter or just "more tokens"?), and 50% / 25% late widening. Branch <code>claude/tokdrop-decay-fix</code>, record <code>records/tokdrop-large-data-decay.md</code>.</p>
+</section>
 __LORA2X2__
 <section>
   <h2>LoRA × routing: Pareto view</h2>
@@ -492,7 +513,7 @@ __LORA2X2__
 </section>
 </div>
 <div class="part" id="ruledout">
-<div class="parthead"><span class="eyebrow">7 · Ruled out</span><h2 class="ptitle">What did not work</h2><p class="verdict">Router-quality tweaks, layer skipping and earlier drops all land at ≤1.3× over the recipe or lose.</p></div>
+<div class="parthead"><span class="eyebrow">7 · Ruled out</span><h2 class="ptitle">What did not work</h2><p class="verdict">Router-quality tweaks, layer skipping, earlier drops and a compressed backward all land at ≤1.3× over the recipe or lose.</p></div>
 <section>
   <h2>What failed, and the number that decided it</h2>
   <div class="tbl"><table>
@@ -539,6 +560,29 @@ __LORA2X2__
       <figcaption>Cosine of the 8-batch (128-row) accumulated update with the full-pass update, router selection, trained parameters, recipe checkpoint. "1st @ b" = one-stage keep 10% after block b; "2st @ b" = keep 20% after block b then 7% after 16. ⚠ eval_size 256 (64 rows/task).</figcaption></figure>
   </div>
   <p class="note"><b>Verdict: fails; no training screen.</b> Letting dropped tokens stay as frozen key/value context closes only ≈10–35% of the gap to the block-7 split on the trained recipe checkpoint: after block 1 the 8-batch cosine goes 0.00 → 0.03 (one stage) and −0.00 → 0.04 (two stage); after block 3, 0.04 → 0.11 and 0.12 → 0.15; against 0.24–0.45 at block 7. Even a perfect token picker plus KV-only context stays at 0.06 / 0.14 after blocks 1 / 3. On the base model it recovers more (≈40–65%), but training moves the model away from that. Branch <code>claude/kv-only-context-9ee75b</code>, table <code>research/token_routing/online_router/gfkv_table.md</code>.</p>
+</section>
+<section>
+  <h2>Sparse backward with an exact forward: cheap steps, collapsed context-reading</h2>
+  <div class="figs">
+    <figure><h3>Step cost vs 8-cell mean, 1,952 rows/task</h3><div class="chart"><canvas id="sbwpar" aria-label="sparse backward cost vs score"></canvas></div>
+      <figcaption>Each point is one training run (2 GPUs, LR 1e-5, eval_size 500 per cell, no-cot). Step cost relative to a dense step. Seeds shown as separate points.</figcaption></figure>
+  </div>
+  <div class="tbl" style="margin-top:14px"><table>
+    <tr><th>run (recipe forward, backward compressed)</th><th class="n">PF</th><th class="n">step/dense</th><th class="n">8-cell</th><th class="n">contra@8k</th><th class="n">outlier@8k</th></tr>
+    <tr><td>recipe, f1952 (reference)</td><td class="n">345</td><td class="n">0.221</td><td class="n">0.883</td><td class="n">0.959</td><td class="n">0.862</td></tr>
+    <tr><td>recipe + answer-only head, f1952 (seed 1)</td><td class="n">318</td><td class="n">0.204</td><td class="n">0.880</td><td class="n">0.948</td><td class="n">0.865</td></tr>
+    <tr><td>top-k 20% rows, f1952 (seed 0 / 1)</td><td class="n">177</td><td class="n">0.113</td><td class="n">0.514 / 0.630</td><td class="n">0.173 / 0.646</td><td class="n">0.203 / 0.227</td></tr>
+    <tr><td>energy 95% + adapter grads all rows, f1952 (seed 0 / 1)</td><td class="n">172</td><td class="n">0.110</td><td class="n">0.534 / 0.514</td><td class="n">0.131 / 0.165</td><td class="n">0.185 / 0.221</td></tr>
+    <tr><td>top-k 40%, f1952</td><td class="n">195</td><td class="n">0.125</td><td class="n">0.688</td><td class="n">0.821</td><td class="n">0.211</td></tr>
+    <tr><td>energy 99%, f1952</td><td class="n">181</td><td class="n">0.116</td><td class="n">0.686</td><td class="n">0.843</td><td class="n">0.205</td></tr>
+    <tr><td>top-k 20%, blocks 0–6 only, f1952</td><td class="n">229</td><td class="n">0.147</td><td class="n">0.614</td><td class="n">0.557</td><td class="n">0.159</td></tr>
+    <tr><td>top-k 20%, exact backward every 4th step, f1952</td><td class="n">212</td><td class="n">0.136</td><td class="n">0.725</td><td class="n">0.831</td><td class="n">0.232</td></tr>
+    <tr><td>top-k 20%, exact backward every 2nd step, f1952</td><td class="n">247</td><td class="n">0.158</td><td class="n">0.810</td><td class="n">0.910</td><td class="n">0.501</td></tr>
+    <tr><td>recipe, f3904 (reference)</td><td class="n">688</td><td class="n">0.221</td><td class="n">0.915</td><td class="n">0.977</td><td class="n">0.970</td></tr>
+    <tr><td>top-k 20%, f3904</td><td class="n">353</td><td class="n">0.113</td><td class="n">0.678</td><td class="n">0.798</td><td class="n">0.264</td></tr>
+    <tr><td>energy 95% + all-row adapter grads, f3904</td><td class="n">343</td><td class="n">0.110</td><td class="n">0.673</td><td class="n">0.608</td><td class="n">0.223</td></tr>
+  </table></div>
+  <p class="note"><b>Verdict: fails (−0.20 to −0.37 vs the recipe at matched data).</b> Keeping only the rows with the largest output gradient in each frozen-linear + LoRA backward halves the step (0.11–0.13× dense vs 0.22×; the floor with no such backward is ≈0.107×) and keeps cosine 0.85–0.96 to the exact gradient (probe ⚠ eval_size 128 rows per checkpoint). But training CE stalls at ≈0.3 from step ≈40 (recipe: 0.08) and context-reading tasks collapse: outlier@8k 0.86 → 0.2. Gradient fidelity did not predict training: the 0.96-cosine arm still lost 0.20. Unbiased variants (1/p sampling, sketches) blow up over ≈300 chained VJPs. A top-k 100% control tracks the recipe exactly, so the loss is the compression, not a bug. Exact backward every 2nd step recovers most of it (0.810) but at 0.158× it is no better than the recipe's FLOP curve. Side products kept: the answer-only LM head (−0.017× per step, same score) and an exact zero-row skip (≈3%). Branch <code>claude/sparse-backward</code>, record <code>records/sparse-backward.md</code>.</p>
 </section>
 </div>
 <div class="part" id="next">
@@ -755,6 +799,22 @@ function draw() {
       const nt = p => p.rows + " rows/task" + (p.n_seeds > 1 ? ", " + p.n_seeds + " seeds" : "");
       plot(id, [{ label: "dense (LR 5e-6)", dense: true, pts: dense.map(p => ({ x: p.pf, y: p.y, note: nt(p) })) },
                 { label: "recipe (LR 1e-5)", col: "--c1", pts: rec.map(p => ({ x: p.pf, y: p.y, note: nt(p) })) }], "8-cell mean"); }); })();
+  (() => { const e = document.getElementById("decayce"); if (!e || !window.Chart) return;
+    const ds = [["dense", [[1952, 0.1581], [3904, 0.1390], [5856, 0.1372], [7808, 0.1374]], "--dense", []],
+                ["recipe", [[1952, 0.1581 + 0.0096], [3904, 0.1527], [7808, 0.1374 + 0.0083]], "--c1", []],
+                ["recipe + late widening", [[3904, 0.1458]], "--c3", []], ["recipe + ReLoRA", [[3904, 0.1553]], "--c6", []]];
+    new Chart(e, { type: "line", data: { datasets: ds.map(([l, p, c, d]) => ({ label: l, data: p.map(q => ({ x: q[0], y: q[1] })), borderColor: css(c), backgroundColor: css(c), borderDash: d, pointRadius: 4, tension: 0 })) },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { type: "logarithmic", title: { display: true, text: "fresh rows / task (log)", color: css("--muted") }, ticks: { color: css("--muted"), callback: v => [2000, 4000, 8000].includes(v) ? v : "" }, grid: { color: css("--rule") } },
+                  y: { title: { display: true, text: "answer cross-entropy (nats)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
+  (() => { const e = document.getElementById("sbwpar"); if (!e || !window.Chart) return;
+    const ds = [["recipe (± answer-only head)", [[0.221, 0.883], [0.204, 0.880]], "--c1"],
+                ["row-sparse backward", [[0.113, 0.514], [0.113, 0.630], [0.110, 0.534], [0.110, 0.514], [0.125, 0.688], [0.116, 0.686], [0.147, 0.614]], "--c6"],
+                ["row-sparse + periodic exact step", [[0.136, 0.725], [0.158, 0.810]], "--c3"]];
+    new Chart(e, { type: "scatter", data: { datasets: ds.map(([l, p, c]) => ({ label: l, data: p.map(q => ({ x: q[0], y: q[1] })), borderColor: css(c), backgroundColor: css(c), pointRadius: 5 })) },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { title: { display: true, text: "step cost / dense step", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } },
+                  y: { title: { display: true, text: "8-cell mean (eval_size 500/cell)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });

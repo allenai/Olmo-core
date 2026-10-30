@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-10-30T12:35:08+00:00",
+ "generated_at": "2026-10-30T12:39:51+00:00",
  "jobs": [
   {
    "name": "ev-oolong-f8k-mt4-dense-f488-q306b-lr5e-06-evoolong-7f1b29ba",
@@ -7,7 +7,7 @@
    "node": "B7ZM8J",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 47,
+   "elapsed_min": 51,
    "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
@@ -16,7 +16,7 @@
    "node": "B7ZM8J",
    "state": "RUNNING",
    "gpus": 1,
-   "elapsed_min": 47,
+   "elapsed_min": 51,
    "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
@@ -25,7 +25,7 @@
    "node": "49K0VQ",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 46,
+   "elapsed_min": 51,
    "entry": "Multiple views per row from cached block-7 states"
   },
   {
@@ -34,7 +34,7 @@
    "node": "CDQPDA",
    "state": "RUNNING",
    "gpus": 4,
-   "elapsed_min": 46,
+   "elapsed_min": 51,
    "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   },
   {
@@ -43,7 +43,7 @@
    "node": "3F34HS",
    "state": "RUNNING",
    "gpus": 4,
-   "elapsed_min": 46,
+   "elapsed_min": 50,
    "entry": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)"
   },
   {
@@ -52,7 +52,7 @@
    "node": "KYB8NN",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 27,
+   "elapsed_min": 31,
    "entry": "Multiple views per row from cached block-7 states"
   },
   {
@@ -61,8 +61,8 @@
    "node": "E8YSG5",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 26,
-   "entry": null
+   "elapsed_min": 31,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
   },
   {
    "name": "f8k-mt4-lora64all32r25to10-f3904-tdf-lr1e-05-be3007c9",
@@ -70,8 +70,8 @@
    "node": "281XKV",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 26,
-   "entry": null
+   "elapsed_min": 30,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
   },
   {
    "name": "f8k-mt4-lora64all32rnd20to7mv2-f3904-tdmv-lr1e-05-9d34d169",
@@ -79,7 +79,7 @@
    "node": "6TEPA9",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 25,
+   "elapsed_min": 29,
    "entry": "Multiple views per row from cached block-7 states"
   },
   {
@@ -88,7 +88,7 @@
    "node": "6TEPA9",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 25,
+   "elapsed_min": 29,
    "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
   },
   {
@@ -97,7 +97,7 @@
    "node": "6TEPA9",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 25,
+   "elapsed_min": 29,
    "entry": "Recipe on Qwen3-4B (full attention, 36 layers): does it generalize, are gains larger with more attention?"
   },
   {
@@ -106,8 +106,8 @@
    "node": "6TEPA9",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 25,
-   "entry": null
+   "elapsed_min": 29,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
   },
   {
    "name": "f8k-mt4-lora64all32r25to10-f7808-tdf-lr1e-05-54656be8",
@@ -115,8 +115,8 @@
    "node": "Q9H003",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 24,
-   "entry": null
+   "elapsed_min": 28,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
   },
   {
    "name": "f8k-mt4-lora64all32r20to7lw50-f3904-tdf-lr1e-05-5c100b02-6e0c",
@@ -124,7 +124,43 @@
    "node": "Q9H003",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 24,
+   "elapsed_min": 28,
+   "entry": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening"
+  },
+  {
+   "name": "ev-contra-f8k-mt4-lora64all32rnd20to7mv1-f1952-tdmv-lr1e-05-evcontradiction-93a4797a",
+   "cluster": "Beaker (jupiter)",
+   "node": "TYMFDX",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 2,
+   "entry": null
+  },
+  {
+   "name": "ev-nq-f8k-mt4-lora64all32rnd20to7mv1-f1952-tdmv-lr1e-05-evnq-9314549e",
+   "cluster": "Beaker (jupiter)",
+   "node": "M0CM0X",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 1,
+   "entry": null
+  },
+  {
+   "name": "ev-outlier-f8k-mt4-lora64all32rnd20to7mv1-f1952-tdmv-lr1e-05-evoutlier-0cef2f71",
+   "cluster": "Beaker (jupiter)",
+   "node": "075214",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 1,
+   "entry": null
+  },
+  {
+   "name": "ev-oolong-f8k-mt4-lora64all32rnd20to7mv1-f1952-tdmv-lr1e-05-evoolong-c355a235",
+   "cluster": "Beaker (jupiter)",
+   "node": "281XKV",
+   "state": "RUNNING",
+   "gpus": 2,
+   "elapsed_min": 1,
    "entry": null
   },
   {
@@ -133,7 +169,7 @@
    "node": "sneetches",
    "state": "RUNNING",
    "gpus": 2,
-   "elapsed_min": 217,
+   "elapsed_min": 222,
    "entry": "Model-scale ablation: dense vs recipe on smaller Qwen3.5 models"
   }
  ]

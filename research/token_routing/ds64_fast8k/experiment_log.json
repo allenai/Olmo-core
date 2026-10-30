@@ -1,11 +1,11 @@
 [
  {
   "date": "2026-10-30",
-  "status": "running",
+  "status": "failed",
   "track": "Next (≥5×)",
   "who": "overnight agent (sparse-backward)",
   "title": "Backward compression with exact forward: token-sparse and sketched backward",
-  "result": "Started 10-30 from the brainstorm's top idea: backward is ≈0.118 of the recipe's 0.225; cutting it 3–5× at parity would give ≈0.12–0.14× per step (≈6–7× dense at small data). Probe first, then 1,952 / 3,904-row screens.",
+  "result": "Failed. Row-sparse backward cuts the step to 0.11–0.13× dense (recipe 0.22×) with grad cosine 0.85–0.96, but training CE stalls at ≈0.3 and contradiction/outlier collapse: 8-cell 0.51–0.69 vs recipe 0.883 at f1952, 0.68 vs 0.915 at f3904. Exact backward every 2nd step: 0.810 at 0.158×. Unbiased sketches diverge. Kept: answer-only head (−0.017×/step) and exact zero-row skip (≈3%). Branch claude/sparse-backward.",
   "match": [
    "sbw",
    "sparsebw",
@@ -19,12 +19,14 @@
   "track": "Next (≥5×)",
   "who": "overnight agent (large-data fix)",
   "title": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening",
-  "result": "Started 10-30: tests whether the 4.1→2.2× decay is the dense eval ceiling or the method, and whether ReLoRA (zero FLOPs) or widening late keep restores ≥3.5× at 7,808 rows.",
+  "result": "Diagnosis: the 4.1→2.2× decay is mostly dense's ceiling: dense plateaus at 3,904 rows on f1 and answer CE, while the recipe keeps improving at a constant ≈0.01-nat gap (on oolong, nq@8k, outlier@2k). ReLoRA: no effect. Late keep-widening (35/15% last third) halves the CE gap at 3,904 rows (FTM on CE 2.7→3.2×) but f1 unchanged. Running: fixes at 7,808, recipe seed 1, uniform-25% control, 50/25% widening. Branch claude/tokdrop-decay-fix; collect with research/token_routing/decay_fix/ scripts.",
   "match": [
-   "relora",
-   "widen",
-   "rlr",
-   "lw35"
+   "tdf",
+   "dfce",
+   "rl25",
+   "lw35",
+   "lw50",
+   "r25to10"
   ]
  },
  {
