@@ -553,6 +553,9 @@ def do_launch(args, mode):
     for arm in args.arms.split(","):
         for budget in args.budgets.split(","):
             variant, data, largs, extra = arm_args(args.task, arm, budget)
+            # F8K_EXTRA: trainer args appended to every arm, e.g. "--save-interval 250" so a preempted Beaker job resumes
+            # (a retry restarts from scratch without a checkpoint: 4B dense f7808 lost 1884/1952 steps, 2026-10-30)
+            extra = f"{extra} {os.environ.get('F8K_EXTRA', '')}".strip()
             # --seed N: a seed replicate named <arm>sd<N> (collectors strip sd<N> and average seed copies)
             label = f"{arm}sd{args.seed}" if args.seed else arm
             name = run_name(args.task, label, budget)

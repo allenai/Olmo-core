@@ -122,3 +122,17 @@ fast8k	4b	mt4	q3lora64all36r20at4	f1952	f8k-mt4-q3lora64all36r20at4-f1952-q3-lr1
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
 fast8k	4b	mt4	q3lora64all36r20at12	f1952	f8k-mt4-q3lora64all36r20at12-f1952-q3-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 15:53	LAUNCHED	"01M64XWVWZRK1CPS3N5Q3VZCRE transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	1.7b	mt4	dense	f1952	f8k-mt4-dense-f1952-q317b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 23:49	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --model-scale: invalid choice: '1.7b' (choose from 0.8b, 2b, 4b, 9b, 27b, 7b, 7b-hybrid, 7b-noswa, 3b, 8b)"
+fast8k	1.7b	mt4	dense	f3904	f8k-mt4-dense-f3904-q317b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 23:49	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --model-scale: invalid choice: '1.7b' (choose from 0.8b, 2b, 4b, 9b, 27b, 7b, 7b-hybrid, 7b-noswa, 3b, 8b)"
+fast8k	1.7b	mt4	dense	f488	f8k-mt4-dense-f488-q317b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 23:49	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --model-scale: invalid choice: '1.7b' (choose from 0.8b, 2b, 4b, 9b, 27b, 7b, 7b-hybrid, 7b-noswa, 3b, 8b)"
+fast8k	1.7b	mt4	dense	f976	f8k-mt4-dense-f976-q317b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 23:49	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --model-scale: invalid choice: '1.7b' (choose from 0.8b, 2b, 4b, 9b, 27b, 7b, 7b-hybrid, 7b-noswa, 3b, 8b)"
+fast8k	1.7b	mt4	dense	f1464	f8k-mt4-dense-f1464-q317b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 23:49	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --model-scale: invalid choice: '1.7b' (choose from 0.8b, 2b, 4b, 9b, 27b, 7b, 7b-hybrid, 7b-noswa, 3b, 8b)"
+fast8k	1.7b	mt4	q3lora64all28r20at9s19	f1952	f8k-mt4-q3lora64all28r20at9s19-f1952-q317b-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 23:50	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --model-scale: invalid choice: '1.7b' (choose from 0.8b, 2b, 4b, 9b, 27b, 7b, 7b-hybrid, 7b-noswa, 3b, 8b)"
+fast8k	1.7b	mt4	q3lora64all28r20at9s19	f3904	f8k-mt4-q3lora64all28r20at9s19-f3904-q317b-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 23:50	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --model-scale: invalid choice: '1.7b' (choose from 0.8b, 2b, 4b, 9b, 27b, 7b, 7b-hybrid, 7b-noswa, 3b, 8b)"
