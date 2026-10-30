@@ -1,5 +1,18 @@
 [
  {
+  "date": "2026-10-31",
+  "status": "running",
+  "track": "mechanism",
+  "who": "agent (Opus)",
+  "title": "Gradient sparsity vs routing gap: where the 1–4%-token oracle bound breaks",
+  "result": "Running. Decomposes oracle cosine (attribution under dense forward) through: forward removal (true routed gradient), noise (vs expected large-batch gradient), residual bias across batches, Adam preconditioning, router vs oracle; residual by task/token type; optional oracle-routed training ceiling.",
+  "match": [
+   "gapprobe",
+   "grgap",
+   "oracleroute"
+  ]
+ },
+ {
   "date": "2026-10-30",
   "status": "failed",
   "track": "Next (≥5×)",
