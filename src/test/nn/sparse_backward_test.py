@@ -70,7 +70,8 @@ def test_forward_exact_and_full_selection_exact():
     m0, x, w = _ref()
     l0, g0, gx0 = _grads(m0, x, w)
     for cfg in (SparseBackwardConfig("topk", frac=1.0), SparseBackwardConfig("energy", energy=1.0),
-                SparseBackwardConfig("sample", frac=1.0), SparseBackwardConfig("sketch", rank=64, sketch=0)):
+                SparseBackwardConfig("sample", frac=1.0), SparseBackwardConfig("sketch", rank=64, sketch=0),
+                SparseBackwardConfig("topk", frac=1.0, lora_all_rows=True)):
         m = _model()
         install_sparse_backward(m, cfg)
         l1, g1, gx1 = _grads(m, x, w)
@@ -147,3 +148,26 @@ def test_eval_no_grad_uses_hook():
     install_sparse_backward(m, SparseBackwardConfig("topk", frac=0.1))
     with torch.no_grad():
         torch.testing.assert_close(m(x), m0(x))
+
+
+def test_lora_all_rows_exact_adapter_grads_at_top_block():
+    # the TOP block's adapters see the exact dy, so with lora_all_rows their gradients are exact even at frac 0.2
+    m0, x, w = _ref()
+    _, g0, _ = _grads(m0, x, w)
+    m = _model()
+    install_sparse_backward(m, SparseBackwardConfig("topk", frac=0.2, lora_all_rows=True))
+    _, g1, _ = _grads(m, x, w)
+    for n in ("blocks.2.down.lora_A", "blocks.2.down.lora_B"):
+        torch.testing.assert_close(g1[n], g0[n], rtol=1e-8, atol=1e-10)
+    assert (g1["blocks.0.up.lora_B"] - g0["blocks.0.up.lora_B"]).abs().max() > 0  # lower blocks: approximate
+
+
+def test_dense_rows_registered_real_count():
+    m = _model()
+    install_sparse_backward(m, SparseBackwardConfig("topk", frac=0.5))
+    st = m._sparse_backward
+    st.real_rows = {14: 10.0}  # 2 x 7 rows, 10 real
+    assert st.dense_rows(14, 8) == 10.0
+    assert st.dense_rows(15, 8) == 8.0  # unknown call: the nonzero rows (conservative)
+    st.assume_no_pad = True
+    assert st.dense_rows(15, 8) == 15.0

@@ -309,6 +309,20 @@ ARM_EXTRA.update({
                           "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
                           "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
                           "--st-otr-early-lora-blocks 32"),
+    # BACKWARD COMPRESSION with an exact forward (olmo_core.nn.sparse_backward, 2026-10-30 overnight): the recipe + the
+    # answer-only LM head (sl), and on top of it each adapted frozen linear's input-gradient + LoRA VJPs computed only for
+    # token rows of dy: sbt<k> = top k% by ||dy_t||, sbe<e> = rows covering e% of sum ||dy_t||^2, sbs<k> = sampled at
+    # expected k% with p ~ ||dy_t|| and 1/p reweighting (unbiased), sk<r> = top-r SVD + width-r Gaussian sketch
+    **{f"lora64all32r20to7sl{t}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                                   "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
+                                   "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                                   "--st-otr-early-lora-blocks 32 --sparse-loss-positions" + x)
+       for t, x in (("", ""),
+                    *((f"sbt{k}", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40)),
+                    *((f"sbe{e}", f" --st-otr-sbw-mode energy --st-otr-sbw-energy {e / 100}") for e in (90, 95, 99)),
+                    *((f"sbs{k}", f" --st-otr-sbw-mode sample --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40)),
+                    *((f"sk{r}", f" --st-otr-sbw-mode sketch --st-otr-sbw-rank {r} --st-otr-sbw-sketch {r}")
+                      for r in (128, 256, 512)))},
     # hill-climb winner (router session, 3 seeds mt4s1464: 0.864 vs 0.852): stage-2 adaptive budget = each doc's top
     # tokens covering 70% of predicted gradient mass, capped at 50% of the stage input (needs router 8ce5fd22a+)
     **{f"lora64all32m70c50{t}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "

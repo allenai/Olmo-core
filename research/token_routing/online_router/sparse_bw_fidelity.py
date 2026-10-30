@@ -56,7 +56,10 @@ def variants(sketch: bool, k: int):
         return out
     out = [(f"topk{int(f * 100)}", C("topk", frac=f), 1) for f in (0.05, 0.10, 0.20, 0.40)]
     out += [(f"energy{int(e * 100)}", C("energy", energy=e), 1) for e in (0.90, 0.95, 0.99)]
-    out += [(f"sample{int(f * 100)}", C("sample", frac=f), k) for f in (0.10, 0.20)]
+    # adapter weight gradients from every nonzero row (dx still from the selected rows only)
+    out += [(f"topk{int(f * 100)}L", C("topk", frac=f, lora_all_rows=True), 1) for f in (0.05, 0.10, 0.20)]
+    out += [(f"energy{int(e * 100)}L", C("energy", energy=e, lora_all_rows=True), 1) for e in (0.90, 0.95)]
+    out += [(f"sample{int(f * 100)}", C("sample", frac=f), k) for f in (0.10, 0.20, 0.40)]
     return out
 
 
@@ -140,6 +143,7 @@ def main():
     vs = variants(a.sketch, a.k)
     install_sparse_backward(model, SparseBackwardConfig("topk", frac=1.0))
     st = model._sparse_backward
+    st.assume_no_pad = True  # single unpadded rows: every row the VJP sees is a real token the meter charged
     fit = OP.load_rows(a.shard, a.fit_rows, a.fit_offset, None)
     test = OP.load_rows(a.shard, a.rows_per_task, a.row_offset, None)
     by = {}

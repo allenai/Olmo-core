@@ -67,6 +67,9 @@ class SparseBackwardConfig:
     """... and in blocks < end_block."""
     min_rows: int = 1
     """Never keep fewer rows than this per call (topk / energy)."""
+    lora_all_rows: bool = False
+    """Adapter weight gradients from EVERY nonzero row (exact given the arriving dy; ~4 r (in + out) per row, a few %
+    of the VJP), while the input gradient ``dx`` is still computed for the selected rows only."""
 
     def validate(self) -> None:
         if self.mode not in MODES:
@@ -92,6 +95,11 @@ class _State:
         self.enabled = True
         self.gen: Optional[torch.Generator] = None
         self.svd_flops = 0.0
+        self.assume_no_pad = False
+        """True when every row of every call is a real token (the probe's unpadded single rows)."""
+        self.real_rows: Dict[int, float] = {}
+        """flattened row count N of a call -> real (non-pad) tokens among them, registered by the forward (the online
+        router, per stage) and read in the backward: the meter charged the dense VJP for exactly those rows."""
         self.reset_stats()
 
     def reset_stats(self) -> None:
@@ -100,6 +108,15 @@ class _State:
         self.flops_dense = 0.0
         self.flops_actual = 0.0
         self.calls = 0
+
+    def dense_rows(self, N: int, nz: int) -> float:
+        """Rows the meter charged a dense VJP for in a call over N flattened rows: all of them (no padding), the
+        registered real-token count, or (unknown) the nonzero-dy rows -- conservative, since every charged row with
+        dy = 0 is one the compressed backward skips but is not credited for."""
+        if self.assume_no_pad:
+            return float(N)
+        r = self.real_rows.get(int(N))
+        return float(r) if r is not None else float(nz)
 
     def charge(self, dense: float, actual: float, kept: float, nz: float) -> None:
         self.rows_kept += kept
@@ -231,7 +248,7 @@ class _SparseLinearFn(torch.autograd.Function):
             m = int(cfg.sketch)
             act_row = 2.0 * rr * (in_f + out_f) + 2.0 * m * (in_f + out_f) + 4.0 * r * (in_f + out_f) + 2.0 * out_f
             act_call = (2.0 * out_f * in_f * m + 2.0 * rr * m * (in_f + out_f)) if m > 0 else 0.0
-            st.charge(nz * row_dense, nz * act_row + act_call, float(nz), float(nz))
+            st.charge(st.dense_rows(N, nz) * row_dense, nz * act_row + act_call, float(nz), float(nz))
             return (dx.view_as(x) if dx is not None else None), None, None, dA, dB, None, None
         idx, w, nz = select_rows(norm2, cfg, st.gen)
         k = int(idx.numel())
@@ -248,7 +265,18 @@ class _SparseLinearFn(torch.autograd.Function):
             dx = torch.zeros(N, in_f, device=g.device, dtype=g.dtype)
             dx.index_copy_(0, idx, dxS.to(dx.dtype))
             dx = dx.view_as(x)
-        if need_A or need_B:
+        lora_rows = 0.0
+        if (need_A or need_B) and cfg.lora_all_rows and cfg.mode != "sample":
+            # adapter weight gradients from every nonzero row; the selected rows' share of them is already priced in
+            # row_dense, so only the unselected nonzero rows add 4 r (in + out)
+            nzi = torch.nonzero(norm2 > 0, as_tuple=True)[0]
+            gN, xN = g.index_select(0, nzi), xf.index_select(0, nzi)
+            if need_B:
+                dB = s * (gN.T @ (xN @ A.T))
+            if need_A:
+                dA = s * ((gN @ Bm).T @ xN)
+            lora_rows = float(max(0, nz - k))
+        elif need_A or need_B:
             xS = xf.index_select(0, idx)
             if need_B:
                 dB = s * (gS.T @ (xS @ A.T))
@@ -256,7 +284,8 @@ class _SparseLinearFn(torch.autograd.Function):
                 if gb is None:
                     gb = gS @ Bm
                 dA = s * (gb.T @ xS)
-        st.charge(nz * row_dense, k * row_dense + 2.0 * out_f * N, float(k), float(nz))
+        st.charge(st.dense_rows(N, nz) * row_dense,
+                  k * row_dense + lora_rows * 4.0 * r * (in_f + out_f) + 2.0 * out_f * N, float(k), float(nz))
         return dx, None, None, dA, dB, None, None
 
 

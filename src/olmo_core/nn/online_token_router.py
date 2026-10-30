@@ -1246,6 +1246,13 @@ class OnlineTokenRouter:
         # the LM head was charged at this stage's kept length (headx per kept token); with --sparse-loss-positions it
         # runs only at the supervised positions: charge_sparse_head corrects that after the last stage
         self._head_charged = (float(headx), float(counts.sum()))
+        sbw = getattr(model, "_sparse_backward", None)
+        if sbw is not None and model.training:
+            # sparse backward prices its VJPs against the meter's dense charge: the real tokens of each stage's rows
+            if self.stage_idx == 0:
+                sbw.real_rows = {}
+            sbw.real_rows[int(B * Tw)] = float(real.sum())
+            sbw.real_rows[int(B * W)] = float(counts.sum())
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         if self._next is not None:
             self._next._mid = self._stash_for_next(fp, ids, cid, Tr, Tw, order, valid)
