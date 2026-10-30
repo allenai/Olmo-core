@@ -105,6 +105,36 @@ def main():
         def record_ce_loss(self, value, reduce_type=None):
             self.metrics["ce"] = value
 
+    if os.environ.get("TRACE"):
+        from torch.distributed.fsdp._fully_shard import _fsdp_param_group as PG
+        from torch.distributed.fsdp._fully_shard import _fsdp_state as FS
+        phase = {"on": False}
+
+        def wrap(cls, name):
+            orig = getattr(cls, name)
+
+            def f(self, *args, **kw):
+                if phase["on"]:
+                    g = getattr(self, "_fsdp_param_group", self)
+                    print(f"[trace] {cls.__name__}.{name} {getattr(g, '_module_fqn', '?')} "
+                          f"state={getattr(self, '_training_state', None)}", flush=True)
+                return orig(self, *args, **kw)
+            setattr(cls, name, f)
+        for n in ("_pre_backward", "_pre_forward", "_post_forward"):
+            wrap(FS.FSDPState, n)
+        for n in ("unshard", "reshard", "post_backward", "pre_backward"):
+            wrap(PG.FSDPParamGroup, n)
+        ob = torch.autograd.backward
+
+        def bw(t, g=None, **kw):
+            phase["on"] = t.grad_fn is not None and "View" in type(t.grad_fn).__name__
+            if phase["on"]:
+                print("[trace] ===== deferred early backward", flush=True)
+            try:
+                return ob(t, g, **kw)
+            finally:
+                phase["on"] = False
+        torch.autograd.backward = bw
     model.zero_grad(set_to_none=True)
     tm = TM()
     MV.enable_multiview(tm, a.views)

@@ -93,8 +93,8 @@ def _fire_pre_backward(states: List[Any], g: torch.Tensor) -> torch.Tensor:
     for stt in states:
         if _DEBUG:
             gr = stt._fsdp_param_group
-            log.info("[multiview-debug] pre-fire state=%s group_state=%s unsharded=%s", stt._training_state,
-                     getattr(gr, "_training_state", None), getattr(gr, "is_unsharded", None))
+            print(f"[multiview-debug] pre-fire state={stt._training_state} group_state="
+                  f"{getattr(gr, '_training_state', None)} unsharded={getattr(gr, 'is_unsharded', None)}", flush=True)
         stt._pre_backward(g)
     return g
 
