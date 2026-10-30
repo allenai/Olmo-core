@@ -54,7 +54,8 @@ from olmo_core.nn.online_token_router import structural_features  # noqa: E402
 
 EOS, DOC_START, DOC_END = 248044, 248049, 248050
 NB = 32
-KS = (0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
+KS = (0.0005, 0.001, 0.002, 0.003, 0.005, 0.0075, 0.01, 0.015, 0.02, 0.03, 0.05, 0.07, 0.1, 0.15, 0.2, 0.3, 0.4,
+      0.5, 0.7, 1.0)
 SPLITS = (0, 3, 7, 16, 24)
 REP_BLOCKS = (0, 3, 7, 16, 24, 31)
 RECIPE = ((7, 0.2), (16, 0.07))
@@ -135,7 +136,7 @@ def load_rows(shards, tasks, n, offset, max_len, seen_shards):
 def body_mask(x):
     cid = build_chunk_ids_from_tokens(x[None], DOC_START, DOC_END, EOS, mode="chunked")
     _, body = structural_features(x[None], cid, doc_start_id=DOC_START, doc_end_id=DOC_END, offsets={})
-    return body[0].bool()
+    return body[0].bool(), cid[0].long()
 
 
 # ---------------------------------------------------------------------------------------------------------- model
@@ -224,6 +225,22 @@ def rank_bins(score, elig):
     order = torch.argsort(score[idx], descending=True)
     frac = (torch.arange(n, dtype=torch.float64) + 1) / max(n, 1)
     bins[idx[order]] = torch.searchsorted(torch.tensor(KS, dtype=torch.float64), frac) + 1
+    return bins
+
+
+def rank_bins_grouped(score, elig, grp):
+    """like rank_bins, but the quantile is taken within each group (row or document): every group keeps its own
+    top-k share."""
+    bins = torch.zeros(score.numel(), dtype=torch.long)
+    idx = torch.nonzero(elig, as_tuple=True)[0]
+    s, g = score[idx].double(), torch.unique(grp[idx], return_inverse=True)[1]
+    o = torch.argsort(-s)
+    o = o[torch.argsort(g[o], stable=True)]
+    gs = g[o]
+    cnt = torch.bincount(gs)
+    start = torch.cumsum(cnt, 0) - cnt
+    frac = (torch.arange(len(o), dtype=torch.float64) - start[gs] + 1) / cnt[gs]
+    bins[idx[o]] = torch.searchsorted(torch.tensor(KS, dtype=torch.float64), frac) + 1
     return bins
 
 
@@ -394,6 +411,9 @@ def main():
         for L in SPLITS:
             for v in ("all", "body"):
                 R.append(Ranking(f"down{L}_{v}", [ln for ln in lins if ln.block >= L]))
+        for L in (7, 16):  # router-like budgets: each row / each document keeps its own top-k share of body tokens
+            for gname in ("rowq", "docq"):
+                R.append(Ranking(f"{gname}{L}_body", [ln for ln in lins if ln.block >= L]))
         for L in (7, 16):
             R.append(Ranking(f"rand{L}_body", [ln for ln in lins if ln.block >= L]))
         for ln in rep:
@@ -470,7 +490,7 @@ def main():
         batch = order[J * big:(J + 1) * big]
         # ---- pass 1: energies
         tap.mode = "energy"
-        E, body = [], []
+        E, body, cids = [], [], []
         for ri, row in enumerate(batch):
             if J == 0 and ri == 0:  # validate delta x^T against autograd's weight gradient
                 for nme in exact_names:
@@ -490,7 +510,9 @@ def main():
                     w.requires_grad_(False)
                 tap.check = {}
             x = torch.from_numpy(row["ids"]).cuda()
-            bm = body_mask(x).cpu()
+            bm, cid = body_mask(x)
+            bm, cid = bm.cpu(), cid.cpu()
+            cids.append(cid)
             E.append(torch.stack([tap.E[ln.idx] for ln in lins]))  # (n_lin, T)
             body.append(bm)
             row.update(ce=float(loss) / max(nans, 1), n_answer=nans)
@@ -518,6 +540,8 @@ def main():
                 sl = slice(bi * s, (bi + 1) * s)
                 Ecat = torch.cat(E[sl], 1)
                 Bcat = torch.cat(body[sl])
+                rowid = torch.cat([torch.full((n_,), q) for q, n_ in enumerate(lens[sl])])
+                docid = torch.unique(rowid * 100000 + torch.cat(cids[sl]).clamp(min=0), return_inverse=True)[1]
                 offs = np.cumsum([0] + lens[sl])
                 nrows = range(bi * s, (bi + 1) * s)
                 for r in rankings[s]:
@@ -548,8 +572,15 @@ def main():
                         else:
                             sc = Ecat[blk >= int(r.name[4:].split("_")[0])].sum(0)
                         elig = Bcat if r.name.endswith("_body") else torch.ones_like(Bcat)
-                        bins = rank_bins(sc, elig)
-                        en = energy_curve(sc, elig) if not r.name.startswith("rand") else np.zeros(len(KS))
+                        if r.name.startswith(("rowq", "docq")):
+                            bins = rank_bins_grouped(sc, elig, rowid if r.name.startswith("rowq") else docid)
+                            se = sc[elig].double()
+                            en = np.array([float(se[bins[elig] <= j + 1].sum() / se.sum()) for j in range(len(KS))])
+                        else:
+                            bins = rank_bins(sc, elig)
+                            en = energy_curve(sc, elig) if not r.name.startswith("rand") else np.zeros(len(KS))
+                        be = bins[elig]
+                        put(res, (s, r.name, "kfrac"), np.array([float((be <= j + 1).float().mean()) for j in range(len(KS))]))
                         put(res, (s, r.name, "eshare"), en)
                         put(res, (s, r.name, "nelig"), np.array([int(elig.sum()), Bcat.numel()]))
                         if not r.name.startswith("rand"):

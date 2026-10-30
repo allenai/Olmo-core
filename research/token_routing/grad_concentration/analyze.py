@@ -54,12 +54,13 @@ def summarize(lab, d, A, steps, rows_seen):
         S = {}
         g = lambda r, q: A[f"{s}|{r}|{q}"]  # noqa: E731
         d0 = g("down0_all", "full")
-        for L in d["splits"]:
-            for v in ("all", "body"):
-                r = f"down{L}_{v}"
+        names = [(f"down{L}_{v}", L, v) for L in d["splits"] for v in ("all", "body")]
+        names += [(f"{gn}{L}_body", L, "body") for L in (7, 16) for gn in ("rowq", "docq")
+                  if f"{s}|{gn}{L}_body|dot" in A]
+        for r, L, v in names:
                 groups = list(range(2 * L, 2 * NB))
                 cos, rel, proj = curves(g(r, "dot"), g(r, "sq"), g(r, "full"), groups)
-                kx = [0.0] + KS
+                kx = [0.0] + (g(r, "kfrac").mean(0).tolist() if f"{s}|{r}|kfrac" in A else KS)
                 e = {"cos": cos.mean(0).tolist(), "cos_sd": cos.std(0).tolist(), "relnorm": rel.mean(0).tolist(),
                      "proj": proj.mean(0).tolist(), "k": kx}
                 for t in TARGETS:
@@ -67,7 +68,7 @@ def summarize(lab, d, A, steps, rows_seen):
                 es = g(r, "eshare")
                 e["eshare"] = es.mean(0).tolist()
                 for t in TARGETS:
-                    e[f"k_energy{t}"] = ms([k_at(KS, c, t) for c in es])
+                    e[f"k_energy{t}"] = ms([k_at(kx[1:], c, t) for c in es])
                 ne = g(r, "nelig")
                 e["elig_token_share"] = float((ne[:, 0] / ne[:, 1]).mean())
                 if v == "body":
@@ -189,10 +190,9 @@ def main():
         print(f"== {lab} ({o['steps']} steps, CE {o['ce_mean']:.3f}, {o['eval_size_rows']} rows) "
               f"sketch val {json.dumps(o['sketch_validation'])}")
         for s, S in o["scopes"].items():
-            for L in d["splits"]:
-                for v in ("all", "body"):
-                    e = S[f"down{L}_{v}"]
-                    print(f"  bs{s} down{L:<2} {v:4}: k@cos .7/.9/.95 = " +
+            for r in [k for k in S if k.startswith(("down", "rowq", "docq"))]:
+                    e = S[r]
+                    print(f"  bs{s} {r:12}: k@cos .7/.9/.95 = " +
                           " / ".join(f"{e[f'k_cos{t}'][0]:.3f}" for t in TARGETS) +
                           "   energy " + " / ".join(f"{e[f'k_energy{t}'][0]:.3f}" for t in TARGETS) +
                           f"   whole .9/.95 " + " / ".join(f"{e[f'k_whole_cos{t}'][0]:.3f}" for t in (0.9, 0.95)))
