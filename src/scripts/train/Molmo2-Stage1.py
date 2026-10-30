@@ -512,7 +512,7 @@ class ExperimentConfig(Config):
     model_size: str = MODEL_SIZE
     """``"4b"`` or ``"8b"`` — selects the architecture, the base LM to initialise from, and
     the released checkpoint used by ``--init_from=molmo2``."""
-    data_seed: int = 95818  # mm_olmo `data.seed`
+    data_seed: int = 95818  # mm_olmo `data.seed`; see `train` for which sources it seeds
     init_seed: int = 6198  # mm_olmo `seed`
     global_batch_size: int = GLOBAL_BATCH_SIZE
     """Global batch in *tokens* (= global instances × seq len). Override to scale the batch;
@@ -1394,7 +1394,9 @@ def _build_mixture_sources(tokenizer, config: ExperimentConfig):
 
 def train(config: ExperimentConfig):
     seed_all(config.init_seed)
-    # `--data_seed` controls all data randomness, including the caption dataset's.
+    # `--data_seed` seeds the mixture order and the caption, academic and clocks sources. The other
+    # sources (pointing, counting, GUISyn, OCR) keep their own default seeds, so the default run
+    # draws the same per-row randomness as the reference.
     config.dataset.seed = config.data_seed
 
     tokenizer = _load_tokenizer(config.model_size, config.init_from)

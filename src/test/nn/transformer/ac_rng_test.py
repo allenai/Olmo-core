@@ -24,7 +24,7 @@ from olmo_core.nn.transformer.config import TransformerConfig
 VOCAB, SEQ_LEN = 64, 8
 
 
-def _model(masked_dropout: float = 0.0, dropout: float = 0.0):
+def _model(masked_dropout: float = 0.0, dropout: float = 0.0, attention_dropout: float = 0.0):
     config = TransformerConfig.llama_like(
         d_model=32,
         vocab_size=VOCAB,
@@ -35,22 +35,26 @@ def _model(masked_dropout: float = 0.0, dropout: float = 0.0):
     block = cast(Any, config.block)
     block.masked_dropout = masked_dropout
     block.dropout = dropout
+    cast(Any, block.sequence_mixer).dropout = attention_dropout
     return config.build(init_device="cpu")
 
 
 @pytest.mark.parametrize(
-    "masked_dropout, dropout, expected",
+    "masked_dropout, dropout, attention_dropout, expected",
     [
-        pytest.param(0.0, 0.0, False, id="no-dropout"),
-        pytest.param(0.1, 0.0, True, id="masked-dropout"),
-        pytest.param(0.0, 0.1, True, id="plain-dropout"),
+        pytest.param(0.0, 0.0, 0.0, False, id="no-dropout"),
+        pytest.param(0.1, 0.0, 0.0, True, id="masked-dropout"),
+        pytest.param(0.0, 0.1, 0.0, True, id="plain-dropout"),
+        pytest.param(0.0, 0.0, 0.1, True, id="attention-dropout"),
     ],
 )
 def test_preserve_rng_state_tracks_whether_dropout_is_active(
-    masked_dropout: float, dropout: float, expected: bool
+    masked_dropout: float, dropout: float, attention_dropout: float, expected: bool
 ):
     """RNG preservation costs something per block, so it should be on only when it matters."""
-    model = _model(masked_dropout=masked_dropout, dropout=dropout)
+    model = _model(
+        masked_dropout=masked_dropout, dropout=dropout, attention_dropout=attention_dropout
+    )
     assert model._dropout_is_active() is expected
 
     model.apply_activation_checkpointing(TransformerActivationCheckpointingMode.full)
