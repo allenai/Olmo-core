@@ -21,13 +21,13 @@
    "rc": null
   },
   "f8k-mt4-dense-f7808-q3-lr5e-06": {
-   "ex": "01M64XMF19Q9F6FZ1Q6TKWFXAP",
+   "ex": "01M65SA1250ZS5KEK5K2NJP6B7",
    "task": "mt4",
    "arm": "dense",
    "budget": "f7808",
    "steps_expected": 1952,
    "gpus": 2,
-   "state": "R"
+   "state": "S"
   },
   "f8k-mt4-dense-f3904-q3-lr5e-06": {
    "ex": "01M64XNAQ5ZWD9P261XYH9KC8T",

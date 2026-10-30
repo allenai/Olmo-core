@@ -15,9 +15,10 @@
 set -uo pipefail
 CODE="${CODE:?}"; SPECS="${SPECS:?}"
 for spec in $SPECS; do
-  IFS=: read -r arm budget lr <<< "$spec"
-  log=/data/prasann/joblogs/q3recipe_${arm}-${budget}-${lr}_chain${SLURM_JOB_ID}.log
+  # arm:budget:lr, or size:arm:budget:lr (Q3_SIZE per run; size ablation)
+  if [ $(tr -cd ':' <<< "$spec" | wc -c) -eq 3 ]; then IFS=: read -r size arm budget lr <<< "$spec"; else size=${Q3_SIZE:-4b}; IFS=: read -r arm budget lr <<< "$spec"; fi
+  log=/data/prasann/joblogs/q3recipe_${size}-${arm}-${budget}-${lr}_chain${SLURM_JOB_ID}.log
   echo "=== chain $(date '+%F %T') $spec -> $log ==="
-  ARM=$arm BUDGET=$budget LR=$lr CODE=$CODE bash $CODE/research/token_routing/ds64_fast8k/run_q3_local.sbatch > $log 2>&1
+  Q3_SIZE=$size ARM=$arm BUDGET=$budget LR=$lr CODE=$CODE bash $CODE/research/token_routing/ds64_fast8k/run_q3_local.sbatch > $log 2>&1
   echo "=== chain $spec rc=$? $(date '+%F %T') ==="
 done
