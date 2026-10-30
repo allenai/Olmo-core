@@ -148,8 +148,14 @@ def main():
             cap = {}
             b0 = list(model.blocks.values())[0]
             hd = b0.register_forward_hook(lambda m, i, o: cap.__setitem__("h", o))
+
+            def pre(m, args, kwargs):
+                print("block0 args:", [(type(x).__name__, tuple(x.shape), x.requires_grad) for x in args if torch.is_tensor(x)],
+                      "kwargs:", {k: (tuple(v.shape), v.requires_grad) for k, v in kwargs.items() if torch.is_tensor(v)},
+                      flush=True)
+            hp = b0.register_forward_pre_hook(pre, with_kwargs=True)
             out = model(ids, labels=labels)
-            hd.remove()
+            hd.remove(); hp.remove()
             (cap["h"].float().sum()).backward()
             print("SIMPLE_OK nomv_early"); return
         ctx = {"layer": 1, "repeat": False, "h7": None}
