@@ -1761,11 +1761,34 @@ class Transformer(nn.Module):
         otr_nograd = otr_layer > 0 and bool(getattr(otr, "_nograd_fwd", False))
         # the no-grad prefix ends at the drop layer, or earlier when a progressive freeze has frozen fewer blocks
         otr_nograd_end = int(getattr(otr, "_nograd_until", 0) or otr_layer) if otr_nograd else -1
+        # multi-view training (olmo_core.nn.multiview): the train module sets ``_mv_ctx`` per forward. The FIRST view
+        # runs blocks [0, L) and splits the graph at block L's input (a fresh leaf, so the view's backward stops
+        # there and its dL/dh_L lands in ``leaf.grad``); a REPEAT view skips blocks [0, L) and starts from the
+        # first view's cached (detached) h_L. ``L`` is the router's first drop layer.
+        mv = getattr(self, "_mv_ctx", None) if self.training else None
+        if mv is not None:
+            if otr_layer <= 0 or int(mv["layer"]) != int(otr_layer):
+                raise RuntimeError(f"multi-view needs the online router's first drop layer ({otr_layer}) as its "
+                                   f"split layer, got {mv['layer']}")
+            if otr_nograd or otr_mod or otr_tap or ld_skip or token_exit is not None or capture_layers:
+                raise NotImplementedError("multi-view does not compose with early_nograd / mod_layers / target_layer "
+                                          "/ layer drop / token exit / captured layers")
         grad_was = torch.is_grad_enabled()
         if otr_nograd:
             torch.set_grad_enabled(False)
         for block_key, block in self.blocks.items():
             block_idx = int(block_key)
+            if mv is not None:
+                if block_idx < otr_layer and mv["repeat"]:
+                    continue  # a repeat view: blocks [0, L) ran once, in the first view
+                if block_idx == otr_layer:
+                    if mv["repeat"]:
+                        h = mv["h7"]
+                    else:
+                        mv["h7_attached"] = h
+                        mv["h7"] = h.detach()
+                    h = h.detach().requires_grad_(True)
+                    mv["leaf"] = h
             if otr_nograd and block_idx == otr_nograd_end:
                 torch.set_grad_enabled(grad_was)
                 # a fresh leaf: the router's target hook at the split reads dL/dh at or above here
@@ -2679,10 +2702,14 @@ class Transformer(nn.Module):
         soft_inject: Optional[Tuple] = None
         aux_ctx: Optional[Dict[str, Any]] = None
         distill_teacher: Optional[Dict[str, Any]] = None
+        # a multi-view REPEAT forward (olmo_core.nn.multiview) re-runs only blocks [L, n) on rows the first view
+        # already logged: it records no example lengths (the online router charges its blocks itself)
+        mv_repeat = self.training and bool((getattr(self, "_mv_ctx", None) or {}).get("repeat"))
         track_lens = (
             getattr(self, "_flop_pad_id", None) is not None
             and self.training
             and not input_ids.is_floating_point()
+            and not mv_repeat
         )
         if track_lens and self._pooled_soft_tokens is None:
             from ..pooled_soft_token import example_lengths

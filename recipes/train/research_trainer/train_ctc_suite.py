@@ -2011,6 +2011,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora-blocks", type=int, default=0,
                     help="early LoRA on blocks [0, K) instead of [0, drop_layer), e.g. the whole model; blocks at or "
                     "above the drop layer then run at the kept length with frozen base + adapters. 0 = drop_layer")
+    ap.add_argument("--st-otr-views", type=int, default=1,
+                    help="multi-view training (olmo_core.nn.multiview): per batch, run blocks [0, drop_layer) once, "
+                    "then k late-stack views (fresh router subset each, an optimizer step between views) and one "
+                    "early-stack backward on the mean dL/dh. 1 = off")
     ap.add_argument("--st-otr-early-lora-scale", type=float, default=32.0,
                     help="early LoRA output scale (acts as the adapters' LR multiplier under Adam; default 32)")
     ap.add_argument("--st-otr-target-layer", type=int, default=0,

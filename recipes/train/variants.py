@@ -352,6 +352,8 @@ class SoftTokenOptions(VariantOptions):
     st_otr_task_onehot: int = 0
     st_otr_row_cap: float = 2.0
     st_otr_keep_sched: str = ""
+    # multi-view training (olmo_core.nn.multiview): k late-stack views per batch from one cached split-layer state
+    st_otr_views: int = 1
     st_otr_mass_target: float = 0.0
     st_otr_max_keep_frac: float = 1.0
     st_otr_mod_layers: str = ""
@@ -1454,6 +1456,12 @@ class SoftToken(Variant):
         # smallcat_keep is gold-blind by construction; gold_plus_wholecats installs the hook with
         # n_random=0 so the holder's mask is exactly the gold set for the model to grow. The online
         # router never keeps a document whole; it reads gold (if asked) from the sidecar itself.
+        if o.st_keep_token_rule == "online" and o.st_otr_views > 1:
+            from olmo_core.nn.multiview import enable_multiview
+
+            enable_multiview(train_module, o.st_otr_views)
+            print(f"[variants] online router multi-view: {o.st_otr_views} late-stack views per batch from one cached "
+                  "split-layer state (olmo_core.nn.multiview)", flush=True)
         if o.st_gold_blind or o.st_keep_mode == "smallcat_keep" or o.st_keep_token_rule == "online":
             return
         whole = o.st_keep_mode == "gold_plus_wholecats"

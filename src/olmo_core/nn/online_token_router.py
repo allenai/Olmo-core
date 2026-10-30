@@ -1228,10 +1228,15 @@ class OnlineTokenRouter:
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
         ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
+        # multi-view repeat forward (olmo_core.nn.multiview): blocks [0, L0) did not run and the meter logged no
+        # example for it, so this stage charges its own blocks + head at the kept length and nothing else
+        mv_repeat = model.training and bool((getattr(model, "_mv_ctx", None) or {}).get("repeat"))
         for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
             fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
             fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
-            if self.stage_idx == 0:
+            if self.stage_idx == 0 and mv_repeat:
+                adj += Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx) + Lk * sum(ab[L0:])
+            elif self.stage_idx == 0:
                 actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
                           + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
                 adj += actual - L * (sum(fb) + head)
