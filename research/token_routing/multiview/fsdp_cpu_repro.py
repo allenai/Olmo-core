@@ -42,7 +42,7 @@ def main():
         init_device="cpu")
     D = int(model.embeddings.weight.shape[1])
     router = OnlineTokenRouter(OnlineRouterConfig(keep_frac=0.25, explore_frac=0.2, samples_per_row=64, stages="1:0.5,2:0.25",
-                                                  dense_every=0, score="random", early_lora=8, early_lora_blocks=4),
+                                                  dense_every=0, score="random", early_lora=8, early_lora_blocks=4, drop_layer=1),
                                doc_start_id=DS, doc_end_id=DE, eos_id=EOS, d_model=D)
     model.enable_pooled_soft_tokens(DS, DE, EOS, placeholder_id=PH, keep_prob=0.0, keep_seed=0, detach_soft_kv=True,
                                     drop_slots=True, keep_token_rule="online", keep_token_k=0.25, online_router=router)
