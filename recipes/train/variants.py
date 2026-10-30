@@ -338,6 +338,12 @@ class SoftTokenOptions(VariantOptions):
     st_otr_early_lora_blocks: int = 0
     st_otr_early_lora_start: int = 0
     st_otr_early_lora_freeze_head: bool = False
+    st_otr_sbw_mode: str = "off"
+    st_otr_sbw_frac: float = 0.1
+    st_otr_sbw_energy: float = 0.95
+    st_otr_sbw_rank: int = 256
+    st_otr_sbw_sketch: int = 256
+    st_otr_sbw_start: int = 0
     st_otr_route_min_len: int = 0
     st_otr_warmup_random: bool = False
     st_otr_keep_mode: str = "topk"
@@ -1412,6 +1418,14 @@ class SoftToken(Variant):
             print(f"[variants] online router early LoRA: blocks [0, {K}) + embeddings frozen, adapters on [{B0}, {K}), "
                   f"{len(mods)} linears get rank-{o.st_otr_early_lora} adapters (scale {o.st_otr_early_lora_scale})",
                   flush=True)
+            if o.st_otr_sbw_mode != "off":
+                from olmo_core.nn.sparse_backward import SparseBackwardConfig, install_sparse_backward
+
+                install_sparse_backward(model, SparseBackwardConfig(
+                    mode=o.st_otr_sbw_mode, frac=o.st_otr_sbw_frac, energy=o.st_otr_sbw_energy,
+                    rank=o.st_otr_sbw_rank, sketch=o.st_otr_sbw_sketch, start_block=o.st_otr_sbw_start))
+        elif o.st_otr_sbw_mode != "off":
+            raise SystemExit("--st-otr-sbw-mode needs the online router with --st-otr-early-lora (frozen base + LoRA)")
         if online and o.st_otr_freeze_early:
             from olmo_core.nn.online_token_router import freeze_early_blocks
 

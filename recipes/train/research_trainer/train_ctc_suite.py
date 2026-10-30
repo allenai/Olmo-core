@@ -2021,6 +2021,18 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora-blocks", type=int, default=0,
                     help="early LoRA on blocks [0, K) instead of [0, drop_layer), e.g. the whole model; blocks at or "
                     "above the drop layer then run at the kept length with frozen base + adapters. 0 = drop_layer")
+    ap.add_argument("--st-otr-sbw-mode", default="off", choices=["off", "topk", "energy", "sample", "sketch"],
+                    help="BACKWARD COMPRESSION with an exact forward (olmo_core.nn.sparse_backward; needs early LoRA): "
+                    "each adapted frozen linear computes its input-gradient and LoRA VJPs only for token rows of dy: "
+                    "topk = top --st-otr-sbw-frac by ||dy_t||; energy = fewest rows covering --st-otr-sbw-energy of "
+                    "sum ||dy_t||^2; sample = p_t ~ ||dy_t|| at expected --st-otr-sbw-frac, reweighted 1/p_t (unbiased); "
+                    "sketch = top --st-otr-sbw-rank SVD + Gaussian sketch of the residual. Charged exactly. off = dense")
+    ap.add_argument("--st-otr-sbw-frac", type=float, default=0.1, help="sparse backward: kept / expected row share")
+    ap.add_argument("--st-otr-sbw-energy", type=float, default=0.95, help="sparse backward energy mode: coverage")
+    ap.add_argument("--st-otr-sbw-rank", type=int, default=256, help="sparse backward sketch mode: exact SVD rank")
+    ap.add_argument("--st-otr-sbw-sketch", type=int, default=256, help="sparse backward sketch mode: sketch width")
+    ap.add_argument("--st-otr-sbw-start", type=int, default=0,
+                    help="sparse backward only on adapted linears in blocks >= this (e.g. the drop layer)")
     ap.add_argument("--st-otr-early-lora-scale", type=float, default=32.0,
                     help="early LoRA output scale (acts as the adapters' LR multiplier under Adam; default 32)")
     ap.add_argument("--st-otr-target-layer", type=int, default=0,

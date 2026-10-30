@@ -1243,6 +1243,9 @@ class OnlineTokenRouter:
                         - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + headx))
                 adj += (Lk - L) * sum(ab[L0:])
         self._flop(model, adj)
+        # the LM head was charged at this stage's kept length (headx per kept token); with --sparse-loss-positions it
+        # runs only at the supervised positions: charge_sparse_head corrects that after the last stage
+        self._head_charged = (float(headx), float(counts.sum()))
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         if self._next is not None:
             self._next._mid = self._stash_for_next(fp, ids, cid, Tr, Tw, order, valid)
@@ -1508,6 +1511,23 @@ class OnlineTokenRouter:
             if torch.is_tensor(v) and v.dim() >= 2 and v.shape[0] == B and v.shape[1] == Tr:
                 fp2[k] = g(v, False if v.dtype == torch.bool else 0)
         return {"fp": fp2, "ids": g(ids, 0), "cid": g(cid, -2), "Tr": W}
+
+    def charge_sparse_head(self, model, labels: torch.Tensor, ignore_index: int = -100) -> None:
+        """``--sparse-loss-positions``: the LM head ran only at the supervised positions (at least one row), not at
+        every kept token the last stage charged it for; credit the difference. No-op if no stage charged the head
+        (unpacked rows only: the packed path does not record its head charge)."""
+        last = None
+        for r in self.chain():
+            hc = getattr(r, "_head_charged", None)
+            if hc is not None:
+                last = hc
+            r._head_charged = None
+        if last is None:
+            return
+        headx, n_rows = last
+        n_sup = max(1.0, float((labels != ignore_index).sum()))
+        self._flop(model, -headx * max(0.0, n_rows - n_sup))
+        self._stat("head_rows_frac", n_sup / max(1.0, n_rows))
 
     def mid_labels(self, labels: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
         """Apply this forward's mid-stack gather(s) -- every pyramid stage in order -- to the (input-compacted) labels."""

@@ -126,6 +126,9 @@ class OnlineRouterCallback(Callback):
         m = {}
         for r in router.chain():
             m.update(r.metrics())
+        from olmo_core.nn.sparse_backward import sparse_backward_metrics
+
+        m.update(sparse_backward_metrics(self.trainer.train_module.model))  # type: ignore[union-attr]
         if torch.cuda.is_available():
             # this step's peak allocated memory on this rank (reset in pre_step)
             m["online_router/peak_mem_gib"] = torch.cuda.max_memory_allocated() / 2**30

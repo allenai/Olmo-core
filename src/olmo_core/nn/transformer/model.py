@@ -3010,6 +3010,14 @@ class Transformer(nn.Module):
         )
         if getattr(self, "_online_token_router", None) is not None and self.training:
             labels = self._online_token_router.mid_labels(labels)  # no-op unless a mid-stack drop ran
+            if (labels is not None and self.lm_head is not None
+                    and getattr(self.lm_head, "_sparse_loss_positions", False)
+                    and lm_head_kwargs.get("return_logits") is not True
+                    and lm_head_kwargs.get("loss_reduction", "mean") != "none"
+                    and isinstance(lm_head_kwargs.get("logits_to_keep", 0), int)
+                    and lm_head_kwargs.get("logits_to_keep", 0) == 0):
+                # answer-only LM head: price it at the supervised positions, not the kept length
+                self._online_token_router.charge_sparse_head(self, labels, int(lm_head_kwargs.get("ignore_index", -100)))
 
         # Aux attention-contribution matching loss (soft-token pooling; see aux_matching_loss).
         aux_loss: Optional[torch.Tensor] = None

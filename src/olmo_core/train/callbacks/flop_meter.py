@@ -306,12 +306,11 @@ class FlopMeterCallback(Callback):
             # frozen LM head without the router (which charges it itself): no weight gradient at the positions it ran
             actual -= (1.0 / 3.0) * float(m.lm_head.num_flops_per_token(self.seq_len)) * head_pos
         if self._supervised_this_step is not None:
-            if otr is not None:
-                raise ValueError("FlopMeter: --sparse-loss-positions with the online router is not priced (the router "
-                                 "charges the LM head per kept token); refusing to guess")
-            # the head ran only at the supervised positions, not at every (real) token
-            head = float(m.lm_head.num_flops_per_token(self.seq_len))
-            actual -= head * max(0, tokens - self._supervised_this_step)
+            if otr is None:
+                # the head ran only at the supervised positions, not at every (real) token
+                head = float(m.lm_head.num_flops_per_token(self.seq_len))
+                actual -= head * max(0, tokens - self._supervised_this_step)
+            # (with the online router the router prices the head itself: OnlineTokenRouter.charge_sparse_head)
             self.trainer.record_metric("flop_meter/supervised_frac", self._supervised_this_step / max(1, tokens))
             self._supervised_this_step = None
         if getattr(m, "_early_lora", None) and otr is None:
