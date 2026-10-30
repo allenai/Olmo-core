@@ -318,7 +318,7 @@ ARM_EXTRA.update({
                                    "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
                                    "--st-otr-early-lora-blocks 32 --sparse-loss-positions" + x)
        for t, x in (("", ""),
-                    *((f"sbt{k}", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40)),
+                    *((f"sbt{k}", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100}") for k in (5, 10, 20, 40, 100)),
                     *((f"sbe{e}", f" --st-otr-sbw-mode energy --st-otr-sbw-energy {e / 100}") for e in (90, 95, 99)),
                     *((f"sbt{k}a", f" --st-otr-sbw-mode topk --st-otr-sbw-frac {k / 100} --st-otr-sbw-lora-all-rows")
                       for k in (5, 10, 20)),
