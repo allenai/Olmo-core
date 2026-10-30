@@ -1,0 +1,56 @@
+{
+ "runs": {
+  "f8k-mt4-lora64all32r20to7rl25lw35-f3904-tdf-lr1e-05-smoke12": {
+   "ex": "01M65WBYMTS5MDCG18JPAHXGWV",
+   "arm": "lora64all32r20to7rl25lw35",
+   "budget": "f3904",
+   "seed": 0,
+   "steps_expected": 12
+  }
+ },
+ "evals": {},
+ "ce": {
+  "dfce-dense-f1952-tde-lr5e-06": {
+   "ex": "01M65WFYVZQW1QFCCHEKK50T31",
+   "ckpts": [
+    "f8k-mt4-dense-f1952-tde-lr5e-06"
+   ]
+  },
+  "dfce-dense-f3904-tde-lr5e-06": {
+   "ex": "01M65WGWRYM7CZPBXM71YP6BM5",
+   "ckpts": [
+    "f8k-mt4-dense-f3904-tde-lr5e-06"
+   ]
+  },
+  "dfce-dense-f5856-tde-lr5e-06": {
+   "ex": "01M65WJ5C6GDMZHQPRMH3GY5NB",
+   "ckpts": [
+    "f8k-mt4-dense-f5856-tde-lr5e-06"
+   ]
+  },
+  "dfce-dense-f7808-tde-lr5e-06": {
+   "ex": "01M65WK0YTMHBQKZMSR7HDH1HA",
+   "ckpts": [
+    "f8k-mt4-dense-f7808-tde-lr5e-06"
+   ]
+  },
+  "dfce-lora64all32r20to7-f1952-tde-lr1e-05": {
+   "ex": "01M65WM0286BJ8H44J8X7S4Y9Q",
+   "ckpts": [
+    "f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05"
+   ]
+  },
+  "dfce-lora64all32r20to7-f3904-tde-lr1e-05": {
+   "ex": "01M65WMVYQ8QQGCNVZBK64ZF2T",
+   "ckpts": [
+    "f8k-mt4-lora64all32r20to7-f3904-tde-lr1e-05"
+   ]
+  },
+  "dfce-lora64all32r20to7-f7808-tde-lr1e-05": {
+   "ex": "01M65WNR1DFZFXMGJ0MDA3E4D6",
+   "ckpts": [
+    "f8k-mt4-lora64all32r20to7-f7808-tde-lr1e-05"
+   ]
+  }
+ }
+}

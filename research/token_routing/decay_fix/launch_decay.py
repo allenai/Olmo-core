@@ -44,6 +44,9 @@ ARMS = {
     "lora64all32r20to7lw35": RECIPE + " --st-otr-late-keep 0.667:0.35,0.15",
     "lora64all32r20to7rl25lw35": RECIPE + " --st-otr-relora-frac 0.25 --st-otr-relora-rewarm 20 "
                                           "--st-otr-late-keep 0.667:0.35,0.15",
+    # smoke only: --max-steps is a HARD STOP (the LR schedule and trainer.max_steps stay the full epoch), so the smoke
+    # arm fires a merge every ~0.4% of the epoch and widens the keep from 0.5% on, inside a 12-step smoke
+    "smk": RECIPE + " --st-otr-relora-frac 0.004 --st-otr-relora-rewarm 3 --st-otr-late-keep 0.005:0.35,0.15",
 }
 SHORT = {"rl25": "lora64all32r20to7rl25", "lw35": "lora64all32r20to7lw35", "rl25lw35": "lora64all32r20to7rl25lw35",
          "recipe": "lora64all32r20to7"}
