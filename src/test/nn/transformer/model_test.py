@@ -246,13 +246,42 @@ def get_transformer_config(
     return config
 
 
+def get_transformer_frozen_embeddings_config(architecture: str) -> TransformerConfig:
+    config: TransformerConfig
+    if architecture == "olmo2":
+        config = TransformerConfig.olmo2_190M(
+            vocab_size=16_000,
+            n_layers=2,
+            fused_ops=False,
+            use_flash=False,
+            freeze_params=["embeddings.weight"],
+        )
+    elif architecture == "llama":
+        config = TransformerConfig.llama2_271M(
+            vocab_size=16_000,
+            n_layers=2,
+            fused_ops=False,
+            use_flash=False,
+            freeze_params=["embeddings.weight"],
+        )
+    else:
+        raise NotImplementedError(architecture)
+
+    return config
+
+
 def get_transformer_inputs() -> torch.Tensor:
     return torch.arange(0, 128).unsqueeze(0)
 
 
-def run_tensor_parallel_transformer(checkpoint_dir, outputs_path, architecture: str):
+def run_tensor_parallel_transformer(
+    checkpoint_dir, outputs_path, architecture: str, freeze_embeddings: bool
+):
     device = get_default_device()
-    config = get_transformer_config(architecture)
+    if freeze_embeddings:
+        config = get_transformer_frozen_embeddings_config(architecture)
+    else:
+        config = get_transformer_config(architecture)
     input_ids = get_transformer_inputs().to(device)
 
     mesh = init_device_mesh(
@@ -277,9 +306,13 @@ def run_tensor_parallel_transformer(checkpoint_dir, outputs_path, architecture: 
 
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("architecture", ["olmo2", "llama"])
-def test_tensor_parallel_transformer(backend: str, architecture: str, tmp_path):
+@pytest.mark.parametrize("freeze_embeddings", [False, True])
+def test_tensor_parallel_transformer(backend: str, architecture: str, tmp_path, freeze_embeddings):
     device = torch.device("cuda") if "nccl" in backend else torch.device("cpu")
-    config = get_transformer_config(architecture)
+    if freeze_embeddings:
+        config = get_transformer_frozen_embeddings_config(architecture)
+    else:
+        config = get_transformer_config(architecture)
     model = config.build()
     model.init_weights(device=device, max_seq_len=512)
     input_ids = get_transformer_inputs().to(device)
@@ -299,6 +332,7 @@ def test_tensor_parallel_transformer(backend: str, architecture: str, tmp_path):
             checkpoint_dir,
             outputs_path,
             architecture,
+            freeze_embeddings,
         ),
     )
 
