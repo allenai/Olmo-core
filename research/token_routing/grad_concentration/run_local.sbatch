@@ -14,9 +14,9 @@
 #SBATCH --output=/data/prasann/%x-%j.out
 set -eo pipefail
 REPO=/accounts/projects/berkeleynlp/prasann/projects/OLMo-core
-ROOT=/data/prasann/gradconc
+ROOT=${GCROOT:-/data/prasann/gradconc}  # balrog: /tmp/prasann/gradconc (no /data/prasann there)
 CODE=${CODE:?set CODE}; LABEL=${LABEL:?set LABEL}; CKNAME=${CKNAME:?set CKNAME}
-PY=/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python
+PY=${PY:-/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python}
 export TMPDIR=$ROOT/tmp TRITON_CACHE_DIR=$ROOT/tmp/triton HF_HOME=$ROOT/hf_cache PYTHONPATH="$CODE/src"
 mkdir -p "$TMPDIR" "$ROOT/ckpts" "$ROOT/results/$LABEL" "$ROOT/logs"
 cd "$CODE"
