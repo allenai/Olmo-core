@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added the mixed mid-training recipe (`src/scripts/train/Mixed-Midtraining.py`, `olmo_core.internal.vision_midtraining*`): the merged mid-training + long-context text stage with a vision share, starting from any alignment stage or from the text LM, with the stage-1 v3/v4 visual mixtures, OLMoDDP chunked weighted loss, compact image collation and whole-batch prefetching. See `docs/source/guides/mixed_midtraining.md`.
+- Added `balance_vit_crops` to `MultimodalOLMoDDPTrainModuleConfig` and the mixed mid-training recipe (off by default): the vision encoder's image crops are shared evenly among the ranks (`olmo_core.nn.vision.crop_balance`) instead of every rank waiting for the one holding the most. Features and summed gradients are unchanged up to floating-point rounding; on the v4 merged mid-training mixture at 16 GPUs a step takes 35.7 s instead of 58.7 s.
+- Added `batch_prefetch_process` to `MixtureDataLoaderConfig` and the mixed mid-training recipe (off by default; turn it on, with `prefetch_processes`): the rank batches ahead are built in a forked child process (`BatchProcessPrefetcher`), outside the trainer's interpreter lock, and handed over through shared memory, with the same batches and checkpointed state. Building a batch also makes fewer large fresh allocations: the buffered packer's knapsack keeps one DP table per thread, and the mixed mid-training recipe sets `defer_packed_image_copy`.
+- Added `prefetch_processes` to `MixtureDataLoaderConfig` and the mixed mid-training recipe (off by default; turn it on, with `batch_prefetch_process`): examples load in forked worker processes instead of threads, so a page fault on a memory-mapped source (which holds the interpreter lock until the page arrives) stalls one worker instead of every loading thread and, in a batch prefetch process, the hand-over of finished batches. The mixed mid-training recipe now builds 8 rank batches ahead (`batch_prefetch_depth`, was 2).
+- Added `olmo_core.kernels.layer_norm`: LayerNorm with an affine weight and bias as Triton kernels whose gradients stay at memory bandwidth for any number of rows. The vision encoder's blocks use it.
 - Added the in-repo multimodal evaluation suites (`olmo_core.eval.multimodal_checkpoint`, `multimodal_decoding`, `multimodal_panel`, `vision_fast_text`, `vision_decoded`, `vision_academic`) with `src/scripts/eval/Vision-Align-Eval.py`, and `src/scripts/compare_sft_example.py` for token-level parity checks against reference artifacts.
 - Added OLMo 3.5 vision alignment as a multimodal-only layer over `OLMoDDPModel`: `MultimodalOLMoDDPModel` and `MultimodalOLMoDDPTrainModule` (with inert OLMoDDP hooks), the multimodal optimizer and callbacks, `PretrainingReplay` and perception data sources, the multi-phase alignment pipeline (`olmo_core.internal.vision_alignment*`, `src/scripts/train/Vision-Align.py`), and the OLMoDDP export script.
 - Added Qwen3-0.6B and Qwen3-1.7B variants of the Molmo2 stage-1 recipe (`MultimodalLMConfig.molmo2_0_6B()` / `molmo2_1_7B()`, `--model_size=0.6b|1.7b`).
@@ -29,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and optionally reset auxiliary metrics before training and on exit.
 - Added an opt-in FP32-output LM head with low-precision GEMMs and mixed-precision backward.
 - Added optional eager-rounding parity and dynamic-row specialization for no-gradient SwiGLU.
+
+### Changed
+
+- The vision encoder's self-attention projects q, k and v in one matmul and hands them to the attention as strided views (no head-transposed copies), trying cuDNN's attention first on SM100 GPUs; `VIT_CROP_MICROBATCH` defaults to no chunking. Parameters and checkpoints are unchanged.
+- The vision connector gathers the pooled patches with one `index_select` and computes the pooling attention over each group's few patches as elementwise ops. With compact images and host-side indices, `MultimodalLM.encode_images` pools only the valid rows; the `connector output RMS` diagnostic now covers those rows only.
 
 ### Fixed
 
