@@ -118,6 +118,9 @@ def main():
                     g = getattr(self, "_fsdp_param_group", self)
                     print(f"[trace] {cls.__name__}.{name} {getattr(g, '_module_fqn', '?')} "
                           f"state={getattr(self, '_training_state', None)}", flush=True)
+                    if name in ("post_backward", "reshard"):
+                        import traceback
+                        traceback.print_stack(limit=12)
                 return orig(self, *args, **kw)
             setattr(cls, name, f)
         for n in ("_pre_backward", "_pre_forward", "_post_forward"):
