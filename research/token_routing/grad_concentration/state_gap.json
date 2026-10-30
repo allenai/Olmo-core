@@ -20,5 +20,11 @@
   "commit": "545d96d6af49963131ab048e0e4fe0f07945dde5",
   "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --adam-ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --only-adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt",
   "label": "f1952"
+ },
+ "adam-recipe": {
+  "ex": "01M67G8VG31A11ZKC8Y2QVK8Y3",
+  "commit": "6cc37ea9d28c3b6d0ffa6be37ef2e2c67723c412",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --adam-ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --only-adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe"
  }
 }

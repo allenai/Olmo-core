@@ -568,6 +568,7 @@ def main():
         log(f"adam factor fit: log-R2 median {np.median(r2):.3f} (min {min(r2):.3f}); cos(D, fit) median "
             f"{np.median(cd):.4f} (min {min(cd):.4f})")
     if a.only_adam_factors:
+        os.makedirs(os.path.dirname(os.path.abspath(a.only_adam_factors)), exist_ok=True)
         torch.save({"factors": adam, "diag": adam_diag}, a.only_adam_factors)
         json.dump({"adam_diag": adam_diag}, open(a.out, "w"))
         log(f"wrote {a.only_adam_factors}")
