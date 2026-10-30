@@ -173,7 +173,10 @@ def _mv_train_batch(self: Any, batch: Dict[str, Any], dry_run: bool = False):
         assert h is not None and delta[i] is not None
         with self._train_microbatch_context(i, n):
             if h.requires_grad:
-                torch.autograd.backward(h, (delta[i] / k).to(h.dtype))
+                # through a view, never with the block output itself as the root: FSDP2's pre-backward (unshard) is a
+                # tensor hook on that output, and a backward ROOT does not fire its own tensor hooks -- block L-1
+                # would then recompute against resharded (empty) parameters
+                torch.autograd.backward(h.view(h.shape), (delta[i] / k).to(h.dtype))
         early[i] = cached[i] = delta[i] = None
     del batch, mbs
     st["last_views"] = k
