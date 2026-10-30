@@ -13,13 +13,13 @@ mkdir -p ~/.aws && printf '%s' "$AWS_CREDS" > ~/.aws/credentials && printf '%s' 
 pip install -q awscli 2>&1 | tail -1
 DST=s3://ai2-llm/checkpoints/prasanns/_transfer/gradconc
 SH=$W/ds64/fast8k/shards
-for S in contradiction_fresh nq_fresh outlier_fresh oolong_fresh mt4f7808 mt4s1952; do
+[ "${SKIP_SHARDS:-0}" = 1 ] || for S in contradiction_fresh nq_fresh outlier_fresh oolong_fresh mt4f7808 mt4s1952; do
   AWS_PROFILE=S3 aws s3 sync $SH/$S $DST/shards/$S/ --only-show-errors --exclude "*" --include "*.npy" \
     --include "metadata.json" && echo "SYNCED shard $S $(du -sh $SH/$S | cut -f1)" || echo "!!! FAILED shard $S"
 done
 export MASTER_ADDR=127.0.0.1 MASTER_PORT=29511 RANK=0 WORLD_SIZE=1 LOCAL_RANK=0
 for NAME in $NAMES; do
-  CK=$W/ctc_suite/ckpts/$NAME/model_and_optim
+  case $NAME in /*) CK=$NAME; NAME=$(basename $(dirname $NAME));; *) CK=$W/ctc_suite/ckpts/$NAME/model_and_optim;; esac
   [ -d "$CK" ] || CK=$(ls -d $W/ctc_suite/ckpts/$NAME/step*/model_and_optim 2>/dev/null | tail -1)
   [ -n "$CK" ] && [ -d "$CK" ] || { echo "!!! no model_and_optim for $NAME"; continue; }
   OUT=/tmp/transfer/$NAME; mkdir -p $OUT
@@ -52,5 +52,5 @@ gantry run --name "gradconc-stage-$(date +%m%d%H%M)" -w ai2/flex2 -b ai2/oe-othe
   --beaker-image tylerr/olmo-core-tch291cu128-2025-11-25 \
   --weka oe-training-default:/weka/oe-training-default \
   --env-secret AWS_CREDS=PRASANNS_AWS_CREDENTIALS --env-secret AWS_CFG=PRASANNS_AWS_CONFIG \
-  --env NAMES="$NAMES" --env W="$W" \
+  --env NAMES="$NAMES" --env W="$W" --env SKIP_SHARDS="${SKIP_SHARDS:-0}" \
   --allow-dirty --timeout 0 --yes -- bash -c "$WORK" 2>&1 | grep -E "beaker.org/ex|rror|xperiment" | head -5
