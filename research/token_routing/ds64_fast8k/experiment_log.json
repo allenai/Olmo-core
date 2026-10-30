@@ -31,11 +31,11 @@
  },
  {
   "date": "2026-10-30",
-  "status": "running",
+  "status": "failed",
   "track": "Next (≥5×)",
   "who": "overnight agent (multi-view)",
   "title": "Multiple views per row from cached block-7 states",
-  "result": "Interim (1 seed, f1952): k=2 scores 0.885 at 483 PF, −0.014 vs the recipe's FLOP curve; +0.032 over its random-keep k=1 control (0.853, itself −0.030 vs the router recipe). Each extra view ≈0.089× dense/step. Running: k=3 f1952, k=2/k=3 f3904. Branch claude/multiview-h7cache; collect via research/token_routing/multiview/launch_mv.py + collect_mv.py.",
+  "result": "Failed. All k>1 runs trail the recipe at matched FLOPs: k=2 −0.013 (f1952) / −0.011 (f3904); k=3 −0.069 / −0.017 (1 seed, eval_size 500/cell). Extra views act like extra epochs; fresh rows are a better use of FLOPs. Branch claude/multiview-h7cache.",
   "match": [
    "mview",
    "multiview",

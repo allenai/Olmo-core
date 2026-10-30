@@ -600,14 +600,20 @@ __LORA2X2__
   <p class="note">Ceilings are back-of-envelope estimates, not measurements. Prasann (10-29): pursue only ideas whose ceiling is at least ≈5× over dense.</p>
 </section>
 <section>
-  <h2>Multiple views per row from cached block-7 states (in progress)</h2>
-  <div class="tbl"><table>
-    <tr><th>run (1,952 rows/task, 1 seed)</th><th class="n">views k</th><th class="n">PF</th><th class="n">8-cell</th><th class="n">outlier@8k</th><th class="n">recipe at same PF</th><th class="n">Δ</th></tr>
-    <tr><td>recipe (router)</td><td class="n">1</td><td class="n">345</td><td class="n">0.883</td><td class="n">0.862</td><td class="n">–</td><td class="n">–</td></tr>
-    <tr><td>multi-view control (random keep)</td><td class="n">1</td><td class="n">343</td><td class="n">0.853</td><td class="n">0.812</td><td class="n">0.883</td><td class="n">−0.030</td></tr>
-    <tr><td>multi-view</td><td class="n">2</td><td class="n">483</td><td class="n">0.885</td><td class="n">0.887</td><td class="n">0.899</td><td class="n">−0.014</td></tr>
+  <h2>Multiple views per row from cached block-7 states: fails</h2>
+  <div class="figs">
+    <figure><h3>8-cell mean vs PF: multi-view vs the recipe curve</h3><div class="chart"><canvas id="mvpar" aria-label="multi-view vs recipe"></canvas></div>
+      <figcaption>1 seed per run, eval_size 500 per cell, no-cot. The recipe curve is its fresh-pool points at 1,952 / 3,904 / 7,808 rows/task.</figcaption></figure>
+  </div>
+  <div class="tbl" style="margin-top:14px"><table>
+    <tr><th>run</th><th class="n">views k</th><th class="n">PF</th><th class="n">8-cell</th><th class="n">outlier@8k</th><th class="n">contra@8k</th><th class="n">recipe at same PF</th><th class="n">Δ</th></tr>
+    <tr><td>1,952 rows, random-keep control</td><td class="n">1</td><td class="n">343</td><td class="n">0.853</td><td class="n">0.812</td><td class="n">0.954</td><td class="n">0.883</td><td class="n">−0.030</td></tr>
+    <tr><td>1,952 rows</td><td class="n">2</td><td class="n">483</td><td class="n">0.885</td><td class="n">0.887</td><td class="n">0.954</td><td class="n">0.899</td><td class="n">−0.013</td></tr>
+    <tr><td>1,952 rows</td><td class="n">3</td><td class="n">623</td><td class="n">0.842</td><td class="n">0.873</td><td class="n">0.948</td><td class="n">0.910</td><td class="n">−0.069</td></tr>
+    <tr><td>3,904 rows</td><td class="n">2</td><td class="n">966</td><td class="n">0.908</td><td class="n">0.973</td><td class="n">0.973</td><td class="n">0.919</td><td class="n">−0.011</td></tr>
+    <tr><td>3,904 rows</td><td class="n">3</td><td class="n">1,245</td><td class="n">0.906</td><td class="n">0.959</td><td class="n">0.972</td><td class="n">0.923</td><td class="n">−0.017</td></tr>
   </table></div>
-  <p class="note"><b>Interim: no win yet.</b> Each row runs blocks 0–6 once; blocks 7–31 run k times from the cached block-7 state, each with a fresh random 20%/7% keep, and blocks 0–6 get the mean of the k gradients. Each extra view costs ≈0.089× dense per step (k=2 = 1.40× the recipe's FLOPs). k=2 trails the recipe's FLOP curve by 0.014 (eval_size 500 per cell, no-cot). It beats its own random-keep k=1 control by +0.032, but that control is 0.030 below the router recipe (mostly outlier@2k), so a seed replicate is needed to tell which baseline is right. Running: k=3 at 1,952 rows (needs ≥0.922 to win), k=2 and k=3 at 3,904 rows (need ≥≈0.930). Branch <code>claude/multiview-h7cache</code>, record <code>records/multiview-cached-h7.md</code>, detail page https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ.</p>
+  <p class="note"><b>Verdict: fails; every k&gt;1 run trails the recipe at matched FLOPs (bar +0.01).</b> Each row runs blocks 0–6 once; blocks 7–31 run k times from the cached block-7 state with fresh random 20%/7% keeps, and blocks 0–6 get the mean gradient. Each extra view costs ≈0.089× dense per step. Extra views of the same row behave like extra epochs: the FLOPs are better spent on fresh rows. A third view hurts at 1,952 rows (oolong and outlier@2k drop). Branch <code>claude/multiview-h7cache</code>, record <code>records/multiview-cached-h7.md</code>, detail page https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ.</p>
 </section>
 </div>
 <div class="part" id="provenance">
@@ -825,6 +831,15 @@ function draw() {
       options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
         scales: { x: { title: { display: true, text: "step cost / dense step", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } },
                   y: { title: { display: true, text: "8-cell mean (eval_size 500/cell)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
+  (() => { const e = document.getElementById("mvpar"); if (!e || !window.Chart) return;
+    const ds = [["recipe", [[345, 0.883], [688, 0.915], [1373, 0.926]], "--c1", true],
+                ["multi-view k=2", [[483, 0.885], [966, 0.908]], "--c3", false],
+                ["multi-view k=3", [[623, 0.842], [1245, 0.906]], "--c6", false],
+                ["k=1 random control", [[343, 0.853]], "--muted", false]];
+    new Chart(e, { type: "line", data: { datasets: ds.map(([l, p, c, ln]) => ({ label: l, data: p.map(q => ({ x: q[0], y: q[1] })), borderColor: css(c), backgroundColor: css(c), showLine: true, borderDash: ln ? [] : [4, 3], pointRadius: 5, tension: 0 })) },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { type: "logarithmic", title: { display: true, text: "training PF (log)", color: css("--muted") }, ticks: { color: css("--muted"), callback: v => [300, 500, 1000].includes(v) ? v : "" }, grid: { color: css("--rule") } },
+                  y: { title: { display: true, text: "8-cell mean", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });
