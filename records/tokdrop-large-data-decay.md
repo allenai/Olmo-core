@@ -115,3 +115,24 @@ Runs (2 x H100 jupiter, urgent, minRuntime 1h, gb 16, micro 2, seq 12288, fresh 
 | f8k-mt4-lora64all32r20to7-f7808-tdf-sd1-lr1e-05 (recipe, seed 1: run-to-run noise control) | 01M65X26E7PMTRG4FGHRVJDDT4 |
 
 Decisive: +0.006 on the 8-cell mean at 7,808 rows over the recipe, or answer CE matching dense at >= 1.5x its data.
+| f8k-mt4-lora64all32r25to10-f3904-tdf-lr1e-05 (uniform 25% / 9.7%: compute-matched control for lw35) | 01M66624MPFG8E4P970ZY5TAJ1 |
+| f8k-mt4-lora64all32r25to10-f7808-tdf-lr1e-05 | 01M6662WV3DFQGMBTSCZXDJ0SC |
+| f8k-mt4-lora64all32r20to7lw50-f3904-tdf-lr1e-05 (late 50% / 25%) | 01M6663P9JR9G66X25SWRP6KH4 |
+
+The three f7808 runs launched first (rl25, lw35, recipe sd1) were PREEMPTED at step ~1,315 / 1,952 (10:19 UTC) and
+requeued by Beaker; the trainer saves no mid-run checkpoint, so each restarts from step 0.
+
+### Results at 3,904 rows/task (eval_size 500 per cell, no-cot; 1 seed)
+
+| run | PFLOPs | 8-cell f1 | f1 FTM | answer CE 8-cell | CE FTM | CE vs recipe (paired) | CE vs dense f3904 (paired) |
+|---|---|---|---|---|---|---|---|
+| recipe (tde) | 688 | 0.9153 | 3.7x | 0.1527 | 2.7x | | +0.0136 +- 0.0027 |
+| rl25 (ReLoRA) | 686 | 0.9171 | 3.8x | 0.1553 | 2.5x | +0.0026 +- 0.0020 | +0.0162 +- 0.0029 |
+| lw35 (late widen) | 745 | 0.9157 | 3.4x | 0.1458 | 3.2x | **-0.0069 +- 0.0022** | +0.0067 +- 0.0024 |
+
+- ReLoRA does nothing (CE +0.003 +- 0.002, f1 +0.002): the rank-64 adapter is not the binding constraint at this scale.
+  Merges ran as designed (|dW|/|W| per segment 3.0e-2 / 2.1e-2 / 1.3e-2, no loss spike, LR re-warm 1/20 ... 1).
+- Late keep-widening halves the CE gap to dense (+0.014 -> +0.007) for +8% FLOPs, mostly on oolong (8k -0.037 +-
+  0.012, 2k -0.018 +- 0.009): lw35 at 3,904 rows has the CE of the recipe at 7,808 rows (0.1458 vs 0.1457) at 54% of
+  its FLOPs. f1 does not move (0.9157 vs 0.9153; one 8-cell f1 run has SE ~0.004), so it does not yet clear the f1 bar.
+  The uniform compute-matched control (uw25) decides whether "late" matters or only "more tokens".
