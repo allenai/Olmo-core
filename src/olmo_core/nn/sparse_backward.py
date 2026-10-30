@@ -91,6 +91,7 @@ class _State:
         self._model = weakref.ref(model)
         self.enabled = True
         self.gen: Optional[torch.Generator] = None
+        self.svd_flops = 0.0
         self.reset_stats()
 
     def reset_stats(self) -> None:
@@ -106,9 +107,16 @@ class _State:
         self.flops_dense += dense
         self.flops_actual += actual
         self.calls += 1
+        self._to_model(actual - dense)
+
+    def add_svd(self, flops: float) -> None:
+        self.svd_flops += flops
+        self._to_model(flops)
+
+    def _to_model(self, n: float) -> None:
         m = self._model()
         if m is not None:
-            m._flop_extra_actual = float(getattr(m, "_flop_extra_actual", 0.0)) + (actual - dense)
+            m._flop_extra_actual = float(getattr(m, "_flop_extra_actual", 0.0)) + float(n)
 
 
 def _water_fill(s: torch.Tensor, budget: float) -> torch.Tensor:
@@ -153,22 +161,19 @@ def select_rows(norm2: torch.Tensor, cfg: SparseBackwardConfig, gen: Optional[to
 
 
 def _svd_factors(mod: nn.Linear, rank: int):
-    """(U S (out, r), V (in, r)) of the frozen weight, cached on the module (fp32 SVD, stored in the weight dtype)."""
+    """(U S (out, r), V (in, r)) of the frozen weight. The full factorization (fp32 SVD, stored in the weight dtype)
+    is computed once per linear and cached on the module; its one-time cost goes to the FLOP counter (not the
+    per-call stats)."""
     f = getattr(mod, "_sbw_svd", None)
-    if f is not None:
-        return f
-    W = mod.weight.detach().to(torch.float64 if mod.weight.dtype == torch.float64 else torch.float32)
-    U, S, Vh = torch.linalg.svd(W, full_matrices=False)
-    r = min(rank, S.numel())
-    us = (U[:, :r] * S[:r]).to(mod.weight.dtype).contiguous()
-    v = Vh[:r].T.to(mod.weight.dtype).contiguous()
-    mod._sbw_svd = (us, v)
-    st: _State = mod._sbw_state
-    o, i = W.shape
-    # one-time SVD (~ 4 in^2 out + 22 in^3 for in <= out; charged as 4 o i min(o,i) + 22 min^3)
-    mn = min(o, i)
-    st.charge(0.0, 4.0 * o * i * mn + 22.0 * mn ** 3, 0.0, 0.0)
-    return mod._sbw_svd
+    if f is None:
+        W = mod.weight.detach().to(torch.float64 if mod.weight.dtype == torch.float64 else torch.float32)
+        U, S, Vh = torch.linalg.svd(W, full_matrices=False)
+        f = mod._sbw_svd = ((U * S).to(mod.weight.dtype).contiguous(), Vh.T.to(mod.weight.dtype).contiguous())
+        o, i = W.shape
+        mn = min(o, i)
+        mod._sbw_state.add_svd(4.0 * o * i * mn + 22.0 * mn ** 3)  # one-time SVD, conventional estimate
+    r = min(rank, f[0].shape[1])
+    return f[0][:, :r], f[1][:, :r]
 
 
 class _SparseLinearFn(torch.autograd.Function):
