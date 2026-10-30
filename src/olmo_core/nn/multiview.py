@@ -75,7 +75,9 @@ def _early_fsdp_states(model: Any, layer: int) -> List[Any]:
         from torch.distributed.fsdp import FSDPModule
     except ImportError:  # pragma: no cover
         return []
-    out = []
+    # the root module's own parameters (e.g. the soft-token pooled projector, whose output feeds block 0) are in the
+    # early graph too, and only a backward from the LOSS fires the root's pre-backward
+    out = [model._get_fsdp_state()] if isinstance(model, FSDPModule) else []
     for i, b in enumerate(model.blocks.values()):
         if i >= layer:
             break
@@ -84,12 +86,13 @@ def _early_fsdp_states(model: Any, layer: int) -> List[Any]:
 
 
 def _fire_pre_backward(states: List[Any], g: torch.Tensor) -> torch.Tensor:
-    """Run FSDP2's pre-backward (unshard, PRE_BACKWARD state, final-callback registration) for every early module at
-    the start of the deferred early backward. FSDP2 does this from a tensor hook on each module's forward output; the
-    early graph was built in view 1 and in that position the hooks did not unshard in time (the AC recompute then
-    re-ran FSDP's pre/post-forward and resharded the parameters its saved tensors view: ``setStorage ... size 0``).
-    Calling it for a module whose own hook already ran is a no-op; each module's post-backward reshards it and
-    reduce-scatters its gradients as usual."""
+    """Run FSDP2's pre-backward (unshard, PRE_BACKWARD state, final-callback registration) for the root module and every
+    early block at the start of the deferred early backward. FSDP2 fires it from a tensor hook on each module's forward
+    output; the ROOT's hook sits on the model output (the loss), which this backward never touches, so the root's
+    parameters that the early graph saved (the soft-token pooled projector, run before block 0) stayed resharded and
+    their backward failed with ``setStorage ... storage of size 0`` (found with a CPU FSDP2 + AC repro,
+    research/token_routing/multiview/fsdp_cpu_repro.py). Calling it for a module whose own hook already ran is a
+    no-op; each block's post-backward (and, for the root, the final callback) reshards and reduce-scatters as usual."""
     for stt in states:
         if _DEBUG:
             gr = stt._fsdp_param_group
