@@ -401,6 +401,24 @@
    "steps_expected": 40,
    "gpus": 2,
    "state": "R"
+  },
+  "f8k-mt4-lora64all32r20to7slsbt20de2-f1952-sbw-lr1e-05": {
+   "ex": "01M6626VFFS4Y6WRDG0T97RM2R",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbt20de2",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbt20de4-f1952-sbw-lr1e-05": {
+   "ex": "01M6627MTTX27MEW3YCRM0596R",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbt20de4",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
   }
  },
  "evals": {
