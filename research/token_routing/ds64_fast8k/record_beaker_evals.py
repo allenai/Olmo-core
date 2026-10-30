@@ -37,6 +37,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--suffix", nargs="+", default=["-tdc", "-tdp", "-tde"])
     ap.add_argument("--experiment", default="tokdrop_lr")
+    ap.add_argument("--refetch", action="store_true",
+                    help="re-parse eval jobs that already have a result row (fills cells a mid-run parse missed)")
     a = ap.parse_args()
     st = json.load(open(os.path.join(HERE, "state.json")))
     have, done_jobs = recorded()
@@ -46,7 +48,11 @@ def main():
         if not run or not ex or not any(s in ename for s in a.suffix):
             continue
         task = KEY_TASK.get(e.get("task", ""), e.get("task", ""))
-        if ex in done_jobs:  # this job's log was already parsed (all its lines were recorded then)
+        # Only a FINISHED eval job's log is complete: a job scores its rungs in sequence (8k, then 2k), so parsing it
+        # mid-run records 8k, marks the job done, and the 2k line was then never picked up (2026-10-29).
+        if e.get("state") != "DONE":
+            continue
+        if ex in done_jobs and not a.refetch:  # this job's log was already parsed (all its lines were recorded then)
             continue
         log = subprocess.run([BEAKER, "experiment", "logs", ex], capture_output=True, text=True, timeout=300).stdout
         fetched += 1

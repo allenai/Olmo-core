@@ -98,7 +98,7 @@ def main():
     st = json.load(open(os.path.join(HERE, "state.json")))
     for run, v in st["runs"].items():
         m = NAME.match(run)
-        if not m or v.get("state") != "DONE" or m.group(3):  # skip smoke / step-cut runs
+        if not m or v.get("state") != "DONE" or (m.group(3) and (m.group(3) == "4" or m.group(1) != "dense")):  # skip smoke; keep dense step-cuts
             continue
         arm, n, _, camp, lr = m.groups()
         scale = CAMPAIGNS.get("-" + camp)
