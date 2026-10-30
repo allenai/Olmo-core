@@ -1,6 +1,24 @@
 [
  {
   "date": "2026-10-29",
+  "status": "running",
+  "track": "Model scale",
+  "who": "side session (Qwen3 generalization)",
+  "title": "Qwen3 model-size ablation: dense vs recipe on Qwen3-1.7B and 8B (0.6B if cheap)",
+  "result": "Started 10-29: does the gain grow with scale on an all-full-attention family? Compare with Qwen3.5 0.8B / 2B / 4B (1.7× / 2.5× / 3.7–4.1×).",
+  "match": [
+   "q3s17",
+   "q306",
+   "q38b",
+   "q3-1.7",
+   "q3-8b",
+   "q317b",
+   "q308b",
+   "tdq3"
+  ]
+ },
+ {
+  "date": "2026-10-29",
   "status": "dropped",
   "track": "SFT 4-task",
   "who": "side session (kv-only-context)",
