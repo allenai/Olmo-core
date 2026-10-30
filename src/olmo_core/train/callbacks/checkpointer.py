@@ -111,6 +111,12 @@ class CheckpointerCallback(Callback):
 
     enabled: bool = True
 
+    save_final: bool = True
+    """
+    Save a full checkpoint at the end of training (``post_train``). ``False`` keeps the interval / ephemeral saves
+    (preemption resume points) without writing the final full model+optim+train-state checkpoint.
+    """
+
     # Bookkeeping
 
     # NOTE: can't use type annotation here, omegaconf doesn't like it
@@ -335,7 +341,7 @@ class CheckpointerCallback(Callback):
         if not self.enabled:
             return
 
-        if self.step > self._latest_checkpoint_step:
+        if self.save_final and self.step > self._latest_checkpoint_step:
             self._checkpoints.append(self._save_checkpoint(save_async=False))
             self._trim_checkpoints()
 
