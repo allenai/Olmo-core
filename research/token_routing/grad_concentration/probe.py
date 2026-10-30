@@ -159,8 +159,12 @@ def build_model(ckpt):
     return model
 
 
-def row_loss(model, row):
-    """Summed answer CE of one row; the embedding output is a leaf so every block's linears get output grads."""
+def row_loss(model, row, ckpt=True):
+    """Summed answer CE of one row; the embedding output is a leaf so every block's linears get output grads.
+    ``ckpt``: every block runs under non-reentrant activation checkpointing (fits a 40 GB A100); the Tap then takes
+    each linear's input from the backward-time recompute."""
+    from torch.utils.checkpoint import checkpoint
+
     x = torch.from_numpy(row["ids"]).cuda()
     lm = torch.from_numpy(row["lmask"]).cuda()
     pred = torch.nonzero(lm[1:], as_tuple=True)[0]
@@ -168,7 +172,8 @@ def row_loss(model, row):
     _, _, abk, pbk, lmk = model._prepare_inputs(x[None], None, logits_to_keep=pred[None])
     h = model.embeddings(x[None]).detach().requires_grad_(True)
     for key, block in model.blocks.items():
-        h = block(h, **{**abk, **pbk.get(int(key), {})})
+        kw = {**abk, **pbk.get(int(key), {})}
+        h = checkpoint(lambda hh, b=block, k=kw: b(hh, **k), h, use_reentrant=False) if ckpt else block(h, **kw)
     return F.cross_entropy(model.lm_head(h, **lmk)[0].float(), tgt, reduction="sum"), int(pred.numel())
 
 
@@ -240,6 +245,9 @@ class Tap:
         self.exact = {}  # lin idx -> [(acc (nb, out, in) fp32, bins)]
         self.exact_names = exact_names
         self.check = {}
+        self.ckpt = True
+        self.recompute = False  # True during backward: forward hooks then come from the checkpoint recompute
+        self.xs, self.gs = {}, {}  # linear inputs / output grads waiting for their partner (either may come first)
         dev = torch.device("cuda")
         self.hash = []
         for ln in lins:
@@ -253,11 +261,36 @@ class Tap:
 
     def _fwd(self, i):
         def hook(mod, inp, out):
-            if self.mode is None or not out.requires_grad:
+            if self.mode is None:
                 return
-            x = inp[0].detach()
-            out.register_hook(lambda g, i=i, x=x: self._grad(i, x, g))
+            if self.recompute:
+                x = inp[0].detach()
+                if i in self.gs:
+                    self._grad(i, x, self.gs.pop(i))
+                else:
+                    self.xs[i] = x
+                return
+            if not out.requires_grad:
+                return
+            if self.ckpt:
+                out.register_hook(lambda g, i=i: self._on_g(i, g))
+            else:
+                x = inp[0].detach()
+                out.register_hook(lambda g, i=i, x=x: self._grad(i, x, g))
         return hook
+
+    def _on_g(self, i, g):
+        if i in self.xs:
+            self._grad(i, self.xs.pop(i), g)
+        else:
+            self.gs[i] = g.detach()
+
+    def backward(self, loss):
+        self.recompute = self.ckpt
+        loss.backward()
+        self.recompute = False
+        if self.xs or self.gs:
+            raise SystemExit(f"unpaired linear inputs/grads after backward: {len(self.xs)} / {len(self.gs)}")
 
     def _grad(self, i, x, g):
         self.fired += 1
@@ -311,6 +344,7 @@ def main():
     ap.add_argument("--exact", default="b7.feed_forward.w2,b16.attention.w_out",
                     help="linears that also get exact fp32 accumulators (smallest scope only)")
     ap.add_argument("--max-len", type=int, default=12288)
+    ap.add_argument("--no-ckpt", action="store_true", help="no per-block activation checkpointing (needs ~60 GB)")
     ap.add_argument("--max-batches", type=int, default=0, help="debug: stop after this many large batches")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
@@ -343,6 +377,7 @@ def main():
     lins = list_linears(model)
     exact_names = [s for s in a.exact.split(",") if s]
     tap = Tap(lins, a.sketch_dim, exact_names)
+    tap.ckpt = not a.no_ckpt
     by_name = {ln.name: ln for ln in lins}
     rep = [ln for ln in lins if ln.block in REP_BLOCKS]
     log(f"{len(lins)} linears ({sum(ln.mod.weight.numel() for ln in lins) / 1e9:.2f}B params); block 3: "
@@ -437,8 +472,8 @@ def main():
                     by_name[nme].mod.weight.requires_grad_(True)
                     tap.check[nme] = None
             tap.fired = 0
-            loss, nans = row_loss(model, row)
-            loss.backward()
+            loss, nans = row_loss(model, row, tap.ckpt)
+            tap.backward(loss)
             if tap.fired != len(lins):
                 raise SystemExit(f"hooks fired {tap.fired} times for {len(lins)} linears")
             if tap.check:
@@ -535,8 +570,8 @@ def main():
                               (exact_acc[(nme, "down7_body")], sm.bins_for(ri, ln))]
                 act[ln.idx].append((val_sk[nme], sm.bins_for(ri, ln)))
             tap.active, tap.exact = act, ex
-            loss, _ = row_loss(model, row)
-            loss.backward()
+            loss, _ = row_loss(model, row, tap.ckpt)
+            tap.backward(loss)
             n = J * big + ri + 1
             if n in (1, 2, 5, 10) or n % 32 == 0:
                 el = time.time() - t0
