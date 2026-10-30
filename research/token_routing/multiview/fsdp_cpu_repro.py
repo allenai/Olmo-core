@@ -126,12 +126,12 @@ def main():
             wrap(PG.FSDPParamGroup, n)
         ob = torch.autograd.backward
 
-        def bw(t, g=None, **kw):
+        def bw(t, g=None, *rest, **kw):
             phase["on"] = t.grad_fn is not None and "View" in type(t.grad_fn).__name__
             if phase["on"]:
                 print("[trace] ===== deferred early backward", flush=True)
             try:
-                return ob(t, g, **kw)
+                return ob(t, g, *rest, **kw)
             finally:
                 phase["on"] = False
         torch.autograd.backward = bw
