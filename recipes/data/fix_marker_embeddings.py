@@ -87,7 +87,9 @@ DEFAULT_TOKENIZERS: Dict[str, str] = {
 #: Model builders by (family, size). Only what is needed to load the checkpoint into.
 MODEL_BUILDERS = {
     ("qwen3", "0.6B"): "qwen3_0_6B",
+    ("qwen3", "1.7B"): "qwen3_1_7B",
     ("qwen3", "4B"): "qwen3_4B",
+    ("qwen3", "8B"): "qwen3_8B",
     ("qwen3_5", "0.8B"): "qwen3_5_0_8B",
     ("qwen3_5", "4B"): "qwen3_5_4B",
 }

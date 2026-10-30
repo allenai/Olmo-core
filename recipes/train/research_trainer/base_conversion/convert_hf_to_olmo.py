@@ -137,8 +137,9 @@ def main():
         transformer_config_dict=model_cfg.as_config_dict(),
         tokenizer_config_dict=tok_cfg.as_config_dict(),
         validate=not args.no_validate,
-        device=torch.device("cuda"),
-        validation_device=torch.device("cuda"),
+        # CPU fallback (a GPU-less gantry job): conversion and the HF-parity check both run on CPU, just slower
+        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        validation_device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     )
     print(f"[convert] DONE -> {args.out}", flush=True)
 
