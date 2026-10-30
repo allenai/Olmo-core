@@ -44,12 +44,17 @@ ARMS = {
     "lora64all32r20to7lw35": RECIPE + " --st-otr-late-keep 0.667:0.35,0.15",
     "lora64all32r20to7rl25lw35": RECIPE + " --st-otr-relora-frac 0.25 --st-otr-relora-rewarm 20 "
                                           "--st-otr-late-keep 0.667:0.35,0.15",
+    # compute-matched control for lw35 (2026-10-30, after lw35 f3904 beat the recipe by -0.007 CE): the same average
+    # keep (2/3 x 20/7 + 1/3 x 35/15 = 25 / 9.7%) spread UNIFORMLY over training -- is it "late" or just "more"?
+    "lora64all32r25to10": RECIPE.replace("--st-otr-stages 7:0.2,16:0.07", "--st-otr-stages 7:0.25,16:0.097"),
+    # wider late window: 50% / 25% in the last third
+    "lora64all32r20to7lw50": RECIPE + " --st-otr-late-keep 0.667:0.5,0.25",
     # smoke only: --max-steps is a HARD STOP (the LR schedule and trainer.max_steps stay the full epoch), so the smoke
     # arm fires a merge every ~0.4% of the epoch and widens the keep from 0.5% on, inside a 12-step smoke
     "smk": RECIPE + " --st-otr-relora-frac 0.004 --st-otr-relora-rewarm 3 --st-otr-late-keep 0.005:0.35,0.15",
 }
 SHORT = {"rl25": "lora64all32r20to7rl25", "lw35": "lora64all32r20to7lw35", "rl25lw35": "lora64all32r20to7rl25lw35",
-         "recipe": "lora64all32r20to7"}
+         "recipe": "lora64all32r20to7", "uw25": "lora64all32r25to10", "lw50": "lora64all32r20to7lw50"}
 MT4 = ["contradiction", "nq", "outlier", "oolong"]
 #: launch_fast8k.py RUNGS / TASK_KEY / eval_cmd (the per-task ladder every fast8k mt4 run was scored with)
 RUNGS = {"outlier": {"8k": f"{W}/outlier_lengthmix/eval_rungs/outlier/rung_8192.jsonl",
