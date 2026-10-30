@@ -187,3 +187,31 @@ and relaunched both as `...-f7808-tdf-lr1e-05-rs` (`--resume-every 150`); the or
 at +8% FLOPs; it also beats the compute-matched uniform keep by 0.006 +- 0.002), but no arm moves the 8-cell f1 beyond
 noise (|delta f1| <= 0.004). ReLoRA does nothing at either size. The f7808 verdict (lw35 / uw25 vs the two recipe
 seeds, CE 0.1457 / 0.1421, f1 0.9243 / 0.9270) is pending on the two -rs runs.
+
+## Final f7808 results (2026-10-30 ~23:30 UTC; eval_size 500 per cell, no-cot, 1 seed each)
+
+Resume audit (both -rs runs, from their Beaker job logs): job 1 ran steps 1-933 / 1-906 (one dense warmup step, as in
+every recipe run) with ephemeral saves every 150; job 2 loaded step900, "Data loader will resume from batch
+900/1,952", router fit resumed "at router step 900", FLOP accumulators resumed (631.2 / 685.7 PF), 0 full-context
+steps; job 3 the same from step1500 (batch 1,500/1,952; 1087.8 / 1142.9 PF); last step 1952/1952. Final actual PF
+1489.7 / 1489.5 = the uninterrupted expectation (recipe 1373 x the f3904 lw35/recipe ratio 1.083 = 1487). Steps redone
+after a preemption reuse the same batches from the checkpoint, so no fresh row was repeated or skipped and no FLOP is
+double-counted. Late keep was on from step 1302 (late_keep_on=1).
+
+| run | PFLOPs | 8-cell f1 | f1 FTM | unsat-4 f1 | CE 8-cell | CE FTM | CE vs recipe s0 / s1 (paired) |
+|---|---|---|---|---|---|---|---|
+| dense f7808 | 6128 | 0.9310 | | 0.8822 | 0.1374 | | |
+| recipe s0 (tde) | 1373 | 0.9243 | 2.2x | 0.8745 | 0.1457 | 1.8x | |
+| recipe s1 (tdf) | 1371 | 0.9270 | 2.8x | 0.8827 | 0.1421 | 2.0x | |
+| **lw35-rs** | 1490 | **0.9335** | **> 4.1x** | 0.8965 | **0.1365** | **> 3.1x** | **-0.0091 +- 0.0027 / -0.0056 +- 0.0025** |
+| uw25-rs (same FLOPs) | 1490 | 0.9319 | > 4.1x | 0.8905 | 0.1398 | 2.0x | -0.0058 +- 0.0024 / -0.0023 +- 0.0023 |
+
+(">": better than every dense point; the ratio is dense's best point's PF over the run's.) lw35 - uw25: CE -0.0033 +-
+0.0023. lw35 - dense f7808: CE -0.0008 +- 0.0029 (parity with dense's plateau at 24% of its FLOPs); f1 +0.0025.
+
+**Verdict at 7,808 rows: late keep-widening beats the recipe on both metrics against both seeds** (f1 +0.009 / +0.0065,
+CE -0.009 / -0.006, 2.2-3.4 sigma on CE) and reaches dense's f1 and CE at 24% of dense's FLOPs, so the FLOPs-to-match
+decay is gone (>= 4.1x on f1, >= 3.1x on CE, vs 2.2-2.8x / 1.8-2.0x for the recipe). It clears the +0.006 f1 bar vs
+both seeds, narrowly vs seed 1 (one run; f1 SE of an 8-cell mean ~0.004), and part of the f1 gain is outlier@2k (0.998),
+the noisy cell. The uniform keep at the same FLOPs also helps f1 (+0.008 / +0.005) but its CE gain does not survive
+seed 1 (-0.002 +- 0.002), so the timing matters. Next: a second seed of lw35 at f7808, and lw35 at a larger pool.
