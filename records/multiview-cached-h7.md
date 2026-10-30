@@ -5,10 +5,10 @@ updated: 2026-10-30
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (4 of 5 scored: no win; mv3-f3904 training)
+status: done (negative: no run beats the recipe at matched FLOPs)
 superseded_by:
 artifact: https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ
-summary: Run blocks 0-6 once per row, cache h7, take k optimizer steps on blocks 7-31 each with a fresh random 20%/7% token subset, then one early-stack backward on the mean dL/dh7. Cost per row 0.10 + 0.12k x dense; goal = beat the recipe at matched FLOPs by >= 0.01 (mt4 8-cell mean).
+summary: k late-stack views per row from one cached block-7 pass (fresh random 20%/7% subset per view, early stack updated once on the mean dL/dh7). NEGATIVE - every k=2/3 run at f1952/f3904 trails the recipe at matched FLOPs (-0.011 to -0.069); extra views act like extra epochs.
 ---
 
 # Multi-view training from a cached block-7 state
@@ -81,7 +81,7 @@ routed step, as planned (0.12 of 0.225). Expected full-run cost: k = 2 about 1.5
 | ...mv3-f1952 (01M660CBN2GSBT9AQ954ZB1HGK) | 3 | 1,952 | 622.6 | 0.842 | 0.910 | -0.068 |
 | ...mv1-f1952 (01M6662Z9T213KKGJC8M3ZA215), same-code-path k = 1 control | 1 | 1,952 | 343.4 | 0.853 | 0.883 (extrap.) | -0.030 |
 | ...mv2-f3904 (01M660D44KG044R94YW2CYDC8T) | 2 | 3,904 | 965.7 | 0.909 | 0.919 | -0.011 |
-| ...mv3-f3904 (01M660DX5J61G6CSZ21MXAF1X3) | 3 | 3,904 | running | | | |
+| ...mv3-f3904 (01M660DX5J61G6CSZ21MXAF1X3) | 3 | 3,904 | 1,245.4 | 0.906 | 0.923 | -0.017 |
 
 eval_size 500 per cell, no-cot, query after; cells (8k / 2k) for mv2-f1952: contradiction 0.954 / 0.984, nq 0.930 /
 0.978, outlier 0.887 / 0.867, oolong 0.639 / 0.844 (recipe f1952: 0.959 / 0.977, 0.912 / 0.970, 0.862 / 0.880,
@@ -93,6 +93,14 @@ row's answer labels three times overfits.
 
 mv2-f3904 cells (8k / 2k): contradiction 0.973 / 0.993, nq 0.912 / 0.976, outlier 0.973 / 0.908, oolong 0.673 /
 0.860. Below the k = 1 recipe at the same rows (router 0.915, random 0.914) despite 1.40x the FLOPs.
+
+mv3-f3904 cells (8k / 2k): contradiction 0.972 / 0.964, nq 0.928 / 0.978, outlier 0.959 / 0.927, oolong 0.671 /
+0.845.
+
+**Verdict (all 5 scored, collect_mv.py):** no multi-view run beats the recipe at matched FLOPs (deltas -0.013,
+-0.069, -0.011, -0.017; bar +0.01). Extra views of a row behave like extra epochs: a second view adds about nothing
+over one view at the same rows and a third hurts at f1952. Fresh rows are the better use of the FLOPs. Not pursued
+further; no seed replicate (no run cleared its bar).
 
 mv1-f1952 cells (8k / 2k): contradiction 0.954 / 0.977, nq 0.926 / 0.974, outlier 0.812 / 0.690, oolong
 0.645 / 0.848.
