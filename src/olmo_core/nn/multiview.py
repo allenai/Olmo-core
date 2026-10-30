@@ -43,6 +43,28 @@ log = logging.getLogger(__name__)
 
 __all__ = ["enable_multiview"]
 
+_DEBUG = bool(int(__import__("os").environ.get("MV_DEBUG", "0") or 0))
+
+
+def _early_fsdp_modules(model: Any, layer: int) -> List[Any]:
+    """The FSDP-wrapped blocks [0, layer) (empty without FSDP)."""
+    try:
+        from torch.distributed.fsdp import FSDPModule
+    except ImportError:  # pragma: no cover
+        return []
+    return [b for i, b in enumerate(model.blocks.values()) if i < layer and isinstance(b, FSDPModule)]
+
+
+def _log_fsdp_states(mods: List[Any], tag: str) -> None:
+    for j, m in enumerate(mods):
+        try:
+            stt = m._get_fsdp_state()
+            g = stt._fsdp_param_group
+            log.info("[multiview-debug] %s: early block %d state=%s group_state=%s unsharded=%s", tag, j,
+                     stt._training_state, getattr(g, "_training_state", None), getattr(g, "is_unsharded", None))
+        except Exception as e:  # noqa: BLE001
+            log.info("[multiview-debug] %s: block %d: %s", tag, j, e)
+
 
 def enable_multiview(train_module: Any, views: int) -> None:
     """Replace ``train_module.train_batch`` with the k-view version (``views`` > 1)."""
@@ -168,14 +190,19 @@ def _mv_train_batch(self: Any, batch: Dict[str, Any], dry_run: bool = False):
             if gn is not None:
                 gns.append(gn.detach())
     # the early stack: one backward with the mean of the views' dL/dh_L
+    early_mods = _early_fsdp_modules(model, int(st["layer"]))
     for i in range(n):
         h = early[i]
         assert h is not None and delta[i] is not None
         with self._train_microbatch_context(i, n):
             if h.requires_grad:
-                # through a view, never with the block output itself as the root: FSDP2's pre-backward (unshard) is a
-                # tensor hook on that output, and a backward ROOT does not fire its own tensor hooks -- block L-1
-                # would then recompute against resharded (empty) parameters
+                if _DEBUG and i == 0:
+                    _log_fsdp_states(early_mods, "before early backward")
+                # FSDP2 unshards a module for backward from a tensor hook on its forward output; this graph was built
+                # in view 1 and later backwards' final callbacks already resharded / finalized these modules, so
+                # unshard them explicitly (each one's post-backward reshards it and reduce-scatters its gradients)
+                for m in early_mods:
+                    m.unshard()
                 torch.autograd.backward(h.view(h.shape), (delta[i] / k).to(h.dtype))
         early[i] = cached[i] = delta[i] = None
     del batch, mbs
