@@ -27,6 +27,7 @@ CKPTS = "/net/sneetches/data/prasann/q3recipe/ckpts"
 TASKS = ["contradiction", "nq", "outlier", "oolong"]
 KEY = {"contra": "contradiction"}
 HDR = re.compile(r"=== q3recipe host=\S+ RUN=(\S+) NGPU=(\d+)")
+EVHDR = re.compile(r"^=== EVAL (f8k-\S+) [a-z]+ ")  # a log's pending_evals section scores ANOTHER run
 LAD = re.compile(r"\[ladder:([a-z_]+)@(\d+k)\] ([a-z0-9_]+)=(-?[0-9.]+) \(n=(\d+)")
 STEP = re.compile(r"^(\S+ \S+)\s.*\[step=(\d+)/(\d+)")
 MEM = re.compile(r"gpu_memory/GPU (active|reserved) mem \(GiB\)=([0-9.]+)")
@@ -40,14 +41,19 @@ DENSE_PF_RE = re.compile(r"flop_meter/dense_pflops[ =]+([0-9.]+)")
 
 
 def parse_log(path):
-    run, ngpu, scores, mem, steps = None, 0, {}, defaultdict(float), []
+    """(run, ngpu, {evaluated run: {(task, rung): (v, n, metric)}}, mem, steps)"""
+    run, ngpu, scores, mem, steps, cur = None, 0, defaultdict(dict), defaultdict(float), [], None
     for ln in open(path, errors="replace"):
         m = HDR.search(ln)
         if m:
             run, ngpu = m.group(1), int(m.group(2))
+            cur = run
+        m = EVHDR.match(ln)
+        if m:
+            cur = m.group(1)
         for m in LAD.finditer(ln):
             k = (KEY.get(m.group(1), m.group(1)), m.group(2))
-            scores.setdefault(k, (float(m.group(4)), int(m.group(5)), m.group(3)))  # first metric = primary
+            scores[cur].setdefault(k, (float(m.group(4)), int(m.group(5)), m.group(3)))  # first metric = primary
         m = MEM.search(ln)
         if m:
             mem[m.group(1)] = max(mem[m.group(1)], float(m.group(2)))
@@ -63,9 +69,13 @@ def collect(include_beaker=True):
         run, ngpu, scores, mem, steps = parse_log(path)
         if not run or not NAME.match(run):
             continue
+        for er, sc in scores.items():  # eval-only reruns / pending_evals add tasks to the run they scored
+            if er and NAME.match(er):
+                e = runs.setdefault(er, {"logs": [], "scores": {}, "mem": {}, "steps": 0})
+                for k, v in sc.items():
+                    e["scores"].setdefault(k, v)
         r = runs.setdefault(run, {"logs": [], "scores": {}, "mem": {}, "steps": 0})
         r["logs"].append(path)
-        r["scores"].update(scores)  # a rerun (eval-only) adds its tasks
         for k, v in mem.items():
             r["mem"][k] = max(r["mem"].get(k, 0), v)
         if steps:
@@ -157,9 +167,17 @@ def record_local(out_jsonl):
         if "lora" in run and LAD.search(txt) and "adapters re-installed" not in txt:
             print(f"!!! {path}: LoRA run scored without 'adapters re-installed' -- NOT recorded")
             continue
-        for mm in LAD.finditer(txt):
+        sha = re.search(r"CODE=\S+/code_([0-9a-f]+)", txt)
+        job = re.search(r"_(?:chain)?(\d+)\.log$", path)
+        cur = run
+        for ln in txt.splitlines():
+          me = EVHDR.match(ln)
+          if me:
+              cur = me.group(1)
+          for mm in LAD.finditer(ln):
             t, rung, metric, v, n = mm.groups()
             t = KEY.get(t, t)
+            run = cur
             if (run, t, rung) in have:
                 continue
             v, n = float(v), int(n)
@@ -167,7 +185,10 @@ def record_local(out_jsonl):
             rows.append(dict(run_id=f"{run}-ev{t}", train_run=run, experiment="tokdrop_lr", task=t, rung=rung,
                              metric=metric, value=v, eval_size=n, se=se and round(se, 6), cot_label="no-cot",
                              eval_backend="olmo-core-native-docchunk-ladder (sneetches)",
-                             ckpt_path=f"sneetches:/data/prasann/q3recipe/ckpts/{run}", log_path=f"sneetches:{path}"))
+                             ckpt_path=f"sneetches:/data/prasann/q3recipe/ckpts/{run}",
+                             source_json=f"sneetches:/data/prasann/q3recipe/ckpts/{run}/eval/{'contra' if t == 'contradiction' else t}_multirung.json",
+                             git_commit=sha and sha.group(1), eval_job_id=job and f"slurm:{job.group(1)}",
+                             notes=f"log sneetches:{path}"))
             have.add((run, t, rung))
     open(out_jsonl, "w").write("".join(json.dumps(r) + "\n" for r in rows))
     print(f"{len(rows)} new local rows -> {out_jsonl}")
