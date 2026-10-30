@@ -36,7 +36,8 @@
    "budget": "f3904",
    "steps_expected": 976,
    "gpus": 2,
-   "state": "R"
+   "state": "DONE",
+   "rc": 0
   },
   "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05": {
    "ex": "01M64XP48R32THR7V4MM242CA7",
@@ -206,9 +207,10 @@
   },
   "f8k-mt4-dense-f976-q3-lr5e-06-evcontradiction": {
    "ex": "01M65440G8B60BCTQT06JNZ0NB",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f976-q3-lr5e-06",
-   "task": "contradiction"
+   "task": "contradiction",
+   "rc": 0
   },
   "f8k-mt4-dense-f976-q3-lr5e-06-evnq": {
    "ex": "01M6544TACQW1SDE9R6W8N2NHX",
@@ -233,9 +235,10 @@
   },
   "f8k-mt4-dense-f1464-q3-lr5e-06-evcontradiction": {
    "ex": "01M655PAWEJ63QM4WM19TV8S5K",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f1464-q3-lr5e-06",
-   "task": "contradiction"
+   "task": "contradiction",
+   "rc": 0
   },
   "f8k-mt4-dense-f1464-q3-lr5e-06-evnq": {
    "ex": "01M655Q3TBWDG14XHGBD0QEQ45",
@@ -246,9 +249,10 @@
   },
   "f8k-mt4-dense-f1464-q3-lr5e-06-evoutlier": {
    "ex": "01M655R1GG53GBAS45J9W9Y1GR",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f1464-q3-lr5e-06",
-   "task": "outlier"
+   "task": "outlier",
+   "rc": 0
   },
   "f8k-mt4-dense-f1464-q3-lr5e-06-evoolong": {
    "ex": "01M655RV0C92XQB570HECSCVXA",
@@ -259,50 +263,82 @@
   },
   "f8k-mt4-dense-f1952-q3-lr1e-05-evcontradiction": {
    "ex": "01M65799E4GTHGW960S72FKWQT",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f1952-q3-lr1e-05",
-   "task": "contradiction"
+   "task": "contradiction",
+   "rc": 0
   },
   "f8k-mt4-dense-f1952-q3-lr1e-05-evnq": {
    "ex": "01M657A2XSFZ8B5Y5X8MF2NYH9",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f1952-q3-lr1e-05",
-   "task": "nq"
+   "task": "nq",
+   "rc": 0
   },
   "f8k-mt4-dense-f1952-q3-lr1e-05-evoutlier": {
    "ex": "01M657AWEN7M96F2AE7Y32F321",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f1952-q3-lr1e-05",
-   "task": "outlier"
+   "task": "outlier",
+   "rc": 0
   },
   "f8k-mt4-dense-f1952-q3-lr1e-05-evoolong": {
    "ex": "01M657BPYDZQC35M4NMQ3RHHZM",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f1952-q3-lr1e-05",
-   "task": "oolong"
+   "task": "oolong",
+   "rc": 0
   },
   "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05-evcontradiction": {
    "ex": "01M65814MABJB6H8P6F4D1JEZA",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05",
-   "task": "contradiction"
+   "task": "contradiction",
+   "rc": 0
   },
   "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05-evnq": {
    "ex": "01M6581XYTJZ9KKE8B58JT6J3C",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05",
-   "task": "nq"
+   "task": "nq",
+   "rc": 0
   },
   "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05-evoutlier": {
    "ex": "01M6582YD4XYCVD7E4WW73FYVK",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05",
-   "task": "outlier"
+   "task": "outlier",
+   "rc": 0
   },
   "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05-evoolong": {
    "ex": "01M6583VFNW051J5QD6JEPNJKP",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-q3lora64all36r20at8-f7808-q3-lr1e-05",
+   "task": "oolong",
+   "rc": 0
+  },
+  "f8k-mt4-dense-f3904-q3-lr5e-06-evcontradiction": {
+   "ex": "01M65DAR7S4G6NY722Y212DW06",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q3-lr5e-06",
+   "task": "contradiction"
+  },
+  "f8k-mt4-dense-f3904-q3-lr5e-06-evnq": {
+   "ex": "01M65DBHQNWA458XVZQVDQ2TGQ",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q3-lr5e-06",
+   "task": "nq"
+  },
+  "f8k-mt4-dense-f3904-q3-lr5e-06-evoutlier": {
+   "ex": "01M65DCD1WD89K6CW56RAFMARR",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q3-lr5e-06",
+   "task": "outlier"
+  },
+  "f8k-mt4-dense-f3904-q3-lr5e-06-evoolong": {
+   "ex": "01M65DD8KJENRHYM75CWGYYR7E",
+   "state": "S",
+   "train_run": "f8k-mt4-dense-f3904-q3-lr5e-06",
    "task": "oolong"
   }
  },
