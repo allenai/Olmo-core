@@ -346,6 +346,15 @@
    "steps_expected": 488,
    "gpus": 2,
    "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbt20e7-f1952-sbw-lr1e-05": {
+   "ex": "01M65Y3TRSSDZ6QMBYD357418Y",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbt20e7",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
   }
  },
  "evals": {
