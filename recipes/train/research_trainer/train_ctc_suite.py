@@ -581,7 +581,7 @@ def build_model_config(opts: argparse.Namespace) -> TransformerConfig:
 #: on that path so its proven runs don't change. 2B is grouped with the large scales: it is 2.4B
 #: params and the model-scale study runs it on 80GB A100s, where even 0.8B needs full sharding +
 #: AC at 40960 (lambda_cluster.md).
-_LARGE_SCALES = ("2b", "4b", "9b", "27b")
+_LARGE_SCALES = ("0.6b", "1.7b", "2b", "4b", "8b", "9b", "27b")  # Qwen3 sizes too: full AC + FSDP like the 4B runs (size ablation, 2026-10-30)
 
 
 def kv_route_enabled(opts: argparse.Namespace) -> bool:
