@@ -40,6 +40,8 @@ __all__ = ["install_early_lora", "lora_flop_adjust_per_token", "early_lora_flops
 
 def _lora_hook(mod: nn.Linear, inp, out):
     mod._lora_calls += 1  # type: ignore[attr-defined]
+    if not getattr(mod, "_sbw_hook_adds", True):
+        return None  # olmo_core.nn.sparse_backward's forward already added the adapter (exact forward, compressed VJP)
     x = inp[0]
     return out + mod._lora_scale * F.linear(F.linear(x, mod.lora_A), mod.lora_B)  # type: ignore[attr-defined]
 
