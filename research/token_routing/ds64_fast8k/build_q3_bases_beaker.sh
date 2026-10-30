@@ -14,6 +14,8 @@ export PYTHONWARNINGS=ignore TOKENIZERS_PARALLELISM=false HF_HUB_DISABLE_PROGRES
 PYB=/opt/conda/bin/python
 $PYB -m pip install -q -e . 2>&1 | tail -1
 pip install -q awscli 2>&1 | tail -1
+# the image's torchvision does not match its torch, and transformers imports it for Qwen3 modeling -> uninstall it
+$PYB -m pip uninstall -y -q torchvision 2>&1 | tail -1
 mkdir -p ~/.aws && printf '%s' "$AWS_CREDS" > ~/.aws/credentials && printf '%s' "$AWS_CFG" > ~/.aws/config
 for S in $SIZES; do
   s=$(echo $S | tr 'B' 'b')
