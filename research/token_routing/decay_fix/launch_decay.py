@@ -107,11 +107,12 @@ def do_launch(a):
     for short in a.arms.split(","):
         arm = SHORT.get(short, short)
         for budget in a.budgets.split(","):
-            name = run_name(arm, budget, a.seed) + (f"-smoke{a.max_steps}" if a.max_steps else "")
+            name = run_name(arm, budget, a.seed) + (f"-smoke{a.max_steps}" if a.max_steps else "") + a.name_tag
             if name in st["runs"] and not a.force:
                 print(f"[skip] {name}: {st['runs'][name]}")
                 continue
-            extra = ARMS[arm] + " --attn-backend flash_2" + (f" --seed {a.seed}" if a.seed else "")
+            extra = (ARMS[arm] + " --attn-backend flash_2" + (f" --seed {a.seed}" if a.seed else "")
+                     + (f" --ephemeral-save-interval {a.resume_every}" if a.resume_every else ""))
             cmd = [PY, "-u", f"{REPO}/recipes/train/research_trainer/beaker_ctc_suite.py", "--task", "mt4",
                    "--variant", "softtoken", "--model-family", "qwen3_5", "--model-scale", "4b",
                    "--data-root", f"{SHARDS}/mt4{budget}", "--run-name", name, "--exact-run-name",
@@ -184,6 +185,9 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--max-steps", type=int, default=0, help="smoke: cut at this many steps (name gets -smoke<N>)")
     ap.add_argument("--group", type=int, default=1)
+    ap.add_argument("--name-tag", default="", help="appended to the run name (e.g. -rs for a resumable relaunch)")
+    ap.add_argument("--resume-every", type=int, default=0,
+                    help="--ephemeral-save-interval for the trainer: a preempted job resumes instead of restarting")
     ap.add_argument("--tag", default="grp")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry", action="store_true")
