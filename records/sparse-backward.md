@@ -65,3 +65,49 @@ layer) is read from the compressed backward, so the router fits a distorted targ
 0.20 / 0.02 at step 3 for sl / sbt20 / sbe95a; early-step noise, but watch it). Follow-up variant if it matters:
 compress only blocks below the drop layer (`--st-otr-sbw-end 7`, arm `sbt20e7`),
 which keeps the router target exact and still covers ~70% of the VJP FLOPs.
+
+## Probe on trained checkpoints (Beaker, 1 GPU each; held-out fresh rows mt4f7808 rows 4000-4031 per task)
+
+eval_size 128 rows per checkpoint (32 per task; a probe). Checkpoints: base markerfix + fresh LoRA; "mid" = recipe
+f1952 final (`f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05`, 488 steps; the recipe saves no mid-run checkpoint);
+"end" = recipe f3904 final (976 steps). Router fit on 24 rows per task (offset 6000). Jobs: sbwfid-{base,mid,end}-{rows,sketch}.
+
+| variant | step/dense | VJP kept | cos 1 row (base / mid / end) | cos 8 rows (base / mid / end) | cos 32 rows (base / mid / end) | rel. sq. error (end) |
+|---|---|---|---|---|---|---|
+| topk5 | 0.109 | 1.0% | 0.20 / 0.38 / 0.44 | 0.47 / 0.39 / 0.39 | 0.55 / 0.36 / 0.36 | 0.83 |
+| topk10 | 0.110 | 2.5% | 0.48 / 0.60 / 0.60 | 0.76 / 0.61 / 0.64 | 0.82 / 0.59 / 0.65 | 0.66 |
+| topk20 | 0.114 | 6.9% | 0.74 / 0.83 / 0.78 | 0.90 / 0.85 / 0.85 | 0.94 / 0.86 / 0.86 | 0.40 |
+| topk40 | 0.128 | 20.5% | 0.91 / 0.95 / 0.92 | 0.96 / 0.95 / 0.95 | 0.98 / 0.96 / 0.96 | 0.15 |
+| energy90 | 0.109 | 1.1% | 0.65 / 0.70 / 0.76 | 0.77 / 0.64 / 0.73 | 0.80 / 0.61 / 0.74 | 0.45 |
+| energy95 | 0.111 | 2.5% | 0.79 / 0.82 / 0.86 | 0.85 / 0.80 / 0.84 | 0.88 / 0.78 / 0.84 | 0.28 |
+| energy99 | 0.123 | 13.1% | 0.93 / 0.96 / 0.96 | 0.95 / 0.95 / 0.96 | 0.96 / 0.95 / 0.96 | 0.07 |
+| topk5L | 0.110 | 2.8% | 0.24 / 0.43 / 0.48 | 0.48 / 0.43 / 0.44 | 0.55 / 0.41 / 0.41 | 0.78 |
+| topk10L | 0.112 | 4.5% | 0.48 / 0.63 / 0.63 | 0.76 / 0.64 / 0.67 | 0.82 / 0.61 / 0.68 | 0.63 |
+| topk20L | 0.117 | 9.2% | 0.74 / 0.85 / 0.81 | 0.89 / 0.86 / 0.86 | 0.93 / 0.87 / 0.87 | 0.36 |
+| energy90L | 0.111 | 2.9% | 0.67 / 0.73 / 0.78 | 0.79 / 0.67 / 0.76 | 0.82 / 0.63 / 0.76 | 0.41 |
+| energy95L | 0.113 | 4.5% | 0.80 / 0.84 / 0.88 | 0.87 / 0.82 / 0.86 | 0.89 / 0.80 / 0.86 | 0.24 |
+| sample10 | 0.111 | 3.3% | 0.00 / 0.00 / 0.00 | -0.00 / -0.00 / 0.00 | -0.00 / -0.00 / -0.00 | 7868210023716712611840.00 |
+| sample20 | 0.117 | 9.0% | -0.00 / 0.00 / 0.00 | -0.00 / 0.00 / -0.00 | -0.01 / 0.00 / -0.00 | 983882103239187.50 |
+| sample40 | 0.131 | 24.0% | 0.00 / 0.00 / 0.00 | -0.00 / 0.00 / 0.00 | 0.00 / 0.00 / -0.00 | 3204264.62 |
+| svd128 | 0.121 | 13.2% | 0.12 / 0.21 / 0.28 | 0.11 / 0.16 / 0.17 | 0.11 / 0.15 / 0.15 | 0.94 |
+| svd256 | 0.127 | 19.4% | 0.15 / 0.26 / 0.34 | 0.14 / 0.23 / 0.23 | 0.14 / 0.21 / 0.21 | 0.90 |
+| svd512 | 0.139 | 32.0% | 0.21 / 0.37 / 0.42 | 0.18 / 0.33 / 0.35 | 0.18 / 0.31 / 0.33 | 0.84 |
+| sk128 | 0.119 | 10.4% | nan / nan / nan | nan / nan / nan | nan / nan / nan | nan |
+| sk256 | 0.149 | 39.4% | nan / nan / nan | nan / nan / nan | nan / nan / nan | nan |
+| sk512 | 0.195 | 81.0% | 0.00 / 0.00 / 0.00 | 0.00 / 0.00 / 0.00 | 0.00 / 0.00 / 0.00 | inf |
+
+- Row-sparse top-k / energy: fidelity is stable across checkpoints. topk40 / energy99 keep cos >= 0.95 at 1, 8 and 32
+  rows for a step of 0.128 / 0.123 x dense; topk20 / energy95 ~0.85 at 0.114 / 0.111.
+- Unbiased variants diverge: the 1/p sampler (gradient norm 4e10 / 2e7 / 9e2 x exact at 10 / 20 / 40%) and the
+  Gaussian residual sketch (overflows to inf/NaN in bf16) both compound variance over ~300 sequential VJPs.
+- Truncated SVD of the frozen weights is poor (cos 0.15-0.42 even at r = 512): the spectra are flat.
+
+## Training (Beaker jupiter, 2 GPUs, LR 1e-5, eval 8k + 2k rungs x 4 tasks, eval_size 500 each, no-cot)
+
+- Equivalence control: `sbt100` (top-k at 100%, i.e. the custom backward computing every row) tracks the recipe
+  step for step over 40 steps (CE 1.331/1.369/1.171/0.648 vs 1.331/1.368/1.171/0.651; steps 10-40 mean 0.307 vs
+  0.319), so the FSDP2 + activation-checkpointing path is correct and every deficit below is the compression.
+- Training CE (routed, answer tokens; same data order for seed 0): the recipe falls 0.32 -> 0.20 -> 0.11 (steps 10-40 /
+  50-100 / 200-488); every compressed arm stalls at 0.35-0.40 from ~step 40 (sbt20, sbe95a, and also the
+  high-fidelity sbt40 / sbe99); sbt20e7 (blocks 0-6 only) reaches 0.21.
+- RESULTS_PLACEHOLDER
