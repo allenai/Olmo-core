@@ -50,3 +50,13 @@ fast8k	2b	mt4	dense	f1952@122	f8k-mt4-dense-f1952st122-tds2b-lr5e-06	ai2/jupiter
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
 fast8k	2b	mt4	lora64all24r20to7s12	f1952	f8k-mt4-lora64all24r20to7s12-f1952-tds2b-lr3e-05	ai2/jupiter-cirrascale-2	2026-10-29 16:56	LAUNCHED	"01M651FHWQ933TG6ZRMBAT8C0P transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	9b	mt4	dense	f1952	f8k-mt4-dense-f1952-tds9b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 18:47	LAUNCHED	"01M657TFEDZDHBZ8TWZZ2PAMF6 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	9b	mt4	dense	f3904	f8k-mt4-dense-f3904-tds9b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 18:47	LAUNCHED	"01M657V7JA79NJTFYK4W3YY1D9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	9b	mt4	dense	f7808	f8k-mt4-dense-f7808-tds9b-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-29 18:47	LAUNCHED	"01M657VZJWTVY1KK69PVJJCH11 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	9b	mt4	lora64all32r20to7	f1952	f8k-mt4-lora64all32r20to7-f1952-tds9b-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 18:48	LAUNCHED	"01M657WSJZZFZHJV5EQX4EAWHJ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	9b	mt4	lora64all32r20to7	f3904	f8k-mt4-lora64all32r20to7-f3904-tds9b-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 18:48	LAUNCHED	"01M657XKHTJDKB92D6HQX7ZCW5 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
