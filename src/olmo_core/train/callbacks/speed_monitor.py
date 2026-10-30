@@ -200,15 +200,14 @@ class SpeedMonitorCallback(Callback):
             self._total_tokens += self._step_tokens
 
             # Examples (= images, for image-bearing data) per step — a packing-aware
-            # throughput measure (tokens conflate real/pad/image). With sequence packing a
-            # row holds several examples (per-token ``example_ids`` 0..K-1, pad = -1), so
-            # count ``max(example_ids)+1`` per row; otherwise one example per row.
+            # throughput measure (tokens conflate real/pad/image). Only batches that carry
+            # per-token ``example_ids`` (0..K-1 per row, pad = -1; multimodal sequence packing)
+            # report it, so text-only runs log exactly the metrics they did before.
+            self._step_examples = 0
             if "example_ids" in batch:
                 per_row = batch["example_ids"].amax(dim=1) + 1  # all-pad row -> 0
                 examples_in_batch = int(per_row.clamp(min=0).sum())
-            else:
-                examples_in_batch = batch["input_ids"].shape[0]
-            self._step_examples = examples_in_batch // self._parallel_degree
+                self._step_examples = examples_in_batch // self._parallel_degree
             self._total_examples += self._step_examples
 
             self._step_flops = 0

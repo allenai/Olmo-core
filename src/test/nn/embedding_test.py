@@ -77,3 +77,15 @@ def test_freezing_base_block_leaves_extra_rows_trainable(tied: bool):
     assert model.embeddings.weight.grad is None  # pinned (and, when tied, so is the head)
     assert model.embeddings.extra_weight.grad is not None
     assert model.embeddings.extra_weight.grad[2].abs().sum() > 0
+
+
+@pytest.mark.parametrize("name", ["moe", "moe_fused_v2", "normalized"])
+def test_n_extra_vocab_rejected_for_other_transformer_types(name):
+    from olmo_core.exceptions import OLMoConfigurationError
+    from olmo_core.nn.transformer import TransformerConfig, TransformerType
+
+    cfg = TransformerConfig.olmo2_1M(vocab_size=64, n_extra_vocab=0)
+    cfg.n_extra_vocab = 4
+    cfg.name = TransformerType(name)
+    with pytest.raises(OLMoConfigurationError, match="n_extra_vocab"):
+        cfg.__post_init__()

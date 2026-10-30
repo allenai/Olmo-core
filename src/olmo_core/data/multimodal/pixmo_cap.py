@@ -266,9 +266,11 @@ class PixMoCapDataset:
             return img
         if isinstance(img, str):
             path = img
-            if self.config.image_root is not None and not img.startswith(
-                ("http://", "https://", "/")
-            ):
+            if img.startswith(("http://", "https://")):
+                raise ValueError(
+                    f"Remote image URLs are not supported, got {img!r}; use a local path"
+                )
+            if self.config.image_root is not None and not img.startswith("/"):
                 import os
 
                 path = os.path.join(self.config.image_root, img)

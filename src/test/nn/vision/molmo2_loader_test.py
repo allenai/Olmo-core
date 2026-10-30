@@ -12,8 +12,7 @@ A separate ``@pytest.mark.slow`` numerical-parity test that requires a real
 HF Molmo2 checkpoint can be added later (task follow-up).
 """
 
-import dataclasses
-from typing import Dict
+from typing import Any, Dict, cast
 
 import pytest
 import torch
@@ -29,6 +28,8 @@ from olmo_core.nn.vision import (
 )
 from olmo_core.nn.vision.molmo2_loader import (
     Molmo2LoaderError,
+    _attention_dims,
+    _has_qk_norm,
     molmo2_hf_state_dict_to_multimodal_lm,
     retie_word_embeddings,
 )
@@ -90,28 +91,7 @@ def _tiny_cfg(tie_word_embeddings: bool = False) -> MultimodalLMConfig:
         connector=conn_cfg,
         image_patch_token_id=_IMAGE_PATCH_ID,
         # The head spans the base vocab structurally, so no logit masking.
-        output_vocab_size=None,
     )
-
-
-def _attention_dims(lm_cfg: TransformerConfig):
-    """Mirror of molmo2_loader._attention_dims so tests can construct fake weights."""
-    block = lm_cfg.block
-    seq_mixer = block.attention if block.attention is not None else block.sequence_mixer
-    n_heads = getattr(seq_mixer, "n_heads", None) or getattr(seq_mixer, "num_heads", None)
-    n_kv = (
-        getattr(seq_mixer, "n_kv_heads", None)
-        or getattr(seq_mixer, "num_kv_heads", None)
-        or n_heads
-    )
-    head_dim = getattr(seq_mixer, "head_dim", None) or (lm_cfg.d_model // n_heads)
-    return int(n_heads), int(n_kv), int(head_dim)
-
-
-def _has_qk_norm(lm_cfg: TransformerConfig) -> bool:
-    block = lm_cfg.block
-    seq_mixer = block.attention if block.attention is not None else block.sequence_mixer
-    return getattr(seq_mixer, "qk_norm", None) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +113,7 @@ def _synthetic_hf_state_dict(cfg: MultimodalLMConfig) -> Dict[str, torch.Tensor]
     d_model = lm_cfg.d_model
     # Match our model's resolved hidden_size for SwiGLU. For olmo3_1M this
     # ends up matching what TransformerConfig.llama_like computes.
-    block = lm_cfg.block
+    block: Any = lm_cfg.block
     intermediate = block.feed_forward.hidden_size
 
     has_qk_norm = _has_qk_norm(lm_cfg)
@@ -282,7 +262,7 @@ def test_ff_proj_chunk_assigns_gate_and_multiplier_correctly():
     cfg = _tiny_cfg()
     lm_cfg = cfg.lm
     d_model = lm_cfg.d_model
-    intermediate = lm_cfg.block.feed_forward.hidden_size
+    intermediate = cast(Any, lm_cfg.block).feed_forward.hidden_size
     # Distinct halves so we can verify the assignment.
     mul_half = torch.ones(intermediate, d_model)
     gate_half = -torch.ones(intermediate, d_model)
@@ -413,16 +393,3 @@ def test_retie_word_embeddings_after_to_empty():
         model.lm.embeddings.weight,
         hf_sd["model.transformer.wte.embedding"],
     )
-
-
-def test_labels_path_guarded_when_output_vocab_masked():
-    """Passing ``labels`` through MultimodalLM bypasses output-vocab masking — must raise.
-
-    Molmo2 no longer needs the masking (its head spans the base vocab structurally), so this
-    exercises the feature on a config that opts into it explicitly."""
-    cfg = _tiny_cfg()
-    cfg = dataclasses.replace(cfg, output_vocab_size=_BASE_VOCAB - 4)
-    model = MultimodalLM(cfg, init_device="cpu")
-    input_ids = torch.randint(0, _BASE_VOCAB - 4, (1, 8))
-    with pytest.raises(Exception, match="output_vocab_size"):
-        model(input_ids=input_ids, labels=input_ids.clone())

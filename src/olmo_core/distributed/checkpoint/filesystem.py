@@ -1,10 +1,12 @@
 import dataclasses
 import io
+import json
 import logging
 import operator
 import os
 import pickle
 import tempfile
+import time
 import traceback
 from concurrent.futures import (
     Executor,
@@ -102,10 +104,32 @@ def _split_by_size_and_type(bins: int, items: List[WriteItem]) -> List[List[Writ
     return buckets
 
 
+def _compact_checkpoint_tensor(data: torch.Tensor) -> torch.Tensor:
+    # Contiguity alone does not exclude slices of a larger storage. torch.save serializes
+    # the entire backing storage, including bytes outside such a slice.
+    if (
+        data.is_contiguous()
+        and data.storage_offset() == 0
+        and data.untyped_storage().nbytes() == data.nbytes
+    ):
+        return data
+    return data.clone(memory_format=torch.contiguous_format)
+
+
 def _write_items(
-    path: str, storage_key: str, items: List[WriteItem], planner: SavePlanner
+    path: str,
+    storage_key: str,
+    items: List[WriteItem],
+    planner: SavePlanner,
+    *,
+    compact_storage: bool = False,
+    timings: Optional[Dict[str, float]] = None,
 ) -> List[WriteResult]:
     results: List[WriteResult] = []
+
+    def record(name: str, start: float) -> None:
+        if timings is not None:
+            timings[name] = timings.get(name, 0.0) + time.perf_counter() - start
 
     tmp_file = tempfile.NamedTemporaryFile(
         mode="w+b", suffix=".distcp", dir=None if is_url(path) else Path(path).parent, delete=False
@@ -114,18 +138,37 @@ def _write_items(
     try:
         for write_item in items:
             offset = tmp_file.tell()
+            start = time.perf_counter() if timings is not None else 0.0
             data = planner.resolve_data(write_item)
+            if timings is not None:
+                record("resolve_seconds", start)
 
             if write_item.type == WriteItemType.BYTE_IO:
                 assert isinstance(data, io.BytesIO)
+                start = time.perf_counter() if timings is not None else 0.0
                 tmp_file.write(data.getbuffer())
+                if timings is not None:
+                    record("serialize_seconds", start)
             else:
                 assert isinstance(data, torch.Tensor)
-                data = data.cpu()  # should already be on CPU, but just in case
-                data = data.clone()  # avoid serializing unrelated shared storage
+                start = time.perf_counter() if timings is not None else 0.0
+                data = data.cpu()  # Blocking copy: includes transfer completion.
+                if timings is not None:
+                    record("cpu_seconds", start)
+                start = time.perf_counter() if timings is not None else 0.0
+                data = _compact_checkpoint_tensor(data) if compact_storage else data.clone()
+                if timings is not None:
+                    record("clone_seconds", start)
+                start = time.perf_counter() if timings is not None else 0.0
                 torch.save(data, tmp_file)
+                if timings is not None:
+                    record("serialize_seconds", start)
+                    timings["tensor_bytes"] = timings.get("tensor_bytes", 0.0) + data.nbytes
 
             length = tmp_file.tell() - offset
+            if timings is not None:
+                timings["written_bytes"] = timings.get("written_bytes", 0.0) + length
+                timings["items"] = timings.get("items", 0.0) + 1
 
             if isinstance(data, torch.Tensor) and (length - data.nbytes) > 1024 * 1024:
                 raise OLMoCheckpointError(
@@ -143,16 +186,22 @@ def _write_items(
             )
 
         # Ensure all data is written to disk.
+        start = time.perf_counter() if timings is not None else 0.0
         tmp_file.flush()
         if hasattr(os, "fdatasync"):  # only available on linux
             os.fdatasync(tmp_file)  # type: ignore
         tmp_file.close()
+        if timings is not None:
+            record("flush_seconds", start)
 
+        start = time.perf_counter() if timings is not None else 0.0
         # Copy to final destination.
         if is_url(path):
             upload(tmp_path, path, save_overwrite=True)
         else:
             tmp_path.replace(path)
+        if timings is not None:
+            record("publish_seconds", start)
     finally:
         tmp_file.close()
         tmp_path.unlink(missing_ok=True)
@@ -160,20 +209,40 @@ def _write_items(
     return results
 
 
+@dataclass
+class _BucketResult:
+    results: List[WriteResult]
+    timings: Dict[str, float]
+
+
 def _write_buckets(
-    buckets: List[List[WriteItem]], paths: List[str], planner: dist_cp.SavePlanner
-) -> List[WriteResult]:
+    buckets: List[List[WriteItem]],
+    paths: List[str],
+    planner: dist_cp.SavePlanner,
+    compact_storage: bool = False,
+    profile: bool = False,
+) -> _BucketResult:
     results: List[WriteResult] = []
+    timings: Dict[str, float] = {}
     for bucket, path in zip(buckets, paths):
         key = os.path.basename(path)
         try:
-            results.extend(_write_items(path, key, bucket, planner))
+            results.extend(
+                _write_items(
+                    path,
+                    key,
+                    bucket,
+                    planner,
+                    compact_storage=compact_storage,
+                    timings=timings if profile else None,
+                )
+            )
         except BaseException:
             # NOTE: we might get an error here that can't be pickled, which causes a different failure
             # later when PyTorch tries to reduce that error across ranks. So here we just make
             # sure we're raising a simple error type that can be pickled.
             raise OLMoCheckpointError(f"Original error:\n{traceback.format_exc()}")
-    return results
+    return _BucketResult(results, timings)
 
 
 def _narrow_tensor_by_index(
@@ -205,10 +274,18 @@ class RemoteFileSystemWriter(dist_cp.StorageWriter):
         process_count: Optional[int] = None,
         process_group: Optional[dist.ProcessGroup] = None,
         throttle_uploads: bool = False,
+        *,
+        compact_storage: bool = False,
+        profile: bool = False,
     ) -> None:
         super().__init__()
         if thread_count is not None and thread_count <= 0:
             raise ValueError("thread count must be at least 1")
+        if process_count is not None and process_count <= 0:
+            raise ValueError("process count must be at least 1")
+        self.compact_storage = compact_storage
+        self.profile = profile
+        self.timings: Dict[str, float] = {}
         self.path = normalize_path(path)
         self.thread_count = thread_count or get_default_thread_count()
         self.process_count = process_count
@@ -242,6 +319,8 @@ class RemoteFileSystemWriter(dist_cp.StorageWriter):
         plan: dist_cp.SavePlan,
         planner: dist_cp.SavePlanner,
     ) -> Future[List[WriteResult]]:
+        start = time.perf_counter() if self.profile else 0.0
+        self.timings = {}
         if is_url(self.path):
             # Create the global S3 client up front to work around a threading issue in boto.
             init_client(self.path)
@@ -259,11 +338,15 @@ class RemoteFileSystemWriter(dist_cp.StorageWriter):
         if self.throttle_uploads and is_url(self.path):
             buckets = _split_by_size_and_type(1, plan.items)
             paths = [gen_file_name() for _ in buckets]
-            results = do_n_at_a_time(
-                partial(_write_buckets, buckets, paths, planner),
+            result = do_n_at_a_time(
+                partial(
+                    _write_buckets, buckets, paths, planner, self.compact_storage, self.profile
+                ),
                 process_group=self.process_group,
                 n=max(get_num_nodes() // 4, 1),
             )
+            results = result.results
+            self.timings.update(result.timings)
         else:
             buckets = _split_by_size_and_type(self.thread_count, plan.items)
             paths = [gen_file_name() for _ in buckets]
@@ -283,15 +366,35 @@ class RemoteFileSystemWriter(dist_cp.StorageWriter):
 
                 futures = []
                 for bucket, path in zip(buckets, paths):
-                    futures.append(executor.submit(_write_buckets, [bucket], [path], planner))
+                    futures.append(
+                        executor.submit(
+                            _write_buckets,
+                            [bucket],
+                            [path],
+                            planner,
+                            self.compact_storage,
+                            self.profile,
+                        )
+                    )
                 for f in as_completed(futures):
-                    results.extend(f.result())
+                    result = f.result()
+                    results.extend(result.results)
+                    for name, value in result.timings.items():
+                        self.timings[name] = self.timings.get(name, 0.0) + value
 
+        # Stage durations above are summed worker time, not mutually exclusive wall time.
+        if self.profile:
+            self.timings["write_wall_seconds"] = time.perf_counter() - start
+            log.info(
+                "checkpoint_writer %s",
+                json.dumps({"rank_prefix": storage_plan.prefix, **self.timings}, sort_keys=True),
+            )
         fut: Future[List[WriteResult]] = Future()
         fut.set_result(results)
         return fut
 
     def finish(self, metadata: Metadata, results: List[List[WriteResult]]) -> None:
+        start = time.perf_counter() if self.profile else 0.0
         storage_md = dict()
         for wr_list in results:
             storage_md.update({wr.index: wr.storage_data for wr in wr_list})
@@ -322,6 +425,10 @@ class RemoteFileSystemWriter(dist_cp.StorageWriter):
         finally:
             tmp_file.close()
             tmp_path.unlink(missing_ok=True)
+
+        if self.profile:
+            self.timings["metadata_seconds"] = time.perf_counter() - start
+            log.info("checkpoint_metadata_seconds %.6f", self.timings["metadata_seconds"])
 
     def storage_meta(self) -> Optional[StorageMeta]:
         return StorageMeta(checkpoint_id=self.checkpoint_id, save_id=self.save_id)

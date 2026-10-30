@@ -32,7 +32,7 @@ from olmo_core.train.train_module.transformer import (
 )
 
 
-def _build_model(width, hidden, num_experts=512):
+def _build_model(width, hidden, num_experts=512, ep_path=ExpertParallelPath.rowwise_nvshmem):
     norm = LayerNormConfig(name=LayerNormType.rms, bias=False, dtype=DType.float32)
     return OLMoDDPModelConfig(
         init_seed=12536,
@@ -74,7 +74,7 @@ def _build_model(width, hidden, num_experts=512):
                 ),
             ),
             ep=ExpertParallelConfig(
-                path=ExpertParallelPath.rowwise_nvshmem,
+                path=ep_path,
                 # Dropless correctness fixture; production timing retains1.25.
                 capacity_factor=8.0,
                 share_dispatch_out=False,

@@ -41,8 +41,7 @@ def core_swiglu(up_gate: torch.Tensor) -> torch.Tensor:
     return (up * gate * torch.sigmoid(gate)).to(up_gate.dtype)
 
 
-@torch.library.custom_op("olmo3_moe_hf::core_combine", mutates_args=())
-def core_combine(values: torch.Tensor, probabilities: torch.Tensor) -> torch.Tensor:
+def _core_combine_impl(values: torch.Tensor, probabilities: torch.Tensor) -> torch.Tensor:
     """Reproduce TE's index-map combination in routing-slot order.
 
     TE 2.18 converts probabilities to the activation dtype and rounds every
@@ -72,7 +71,6 @@ def core_combine(values: torch.Tensor, probabilities: torch.Tensor) -> torch.Ten
     return output
 
 
-@core_combine.register_fake
 def _core_combine_fake(values, probabilities):
     return values.new_empty((values.shape[0], values.shape[2]))
 
@@ -81,8 +79,7 @@ def _core_combine_setup_context(ctx, inputs, output):
     ctx.save_for_backward(*inputs)
 
 
-@torch.library.custom_op("olmo3_moe_hf::core_combine_backward", mutates_args=())
-def _core_combine_backward_op(
+def _core_combine_backward_impl(
     values: torch.Tensor, probabilities: torch.Tensor, grad_output: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     # Match autograd through the activation-dtype casts in the forward.
@@ -92,7 +89,6 @@ def _core_combine_backward_op(
     return grad_values, grad_probabilities
 
 
-@_core_combine_backward_op.register_fake
 def _core_combine_backward_fake(values, probabilities, grad_output):
     return torch.empty_like(values), torch.empty_like(probabilities)
 
@@ -101,4 +97,20 @@ def _core_combine_backward(ctx, grad_output):
     return _core_combine_backward_op(*ctx.saved_tensors, grad_output)
 
 
-core_combine.register_autograd(_core_combine_backward, setup_context=_core_combine_setup_context)
+# HF remote-code loading imports this file under a different module name for
+# each checkpoint/revision. Operator names are process-global: register each
+# implementation (including fake/autograd kernels) only once, then reuse it.
+if not hasattr(torch.ops.olmo3_moe_hf, "core_combine_backward"):
+    _backward_op = torch.library.custom_op("olmo3_moe_hf::core_combine_backward", mutates_args=())(
+        _core_combine_backward_impl
+    )
+    _backward_op.register_fake(_core_combine_backward_fake)
+_core_combine_backward_op = torch.ops.olmo3_moe_hf.core_combine_backward.default
+
+if not hasattr(torch.ops.olmo3_moe_hf, "core_combine"):
+    _combine_op = torch.library.custom_op("olmo3_moe_hf::core_combine", mutates_args=())(
+        _core_combine_impl
+    )
+    _combine_op.register_fake(_core_combine_fake)
+    _combine_op.register_autograd(_core_combine_backward, setup_context=_core_combine_setup_context)
+core_combine = torch.ops.olmo3_moe_hf.core_combine.default

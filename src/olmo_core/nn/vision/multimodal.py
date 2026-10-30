@@ -152,19 +152,6 @@ class MultimodalLMConfig(Config):
     summation order within a chunk. Off by default; the mixed mid-training recipe turns it on.
     """
 
-    output_vocab_size: Optional[int] = None
-    """
-    Number of token IDs the model may *predict*. Molmo2 extends the base text vocab
-    with extra image-special tokens (``<im_patch>``, ``<im_start>``, …) that are
-    **inputs-only**: HF Molmo2's ``lm_head`` covers just the base vocab, so the extra
-    IDs can never be sampled and never enter the softmax. Our LM head spans the full
-    ``lm.vocab_size``, so when this is set (to the base vocab size), the forward pass
-    masks logit columns ``>= output_vocab_size`` to the dtype minimum — they contribute
-    exactly ``0`` to the softmax and receive exactly ``0`` gradient, reproducing a
-    base-vocab-only head for loss, sampling, and (tied-embedding) training dynamics.
-    ``None`` (default) disables masking.
-    """
-
     @classmethod
     def _molmo2_like(
         cls,
@@ -228,7 +215,6 @@ class MultimodalLMConfig(Config):
             image_patch_token_id=image_patch_token_id,
             vit_layers=(24, 18),
             # The head spans the base vocab structurally, so no logit masking is required.
-            output_vocab_size=None,
             **kwargs,
         )
 
@@ -286,6 +272,57 @@ class MultimodalLMConfig(Config):
                 dtype=DType.float32,
             ),
             connector_mlp_hidden_size=9728,
+            response_residual_dropout=response_residual_dropout,
+            **kwargs,
+        )
+
+    @classmethod
+    def molmo2_0_6B(
+        cls, *, rope_theta: int = 1_000_000, response_residual_dropout: float = 0.0, **kwargs
+    ) -> "MultimodalLMConfig":
+        """
+        The Molmo2 architecture on a Qwen3-0.6B LM: the shared Molmo2 vision stack, with a
+        connector MLP as wide as the LM's feed-forward (3,072), the rule the released 4B
+        (9,728) and 8B (12,288) follow. There is no released Molmo2 at this size, so this is
+        for training from base weights only.
+
+        :param rope_theta: RoPE base. ``1_000_000``, Qwen3-0.6B's.
+        """
+        return cls._molmo2_like(
+            TransformerConfig.qwen3_0_6B(
+                vocab_size=MOLMO2_BASE_VOCAB_SIZE,
+                n_extra_vocab=MOLMO2_N_EXTRA_TOKENS,
+                rope_theta=rope_theta,
+                rope_full_precision=True,
+                attn_backend=_molmo2_attn_backend(),
+                dtype=DType.float32,
+            ),
+            connector_mlp_hidden_size=3072,
+            response_residual_dropout=response_residual_dropout,
+            **kwargs,
+        )
+
+    @classmethod
+    def molmo2_1_7B(
+        cls, *, rope_theta: int = 1_000_000, response_residual_dropout: float = 0.0, **kwargs
+    ) -> "MultimodalLMConfig":
+        """
+        The Molmo2 architecture on a Qwen3-1.7B LM, built like :meth:`molmo2_0_6B` with a
+        6,144-wide connector MLP (the LM's feed-forward width). There is no released Molmo2 at
+        this size, so this is for training from base weights only.
+
+        :param rope_theta: RoPE base. ``1_000_000``, Qwen3-1.7B's.
+        """
+        return cls._molmo2_like(
+            TransformerConfig.qwen3_1_7B(
+                vocab_size=MOLMO2_BASE_VOCAB_SIZE,
+                n_extra_vocab=MOLMO2_N_EXTRA_TOKENS,
+                rope_theta=rope_theta,
+                rope_full_precision=True,
+                attn_backend=_molmo2_attn_backend(),
+                dtype=DType.float32,
+            ),
+            connector_mlp_hidden_size=6144,
             response_residual_dropout=response_residual_dropout,
             **kwargs,
         )
@@ -356,13 +393,6 @@ class MultimodalLM(nn.Module):
 
     def __init__(self, cfg: MultimodalLMConfig, init_device: str = "cpu"):
         super().__init__()
-        if cfg.output_vocab_size is not None and not (
-            0 < cfg.output_vocab_size <= cfg.lm.vocab_size
-        ):
-            raise OLMoConfigurationError(
-                f"output_vocab_size ({cfg.output_vocab_size}) must be in "
-                f"(0, lm.vocab_size={cfg.lm.vocab_size}]"
-            )
         self.cfg = cfg
         self.lm = cfg.lm.build(init_device=init_device)
         # Cached so `forward` only builds a drop mask when some block will consume it.
@@ -857,18 +887,7 @@ class MultimodalLM(nn.Module):
                     "`loss_masks` is required when the LM uses `masked_dropout` "
                     "(response_residual_dropout)"
                 )
-            drop_mask = (loss_masks > 0).to(dtype=torch.bool)
-
-        if labels is not None and self.cfg.output_vocab_size is not None:
-            # The LM head would compute the loss internally over the full (padded) vocab,
-            # bypassing the output-vocab masking below and shifting the softmax
-            # denominator relative to mm_olmo / HF Molmo2 (whose lm_head has no columns
-            # for the extra image-special tokens).
-            raise OLMoConfigurationError(
-                "`labels` cannot be passed through MultimodalLM when `output_vocab_size` "
-                "is set: compute the loss externally on the (masked) logits instead, as "
-                "MultimodalTransformerTrainModule does."
-            )
+            drop_mask = loss_masks > 0
 
         assert (
             self.lm.embeddings is not None
@@ -878,6 +897,8 @@ class MultimodalLM(nn.Module):
         # The trainer hands the ids over on the host; index work done there costs no device sync.
         input_ids_host = input_ids if input_ids.device.type == "cpu" else None
         input_ids = input_ids.to(device)
+        if drop_mask is not None:
+            drop_mask = drop_mask.to(device)
         if labels is not None:
             labels = labels.to(device)
 
@@ -906,7 +927,28 @@ class MultimodalLM(nn.Module):
             # sequence is one causal stream, so nothing is masked, bounded or positioned.
             subsegment_ids = position_ids = example_ids = token_type_ids = None
 
-        use_flex_attn = os.environ.get("OLMO2_FLEX_ATTN") == "1" and not document_mode
+        # Choose the mask representation from the LM's actual attention backend (not the
+        # environment), so a mismatched OLMO2_FLEX_ATTN can never silently drop the masks.
+        from olmo_core.nn.attention.backend import FlexAttentionBackend
+
+        backends = [m.backend for m in self.lm.modules() if getattr(m, "backend", None) is not None]
+        # Document mode (recurrent-mixer LMs) passes document lengths, never a flex mask.
+        use_flex_attn = not document_mode and any(
+            isinstance(b, FlexAttentionBackend) for b in backends
+        )
+        if any(isinstance(b, FlexAttentionBackend) and b.window_size != (-1, -1) for b in backends):
+            raise OLMoConfigurationError(
+                "MultimodalLM builds one shared FlexAttention block mask without a sliding "
+                "window, so LMs with sliding-window flex layers are not supported yet (those "
+                "layers would silently attend over the full context)."
+            )
+        if use_flex_attn and not all(isinstance(b, FlexAttentionBackend) for b in backends):
+            raise OLMoConfigurationError(
+                "MultimodalLM does not support mixing FlexAttention with other attention "
+                "backends across blocks: the flex block mask and the dense or/and masks are "
+                "mutually exclusive, so the non-flex blocks would silently lose packed-example "
+                "isolation and bidirectional image attention."
+            )
         or_mask: Optional[torch.Tensor] = None
         and_mask: Optional[torch.Tensor] = None
         flex_attn_block_mask = None
@@ -1004,8 +1046,6 @@ class MultimodalLM(nn.Module):
 
         # Build flex BlockMask after vision so the mask is not resident during ViT.
         if flex_mask_kwargs is not None:
-            from olmo_core.nn.attention.backend import FlexAttentionBackend
-
             flex_attn_block_mask = FlexAttentionBackend.build_block_mask_from_vectors(
                 **flex_mask_kwargs
             )
@@ -1045,19 +1085,6 @@ class MultimodalLM(nn.Module):
             **kwargs,
         )
 
-        # Mask the logit columns of the inputs-only image-special tokens (see
-        # :attr:`MultimodalLMConfig.output_vocab_size`). ``finfo.min`` underflows to
-        # exactly 0 in the softmax, so loss / sampling / gradients match a
-        # base-vocab-only head bit-for-bit (mm_olmo computes logits against the base
-        # embedding table only, even under weight tying). Applies to both the full
-        # ``(B, S, V)`` logits and the ``(N_response, V)`` response-only logits.
-        output_vocab_size = self.cfg.output_vocab_size
-        if (
-            output_vocab_size is not None
-            and isinstance(out, torch.Tensor)
-            and out.shape[-1] > output_vocab_size
-        ):
-            out[..., output_vocab_size:] = torch.finfo(out.dtype).min
         return out
 
 
@@ -1488,10 +1515,6 @@ class MultimodalOLMoDDPModel(MultimodalLM):
             raise ValueError(
                 f"{type(self).__name__} computes a weighted sum loss; got "
                 f"loss_reduction={loss_reduction!r}"
-            )
-        if self.cfg.output_vocab_size is not None:
-            raise OLMoConfigurationError(
-                "output_vocab_size is not supported by the multimodal OLMoDDP loss"
             )
         labels = labels.to(self.lm.device)
         positions: Optional[torch.Tensor] = None

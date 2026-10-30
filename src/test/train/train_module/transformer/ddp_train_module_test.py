@@ -130,7 +130,7 @@ def test_moe_v2_train_module_construction_no_ep():
     )
 
 
-def _run_load_shared_qk_checkpoint(path, key_format, eval_only=True):
+def _run_load_shared_qk_checkpoint(path, key_format, eval_only=True, constant_memory=False):
     device = "cpu" if eval_only else "cuda"
     dtype = DType.float32 if eval_only else DType.bfloat16
     source = _tiny_model_config(dtype=dtype, per_head_qk=False).build(init_device=device)
@@ -158,9 +158,13 @@ def _run_load_shared_qk_checkpoint(path, key_format, eval_only=True):
     # Without the opt-in, a shared/per-head shape mismatch must remain an error.
     tm.expand_shared_qk_norm_on_load = False
     with pytest.raises(RuntimeError, match="shape mismatch"):
-        tm.load_state_dict_direct(path, load_optim_state=False)
+        tm.load_state_dict_direct(
+            path, load_optim_state=False, constant_memory_planning=constant_memory
+        )
     tm.expand_shared_qk_norm_on_load = True
-    tm.load_state_dict_direct(path, load_optim_state=False)
+    tm.load_state_dict_direct(
+        path, load_optim_state=False, constant_memory_planning=constant_memory
+    )
     expected = dict(source.named_parameters())
     for part in tm.model_parts:
         for name, param in part.named_parameters():
@@ -180,10 +184,11 @@ def _run_load_shared_qk_checkpoint(path, key_format, eval_only=True):
 
 
 @pytest.mark.parametrize("key_format", ["model", "main"])
-def test_eval_load_expands_shared_qk_gains(tmp_path, key_format):
+@pytest.mark.parametrize("constant_memory", [False, True])
+def test_eval_load_expands_shared_qk_gains(tmp_path, key_format, constant_memory):
     run_distributed_test(
         _run_load_shared_qk_checkpoint,
-        func_args=(str(tmp_path / "checkpoint"), key_format),
+        func_args=(str(tmp_path / "checkpoint"), key_format, True, constant_memory),
         world_size=2,
         backend="gloo",
         start_method="spawn",

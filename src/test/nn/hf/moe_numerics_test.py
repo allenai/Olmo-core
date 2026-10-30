@@ -129,7 +129,12 @@ def test_hf_dense_and_shared_experts_match_core_packed_gemm(dtype, kind):
     )
     hf: Union[Olmo3MoeDenseMLP, Olmo3MoeCoreSharedExpert] = (
         Olmo3MoeDenseMLP(
-            Olmo3MoeConfig(hidden_size=D, dense_mlp_intermediate_size=H, moe_use_core_numerics=True)
+            Olmo3MoeConfig(
+                hidden_size=D,
+                dense_mlp_intermediate_size=H,
+                moe_use_core_numerics=True,
+                dense_layers_use_shared_expert=True,
+            )
         )
         if kind == "dense"
         else Olmo3MoeCoreSharedExpert(D, H, "silu")
@@ -200,3 +205,253 @@ def test_core_experts_fullgraph_fallback(device):
         expected = experts(x, indices, weights)
         actual = torch.compile(experts, fullgraph=True)(x, indices, weights)
     torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("kind", ["dense", "shared", "routed"])
+@pytest.mark.parametrize("projection", ["up_proj", "gate_proj", "down_proj"])
+@pytest.mark.parametrize("adaptation", ["adapter", "hook"])
+def test_core_experts_preserve_projection_adapters_and_hooks(kind, projection, adaptation):
+    from olmo_core.nn.moe.v2.hf.configuration_olmo3moe import Olmo3MoeConfig
+    from olmo_core.nn.moe.v2.hf.modeling_olmo3moe import (
+        Olmo3MoeCoreExperts,
+        Olmo3MoeCoreSharedExpert,
+        Olmo3MoeDenseMLP,
+        Olmo3MoeExpert,
+        _can_use_packed_projections,
+    )
+    from olmo_core.nn.moe.v2.hf.moe_numerics import core_swiglu
+
+    class Adapter(torch.nn.Module):
+        # Like an unmerged LoRA module, .weight exposes only the base weight.
+        def __init__(self, base):
+            super().__init__()
+            self.base = base
+            self.delta = torch.nn.Parameter(torch.zeros_like(base.weight))
+
+        @property
+        def weight(self):
+            return self.base.weight
+
+        def forward(self, x):
+            return self.base(x) + torch.nn.functional.linear(x, self.delta)
+
+    torch.manual_seed(42)
+    if kind == "dense":
+        expert = Olmo3MoeDenseMLP(
+            Olmo3MoeConfig(
+                hidden_size=16,
+                dense_mlp_intermediate_size=32,
+                moe_use_core_numerics=True,
+                dense_layers_use_shared_expert=True,
+            )
+        )
+    elif kind == "shared":
+        expert = Olmo3MoeCoreSharedExpert(16, 32, "silu")
+    else:
+        expert = Olmo3MoeExpert(16, 32, "silu")
+    assert _can_use_packed_projections(expert)
+    if adaptation == "adapter":
+        adapter = Adapter(getattr(expert, projection))
+        setattr(expert, projection, adapter)
+        delta = adapter.delta
+    else:
+        layer = getattr(expert, projection)
+        delta = torch.nn.Parameter(torch.zeros(layer.out_features))
+        layer.register_forward_hook(lambda module, args, output: output + delta)
+    assert not _can_use_packed_projections(expert)
+
+    x = torch.randn(5, 16)
+    if kind == "routed":
+        experts = Olmo3MoeCoreExperts([expert])
+        assert not experts._can_use_grouped_mm(x)
+        indices = torch.zeros(5, 1, dtype=torch.long)
+        weights = torch.ones(5, 1)
+
+        def forward():
+            return experts(x, indices, weights)
+
+        def reference():
+            return expert.down_proj(
+                core_swiglu(torch.cat((expert.up_proj(x), expert.gate_proj(x)), -1))
+            )
+
+    else:
+
+        def forward():
+            return expert(x)
+
+        def reference():
+            return expert.down_proj(expert.act_fn(expert.gate_proj(x)) * expert.up_proj(x))
+
+    before = forward().detach()
+    with torch.no_grad():
+        delta.fill_(0.25)
+    actual = forward()
+    expected = reference()
+    assert not torch.equal(actual, before)
+    torch.testing.assert_close(actual, expected)
+    gradient = torch.randn_like(actual)
+    actual_grad = torch.autograd.grad(actual, delta, gradient)[0]
+    expected_grad = torch.autograd.grad(expected, delta, gradient)[0]
+    assert actual_grad.count_nonzero() > 0
+    torch.testing.assert_close(actual_grad, expected_grad)
+    if kind == "routed":
+        compiled = torch.compile(experts, fullgraph=True)
+        torch.testing.assert_close(compiled(x, indices, weights), expected)
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
+def test_core_numerics_reuses_custom_ops_across_module_imports(dtype, monkeypatch):
+    import importlib.util
+    import sys
+
+    from olmo_core.nn.moe.v2.hf import moe_numerics
+
+    def reject_registration(*args, **kwargs):
+        pytest.fail("Importing another checkpoint must not register custom ops again")
+
+    torch.manual_seed(91)
+    values = torch.randn(5, 3, 16, dtype=dtype, requires_grad=True)
+    probabilities = torch.rand(5, 3, requires_grad=True)
+    compiled = torch.compile(moe_numerics.core_combine, fullgraph=True)
+    expected = compiled(values, probabilities)
+    gradient = torch.randn_like(expected)
+    expected_grads = torch.autograd.grad(expected, (values, probabilities), gradient)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(torch.library, "custom_op", reject_registration)
+        for name in ("hf_checkpoint_a_numerics", "hf_checkpoint_b_numerics"):
+            spec = importlib.util.spec_from_file_location(name, moe_numerics.__file__)
+            assert spec is not None and spec.loader is not None
+            module = importlib.util.module_from_spec(spec)
+            patch.setitem(sys.modules, name, module)
+            spec.loader.exec_module(module)
+            assert module.core_combine is moe_numerics.core_combine
+            assert module._core_combine_backward_op is moe_numerics._core_combine_backward_op
+            actual = module.core_combine(values, probabilities)
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+            actual_grads = torch.autograd.grad(actual, (values, probabilities), gradient)
+            for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+                torch.testing.assert_close(actual_grad, expected_grad, rtol=0, atol=0)
+
+    # A graph compiled before the imports must retain working forward/backward kernels.
+    actual = compiled(values, probabilities)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    actual_grads = torch.autograd.grad(actual, (values, probabilities), gradient)
+    for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+        torch.testing.assert_close(actual_grad, expected_grad, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=GPU_MARKS)])
+def test_core_numerics_preserves_standard_dense_projections(device, monkeypatch):
+    from olmo_core.nn.feed_forward import FeedForward
+    from olmo_core.nn.moe.v2.hf import modeling_olmo3moe
+    from olmo_core.nn.moe.v2.hf.configuration_olmo3moe import Olmo3MoeConfig
+
+    def reject_packed(*args):
+        pytest.fail("Standard FeedForward layers must keep separate projections")
+
+    monkeypatch.setattr(modeling_olmo3moe, "_core_shared_expert_forward", reject_packed)
+    core = FeedForward(
+        d_model=32, hidden_size=64, bias=False, dtype=torch.bfloat16, init_device=device
+    )
+    hf = modeling_olmo3moe.Olmo3MoeDenseMLP(
+        Olmo3MoeConfig(hidden_size=32, dense_mlp_intermediate_size=64, moe_use_core_numerics=True)
+    ).to(device=device, dtype=torch.bfloat16)
+    with torch.no_grad():
+        hf.gate_proj.weight.copy_(core.w1.weight)
+        hf.up_proj.weight.copy_(core.w3.weight)
+        hf.down_proj.weight.copy_(core.w2.weight)
+        x = torch.randn(2, 7, 32, device=device, dtype=torch.bfloat16)
+        torch.testing.assert_close(hf(x), core(x), rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("kind", ["dense", "shared", "routed"])
+@pytest.mark.parametrize("offload", ["cpu", "disk"])
+def test_core_experts_preserve_accelerate_offload(kind, offload, tmp_path):
+    accelerate = pytest.importorskip("accelerate")
+    from olmo_core.nn.moe.v2.hf.configuration_olmo3moe import Olmo3MoeConfig
+    from olmo_core.nn.moe.v2.hf.modeling_olmo3moe import (
+        Olmo3MoeCoreExperts,
+        Olmo3MoeCoreSharedExpert,
+        Olmo3MoeDenseMLP,
+        Olmo3MoeExpert,
+    )
+
+    if kind == "dense":
+        model = Olmo3MoeDenseMLP(
+            Olmo3MoeConfig(
+                hidden_size=16,
+                dense_mlp_intermediate_size=32,
+                moe_use_core_numerics=True,
+                dense_layers_use_shared_expert=True,
+            )
+        )
+    elif kind == "shared":
+        model = Olmo3MoeCoreSharedExpert(16, 32, "silu")
+    else:
+        model = Olmo3MoeCoreExperts([Olmo3MoeExpert(16, 32, "silu")])
+    x = torch.randn(5, 16)
+    args = (x, torch.zeros(5, 1, dtype=torch.long), torch.ones(5, 1)) if kind == "routed" else (x,)
+    with torch.no_grad():
+        expected = model(*args)
+        if offload == "cpu":
+            accelerate.cpu_offload(model, execution_device=torch.device("cpu"))
+        else:
+            accelerate.disk_offload(model, str(tmp_path), execution_device=torch.device("cpu"))
+        assert all(param.is_meta for param in model.parameters())
+        for _ in range(2):
+            torch.testing.assert_close(model(*args), expected)
+            assert all(param.is_meta for param in model.parameters())
+
+
+@pytest.mark.parametrize("customization", ["pre_hook", "hook", "wrapper", "subclass"])
+@pytest.mark.parametrize("compile", [False, True])
+def test_core_routed_experts_honor_module_calls(customization, compile, monkeypatch):
+    from olmo_core.nn.moe.v2.hf.modeling_olmo3moe import (
+        Olmo3MoeCoreExperts,
+        Olmo3MoeExpert,
+        Olmo3MoeExperts,
+    )
+
+    torch.manual_seed(92)
+    delta = torch.nn.Parameter(torch.full((16,), 0.25))
+
+    class AdaptedExpert(Olmo3MoeExpert):
+        def forward(self, x):
+            return super().forward(x) + delta
+
+    expert = (
+        AdaptedExpert(16, 32, "silu")
+        if customization == "subclass"
+        else Olmo3MoeExpert(16, 32, "silu")
+    )
+    if customization == "pre_hook":
+        expert.register_forward_pre_hook(lambda module, args: (args[0] + delta,))
+    elif customization == "hook":
+        expert.register_forward_hook(lambda module, args, output: output + delta)
+    elif customization == "wrapper":
+        original_forward = expert.forward
+        monkeypatch.setattr(expert, "forward", lambda x: original_forward(x) + delta)
+
+    experts = Olmo3MoeCoreExperts([expert])
+    x = torch.randn(5, 16, requires_grad=True)
+    indices = torch.zeros(5, 1, dtype=torch.long)
+    weights = torch.ones(5, 1)
+    # Exercise the eligibility guard even on hosts without grouped_mm support.
+    monkeypatch.setattr(Olmo3MoeExperts, "_can_use_grouped_mm", lambda *args: True)
+    assert not experts._can_use_grouped_mm(x)
+    if compile:
+        # Each case uses a different hook configuration on the same forward code.
+        torch.compiler.reset()
+    forward = torch.compile(experts, fullgraph=True) if compile else experts
+    actual = forward(x, indices, weights)
+    expected = expert(x)
+    torch.testing.assert_close(actual, expected)
+    gradient = torch.randn_like(actual)
+    inputs = (x, delta, *expert.parameters())
+    actual_grads = torch.autograd.grad(actual, inputs, gradient)
+    expected_grads = torch.autograd.grad(expected, inputs, gradient)
+    assert actual_grads[1].count_nonzero() > 0
+    for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+        torch.testing.assert_close(actual_grad, expected_grad)

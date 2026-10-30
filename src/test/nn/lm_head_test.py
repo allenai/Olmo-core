@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import pytest
 import torch
@@ -261,7 +261,10 @@ def test_lm_head_response_logits_only(head_type, loss_implementation):
     ):
         pytest.skip("NormalizedLMHead does not support fused_linear")
 
-    config = LMHeadConfig(name=head_type, loss_implementation=loss_implementation)
+    fused = loss_implementation == LMLossImplementation.fused_linear
+    # Liger's fused kernel needs the bias-free head (as in test_lm_head_fused_linear_loss).
+    kwargs: Dict[str, Any] = {"bias": False} if fused else {}
+    config = LMHeadConfig(name=head_type, loss_implementation=loss_implementation, **kwargs)
     lm_head = config.build(d_model=d_model, vocab_size=vocab_size, init_device="cuda")
 
     inputs = torch.randn(B, S, d_model, device=device)
@@ -271,28 +274,34 @@ def test_lm_head_response_logits_only(head_type, loss_implementation):
     response_mask[0, [3, 7, 15, 22]] = True
     response_mask[1, [1, 9, 18]] = True
 
-    output_full = lm_head(inputs, labels=labels, return_logits=True)
-    full_logits = output_full.logits
-    ref_logits = full_logits.view(-1, vocab_size)[response_mask.view(-1)]
-
-    narrow_logits = lm_head(
+    # The narrowed loss averages over response tokens only, so the reference ignores the rest.
+    masked_labels = labels.masked_fill(~response_mask, -100)
+    output_narrow = lm_head(
         inputs,
-        labels=None,
+        labels=labels,
         response_logits_only=True,
         response_mask=response_mask,
     )
-    torch.testing.assert_close(narrow_logits, ref_logits)
+    output_ref = lm_head(inputs, labels=masked_labels)
+    torch.testing.assert_close(output_narrow.loss, output_ref.loss)
 
-    output_narrow = lm_head(
+    if fused:
+        return  # the fused kernel never materialises logits (`return_logits=True` is rejected)
+
+    full_logits = lm_head(inputs, labels=labels, return_logits=True).logits
+    ref_logits = full_logits.view(-1, vocab_size)[response_mask.view(-1)]
+    narrow_logits = lm_head(
+        inputs, labels=None, response_logits_only=True, response_mask=response_mask
+    )
+    torch.testing.assert_close(narrow_logits, ref_logits)
+    narrow_with_logits = lm_head(
         inputs,
         labels=labels,
         response_logits_only=True,
         response_mask=response_mask,
         return_logits=True,
     )
-    if output_narrow.logits is not None:
-        torch.testing.assert_close(output_narrow.logits, ref_logits)
-    torch.testing.assert_close(output_narrow.loss, output_full.loss)
+    torch.testing.assert_close(narrow_with_logits.logits, ref_logits)
 
 
 @pytest.mark.parametrize("head_type", [LMHeadType.default, LMHeadType.normalized])
@@ -327,3 +336,17 @@ def test_lm_head_num_flops_per_token(
         f"Estimated FLOPs ({estimated_flops_per_token}) differs too much from actual ({actual_flops_per_token}), "
         f"{relative_error=:.2%}, {tolerance=:.2%}"
     )
+
+
+@pytest.mark.parametrize("head_type", [LMHeadType.default, LMHeadType.normalized])
+def test_lm_head_response_logits_only_rejects_unreduced_loss(head_type):
+    lm_head = LMHeadConfig(name=head_type).build(d_model=16, vocab_size=32, init_device="cpu")
+    x = torch.randn(2, 4, 16)
+    labels = torch.randint(0, 32, (2, 4))
+    mask = torch.zeros(2, 4, dtype=torch.bool)
+    mask[0, [0, 1]] = True
+    mask[1, 2] = True  # 3 selected tokens over 2 rows: no (B, S) layout exists
+    with pytest.raises(ValueError, match="response_logits_only"):
+        lm_head(
+            x, labels=labels, response_logits_only=True, response_mask=mask, loss_reduction="none"
+        )

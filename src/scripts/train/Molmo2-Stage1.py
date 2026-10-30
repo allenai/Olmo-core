@@ -15,7 +15,9 @@ is stage-1 *pretraining*. Passing ``--init_from=molmo2`` instead continues the r
 already-post-trained Molmo2 checkpoint on the stage-1 objective, which is a fine-tune —
 useful for parity tests and continuation experiments, but not a stage-1 reproduction.
 
-``--model_size`` selects the variant: ``4b`` (Qwen3-4B, the default) or ``8b`` (Qwen3-8B).
+``--model_size`` selects the variant: ``4b`` (Qwen3-4B, the default) or ``8b`` (Qwen3-8B), or
+``0.6b`` / ``1.7b`` (Qwen3-0.6B / Qwen3-1.7B, smaller baselines with no released Molmo2, so
+from scratch only).
 
 ``--recipe`` selects the data mixture (see :data:`RECIPES`): ``v1`` (the default) is the released
 Molmo2-4B-Pretrain mixture -- caption 0.6, pointing and counting 0.3 on the v1 sources, Tulu
@@ -173,8 +175,9 @@ class ModelSizeSpec:
     factory: Callable[..., MultimodalLMConfig]
     """Native architecture factory, e.g. :meth:`MultimodalLMConfig.molmo2_4B`."""
 
-    molmo2_id: str
-    """Released checkpoint, used by ``--init_from=molmo2``."""
+    molmo2_id: Optional[str]
+    """Released checkpoint, used by ``--init_from=molmo2``; ``None`` for sizes with no release,
+    which can only start from scratch."""
 
     scratch_lm_id: str
     """Base Qwen3 backbone, used by ``--init_from=scratch``."""
@@ -212,6 +215,23 @@ MODEL_SIZES = {
         # RoPE base 1e6, untied. Hence the 4B/8B asymmetry: different backbones, not a
         # Molmo2-side change.
         scratch_lm_id="Qwen/Qwen3-8B",
+        scratch_rope_theta=1_000_000,
+        molmo2_rope_theta=1_000_000,
+    ),
+    # Smaller baselines with no released Molmo2, so `--init_from=scratch` only. The backbones are
+    # the ones mm_olmo's `qwen3_0.6b` / `qwen3_1.7b` LLM configs use (RoPE base 1e6, tied, same
+    # tokenizer as the 4B: BPE, eos_token_id 151645 and the user-turn chat template).
+    "0.6b": ModelSizeSpec(
+        factory=MultimodalLMConfig.molmo2_0_6B,
+        molmo2_id=None,
+        scratch_lm_id="Qwen/Qwen3-0.6B",
+        scratch_rope_theta=1_000_000,
+        molmo2_rope_theta=1_000_000,
+    ),
+    "1.7b": ModelSizeSpec(
+        factory=MultimodalLMConfig.molmo2_1_7B,
+        molmo2_id=None,
+        scratch_lm_id="Qwen/Qwen3-1.7B",
         scratch_rope_theta=1_000_000,
         molmo2_rope_theta=1_000_000,
     ),
@@ -511,8 +531,8 @@ class ExperimentConfig(Config):
     """The ``synth_receipts_en`` OCR source; used when it is in ``ocr_sources`` and
     ``ocr_rate > 0``."""
     model_size: str = MODEL_SIZE
-    """``"4b"`` or ``"8b"`` — selects the architecture, the base LM to initialise from, and
-    the released checkpoint used by ``--init_from=molmo2``."""
+    """``"4b"``, ``"8b"``, ``"0.6b"`` or ``"1.7b"`` — selects the architecture, the base LM to
+    initialise from, and the released checkpoint used by ``--init_from=molmo2``."""
     data_seed: int = 95818  # mm_olmo `data.seed`
     init_seed: int = 6198  # mm_olmo `seed`
     global_batch_size: int = GLOBAL_BATCH_SIZE
@@ -661,6 +681,10 @@ def _resolve_model_spec(overrides: List[str]) -> Tuple[str, str]:
         )
     if init_from not in INIT_FROM_CHOICES:
         raise OLMoConfigurationError(f"init_from={init_from!r} is not one of {INIT_FROM_CHOICES}")
+    if init_from == "molmo2" and MODEL_SIZES[model_size].molmo2_id is None:
+        raise OLMoConfigurationError(
+            f"model_size={model_size!r} has no released Molmo2 checkpoint; use init_from=scratch"
+        )
     return model_size, init_from
 
 
@@ -1076,6 +1100,7 @@ def _load_tokenizer(model_size: str, init_from: str):
     spec = MODEL_SIZES[model_size]
     if init_from == "scratch":
         return AutoTokenizer.from_pretrained(spec.scratch_lm_id)
+    assert spec.molmo2_id is not None  # `_resolve_model_spec` rejects sizes with no release
     return AutoTokenizer.from_pretrained(spec.molmo2_id, trust_remote_code=True)
 
 
@@ -1402,6 +1427,7 @@ def train(config: ExperimentConfig):
     if config.init_from == "scratch":
         _init_weights_from_scratch(model, config.model, spec.scratch_lm_id)
     elif config.init_from == "molmo2":
+        assert spec.molmo2_id is not None  # `_resolve_model_spec` rejects sizes with no release
         _init_weights_from_hf(model, config.model, spec.molmo2_id)
     else:  # unreachable via build_config, which validates; guards direct train() calls
         raise OLMoConfigurationError(
@@ -1485,6 +1511,9 @@ The v2 recipe (caption 0.5, v2 pointing and counting 0.25, OCR 0.25, no text-onl
 
 8B from-scratch run:
 › python {sys.argv[0]} launch molmo2-stage1-8b --model_size=8b
+
+Qwen3-1.7B baseline on the v3 recipe:
+› python {sys.argv[0]} launch molmo2-stage1-1.7b-v3 --model_size=1.7b --recipe=v3
 
 Audited (v2) pointing sources, dropping audit-failed points instead of marking them:
 › python {sys.argv[0]} launch molmo2-stage1-v2pts --pointing_data=v2 --pointing_v2.filter_audit=true

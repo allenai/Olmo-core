@@ -1,27 +1,20 @@
-"""Memory-efficient SDPA helpers for vision modules (ViT + connector)."""
+"""SDPA restricted to the flash / memory-efficient kernels, as in mm_olmo's ViT."""
 
 from contextlib import contextmanager
 from typing import Iterator, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-
-try:
-    from torch.nn.attention import SDPBackend, sdpa_kernel
-except ImportError:  # pragma: no cover
-    SDPBackend = None  # type: ignore
-    sdpa_kernel = None  # type: ignore
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
-def vision_sdpa_backends(*, cudnn_first: bool = False) -> List:
+def vision_sdpa_backends(*, cudnn_first: bool = False) -> List[SDPBackend]:
     """
     Backends matching mm_olmo ViT (flash + efficient; exclude cuDNN math pitfalls).
 
     :param cudnn_first: Put cuDNN's attention ahead of them (see
         :func:`vision_scaled_dot_product_attention`).
     """
-    if SDPBackend is None:
-        return []
     backends = [SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]
     return [SDPBackend.CUDNN_ATTENTION, *backends] if cudnn_first else backends
 
@@ -57,12 +50,19 @@ def cudnn_first_supported(device: torch.device) -> bool:
 
 
 @contextmanager
-def vision_sdpa_context(*, cudnn_first: bool = False) -> Iterator[None]:
-    backends = vision_sdpa_backends(cudnn_first=cudnn_first)
-    if backends and sdpa_kernel is not None:
-        with sdpa_kernel(backends, set_priority=cudnn_first):
-            yield
-    else:
+def vision_sdpa_context(
+    device: Optional[torch.device] = None, *, cudnn_first: bool = False
+) -> Iterator[None]:
+    """Restrict SDPA to the flash and memory-efficient backends (never cuDNN / math) on CUDA,
+    with cuDNN's attention ahead of them when ``cudnn_first``.
+
+    Other devices (e.g. CPU, where only the math kernel handles dropout) keep PyTorch's default
+    kernel selection.
+    """
+    if device is not None and device.type != "cuda":
+        yield
+        return
+    with sdpa_kernel(vision_sdpa_backends(cudnn_first=cudnn_first), set_priority=cudnn_first):
         yield
 
 
@@ -86,7 +86,7 @@ def vision_scaled_dot_product_attention(
         against a float32 reference. Older cuDNNs are skipped (:func:`cudnn_first_supported`).
     """
     cudnn_first = cudnn_first_on_sm100 and cudnn_first_supported(q.device)
-    with vision_sdpa_context(cudnn_first=cudnn_first):
+    with vision_sdpa_context(q.device, cudnn_first=cudnn_first):
         return F.scaled_dot_product_attention(
             q,
             k,
