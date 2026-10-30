@@ -155,3 +155,20 @@ metrics starting with `answer_` there (as it already skips `gradcomp_`).
   (full-ish context in the last third), not the extra tokens. Widening further (lw50) buys nothing more.
 - ReLoRA at f7808: -0.003 +- 0.002 CE vs the recipe (unsat-4 -0.008 +- 0.004), f1 +0.000; gap to dense f7808 shrinks
   from +0.008 to +0.005 +- 0.003. Within the recipe's seed noise until the seed-1 control lands.
+
+### Seed / commit noise at f7808 (recipe seed 1, this branch)
+
+| run | PFLOPs | 8-cell f1 | f1 FTM | unsat-4 f1 | CE 8-cell | CE FTM |
+|---|---|---|---|---|---|---|
+| recipe f7808 (tde, seed 0) | 1373 | 0.9243 | 2.2x | 0.8745 | 0.1457 | 1.8x |
+| recipe f7808 (tdf, seed 1) | 1371 | 0.9270 | 2.8x | 0.8827 | 0.1421 | 2.0x |
+| rl25 f7808 | 1371 | 0.9245 | 2.2x | 0.8805 | 0.1426 | 2.0x |
+
+Seed 1 - seed 0: CE -0.0035 +- 0.0026, f1 +0.0027; so the f1 FTM at 7,808 rows is 2.2-2.8x across two seeds and part
+of the "4.1 -> 2.2x" decay is one unlucky seed. rl25 - recipe seed 1: CE +0.0005 +- 0.0023 -> ReLoRA = no effect.
+Recipe (seed 1) - dense f7808: CE +0.0048 +- 0.0031.
+
+Preemption: lw35-f7808 and uw25-f7808 were preempted 4 and 3 times (restart from 0 each time). Added resume support
+(commit def4dce00: `--ephemeral-save-interval`, FLOP-meter + online-router fit in the trainer state, checkpointer
+`save_final`; verified on horton: resumed at step 3 with the router fit and FLOP total intact, no full-context step)
+and relaunched both as `...-f7808-tdf-lr1e-05-rs` (`--resume-every 150`); the original attempts keep running too.
