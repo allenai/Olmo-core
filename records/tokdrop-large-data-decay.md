@@ -172,3 +172,18 @@ Preemption: lw35-f7808 and uw25-f7808 were preempted 4 and 3 times (restart from
 (commit def4dce00: `--ephemeral-save-interval`, FLOP-meter + online-router fit in the trainer state, checkpointer
 `save_final`; verified on horton: resumed at step 3 with the router fit and FLOP total intact, no full-context step)
 and relaunched both as `...-f7808-tdf-lr1e-05-rs` (`--resume-every 150`); the original attempts keep running too.
+
+### Status at hand-back (2026-10-30 ~19:40 UTC)
+
+- The original lw35-f7808 / uw25-f7808 attempts (non-resumable, preempted 4x / 3x) were CANCELLED; the resumable
+  copies `f8k-mt4-lora64all32r20to7lw35-f7808-tdf-lr1e-05-rs` (01M66S2ZS1HFBF47J70H978ZGX) and
+  `f8k-mt4-lora64all32r25to10-f7808-tdf-lr1e-05-rs` (01M66S3SBB0C7GJAM2M2VXX72T) reached ~step 980 / 1952, wrote a
+  step-900 resume checkpoint, were preempted at 17:38 UTC and are PENDING on jupiter (they resume from step 900).
+- Not moved to jsteinhardt: the Qwen3.5 mt4f7808 shard, the eval rung files and the step-900 resume checkpoints are on
+  weka only (sneetches holds the Qwen3 `mt4f*q3` pools, not these), so a local run means a weka -> S3 -> /data staging
+  job and a restart from step 0.
+
+**Verdict so far:** at 3,904 rows late keep-widening is the only fix that beats the recipe (answer CE -0.007 +- 0.002
+at +8% FLOPs; it also beats the compute-matched uniform keep by 0.006 +- 0.002), but no arm moves the 8-cell f1 beyond
+noise (|delta f1| <= 0.004). ReLoRA does nothing at either size. The f7808 verdict (lw35 / uw25 vs the two recipe
+seeds, CE 0.1457 / 0.1421, f1 0.9243 / 0.9270) is pending on the two -rs runs.
