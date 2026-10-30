@@ -345,6 +345,10 @@ ARM_EXTRA.update({
                                       f"--st-otr-stages {a}:0.2,{b}:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
                                       "--st-otr-early-lora-blocks 36")
        for a, b in ((12, 24), (16, 24), (16, 27))},
+    # 2x2 control on Qwen3: the best split (12 -> 24) WITHOUT LoRA (full fine-tune under routing), cf. r20to7M7de0
+    "q3r20at12s24": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
+                     "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 12 "
+                     "--st-otr-stages 12:0.2,24:0.07"),
     # second stage at block 12 instead of 16 (same budgets)
     "lora64r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                         "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
