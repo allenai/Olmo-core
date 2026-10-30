@@ -1,0 +1,33 @@
+{
+ "runs": {
+  "f8k-mt4-lora64all32rnd20to7mv2-f1952-tdmv-lr1e-05": {
+   "ex": "01M660BDJE2ZQA3YE2AQQS20FA",
+   "views": 2,
+   "rows": 1952,
+   "steps_expected": 488,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05": {
+   "ex": "01M660CBN2GSBT9AQ954ZB1HGK",
+   "views": 3,
+   "rows": 1952,
+   "steps_expected": 488,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32rnd20to7mv2-f3904-tdmv-lr1e-05": {
+   "ex": "01M660D44KG044R94YW2CYDC8T",
+   "views": 2,
+   "rows": 3904,
+   "steps_expected": 976,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32rnd20to7mv3-f3904-tdmv-lr1e-05": {
+   "ex": "01M660DX5J61G6CSZ21MXAF1X3",
+   "views": 3,
+   "rows": 3904,
+   "steps_expected": 976,
+   "state": "S"
+  }
+ },
+ "evals": {}
+}
