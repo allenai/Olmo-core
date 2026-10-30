@@ -19,7 +19,7 @@
   "track": "Next (≥5×)",
   "who": "overnight agent (large-data fix)",
   "title": "Large-data decay: diagnosis on answer CE + ReLoRA merge-restart and late keep-widening",
-  "result": "Diagnosis: the 4.1→2.2× decay is mostly dense's ceiling: dense plateaus at 3,904 rows on f1 and answer CE, while the recipe keeps improving at a constant ≈0.01-nat gap (on oolong, nq@8k, outlier@2k). ReLoRA: no effect. Late keep-widening (35/15% last third) halves the CE gap at 3,904 rows (FTM on CE 2.7→3.2×) but f1 unchanged. Running: fixes at 7,808, recipe seed 1, uniform-25% control, 50/25% widening. Branch claude/tokdrop-decay-fix; collect with research/token_routing/decay_fix/ scripts.",
+  "result": "Decay is mostly dense's ceiling (dense flat from 3,904 rows; recipe gap ≈0.01 nats, no trend). Recipe seed 1 at 7,808 rows reads 2.8× vs 2.2× (seed noise). ReLoRA: null at both sizes. Late widening 35/15%: CE −0.0069±0.0022 vs recipe and −0.0060 vs uniform keep at equal FLOPs, f1 unchanged; 50/25%: CE −0.0045. Pending: late widening + uniform keep at 7,808 (preempted, resumable). Branch claude/tokdrop-decay-fix.",
   "match": [
    "tdf",
    "dfce",
