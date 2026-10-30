@@ -163,7 +163,7 @@ def row_loss(model, row, ckpt=True):
     """Summed answer CE of one row; the embedding output is a leaf so every block's linears get output grads.
     ``ckpt``: every block runs under non-reentrant activation checkpointing (fits a 40 GB A100); the Tap then takes
     each linear's input from the backward-time recompute."""
-    from torch.utils.checkpoint import checkpoint
+    from torch.utils.checkpoint import checkpoint, set_checkpoint_early_stop
 
     x = torch.from_numpy(row["ids"]).cuda()
     lm = torch.from_numpy(row["lmask"]).cuda()
@@ -171,9 +171,12 @@ def row_loss(model, row, ckpt=True):
     tgt = x[pred + 1]
     _, _, abk, pbk, lmk = model._prepare_inputs(x[None], None, logits_to_keep=pred[None])
     h = model.embeddings(x[None]).detach().requires_grad_(True)
-    for key, block in model.blocks.items():
-        kw = {**abk, **pbk.get(int(key), {})}
-        h = checkpoint(lambda hh, b=block, k=kw: b(hh, **k), h, use_reentrant=False) if ckpt else block(h, **kw)
+    # early stop OFF: the recompute must re-run every linear (a block's last projection, w2, saves nothing, so an
+    # early-stopping recompute would never call it and its input would never reach the Tap)
+    with set_checkpoint_early_stop(False):
+        for key, block in model.blocks.items():
+            kw = {**abk, **pbk.get(int(key), {})}
+            h = checkpoint(lambda hh, b=block, k=kw: b(hh, **k), h, use_reentrant=False) if ckpt else block(h, **kw)
     return F.cross_entropy(model.lm_head(h, **lmk)[0].float(), tgt, reduction="sum"), int(pred.numel())
 
 
