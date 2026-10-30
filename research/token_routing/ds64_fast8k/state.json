@@ -265,6 +265,87 @@
    "steps_expected": 122,
    "gpus": 4,
    "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7sl-f1952st3-sbw-lr1e-05": {
+   "ex": "01M65WY3GM3DMRVTZFTWBGMZGJ",
+   "task": "mt4",
+   "arm": "lora64all32r20to7sl",
+   "budget": "f1952@3",
+   "steps_expected": 3,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbt20-f1952st3-sbw-lr1e-05": {
+   "ex": "01M65WYZ429A9WJ8245103K5JX",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbt20",
+   "budget": "f1952@3",
+   "steps_expected": 3,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbt20-f1952-sbw-lr1e-05": {
+   "ex": "01M65X36M40BEV7BA497VZB3DW",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbt20",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbt20-f3904-sbw-lr1e-05": {
+   "ex": "01M65X4BY4HE09KTP85DYYYC22",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbt20",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbe95a-f1952-sbw-lr1e-05": {
+   "ex": "01M65X5F1GC6MXGH6V1K95NTDV",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbe95a",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbe95a-f3904-sbw-lr1e-05": {
+   "ex": "01M65X6DQ7S50ECA6PAT9PWJ28",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbe95a",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbt20sd1-f1952-sbw-lr1e-05": {
+   "ex": "01M65X7Q0WYE2VQZNMZRFJPNGR",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbt20",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsbe95asd1-f1952-sbw-lr1e-05": {
+   "ex": "01M65X8JTRZQ5E1FPF5G5PYGHW",
+   "task": "mt4",
+   "arm": "lora64all32r20to7slsbe95a",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32r20to7slsd1-f1952-sbw-lr1e-05": {
+   "ex": "01M65X9EJQ6HDWD4SHDVH2YWH8",
+   "task": "mt4",
+   "arm": "lora64all32r20to7sl",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
   }
  },
  "evals": {
