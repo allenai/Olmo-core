@@ -27,7 +27,7 @@
    "budget": "f7808",
    "steps_expected": 1952,
    "gpus": 2,
-   "state": "S"
+   "state": "R"
   },
   "f8k-mt4-dense-f3904-q3-lr5e-06": {
    "ex": "01M64XNAQ5ZWD9P261XYH9KC8T",
@@ -335,7 +335,8 @@
    "budget": "f1952",
    "steps_expected": 488,
    "gpus": 4,
-   "state": "S"
+   "state": "FAILED",
+   "rc": null
   }
  },
  "evals": {
@@ -579,13 +580,13 @@
   },
   "f8k-mt4-dense-f488-q306b-lr5e-06-evoutlier": {
    "ex": "01M65ZNW4WE1NG3R6QBC8HHS00",
-   "state": "R",
+   "state": "S",
    "train_run": "f8k-mt4-dense-f488-q306b-lr5e-06",
    "task": "outlier"
   },
   "f8k-mt4-dense-f488-q306b-lr5e-06-evoolong": {
    "ex": "01M65ZPQ08FJRNCTSXSAFTCEJA",
-   "state": "R",
+   "state": "S",
    "train_run": "f8k-mt4-dense-f488-q306b-lr5e-06",
    "task": "oolong"
   },
@@ -871,9 +872,10 @@
   },
   "f8k-mt4-q3lora64all36r20at12s24-f3904-q38b-lr1e-05-evcontradiction": {
    "ex": "01M662Q8WY8X5NW04EJ2CVX1SB",
-   "state": "R",
+   "state": "DONE",
    "train_run": "f8k-mt4-q3lora64all36r20at12s24-f3904-q38b-lr1e-05",
-   "task": "contradiction"
+   "task": "contradiction",
+   "rc": 0
   },
   "f8k-mt4-q3lora64all36r20at12s24-f3904-q38b-lr1e-05-evnq": {
    "ex": "01M662R2M936VN9PCWNA06A2T7",
@@ -954,10 +956,11 @@
   },
   "f8k-mt4-dense-f3904-q317b-lr5e-06-evcontradiction": {
    "ex": "01M665GRGXBYWNQVMSXHFRW4T0",
-   "state": "S",
+   "state": "DONE",
    "train_run": "f8k-mt4-dense-f3904-q317b-lr5e-06",
    "task": "contradiction",
-   "note": "relaunch: gcloud DNS failure"
+   "note": "relaunch: gcloud DNS failure",
+   "rc": 0
   },
   "f8k-mt4-dense-f3904-q317b-lr5e-06-evnq": {
    "ex": "01M664WM0Y2PBBS9PAGGH4VXJR",
