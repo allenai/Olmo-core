@@ -154,9 +154,11 @@ def main():
                       "kwargs:", {k: (tuple(v.shape), v.requires_grad) for k, v in kwargs.items() if torch.is_tensor(v)},
                       flush=True)
             hp = b0.register_forward_pre_hook(pre, with_kwargs=True)
-            out = model(ids, labels=labels)
+            with torch.autograd.detect_anomaly(check_nan=False):
+                out = model(ids, labels=labels)
             hd.remove(); hp.remove()
-            (cap["h"].float().sum()).backward()
+            with torch.autograd.detect_anomaly(check_nan=False):
+                (cap["h"].float().sum()).backward()
             print("SIMPLE_OK nomv_early"); return
         ctx = {"layer": 1, "repeat": False, "h7": None}
         model._mv_ctx = ctx
