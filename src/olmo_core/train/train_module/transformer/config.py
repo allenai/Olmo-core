@@ -551,8 +551,6 @@ class OLMoDDPTrainModuleConfig(TrainModuleConfig):
         :param device: The device to train on.
         :param eval_only: If ``True``, build the train module without an optimizer (eval-only).
         """
-        from .ddp_train_module import OLMoDDPTrainModule
-
         kwargs = self.as_dict(exclude_none=True, recurse=False)
         if (max_grad_norm := kwargs.pop("max_grad_norm", None)) is not None:
             kwargs["optim"] = replace(self.optim, max_grad_norm=max_grad_norm)
@@ -568,9 +566,15 @@ class OLMoDDPTrainModuleConfig(TrainModuleConfig):
         if grad_accum_in_fp32 is not None and (dp_config := kwargs.get("dp_config")) is not None:
             kwargs["dp_config"] = replace(dp_config, accumulate_grads_in_fp32=grad_accum_in_fp32)
 
-        return OLMoDDPTrainModule(
+        return self._build_train_module(
             model=model,
             device=device,
             eval_only=eval_only,
             **kwargs,
         )
+
+    def _build_train_module(self, **kwargs) -> "OLMoDDPTrainModule":
+        """Construct the train module; subclasses can build a subclass of it instead."""
+        from .ddp_train_module import OLMoDDPTrainModule
+
+        return OLMoDDPTrainModule(**kwargs)
