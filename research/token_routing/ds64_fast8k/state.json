@@ -227,7 +227,7 @@
    "budget": "f7808",
    "steps_expected": 1952,
    "gpus": 4,
-   "state": "R"
+   "state": "CANCELLED"
   },
   "f8k-mt4-lora64all32r20to7-f1952-tds9b-lr1e-05": {
    "ex": "01M657WSJZZFZHJV5EQX4EAWHJ",

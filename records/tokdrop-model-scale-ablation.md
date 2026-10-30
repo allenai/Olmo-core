@@ -5,7 +5,7 @@ updated: 2026-10-30
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: current (9B dense f7808 in flight; not needed for the headline)
+status: current (9B dense f7808 dropped: repeatedly preempted on jupiter; not needed for the headline)
 superseded_by:
 artifact: https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (hub; this ablation is a section there, no separate page)
 summary: At matched data the recipe's dense-FLOPs-to-match grows with scale (1,952 / 3,904 fresh rows/task - 0.8B 1.7 / 1.9x, 2B 2.4 / 3.2x, 4B 4.1 / 3.7x, 9B 4.8 / 4.1x). Small-model dense saturates early (0.8B plateaus at 0.743), and at 7,808 rows/task the 0.8B recipe passes it (0.806, 2 seeds) by routing, not LoRA (dense+LoRA 0.757). The recipe costs 0.23-0.25x dense FLOPs/step and ~0.5-0.6x peak memory at every scale; it is less seed-stable below 4B.
@@ -55,7 +55,7 @@ replicates averaged first), divided by the recipe's PF. ">" = the recipe beats d
 |---|---|---|---|---|
 | 1,952 | 1.7× (3 seeds) | 2.4× (2 seeds) | 4.1× (extrapolated below the dense range) | 4.8× (2 seeds) |
 | 3,904 | 1.9× (2 seeds) | 3.2× (3 seeds) | 3.7× | 4.1× |
-| 7,808 | **>4.2×** (2 seeds, above dense's plateau) | 2.9× | 2.2× | — |
+| 7,808 | **>4.2×** (2 seeds, above dense's plateau) | 2.9× | 2.2× | not run (dense f7808 dropped) |
 
 The hub's 4B numbers (3.9 / 3.0 / 2.0×) used a different dense aggregation; the 4B column above is the same
 method as the other columns.
