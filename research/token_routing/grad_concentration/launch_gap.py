@@ -19,6 +19,9 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, HERE)
 from launch import CKPTS, OPS, PY  # noqa: E402
 
+CKPTS = {**CKPTS, "recipe": (f"/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/"
+                             f"f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05", 488, 1952)}
+
 W = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns"
 GAP_DIR = f"{W}/gradgap"
 STATE = os.path.join(HERE, "state_gap.json")

@@ -399,6 +399,32 @@ def explore_mask(body, frac_budget, gen):
     return m
 
 
+# -------------------------------------------------------------------------------------------------------- lora
+def merge_lora(model, lins, ckpt_dir, scale):
+    """A LoRA checkpoint (the recipe: ``lora_A`` / ``lora_B`` on every block linear, early_lora.py) loads its base
+    weights through the tolerant base load; merge the adapters into them (W += scale * B A). Returns #merged."""
+    from olmo_core.distributed.checkpoint import get_checkpoint_metadata, load_keys
+
+    keys = [k for k in get_checkpoint_metadata(ckpt_dir).state_dict_metadata if k.endswith("lora_A")]
+    if not keys:
+        return 0
+    n = 0
+    for ln in lins:
+        pname = f"blocks.{ln.block}.{ln.name.split('.', 1)[1]}"
+        ka = [k for k in keys if k.endswith(f"{pname}.lora_A")]
+        if len(ka) != 1:
+            continue
+        A, Bm = load_keys(ckpt_dir, [ka[0], ka[0][:-1] + "B"])
+        with torch.no_grad():
+            W = ln.mod.weight
+            W.copy_((W.float() + scale * (Bm.float().cuda() @ A.float().cuda())).to(W.dtype))
+        n += 1
+    log(f"merged {n} LoRA adapters (scale {scale}) of {len(keys)} in the checkpoint")
+    if n != len(keys):
+        raise SystemExit(f"LoRA merge matched {n} of {len(keys)} adapters")
+    return n
+
+
 # -------------------------------------------------------------------------------------------------------- adam
 def adam_factors(ckpt_dir, lins, eps=1e-8):
     """Rank-1 log-additive fit of the Adam preconditioner D = (v + eps^2)^-1/2 per linear: log D_ij ~ a_i + b_j.
@@ -502,6 +528,7 @@ def main():
     ap.add_argument("--exact", default="b16.attention.w_out,b20.feed_forward.w2")
     ap.add_argument("--attn-backend", default="flash_2")
     ap.add_argument("--no-ckpt", action="store_true")
+    ap.add_argument("--lora-scale", type=float, default=32.0, help="LoRA checkpoints (recipe): W += scale * B A")
     ap.add_argument("--max-batches", type=int, default=0)
     ap.add_argument("--sels", default="", help="debug: comma list of selections (default all)")
     ap.add_argument("--save-dir", required=False, default="")
@@ -513,6 +540,7 @@ def main():
 
     model = P.build_model(P.find_ckpt(a.ckpt), a.attn_backend)
     lins = P.list_linears(model)
+    merged = merge_lora(model, lins, P.find_ckpt(a.ckpt), a.lora_scale)
     adam, adam_diag = None, {}
     if a.adam_factors:
         blob = torch.load(a.adam_factors)
