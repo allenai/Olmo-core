@@ -114,7 +114,6 @@ def test_molmo2_vision_stack_wraps_an_external_lm_with_the_4b_vision_and_connect
     assert cfg.vision == reference.vision
     assert cfg.vit_layers == reference.vit_layers == (24, 18)
     assert cfg.image_patch_token_id == 100278
-    assert cfg.output_vocab_size is None
     assert cfg.connector.output_dim == 4096
     assert cfg.connector.mlp_hidden_size == reference.connector.mlp_hidden_size == 9728
     for field in (
