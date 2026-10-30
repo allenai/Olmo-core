@@ -65,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--model-scale",
         required=True,
-        choices=["0.8b", "2b", "4b", "9b", "27b", "7b", "7b-hybrid", "7b-noswa", "3b", "8b"],
+        choices=["0.6b", "0.8b", "1.7b", "2b", "4b", "9b", "27b", "7b", "7b-hybrid", "7b-noswa", "3b", "8b"],
         help="4b/9b for Qwen, 7b for OLMo-3 (7b-hybrid = allenai/Olmo-Hybrid-7B, the same-size "
         "same-data linear-attention twin used as the hybrid-vs-not control; 7b-noswa is the "
         "superseded no-sliding-window variant). 0.8b/2b were originally local-only (hence the old "
