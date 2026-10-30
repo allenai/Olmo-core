@@ -3,7 +3,10 @@ from glob import glob
 import pytest
 
 from olmo_core.io import (
+    _http_auth_headers,
+    _RetryableHttpClient,
     _s3_retry_condition,
+    add_cached_path_clients,
     copy_dir,
     copy_file,
     deserialize_from_tensor,
@@ -19,6 +22,42 @@ from olmo_core.io import (
 def test_serde_from_tensor():
     data = {"a": (1, 2)}
     assert deserialize_from_tensor(serialize_to_tensor(data)) == data
+
+
+def test_retryable_http_client_is_used_by_cached_path():
+    from cached_path.schemes import get_scheme_client
+
+    add_cached_path_clients()
+
+    # cached-path resolves http(s) URLs to our client, and still forwards custom headers to it
+    # (which it only does for clients derived from its own 'HttpClient').
+    client = get_scheme_client(
+        "https://huggingface.co/buckets/allenai/ai2-llm/resolve/checkpoints/OLMo25/step0/config.json",
+        headers={"Authorization": "Bearer hf_secret"},
+    )
+    assert isinstance(client, _RetryableHttpClient)
+    assert client.headers == {"Authorization": "Bearer hf_secret"}
+
+    # Its session retries rate-limited responses, honoring 'Retry-After'.
+    from requests.adapters import HTTPAdapter
+
+    adapter = client._session().adapters["https://"]
+    assert isinstance(adapter, HTTPAdapter)
+    assert 429 in adapter.max_retries.status_forcelist
+    assert adapter.max_retries.respect_retry_after_header
+
+
+def test_http_auth_headers(monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    hf_url = "https://huggingface.co/buckets/allenai/ai2-llm/resolve/checkpoints/OLMo25/step0/config.json"
+
+    # No token set -> no header, even on a registered host.
+    assert _http_auth_headers(hf_url) == {}
+
+    # Token set -> bearer header, but only for the registered host (never leaked to other hosts).
+    monkeypatch.setenv("HF_TOKEN", "hf_secret")
+    assert _http_auth_headers(hf_url) == {"Authorization": "Bearer hf_secret"}
+    assert _http_auth_headers("https://storage.googleapis.com/ai2-llm/x") == {}
 
 
 def test_s3_retry_condition_includes_ssl_errors():
