@@ -5,17 +5,18 @@ updated: 2026-10-30
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: current (9B dense curve in flight)
+status: current (9B dense f7808 in flight; not needed for the headline)
 superseded_by:
 artifact: https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (hub; this ablation is a section there, no separate page)
-summary: At matched small data the recipe's dense-FLOPs-to-match grows with scale (1.7 / 1.9x at 0.8B, 2.4 / 3.2x at 2B, 4.1 / 3.7x at 4B on 1,952 / 3,904 fresh rows/task). Small-model dense saturates early (0.8B plateaus at 0.743), and at 7,808 rows/task the 0.8B recipe passes it (0.806, 2 seeds) by routing, not LoRA (dense+LoRA 0.757). The recipe costs 0.23-0.25x dense FLOPs/step and ~0.5-0.6x peak memory at every scale; it is less seed-stable below 4B.
+summary: At matched data the recipe's dense-FLOPs-to-match grows with scale (1,952 / 3,904 fresh rows/task - 0.8B 1.7 / 1.9x, 2B 2.4 / 3.2x, 4B 4.1 / 3.7x, 9B 4.8 / 4.1x). Small-model dense saturates early (0.8B plateaus at 0.743), and at 7,808 rows/task the 0.8B recipe passes it (0.806, 2 seeds) by routing, not LoRA (dense+LoRA 0.757). The recipe costs 0.23-0.25x dense FLOPs/step and ~0.5-0.6x peak memory at every scale; it is less seed-stable below 4B.
 ---
 
 # Token-drop recipe vs dense across model scale
 
 **Verdict.** On the fresh 4-task pools, the recipe's gain over dense **grows with model size at a fixed
-data budget**: dense needs 1.7 / 1.9× the FLOPs to match it at 0.8B, 2.4 / 3.2× at 2B and 4.1 / 3.7× at 4B (1,952 /
-3,904 rows/task). At 7,808 rows the order reverses (>4.2× / 2.9× / 2.2×) because dense saturates. Smaller models' lower ceiling does **not** cap the recipe: it caps small-model *dense*.
+data budget**: dense needs 1.7 / 1.9× the FLOPs to match it at 0.8B, 2.4 / 3.2× at 2B, 4.1 / 3.7× at 4B and 4.8 / 4.1× at
+9B (1,952 / 3,904 rows/task); at 9B the recipe beats the full dense f1952 run at 0.23× its FLOPs (two seeds,
+0.902 / 0.903 vs 0.900). At 7,808 rows the order reverses (>4.2× / 2.9× / 2.2×) because dense saturates. Smaller models' lower ceiling does **not** cap the recipe: it caps small-model *dense*.
 0.8B dense plateaus at 0.743 from 3,904 rows on, while the 0.8B recipe keeps learning and reaches 0.806 at
 7,808 rows (two seeds, 0.806 / 0.807). That crossing comes from routing (outlier@8k 0.51 vs 0.30), not from
 LoRA (dense + whole-model LoRA, no routing: 0.757). The recipe is less seed-stable below 4B (0.8B
@@ -52,8 +53,8 @@ replicates averaged first), divided by the recipe's PF. ">" = the recipe beats d
 
 | rows/task | 0.8B | 2B | 4B | 9B |
 |---|---|---|---|---|
-| 1,952 | 1.7× (3 seeds) | 2.4× (2 seeds) | 4.1× (extrapolated below the dense range) | pending |
-| 3,904 | 1.9× (2 seeds) | 3.2× (3 seeds) | 3.7× | pending |
+| 1,952 | 1.7× (3 seeds) | 2.4× (2 seeds) | 4.1× (extrapolated below the dense range) | 4.8× (2 seeds) |
+| 3,904 | 1.9× (2 seeds) | 3.2× (3 seeds) | 3.7× | 4.1× |
 | 7,808 | **>4.2×** (2 seeds, above dense's plateau) | 2.9× | 2.2× | — |
 
 The hub's 4B numbers (3.9 / 3.0 / 2.0×) used a different dense aggregation; the 4B column above is the same
@@ -91,8 +92,11 @@ Mean8 = 8-cell mean (eval_size 500 per cell; per-cell binomial SE ≈ ±0.02 at 
 | 2B | recipe | 1952 | 3e-5 | 1 | 167 | 0.342 | 21.6 | 0.680 | 0.202 | 0.817 |
 | 4B | dense | 1952 / 3904 / 5856 / 7808 | 5e-6 | 1 | 1531 / 3063 / 4595 / 6128 | 3.14 | 67.7 (2 GPU) | 0.888 / 0.926 / 0.928 / 0.931 | 0.817 / 0.976 / 0.981 / 0.987 | 0.973 / 0.983 / 0.983 / 0.990 |
 | 4B | recipe | 1952 / 3904 / 7808 | 1e-5 | 1 | 345 / 688 / 1373 | 0.71 | 31.9 | 0.883 / 0.915 / 0.924 | 0.862 / 0.970 / 0.989 | 0.959 / 0.977 / 0.987 |
-| 9B | recipe | 1952 / 3904 | 1e-5 | 1 | 632 / 1262 | 1.29 | 38.2 (4 GPU) | 0.902 / 0.920 | 0.873 / 0.977 | 0.963 / 0.983 |
-| 9B | dense | 1952 | 5e-6 | 1 | 2792 | 5.72 | 64.2 (4 GPU) | pending | | |
+| 9B | recipe | 1952 | 1e-5 | 2 | 632 | 1.29 | 38.2 (4 GPU) | 0.902 / 0.903 | 0.873 / 0.905 | 0.963 / 0.964 |
+| 9B | recipe | 3904 | 1e-5 | 1 | 1262 | 1.29 | 37.8 (4 GPU) | 0.920 | 0.977 | 0.983 |
+| 9B | dense | 1952 (122) | 5e-6 | 1 | 702 | 5.76 | 136 (2×H200) | 0.725 | 0.238 | 0.895 |
+| 9B | dense | 1952 (244) | 5e-6 | 1 | 1398 | 5.73 | 136 (2×H200) | 0.818 | 0.576 | 0.936 |
+| 9B | dense | 1952 / 3904 | 5e-6 | 1 | 2792 / 5590 | 5.72 | 64.2 (4 GPU) | 0.900 / 0.923 | 0.869 / 0.979 | 0.979 / 0.989 |
 
 Metered FLOPs per step, recipe / dense: 0.241 (0.8B), 0.247 (2B), 0.225 (4B), 0.226 (9B). The 24-block
 models drop later in relative depth (29% vs 22%) but adapters skip more weight-gradient work, so the ratio
@@ -112,9 +116,10 @@ barely moves. Peak memory, recipe / dense: 0.60 (0.8B), 0.57 (2B), 0.47 (4B), 0.
 3. **It is routing, not LoRA.** 0.8B dense + whole-model LoRA (no routing) at 7,808 rows scores 0.757, a
    hair above dense (0.743) and with the same outlier@8k (0.30); the recipe reaches 0.806 with outlier@8k
    0.51. This matches the 4B 2×2 (`records/lora-vs-routing-ablation.md`).
-4. **Variance.** Recipe seeds disagree far more than dense seeds below 4B: 0.8B f1952 0.590–0.655
-   (contradiction@8k 0.38–0.76), 2B f3904 0.786–0.836 (outlier@8k 0.48–0.63); dense seeds agree within
-   0.015. Single-seed recipe numbers at small scale are ±0.03 on the 8-cell mean.
+4. **Variance shrinks with scale.** Recipe seeds disagree far more than dense seeds below 4B: 0.8B f1952
+   0.590–0.655 (contradiction@8k 0.38–0.76), 2B f3904 0.786–0.836 (outlier@8k 0.48–0.63); at 9B two seeds
+   give 0.902 / 0.903. Dense seeds agree within 0.015 at every size. Single-seed recipe numbers at 0.8B / 2B
+   are ±0.03 on the 8-cell mean.
 5. **LR is not the confound.** Higher LRs are worse at both small sizes, for dense (2e-5) and for the recipe
    (3e-5), as at 4B.
 
@@ -123,7 +128,12 @@ barely moves. Peak memory, recipe / dense: 0.60 (0.8B), 0.57 (2B), 0.47 (4B), 0.
 - One task mix (mt4), the 8k fast screen, not the 32k ladder.
 - Dense curves are single-seed except 0.8B/2B f1952 and 2B f3904 (2 seeds).
 - 4B has no dense step-cut points, so its f1952 ratio is extrapolated below the dense range.
-- Peak memory is per GPU and not comparable across GPU counts (9B and 4B dense f5856/f7808 ran on 4 GPUs).
+- Peak memory is per GPU and not comparable across GPU counts (9B on Beaker and 4B dense f5856/f7808 ran on 4
+  GPUs; the local 9B cut points and seed ran on 2×H200).
+- Scores are read from ops with metric ∈ {f1, score}. Since 2026-10-30 other sessions also record teacher-forced
+  `answer_ce` / `answer_top1` rows at eval_size 500 on the same train runs. A collector that keeps "the
+  largest eval per (task, rung)" without a metric filter (e.g. the hub's `pareto_points.json` regenerated
+  10-30 06:52) mixes them in. 4B 8-cell means then read 0.14–0.17.
 - The 24-block stage-1 depth (block 7 = 29%) is not the 22% used at 4B. An earlier stage 1 (block 3) puts a
   full-attention block at 12.5%, which the 4B fidelity study found biased.
 

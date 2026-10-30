@@ -25,6 +25,8 @@ CAMPAIGNS = {"-tds08b": "0.8b", "-tds2b": "2b", "-tds9b": "9b"}
 RECIPE = {"0.8b": "lora64all24r20to7s12", "2b": "lora64all24r20to7s12", "4b": "lora64all32r20to7", "9b": "lora64all32r20to7"}
 NAME = re.compile(r"f8k-mt4-(.+)-f(\d+)(?:st(\d+))?-(tds\w+|tde)-lr([\d.e-]+)$")
 LOGDIR = os.path.join(HERE, "results", "scale_logs")
+#: the generation metric of each task's ladder eval (f1; oolong reports `score`)
+GEN_METRICS = ("f1", "score")
 
 
 def ops_scores(run):
@@ -32,6 +34,8 @@ def ops_scores(run):
                          timeout=120).stdout
     best = {}
     for r in json.loads(out) if out.strip().startswith("[") else []:
+        if r.get("metric") not in GEN_METRICS:  # other sessions add teacher-forced answer_ce / answer_top1 rows
+            continue
         k = (r["task"], r["rung"])
         if (r.get("eval_size") or 0) >= 500 and (k not in best or r["eval_size"] > best[k][1]):
             best[k] = (r["value"], r["eval_size"])
@@ -117,6 +121,10 @@ def main():
         arm, n, _, camp, lr = m.groups()
         rows.append(dict(scale=CAMPAIGNS["-" + camp], run=d, arm=arm, rows=int(n), lr=float(lr), pf=pf, steps=steps,
                          mem=mem, wall=wall, ex=f"local:{d}", cells=ops_scores(d)))
+    seen = {}
+    for r in rows:
+        seen.setdefault(r["run"], r)  # Beaker (state.json) rows come first; a same-name local twin is dropped
+    rows[:] = list(seen.values())
     P = json.load(open(PTS_4B))
     cells = {}
     for p in P["points"]:
@@ -129,7 +137,7 @@ def main():
         pf, steps, mem, wall = beaker_train(r["beaker_ex"]) if r.get("beaker_ex") else (r["pf"], r["steps"], None, None)
         rows.append(dict(scale="4b", run=run, arm=m.group(1), rows=int(m.group(2)), lr=r["lr"], pf=pf or r["pf"],
                          steps=steps or r["steps"], mem=mem, wall=wall or r.get("train_seconds"), ex=r.get("beaker_ex"),
-                         cells=cells.get(run, {})))
+                         cells=ops_scores(run)))  # ops, not pareto_points.json (which can carry non-task metrics)
     for r in rows:
         r["seed"] = int(re.search(r"sd(\d+)$", r["arm"]).group(1)) if re.search(r"sd\d+$", r["arm"]) else 0
         r["arm"] = re.sub(r"sd\d+$", "", r["arm"])  # seed replicates count as the same arm
