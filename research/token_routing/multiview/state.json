@@ -13,7 +13,8 @@
    "views": 3,
    "rows": 1952,
    "steps_expected": 488,
-   "state": "S"
+   "state": "DONE",
+   "actual_pflops": 622.6
   },
   "f8k-mt4-lora64all32rnd20to7mv2-f3904-tdmv-lr1e-05": {
    "ex": "01M660D44KG044R94YW2CYDC8T",
@@ -84,6 +85,30 @@
   "f8k-mt4-lora64all32rnd20to7mv1-f1952-tdmv-lr1e-05-evoolong": {
    "ex": "01M66D2DF411HAGMWSJ0ZSVW04",
    "train_run": "f8k-mt4-lora64all32rnd20to7mv1-f1952-tdmv-lr1e-05",
+   "task": "oolong",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05-evcontradiction": {
+   "ex": "01M66GDSWPMA8AGEYJB3YDPX19",
+   "train_run": "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05",
+   "task": "contradiction",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05-evnq": {
+   "ex": "01M66GEKW26K8BBHF8ZD1GZKNE",
+   "train_run": "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05",
+   "task": "nq",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05-evoutlier": {
+   "ex": "01M66GFFBZYV3K3CFRH89C9SPP",
+   "train_run": "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05",
+   "task": "outlier",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05-evoolong": {
+   "ex": "01M66GG8A1QS4TNCBGT1NE2TKJ",
+   "train_run": "f8k-mt4-lora64all32rnd20to7mv3-f1952-tdmv-lr1e-05",
    "task": "oolong",
    "state": "S"
   }
