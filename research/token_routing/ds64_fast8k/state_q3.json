@@ -118,6 +118,195 @@
    "gpus": 2,
    "state": "DONE",
    "rc": 0
+  },
+  "f8k-mt4-dense-f1952-q317b-lr5e-06": {
+   "ex": "01M65SY00GS5C3V0PBGZMFNNCQ",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f3904-q317b-lr5e-06": {
+   "ex": "01M65SYR4TWHBHJVDFPWGEPEBC",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f488-q317b-lr5e-06": {
+   "ex": "01M65SZGC600H49AXTEHKBA10K",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f488",
+   "steps_expected": 122,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f976-q317b-lr5e-06": {
+   "ex": "01M65T0A3R3M6J1SPYN8K6HJE1",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f976",
+   "steps_expected": 244,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1464-q317b-lr5e-06": {
+   "ex": "01M65T12VY2SFZWCVW34QFY9WF",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all28r20at9s19-f1952-q317b-lr1e-05": {
+   "ex": "01M65T1V7M8HHKWZEDVK45JV3M",
+   "task": "mt4",
+   "arm": "q3lora64all28r20at9s19",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all28r20at9s19-f3904-q317b-lr1e-05": {
+   "ex": "01M65T2N6BWG8V07Z1E4KQ2CYP",
+   "task": "mt4",
+   "arm": "q3lora64all28r20at9s19",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1952-q38b-lr5e-06": {
+   "ex": "01M65T5AH833C09636D6PH65FX",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 4,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f3904-q38b-lr5e-06": {
+   "ex": "01M65T65ADCKABEJF18STB3NRZ",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 4,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f488-q38b-lr5e-06": {
+   "ex": "01M65T6Z0539W802WD82GVWB6K",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f488",
+   "steps_expected": 122,
+   "gpus": 4,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f976-q38b-lr5e-06": {
+   "ex": "01M65T7S6WXFNH47HPVZGZFE1H",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f976",
+   "steps_expected": 244,
+   "gpus": 4,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all36r20at12s24-f1952-q38b-lr1e-05": {
+   "ex": "01M65T8HY12ATNBYRGYXAN7CQ7",
+   "task": "mt4",
+   "arm": "q3lora64all36r20at12s24",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 4,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all36r20at12s24-f3904-q38b-lr1e-05": {
+   "ex": "01M65T9AFKDQN7S8AGKMMRJFXY",
+   "task": "mt4",
+   "arm": "q3lora64all36r20at12s24",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 4,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1952-q306b-lr5e-06": {
+   "ex": "01M65TAQ2XDEBY9HZJ6KC0Y74J",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f3904-q306b-lr5e-06": {
+   "ex": "01M65TBQ0Z672GF55VD645E0JD",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f488-q306b-lr5e-06": {
+   "ex": "01M65TCGVDSCZJJQG9667NKS02",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f488",
+   "steps_expected": 122,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f976-q306b-lr5e-06": {
+   "ex": "01M65TD9PTV76JTWKA1CXD4TDA",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f976",
+   "steps_expected": 244,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1464-q306b-lr5e-06": {
+   "ex": "01M65TE8RZ7J1TW853EDJAGRSP",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1464",
+   "steps_expected": 366,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-dense-f1952-q306b-lr1e-05": {
+   "ex": "01M65TF9ERA0945P8D1E9EBZ3X",
+   "task": "mt4",
+   "arm": "dense",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all28r20at9s19-f1952-q306b-lr1e-05": {
+   "ex": "01M65TG1KD2WTQP3ZQCJ2HHQX5",
+   "task": "mt4",
+   "arm": "q3lora64all28r20at9s19",
+   "budget": "f1952",
+   "steps_expected": 488,
+   "gpus": 2,
+   "state": "S"
+  },
+  "f8k-mt4-q3lora64all28r20at9s19-f3904-q306b-lr1e-05": {
+   "ex": "01M65TGXD3QBF05748F5N7BRB6",
+   "task": "mt4",
+   "arm": "q3lora64all28r20at9s19",
+   "budget": "f3904",
+   "steps_expected": 976,
+   "gpus": 2,
+   "state": "S"
   }
  },
  "evals": {
