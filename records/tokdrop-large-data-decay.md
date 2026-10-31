@@ -215,3 +215,27 @@ decay is gone (>= 4.1x on f1, >= 3.1x on CE, vs 2.2-2.8x / 1.8-2.0x for the reci
 both seeds, narrowly vs seed 1 (one run; f1 SE of an 8-cell mean ~0.004), and part of the f1 gain is outlier@2k (0.998),
 the noisy cell. The uniform keep at the same FLOPs also helps f1 (+0.008 / +0.005) but its CE gain does not survive
 seed 1 (-0.002 +- 0.002), so the timing matters. Next: a second seed of lw35 at f7808, and lw35 at a larger pool.
+
+## lw35 seed 2 at f7808 (2026-10-31; eval_size 500 per cell, no-cot)
+
+`f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs` (Beaker 01M67E9NTTQVT7YY2BDHYEMAKE): one job, never preempted
+(steps 1..1952 continuous, the usual single dense warmup step only, no resume needed), 1489.9 PF.
+
+| run | PFLOPs | 8-cell f1 | f1 FTM | unsat-4 f1 | CE 8-cell | CE FTM |
+|---|---|---|---|---|---|---|
+| lw35 seed 0 | 1490 | 0.9335 | > 4.1x | 0.8965 | 0.1365 | > 3.1x |
+| lw35 seed 1 | 1490 | 0.9276 | 2.9x | 0.8862 | 0.1443 | 1.7x |
+| recipe seed 0 / 1 | 1373 / 1371 | 0.9243 / 0.9270 | 2.2x / 2.8x | 0.8745 / 0.8827 | 0.1457 / 0.1421 | 1.8x / 2.0x |
+| **lw35 2-seed mean** | 1490 | **0.9306** | 3.9x | 0.8914 | **0.1404** | 2.0x |
+| **recipe 2-seed mean** | 1372 | **0.9257** | 2.2x | 0.8786 | **0.1439** | 1.9x |
+
+2-seed mean difference (lw35 - recipe): f1 +0.0049 (seed-level SE ~0.003 from the 2+2 runs); CE -0.0035 +- 0.0017
+(paired over rows, eval noise only) or +- 0.004 including the seed spread (lw35 seeds differ by 0.0078 CE, recipe seeds
+by 0.0036). lw35 seed 1 vs recipe seed 1: CE +0.0022 +- 0.0022, f1 +0.0006.
+
+**Revised verdict:** the seed-0 lw35 result was a favourable draw. Averaged over two seeds, late keep-widening is
+ahead of the recipe by ~+0.005 f1 and ~-0.0035 CE at +8.6% FLOPs, which is within seed noise (about 1-1.5 SE) and
+below the +0.006 f1 decisive bar. It does NOT reach dense parity on CE (2-seed mean 0.1404 vs dense 0.1374). The
+f3904 CE gain (-0.0069 +- 0.0022, 1 seed) is the strongest single piece of evidence for it; it needs seeds too.
+Seed variance at f7808 (~0.004-0.008 CE, ~0.003-0.006 f1 between seeds) is as large as every effect measured here, so
+any FTM claim at this scale needs >= 3 seeds per arm.

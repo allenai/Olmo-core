@@ -14,6 +14,11 @@ def per_row(cell):
     return [None if (r is None or r["ans_n"] == 0) else r["ans_sum"] / r["ans_n"] for r in cell["rows"]]
 
 
+def group_rows(ce, names, cell):
+    cols = [per_row(ce[n][cell]) for n in names.split("+")]
+    return [None if any(v is None for v in vs) else sum(vs) / len(vs) for vs in zip(*cols)]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+")
@@ -30,7 +35,8 @@ def main():
         line = []
         cell_d = []
         for c in CELLS:
-            rx, ry = per_row(ce[x][c]), per_row(ce[y][c])
+            # "A1+A2:B1+B2" = per-row mean over each group's runs (seed averages), then paired over rows
+            rx, ry = (group_rows(ce, x, c), group_rows(ce, y, c))
             d = [u - v for u, v in zip(rx, ry) if u is not None and v is not None]
             m = sum(d) / len(d)
             se = math.sqrt(sum((t - m) ** 2 for t in d) / (len(d) - 1) / len(d))

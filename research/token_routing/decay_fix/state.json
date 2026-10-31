@@ -83,6 +83,13 @@
    "budget": "f7808",
    "seed": 0,
    "steps_expected": 1952
+  },
+  "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs": {
+   "ex": "01M67E9NTTQVT7YY2BDHYEMAKE",
+   "arm": "lora64all32r20to7lw35",
+   "budget": "f7808",
+   "seed": 1,
+   "steps_expected": 1952
   }
  },
  "evals": {
@@ -245,6 +252,26 @@
    "ex": "01M67C1C49YJ5FZK5C2DP391DC",
    "train_run": "f8k-mt4-lora64all32r25to10-f7808-tdf-lr1e-05-rs",
    "task": "oolong"
+  },
+  "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs-evcontradiction": {
+   "ex": "01M67R395YJNCHMB3HD2BB6MCZ",
+   "train_run": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs",
+   "task": "contradiction"
+  },
+  "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs-evnq": {
+   "ex": "01M67R442HCZR2X377MXTCHPM3",
+   "train_run": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs-evoutlier": {
+   "ex": "01M67R4YB0FVP5JDBP9JWTGJR7",
+   "train_run": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs-evoolong": {
+   "ex": "01M67R61W106BFC4ATEGFDKW20",
+   "train_run": "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs",
+   "task": "oolong"
   }
  },
  "ce": {
@@ -336,6 +363,12 @@
    "ex": "01M67C25823MD64C4ARX9B6MGV",
    "ckpts": [
     "f8k-mt4-lora64all32r25to10-f7808-tdf-lr1e-05-rs"
+   ]
+  },
+  "dfce-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs": {
+   "ex": "01M67R6TJD8HHEK5AZTER6ZCH9",
+   "ckpts": [
+    "f8k-mt4-lora64all32r20to7lw35-f7808-tdf-sd1-lr1e-05-rs"
    ]
   }
  }
