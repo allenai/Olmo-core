@@ -19,13 +19,14 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, HERE)
 from launch import CKPTS, OPS, PY  # noqa: E402
 
+W = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns"
+
 #: early-phase recipe run (branch claude/grad-routing-gap-train): permanent checkpoints at these steps
 EARLY_RUN = (f"{W}/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05")
 EARLY_STEPS = (0, 8, 16, 31, 61, 122, 244)
 CKPTS = {**{f"e{n}": (f"{EARLY_RUN}/step{n}", n, n * 4) for n in EARLY_STEPS}, "recipe": (f"/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/"
                              f"f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05", 488, 1952)}
 
-W = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns"
 GAP_DIR = f"{W}/gradgap"
 STATE = os.path.join(HERE, "state_gap.json")
 
