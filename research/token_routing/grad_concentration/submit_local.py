@@ -21,6 +21,7 @@ ap.add_argument("--node", default="cubbins")
 ap.add_argument("--qos", default="preemptive_high")
 ap.add_argument("--args", default="")
 ap.add_argument("--minutes", type=int, default=75)
+ap.add_argument("--adam-s3", action="store_true", help="factors from S3 .../gradconc/adam/adam_<label>.pt")
 a = ap.parse_args()
 only = [int(x) for x in a.shards.split(",")] if a.shards else range(a.num_shards)
 for i in only:
@@ -28,6 +29,8 @@ for i in only:
     env = [f"SRC={REPO}", f"LABEL={a.label}", f"CKNAME={a.ckname}", f"MINUTES={a.minutes}", f"ARGS={args}"]
     if a.adam:
         env.append(f"ADAM_FROM={a.adam if a.adam.startswith('/') else os.path.join(HERE, a.adam)}")
+    if a.adam_s3:
+        env.append("ADAM_S3=1")
     if a.adam_publish:
         env.append(f"ADAM_PUBLISH={a.adam_publish}")
     name = f"gradgap-{a.label}-s{i}" if not a.adam_publish else f"gradgap-adam-{a.label}"

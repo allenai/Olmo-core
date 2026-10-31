@@ -30,7 +30,10 @@ s.ROOT = 'checkpoints/prasanns/_transfer/gradconc'; sys.argv = ['s3_sync', 'down
   flock 9
   for S in contradiction_fresh nq_fresh outlier_fresh oolong_fresh mt4f7808 mt4s1952; do s3down "$ROOT/shards/$S" "shards/$S"; done
   s3down "$ROOT/ckpts/$CKNAME" "$CKNAME"
+  # ADAM_S3=1: Adam factor files staged by stage_s3_beaker.sh (.../gradconc/adam/adam_<label>.pt)
+  [ "${ADAM_S3:-0}" = 1 ] && s3down "$ROOT/adam" "adam"
 ) 9>"$ROOT/stage.lock"
+if [ "${ADAM_S3:-0}" = 1 ]; then ARGS="${ARGS:-} --adam-factors $ROOT/adam/adam_${LABEL}.pt"; fi
 # ADAM_FROM=<shared path>: node-local copy of the Adam factors, passed as --adam-factors
 if [ -n "${ADAM_FROM:-}" ]; then cp "$ADAM_FROM" "$OUTROOT/adam_from_${SLURM_JOB_ID}.pt"; ARGS="${ARGS:-} --adam-factors $OUTROOT/adam_from_${SLURM_JOB_ID}.pt"; fi
 [ "${STAGE_ONLY:-0}" = 1 ] && { du -sh $ROOT/*; echo STAGE_DONE; exit 0; }

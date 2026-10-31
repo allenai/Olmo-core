@@ -30,17 +30,19 @@ from olmo_core.distributed.checkpoint import load_model_and_optim_state, save_mo
 from olmo_core.nn.attention import AttentionBackendName
 from olmo_core.nn.transformer import TransformerConfig
 ck, out = sys.argv[1], sys.argv[2]
+# LoRA adapters first: load_keys refuses a distributed context
+from olmo_core.distributed.checkpoint import get_checkpoint_metadata, load_keys
+lk = sorted(k for k in get_checkpoint_metadata(ck).state_dict_metadata if k.endswith("lora_A"))
+lora = {k: tuple(load_keys(ck, [k, k[:-1] + "B"])) for k in lk}
 dist.init_process_group("gloo", rank=0, world_size=1)
 t = time.time()
 m = TransformerConfig.qwen3_5_4B(vocab_size=248320, attn_backend=AttentionBackendName("flash_2")).build(init_device="cpu")
 load_model_and_optim_state(ck, m)
 # LoRA checkpoints (the recipe, early_lora.py): merge W += 32 * B A into the base weights (adapters are extra keys)
-from olmo_core.distributed.checkpoint import get_checkpoint_metadata, load_keys
-lk = sorted(k for k in get_checkpoint_metadata(ck).state_dict_metadata if k.endswith("lora_A"))
 sd = dict(m.named_parameters())
 for k in lk:
     pname = k.split("model.", 1)[-1][:-len(".lora_A")] + ".weight"
-    A, B = load_keys(ck, [k, k[:-1] + "B"])
+    A, B = lora[k]
     with torch.no_grad():
         sd[pname].copy_((sd[pname].float() + 32.0 * (B.float() @ A.float())).to(sd[pname].dtype))
 print("merged LoRA adapters:", len(lk), flush=True)
@@ -52,6 +54,10 @@ PY
   AWS_PROFILE=S3 aws s3 sync $OUT $DST/$NAME/ --only-show-errors && echo "SYNCED $NAME $(du -sh $OUT | cut -f1)" \
     || echo "!!! FAILED $NAME (s3 sync)"
   rm -rf $OUT
+done
+# Adam factor files estimated on Beaker (routed_probe --only-adam-factors) -> .../gradconc/adam/
+for F in $W/gradgap/adam_*.pt; do
+  [ -f "$F" ] && AWS_PROFILE=S3 aws s3 cp "$F" $DST/adam/$(basename $F) --only-show-errors && echo "SYNCED $F"
 done
 echo TRANSFER_DONE
 EOW

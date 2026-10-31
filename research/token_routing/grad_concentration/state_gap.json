@@ -32,5 +32,69 @@
   "commit": "a421d7f06f41b7515cf7d07cea0d9d091a5a58a5",
   "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --adam-ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --only-adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
   "label": "recipe"
+ },
+ "recipe-s0of8": {
+  "ex": "01M67MESPGGZ8Q14K1JN8B4FKC",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 0,
+  "num_shards": 8
+ },
+ "recipe-s1of8": {
+  "ex": "01M67MGTMB9RBSJ5KKW5JZYHF4",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 1 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 1,
+  "num_shards": 8
+ },
+ "recipe-s2of8": {
+  "ex": "01M67MJSFBZQCM72B3MKE5ZC35",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 2 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 2,
+  "num_shards": 8
+ },
+ "recipe-s3of8": {
+  "ex": "01M67MN3NRD5GCRWHZ0GPN1T2C",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 3 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 3,
+  "num_shards": 8
+ },
+ "recipe-s4of8": {
+  "ex": "01M67MQMNMMXB3ESNM335RQEA9",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 4 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 4,
+  "num_shards": 8
+ },
+ "recipe-s5of8": {
+  "ex": "01M67MSJHY7WNCAQFQ1ZF3K6DP",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 5 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 5,
+  "num_shards": 8
+ },
+ "recipe-s6of8": {
+  "ex": "01M67MVKAF1WFMMNRSX0HNFEHB",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 6 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 6,
+  "num_shards": 8
+ },
+ "recipe-s7of8": {
+  "ex": "01M67MYF3T4K07XBW0BA6Q74FX",
+  "commit": "59b354d0a68277c07710116129d15220fa2e9db4",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 8 --shard 7 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt",
+  "label": "recipe",
+  "shard": 7,
+  "num_shards": 8
  }
 }
