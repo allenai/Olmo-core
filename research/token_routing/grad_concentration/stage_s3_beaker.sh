@@ -17,6 +17,11 @@ SH=$W/ds64/fast8k/shards
   AWS_PROFILE=S3 aws s3 sync $SH/$S $DST/shards/$S/ --only-show-errors --exclude "*" --include "*.npy" \
     --include "metadata.json" && echo "SYNCED shard $S $(du -sh $SH/$S | cut -f1)" || echo "!!! FAILED shard $S"
 done
+# FULL_SHARDS: shard dirs synced whole (every file: training needs the sidecars, not just the npy)
+for S in ${FULL_SHARDS:-}; do
+  AWS_PROFILE=S3 aws s3 sync $SH/$S $DST/shards/$S/ --only-show-errors && echo "SYNCED full shard $S $(du -sh $SH/$S | cut -f1)" \
+    || echo "!!! FAILED full shard $S"
+done
 export MASTER_ADDR=127.0.0.1 MASTER_PORT=29511 RANK=0 WORLD_SIZE=1 LOCAL_RANK=0
 for NAME in $NAMES; do
   case $NAME in /*) CK=$NAME; NAME=$(basename $(dirname $NAME));; *) CK=$W/ctc_suite/ckpts/$NAME/model_and_optim;; esac
@@ -68,5 +73,5 @@ gantry run --name "gradconc-stage-$(date +%m%d%H%M)" -w ai2/flex2 -b ai2/oe-othe
   --beaker-image tylerr/olmo-core-tch291cu128-2025-11-25 \
   --weka oe-training-default:/weka/oe-training-default \
   --env-secret AWS_CREDS=PRASANNS_AWS_CREDENTIALS --env-secret AWS_CFG=PRASANNS_AWS_CONFIG \
-  --env NAMES="$NAMES" --env W="$W" --env SKIP_SHARDS="${SKIP_SHARDS:-0}" \
+  --env NAMES="$NAMES" --env W="$W" --env SKIP_SHARDS="${SKIP_SHARDS:-0}" --env FULL_SHARDS="${FULL_SHARDS:-}" \
   --allow-dirty --timeout 0 --yes -- bash -c "$WORK" 2>&1 | grep -E "beaker.org/ex|rror|xperiment" | head -5

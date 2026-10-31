@@ -30,6 +30,7 @@ s.ROOT = 'checkpoints/prasanns/_transfer/gradconc'; sys.argv = ['s3_sync', 'down
   flock 9
   for S in contradiction_fresh nq_fresh outlier_fresh oolong_fresh mt4f7808 mt4s1952; do s3down "$ROOT/shards/$S" "shards/$S"; done
   s3down "$ROOT/ckpts/$CKNAME" "$CKNAME"
+  for S in ${TRAIN_SHARDS:-}; do s3down "$ROOT/shards/$S" "shards/$S"; done
   # ADAM_S3=1: Adam factor files staged by stage_s3_beaker.sh (.../gradconc/adam/adam_<label>.pt)
   [ "${ADAM_S3:-0}" = 1 ] && s3down "$ROOT/adam" "adam"
 ) 9>"$ROOT/stage.lock"
