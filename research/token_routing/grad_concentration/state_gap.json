@@ -96,5 +96,66 @@
   "label": "recipe",
   "shard": 7,
   "num_shards": 8
+ },
+ "e0-s0of1": {
+  "ex": "01M686BDTY21B6HNYJ2FC361D6",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05/step0 --label e0 --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap  --rows 64 --adam-estimate --sels rtr_recipe,rnd_recipe,og_recipe,rtr_L7_k0.1,rtr_L16_k0.03",
+  "label": "e0",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "e8-s0of1": {
+  "ex": "01M686C73CXFXPRG0NCK6VDE1H",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05/step8 --label e8 --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap  --rows 64 --adam-estimate --sels rtr_recipe,rnd_recipe,og_recipe,rtr_L7_k0.1,rtr_L16_k0.03",
+  "label": "e8",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "e16-s0of1": {
+  "ex": "01M686D0P8VC0AHAJJA3BCD1FD",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05/step16 --label e16 --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap  --rows 64 --adam-estimate --sels rtr_recipe,rnd_recipe,og_recipe,rtr_L7_k0.1,rtr_L16_k0.03",
+  "label": "e16",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "e31-s0of1": {
+  "ex": "01M686DVVZ36FWFHFVP9NE5DY9",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05/step31 --label e31 --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap  --rows 64 --adam-estimate --sels rtr_recipe,rnd_recipe,og_recipe,rtr_L7_k0.1,rtr_L16_k0.03",
+  "label": "e31",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "e61-s0of1": {
+  "ex": "01M686ENEQYYV7AZT0MG21CREE",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05/step61 --label e61 --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap  --rows 64 --adam-estimate --sels rtr_recipe,rnd_recipe,og_recipe,rtr_L7_k0.1,rtr_L16_k0.03",
+  "label": "e61",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "e122-s0of1": {
+  "ex": "01M686FFFJXFGHPY5JQZ7WSVBR",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05/step122 --label e122 --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap  --rows 64 --adam-estimate --sels rtr_recipe,rnd_recipe,og_recipe,rtr_L7_k0.1,rtr_L16_k0.03",
+  "label": "e122",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "e244-s0of1": {
+  "ex": "01M686GCK5K1G5T9H4RQAYEDNQ",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05/step244 --label e244 --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap  --rows 64 --adam-estimate --sels rtr_recipe,rnd_recipe,og_recipe,rtr_L7_k0.1,rtr_L16_k0.03",
+  "label": "e244",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "analyze-e0,e8,e16,e31,e61,e122,e244": {
+  "ex": "01M68A1TXCWQNE5DCBCX8GAC2C",
+  "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
+  "extra": "--gap-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --labels e0,e8,e16,e31,e61,e122,e244"
  }
 }

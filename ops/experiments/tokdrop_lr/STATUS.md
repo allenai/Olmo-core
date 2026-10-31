@@ -118,6 +118,11 @@ See `next_step` above.
 - Jobs: f1952 slurm 4134114-21 (cubbins), analysis 4134466; recipe slurm 4134620-23 (mooney), 4134628-31 (sneetches),
   analysis 4134855; Adam estimates 4134064 / Beaker 01M67GARCTBYTJKYTFD2H8C70E. Results: ops results run ids
   gradgap-analyze-f1952-4134466 (has ~60 duplicate rows from a double run; use --best), gradgap-analyze-recipe-4134855.
+- EARLY PHASE (2026-10-31; run f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05, Beaker 01M67X8WFPB07FPQW79X9CNRXX, checkpoints
+  0/8/16/31/61/122/244; probes eval_size 256 each, noisy): step 0 trivially aligned (0.94); the router-routed exp cos drops to
+  0.21 raw / 0.41 Adam at step 8 (random 0.07), recovers above 0.8 by step 31 and ends at 0.89 / 0.88 at step 244. Random never
+  recovers (<= 0.32, norm ratio -> 6). Aggressive budgets (rtr block7/10%, block16/3%) touch 0.82 / 0.75 at step 31, then decay to
+  0.45 / 0.24 by step 244 on the recipe-co-adapted model. Table: records/grad-routing-gap.md, results/step_table.json.
 - Not run: s488, f7808; item 8 (oracle-routed training ceiling).
 
 ## Open issues / traps

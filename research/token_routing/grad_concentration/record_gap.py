@@ -11,16 +11,17 @@ OPS = "/accounts/projects/berkeleynlp/prasann/bin/ops"
 path, lab, run_id, train_run, commit, ckpt, job = sys.argv[1:8]
 d = json.load(open(path))[lab]
 rows = []
-for s in ("og_recipe", "od_recipe", "rnd_recipe", "rtr_recipe", "og_L16_k0.07", "rnd_L16_k0.07", "rtr_L16_k0.07"):
+for s in [x for x in ("og_recipe", "od_recipe", "rnd_recipe", "rtr_recipe", "og_L16_k0.07", "rnd_L16_k0.07",
+                      "rtr_L16_k0.07", "rtr_L7_k0.1", "rtr_L16_k0.03") if x in d["raw"]]:
     for space in ("raw", "adam"):
         v = d[space][s]["whole"]
         for key in ("attr_cos", "routed_cos", "exp_cos_attr", "exp_cos_routed", "exp_proj_routed", "pair_cos_routed",
-                    "bias_share_routed"):
+                    "bias_share_routed", "exp_norm_ratio_routed"):
             x = v[key]
             val = x[0] if isinstance(x, list) else x
             rows.append((f"gradgap_{space}_{s}_{key}", val))
-    rows.append((f"gradgap_raw_dense_pair_cos", d["raw"][s]["whole"]["pair_cos_dense"][0]))
-for s in ("og_recipe", "rnd_recipe", "rtr_recipe"):
+    rows.append(("gradgap_raw_dense_pair_cos", d["raw"][s]["whole"]["pair_cos_dense"][0]))
+for s in [x for x in ("og_recipe", "rnd_recipe", "rtr_recipe", "rtr_L7_k0.1", "rtr_L16_k0.03") if x in d["ce"]]:
     for t, v in d["ce"][s].items():
         rows.append((f"gradgap_routed_ce_{s}_{t}", v["ce_routed"][0]))
         rows.append((f"gradgap_dense_ce_{t}", v["ce_dense"][0]))

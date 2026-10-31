@@ -5,7 +5,7 @@ updated: 2026-10-30
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: f1952 + recipe complete (eval_size 512 each); s488 / f7808 not run
+status: f1952 + recipe complete (eval_size 512 each); early-phase run (7 checkpoints, eval_size 256 each) complete; s488 / f7808 not run
 superseded_by: 
 artifact: 
 summary: Gradient attribution (cos 0.999) says nothing about routing - forward removal breaks it. On dense f1952 the true routed gradient at the recipe shape keeps cos(E[R],E[D]) 0.12 (oracle) / 0.03-0.04 (random, router), >97% of the loss is kept tokens' terms changing. On the routed-trained recipe checkpoint the router-routed gradient is near-unbiased: cos(E[R],E[D]) 0.87 raw / 0.83 Adam, norm ratio 0.89, routed CE ~ dense; random stays biased (0.18). Block-16 7% with the router: 0.98. eval_size 512.
@@ -154,6 +154,68 @@ R_og~D 0.19 / 0.34 / 0.48 exact vs sketch within 0.006.
    gradient (0.94-0.98 with a router, on a co-adapted model); the block-7 / 20% stage is the binding one (0.83-0.87).
    Untested: a run that starts at the late split (no block-7 stage), and the cumulative effect of the early biased phase.
 
+
+## Early phase: when does the routed gradient become unbiased? (2026-10-31)
+
+**Run.** `f8k-mt4-lora64all32r20to7-f1952st244-tdgap-lr1e-05` (Beaker `01M67X8WFPB07FPQW79X9CNRXX`, branch
+`claude/grad-routing-gap-train` @ `92201511f`): the f1952 recipe config (launch_fast8k.py arm `lora64all32r20to7`,
+LR 1e-5, seed 0, its own online router; the full 488-step schedule hard-stopped at step 244) with permanent checkpoints
+at steps 0, 8, 16, 31, 61, 122, 244 (new `--save-fixed-steps`; ephemeral `--resume-every 20`). Probe: one Beaker job per
+checkpoint, ⚠ eval_size=256 rows (16 x 16-row steps) per checkpoint, in-job Adam estimate, selections rtr / rnd / og at
+the recipe shape plus the aggressive budgets rtr at block 7 / 10% and block 16 / 3%. Plot data:
+`research/token_routing/grad_concentration/results/step_table.json` (+ `results/gap_early.json`).
+⚠ With 16 batches and a dense cross-batch cos of only 0.03-0.13 after step 0, the debiased expected cosines are noisy
+(swings of ±0.2 between neighbouring checkpoints are within noise); read trends, not single cells.
+
+| sel | step | exp cos raw | exp cos Adam | Adam proj | ‖E[R]‖/‖E[D]‖ | per-step cos | pair cos R-R (D-D) | routed CE contra / nq / outlier / oolong (dense) |
+|---|---|---|---|---|---|---|---|---|
+| rtr_recipe | 0 | 0.943 | 0.948 | 0.93 | 0.95 | 0.825 | 0.753 (0.689) | 1.23/2.13/1.18/3.24 (0.86/2.03/1.09/3.16) |
+| rtr_recipe | 8 | 0.209 | 0.413 | 0.48 | 1.64 | 0.180 | 0.120 (0.131) | 0.75/0.27/0.31/0.51 (0.46/0.16/0.29/0.44) |
+| rtr_recipe | 16 | 0.652 | 0.678 | 0.79 | 1.07 | 0.309 | 0.075 (0.109) | 0.50/0.21/0.26/0.45 (0.34/0.12/0.24/0.48) |
+| rtr_recipe | 31 | 0.841 | 0.809 | 1.07 | 1.28 | 0.282 | 0.151 (0.116) | 0.44/0.20/0.23/0.58 (0.30/0.10/0.23/0.52) |
+| rtr_recipe | 61 | 0.809 | 0.852 | 1.11 | 1.52 | 0.209 | 0.065 (0.054) | 0.34/0.20/0.20/0.52 (0.22/0.16/0.20/0.52) |
+| rtr_recipe | 122 | 0.654 | 0.702 | 0.88 | 1.77 | 0.282 | 0.034 (0.049) | 0.17/0.12/0.20/0.37 (0.11/0.07/0.19/0.37) |
+| rtr_recipe | 244 | 0.886 | 0.882 | 0.75 | 1.00 | 0.387 | 0.016 (0.031) | 0.07/0.10/0.18/0.35 (0.05/0.08/0.17/0.35) |
+| rnd_recipe | 0 | 0.870 | 0.850 | 0.84 | 0.93 | 0.751 | 0.814 (0.689) | 1.31/2.56/1.31/3.26 |
+| rnd_recipe | 8 | 0.067 | 0.172 | 0.32 | 2.55 | 0.068 | 0.319 (0.131) | 0.94/0.79/0.73/0.51 |
+| rnd_recipe | 31 | 0.319 | 0.345 | 0.89 | 2.83 | 0.094 | 0.224 (0.116) | 0.83/0.92/0.75/0.59 |
+| rnd_recipe | 122 | 0.217 | 0.154 | 0.77 | 5.68 | 0.093 | 0.121 (0.049) | 0.29/0.62/0.82/0.38 |
+| rnd_recipe | 244 | 0.043 | 0.164 | 0.62 | 6.19 | 0.146 | 0.118 (0.031) | 0.13/0.22/0.31/0.36 |
+| og_recipe | 0 | 0.979 | 0.967 | 0.96 | 1.00 | 0.927 | 0.679 (0.689) | 0.86/1.96/1.06/3.13 |
+| og_recipe | 8 | 0.754 | 0.709 | 0.89 | 1.11 | 0.720 | 0.125 (0.131) | 0.48/0.36/0.29/0.47 |
+| og_recipe | 31 | 0.917 | 0.891 | 1.05 | 1.15 | 0.785 | 0.123 (0.116) | 0.31/0.38/0.42/0.55 |
+| og_recipe | 122 | 0.427 | 0.662 | 1.03 | 2.50 | 0.660 | 0.122 (0.049) | 0.11/0.33/0.24/0.37 |
+| og_recipe | 244 | 0.717 | 0.742 | 0.93 | 1.34 | 0.687 | 0.025 (0.031) | 0.06/0.29/0.18/0.36 |
+| rtr_L7_k0.1 | 0 | 0.908 | 0.912 | 0.88 | 0.94 | 0.760 | 0.741 (0.689) | 1.30/2.21/1.24/3.24 |
+| rtr_L7_k0.1 | 8 | 0.154 | 0.295 | 0.35 | 1.54 | 0.114 | 0.111 (0.131) | 0.92/0.34/0.44/0.53 |
+| rtr_L7_k0.1 | 16 | 0.378 | 0.482 | 0.81 | 1.98 | 0.171 | 0.134 (0.109) | 0.58/0.33/0.34/0.45 |
+| rtr_L7_k0.1 | 31 | 0.815 | 0.784 | 1.05 | 1.35 | 0.229 | 0.139 (0.116) | 0.49/0.34/0.24/0.59 |
+| rtr_L7_k0.1 | 61 | 0.664 | 0.704 | 1.19 | 2.47 | 0.125 | 0.081 (0.054) | 0.41/0.47/0.32/0.49 |
+| rtr_L7_k0.1 | 122 | 0.482 | 0.510 | 0.91 | 2.56 | 0.170 | 0.053 (0.049) | 0.25/0.27/0.24/0.39 |
+| rtr_L7_k0.1 | 244 | 0.446 | 0.378 | 0.58 | 2.16 | 0.224 | 0.022 (0.031) | 0.13/0.23/0.20/0.36 |
+| rtr_L16_k0.03 | 0 | 0.972 | 0.959 | 0.96 | 0.98 | 0.886 | 0.710 (0.689) | 1.10/2.09/1.15/3.11 |
+| rtr_L16_k0.03 | 8 | 0.248 | 0.285 | 0.56 | 2.22 | 0.427 | 0.233 (0.131) | 0.62/0.20/0.31/0.50 |
+| rtr_L16_k0.03 | 16 | 0.425 | 0.455 | 0.73 | 1.65 | 0.520 | 0.139 (0.109) | 0.46/0.13/0.28/0.51 |
+| rtr_L16_k0.03 | 31 | 0.746 | 0.700 | 1.12 | 1.45 | 0.536 | 0.204 (0.116) | 0.38/0.42/0.25/0.53 |
+| rtr_L16_k0.03 | 61 | 0.628 | 0.747 | 1.02 | 1.29 | 0.536 | 0.073 (0.054) | 0.27/0.18/0.25/0.52 |
+| rtr_L16_k0.03 | 122 | 0.529 | 0.487 | 0.92 | 1.73 | 0.568 | 0.077 (0.049) | 0.12/0.12/0.20/0.38 |
+| rtr_L16_k0.03 | 244 | 0.237 | 0.386 | 0.82 | 3.25 | 0.565 | 0.068 (0.031) | 0.06/0.12/0.21/0.36 |
+
+(rnd / og rows at steps 16 and 61 are in `step_table.json`.)
+
+**Verdict.**
+1. Step 0 is trivially aligned (every selection 0.87-0.98): the base model's gradient is one shared, format-learning
+   direction (pair cos D-D 0.69), which any context subset reproduces.
+2. The bias is an early-phase effect: right after that direction is learned (step 8) the router-routed expected gradient
+   drops to 0.21 raw / 0.41 Adam (random 0.07 / 0.17), with ‖E[R]‖ 1.6-2.6x ‖E[D]‖. The router-routed gradient is back
+   above 0.8 by step 31 (0.84 / 0.81) and stays mostly there (0.65-0.89, noisy), ending at 0.89 / 0.88 with norm ratio
+   1.00 at step 244 (the f1952-trained recipe checkpoint: 0.87 / 0.83). Random never recovers (0.04-0.32; norm ratio
+   grows to 6): the co-adaptation is to the router's kind of selection.
+3. The aggressive budgets never get there to stay: rtr at block 7 / 10% touches 0.82 / 0.78 at step 31 and then decays
+   to 0.45 / 0.38 by step 244 (norm ratio 2.2); rtr at block 16 / 3% peaks at 0.75 / 0.70 (step 31) and decays to
+   0.24 / 0.39 (norm ratio 3.3), even though its per-step cosine (0.57) is higher than the recipe's. They were not the
+   budgets the model trained at, so this measures how far a recipe-co-adapted model is from supporting them, not a
+   model trained at those budgets.
 
 ## Limits
 
