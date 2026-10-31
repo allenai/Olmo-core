@@ -1,11 +1,11 @@
 [
  {
   "date": "2026-10-31",
-  "status": "running",
+  "status": "done",
   "track": "mechanism",
   "who": "agent (Opus)",
   "title": "Early-phase gradient probe: when does the routed gradient become unbiased?",
-  "result": "Running. Short recipe run with checkpoints at steps 0–244; routed-vs-dense gradient waterfall per checkpoint, incl. aggressive budgets (10% @7, 3% @16).",
+  "result": "⚠ eval_size 256/ckpt. Router-routed gradient biased right after step 0 (step 8: exp cos 0.41 Adam, norm 1.6–2.6×), unbiased again by step 31 (0.81) and at 244 (0.88, norm 1.00). Random never recovers (≤0.35). Aggressive budgets (10%@7, 3%@16) on the recipe-trained model peak ~0.7–0.78 at step 31 then decay to ~0.38. Biased phase is short (~6% of training). Branch claude/grad-routing-gap.",
   "match": [
    "gradgap",
    "earlyph"
