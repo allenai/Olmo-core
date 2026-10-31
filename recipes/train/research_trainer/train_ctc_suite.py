@@ -1126,7 +1126,16 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             "checkpointer",
             CheckpointerCallback(
                 save_interval=opts.save_interval,
-                enabled=not opts.no_final_checkpoint,
+                # --save-fixed-steps: permanent checkpoints at these steps (step 0 = the pre-train state); --resume-every:
+                # ephemeral resume points (removed when the next checkpoint lands), so a preempted job resumes, not restarts
+                fixed_steps=([int(x) for x in opts.save_fixed_steps.split(",") if x != ""] or None)
+                if opts.save_fixed_steps else None,
+                ephemeral_save_interval=opts.resume_every,
+                pre_train_checkpoint=(True if opts.save_fixed_steps and "0" in opts.save_fixed_steps.split(",")
+                                      else None),
+                # fixed / resume checkpoints need the callback even under --no-final-checkpoint (which the Beaker
+                # launcher always passes)
+                enabled=(not opts.no_final_checkpoint) or bool(opts.save_fixed_steps) or bool(opts.resume_every),
                 # default 3 = keep only the newest three permanent checkpoints; 0 = keep all (decay-branch
                 # points must survive the rest of the run)
                 max_checkpoints=(opts.max_checkpoints or None),
@@ -2397,6 +2406,18 @@ def parse_args() -> argparse.Namespace:
         help="steps between mid-run model+optim checkpoints. Default None = none written (eval only "
         "needs the post-fit model-only save, and at 4B each mid-run checkpoint costs ~55G). Set an "
         "integer to get resume points for a long run on a preemptible queue.",
+    )
+    ap.add_argument(
+        "--save-fixed-steps",
+        default="",
+        help="comma list of optimizer steps with a permanent full checkpoint (0 = before the first step); "
+        "use with --max-checkpoints 0 so none is deleted",
+    )
+    ap.add_argument(
+        "--resume-every",
+        type=int,
+        default=None,
+        help="steps between EPHEMERAL checkpoints (resume points removed when the next checkpoint is saved)",
     )
     ap.add_argument(
         "--max-checkpoints",
