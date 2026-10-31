@@ -531,6 +531,30 @@ __LORA2X2__
   </table></div>
   <p class="note"><b>Verdict:</b> on the fresh pools the share of tokens needed for cosine 0.95 falls from 4.1% at 1,952 rows to 1.3% at 7,808 (body tokens past block 16: 0.16% → 0.035%), so the recipe's 4× → 2× decay is not the signal spreading out. An oracle selector of the recipe's shape (20% after block 7, 7% after 16) reaches whole-model cosine ≥0.996 at every stage; a random one sits at 0.84–0.98 with no trend. First-order oracle FLOP bounds at cosine 0.95 are 11–20× (optimistic: forward removal treated as free, raw rather than Adam-scaled gradient, attention cost ignored; the oracle's best split is block 0). <b>Hypothesis, untested:</b> late in training the per-step gradient is mostly noise (gradient noise scale ≈9 rows at base, ≈460 at step 31, ≈1,400 at step 122, unmeasurable with 128-row batches from 1,464 rows on), and the tokens needed grow only ≈√batch, i.e. this measures concentration of noise. Next test: score each batch's top-k update against a different batch's full gradient. 3 stages (s-st61, s976, s1952) still to add. Branch <code>claude/grad-concentration-d91a37</code>.</p>
 </section>
+<section>
+  <h2>Why gradient sparsity does not predict routing sparsity: forward removal</h2>
+  <div class="figs">
+    <figure><h3>Cosine with the dense expected gradient, recipe shape (20% after block 7, 7% after 16)</h3><div class="chart"><canvas id="gapwf" aria-label="gradient vs routing gap waterfall"></canvas></div>
+      <figcaption>Dense checkpoint at 1,952 rows/task; 512 unseen fresh rows = 32 optimizer-step batches of 16. "Attribution" = the kept tokens' terms under the dense forward (what the gradient-concentration analysis measures); "routed" = the true gradient when the other tokens are removed from the forward. Debiased cosine of expected (mean-over-batches) gradients, raw space. Adam projection = progress of E[routed] along E[dense] relative to dense, Adam-preconditioned.</figcaption></figure>
+  </div>
+  <div class="tbl" style="margin-top:14px"><table>
+    <tr><th>selector (recipe shape)</th><th class="n">attribution cos (per step / expected)</th><th class="n">routed cos (per step / expected)</th><th class="n">routed progress along E[dense], raw / Adam</th><th class="n">routed batch-to-batch cos (dense: 0.012)</th></tr>
+    <tr><td>oracle (top gradient tokens, global)</td><td class="n">0.999 / 0.996</td><td class="n">0.385 / 0.124</td><td class="n">1.01 / 0.82</td><td class="n">0.129</td></tr>
+    <tr><td>oracle per document</td><td class="n">0.978 / 0.987</td><td class="n">0.098 / 0.156</td><td class="n">1.84 / 0.28</td><td class="n">–</td></tr>
+    <tr><td>router (ridge, as trained)</td><td class="n">0.935 / 0.980</td><td class="n">0.054 / 0.044</td><td class="n">0.36 / 0.60</td><td class="n">0.067</td></tr>
+    <tr><td>random</td><td class="n">0.855 / 0.856</td><td class="n">0.023 / 0.029</td><td class="n">0.34 / 0.78</td><td class="n">0.116</td></tr>
+    <tr><td>oracle, single split at block 16 keep 7%</td><td class="n">≥0.98</td><td class="n">0.781 / 0.293</td><td class="n">0.84 / 1.25</td><td class="n">–</td></tr>
+  </table></div>
+  <div class="tbl" style="margin-top:10px"><table>
+    <tr><th>where the lost update (dense − routed) lives, share of ‖D−R‖²</th><th class="n">oracle</th><th class="n">router</th><th class="n">random</th></tr>
+    <tr><td>dropped tokens' own gradient terms</td><td class="n">0.1%</td><td class="n">1.8%</td><td class="n">2.9%</td></tr>
+    <tr><td>shift of kept prompt/query terms</td><td class="n">38%</td><td class="n">15%</td><td class="n">24%</td></tr>
+    <tr><td>shift of kept gold-document terms</td><td class="n">22%</td><td class="n">33%</td><td class="n">31%</td></tr>
+    <tr><td>shift of kept other body terms</td><td class="n">26%</td><td class="n">45%</td><td class="n">36%</td></tr>
+    <tr><td>shift of answer-position terms</td><td class="n">14%</td><td class="n">6%</td><td class="n">6%</td></tr>
+  </table></div>
+  <p class="note"><b>Verdict (dense checkpoint; recipe checkpoint running):</b> the gradient-concentration bound is measured under the <i>dense</i> forward, and removing tokens from the forward breaks it. At the same oracle selection, attribution reaches cosine 0.999 per step (0.996 in expectation) but the true routed gradient only 0.385 (0.124); &gt;97% of the lost update is the change in the <i>kept</i> tokens' gradients caused by losing context, not the dropped tokens' own terms. Noise is not the cause (the dense per-step gradient is itself ≈99% noise: cos with its expectation 0.047). The routed gradient is a consistent direction of its own (5–20× more batch-to-batch consistent than dense, 7–12× the expected norm, mostly orthogonal to E[dense]), yet in Adam space it still makes 60–82% of dense's expected progress for router and random, consistent with random routing training about as well as the router. So per-step cosine to the dense gradient is the wrong yardstick, and gradient sparsity (1–4% of tokens) does not translate into an achievable keep: only a late split (block 16, 7%) keeps the routed gradient close (per step 0.78, progress 0.84–1.25). Contradiction carries 66–78% of the lost update. Caveat: on this dense checkpoint the routed forward is off-distribution (contradiction answer CE 0.016 → 0.60); the routed-trained recipe checkpoint is the decisive comparison. Branch <code>claude/grad-routing-gap</code>.</p>
+</section>
 </div>
 <div class="part" id="ruledout">
 <div class="parthead"><span class="eyebrow">7 · Ruled out</span><h2 class="ptitle">What did not work</h2><p class="verdict">Router-quality tweaks, layer skipping, earlier drops and a compressed backward all land at ≤1.3× over the recipe or lose.</p></div>
@@ -874,6 +898,12 @@ function draw() {
       options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
         scales: { x: { type: "logarithmic", title: { display: true, text: "model size (B params, log)", color: css("--muted") }, ticks: { color: css("--muted"), callback: v => [0.6, 1, 2, 4, 8].includes(v) ? v : "" }, grid: { color: css("--rule") } },
                   y: { min: 0, title: { display: true, text: "dense FLOPs-to-match (×)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
+  (() => { const e = document.getElementById("gapwf"); if (!e || !window.Chart) return;
+    const labels = ["oracle (global)", "oracle per doc", "router", "random", "oracle @16 only 7%"];
+    const ds = [["attribution, expected cos", [0.996, 0.987, 0.980, 0.856, 0.98], "--c1"], ["routed, expected cos", [0.124, 0.156, 0.044, 0.029, 0.293], "--c6"], ["routed progress along E[dense], Adam", [0.82, 0.28, 0.60, 0.78, 1.25], "--c3"]];
+    new Chart(e, { type: "bar", data: { labels, datasets: ds.map(([l, v, c]) => ({ label: l, data: v, backgroundColor: css(c) })) },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
+        scales: { x: { ticks: { color: css("--muted") }, grid: { display: false } }, y: { min: 0, title: { display: true, text: "cosine / relative progress", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });

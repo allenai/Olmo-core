@@ -1,15 +1,13 @@
 [
  {
   "date": "2026-10-31",
-  "status": "running",
+  "status": "partial",
   "track": "mechanism",
   "who": "agent (Opus)",
   "title": "Gradient sparsity vs routing gap: where the 1–4%-token oracle bound breaks",
-  "result": "Running. Decomposes oracle cosine (attribution under dense forward) through: forward removal (true routed gradient), noise (vs expected large-batch gradient), residual bias across batches, Adam preconditioning, router vs oracle; residual by task/token type; optional oracle-routed training ceiling.",
+  "result": "Dense f1952 waterfall (512 rows): attribution cos 0.999/0.996 (per step/expected) → true routed gradient 0.385/0.124 at the oracle recipe shape; >97% of the loss is kept tokens' gradients shifting when context is removed. Routed gradient is self-consistent (5–20× dense) and in Adam space still makes 60–82% of dense's expected progress (router/random) → per-step cos is the wrong metric; only a late split (b16, 7%) stays close. Recipe-checkpoint (routed-trained) run in progress. Branch claude/grad-routing-gap.",
   "match": [
-   "gapprobe",
-   "grgap",
-   "oracleroute"
+   "gradgap"
   ]
  },
  {
