@@ -6,6 +6,7 @@ updated: 2026-10-28
 branch: prasann/flopdrop_clean @ eb3c9dd1e (pushed); Beaker -tde runs pinned at origin/claude/online-router-1bc01a 67a28d605
 launcher: research/token_routing/ds64_fast8k/launch_fast8k.py (env F8K_SUFFIX=-lra, OPS_EXPERIMENT=tokdrop_lr)
 records:
+  - records/grad-routing-gap.md (branch claude/grad-routing-gap, unmerged: why gradient sparsity != routing sparsity)
   - records/flopdrop-final-figures-plan.md
   - records/lora-vs-routing-ablation.md (branch claude/vibrant-williams-4b0f66, unmerged)
   - records/layer-skip-screen.md (branch claude/train-layerskip-35010b, unmerged)
@@ -100,6 +101,24 @@ See `next_step` above.
 - Run-to-run noise (3 accidental gbfl20p8 repeats): ±~0.02 contradiction, ±~0.03 outlier at 8k.
 - BUG (fixed 2026-10-22, commit after f889c827e): --st-kept-doc-k / --st-keep-token-min / --st-pad-multiple /
   --st-span-len were not SoftTokenOptions fields → silently defaulted. recipes/train/variants_options_test.py guards it.
+
+## Gradient sparsity vs routing: where the link breaks (2026-10-30, branch claude/grad-routing-gap)
+- Record: records/grad-routing-gap.md. Code: research/token_routing/grad_concentration/{routed_probe,analyze_gap,compare_gap}.py.
+  Data: 512 unseen fresh rows (eval_size 512), 32 x 16-row steps, TensorSketch gradients (exact-checked), no-cot answer CE.
+- f1952 dense ckpt: oracle ATTRIBUTION at the recipe shape cos 0.999 / exp 0.996, but the TRUE routed gradient (real
+  compacted forward) 0.385 per step / exp cos(E[R],E[D]) 0.124; random 0.023 / 0.029, ridge router 0.054 / 0.044.
+  >97% of the lost update = kept tokens' own terms changing (forward removal), not the dropped tokens. Routed grads are
+  10x more self-consistent than dense (pair cos 0.07-0.26 vs 0.012) and 8-12x larger in expectation; Adam keeps
+  60-82% of the dense expected progress. Routed CE on the dense ckpt is 10-40x dense (contradiction 0.016 -> 0.6).
+- recipe ckpt (LoRA r64, router 7:0.2,16:0.07): router-routed gradient is near-unbiased: exp cos 0.874 raw / 0.831 Adam,
+  norm ratio 0.89, pair cos R-R 0.014 ~ D-D 0.025, routed CE ~ dense; block-16/7% with router 0.983. Random on the
+  same ckpt stays biased (0.18; outlier CE 0.39 vs 0.095). Verdict: attribution is not a proxy; after co-adaptation
+  the router recovers the expected gradient, so the attribution->FTM gap is in the early off-distribution phase and
+  the block-7 stage, not end-state per-step mismatch.
+- Jobs: f1952 slurm 4134114-21 (cubbins), analysis 4134466; recipe slurm 4134620-23 (mooney), 4134628-31 (sneetches),
+  analysis 4134855; Adam estimates 4134064 / Beaker 01M67GARCTBYTJKYTFD2H8C70E. Results: ops results run ids
+  gradgap-analyze-f1952-4134466 (has ~60 duplicate rows from a double run; use --best), gradgap-analyze-recipe-4134855.
+- Not run: s488, f7808; item 8 (oracle-routed training ceiling).
 
 ## Open issues / traps
 - The Beaker image (OLMoCoreBeakerImage.stable) now ships torch 2.13.0+cu129, while this branch was
