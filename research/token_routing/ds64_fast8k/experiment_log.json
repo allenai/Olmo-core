@@ -1,11 +1,11 @@
 [
  {
   "date": "2026-10-31",
-  "status": "partial",
+  "status": "done",
   "track": "mechanism",
   "who": "agent (Opus)",
   "title": "Gradient sparsity vs routing gap: where the 1–4%-token oracle bound breaks",
-  "result": "Dense f1952 waterfall (512 rows): attribution cos 0.999/0.996 (per step/expected) → true routed gradient 0.385/0.124 at the oracle recipe shape; >97% of the loss is kept tokens' gradients shifting when context is removed. Routed gradient is self-consistent (5–20× dense) and in Adam space still makes 60–82% of dense's expected progress (router/random) → per-step cos is the wrong metric; only a late split (b16, 7%) stays close. Recipe-checkpoint (routed-trained) run in progress. Branch claude/grad-routing-gap.",
+  "result": "Dense ckpt: attribution 0.996 expected → true routed 0.12 (oracle), 0.04 (router), 0.03 (random); >97% of loss = kept tokens' gradients shifting when context is removed. Recipe ckpt (trained routed): router-routed gradient nearly unbiased (expected cos 0.874 raw/0.831 Adam, norm ratio 0.89; routed CE ≈ dense); random stays biased (0.18). Block-16-only 7% with router: 0.983. Gap to the 11–20× bound likely = early off-distribution phase + block-7 stage. Next: late-split-only training; early-phase probe. Branch claude/grad-routing-gap.",
   "match": [
    "gradgap"
   ]
