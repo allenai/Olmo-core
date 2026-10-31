@@ -1,11 +1,11 @@
 [
  {
   "date": "2026-10-31",
-  "status": "partial",
+  "status": "done",
   "track": "sft4",
   "who": "main",
   "title": "Aggressive keep trained directly: 10%@7 → 3% or 5%@16 (gradient-gap follow-up)",
-  "result": "f1952 (1 seed, eval_size 500/cell): 10%→3% 0.860 at 293 PF (FTM 3.1×), 10%→5% 0.848 at 305 PF (2.4×) vs recipe 0.883 at 345 PF (4.1×). Only ≈12–15% fewer FLOPs than the recipe (blocks 0–6 run dense) for −0.02–0.035 score: worse. f3904 evals running.",
+  "result": "1 seed, eval_size 500/cell. 10%→3%: 0.860 @293 PF (3.1×) at f1952; 0.909 @585 PF (3.9×) at f3904. 10%→5%: 0.848 @305 (2.4×); 0.909 @608 (3.7×). Recipe: 4.1× / 3.7×. Ties the recipe at f3904, loses at f1952; only 12–15% fewer FLOPs because blocks 0–6 run dense (floor ≈0.2× dense/step). Not a path to ≥5×.",
   "match": [
    "r10to3",
    "r10to5"
