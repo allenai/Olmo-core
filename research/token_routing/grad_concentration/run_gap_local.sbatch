@@ -29,7 +29,7 @@ s.ROOT = 'checkpoints/prasanns/_transfer/gradconc'; sys.argv = ['s3_sync', 'down
 (
   flock 9
   for S in contradiction_fresh nq_fresh outlier_fresh oolong_fresh mt4f7808 mt4s1952; do s3down "$ROOT/shards/$S" "shards/$S"; done
-  s3down "$ROOT/ckpts/$CKNAME" "$CKNAME"
+  [ -z "${CKPT_PATH:-}" ] && s3down "$ROOT/ckpts/$CKNAME" "$CKNAME"
   for S in ${TRAIN_SHARDS:-}; do s3down "$ROOT/shards/$S" "shards/$S"; done
   # ADAM_S3=1: Adam factor files staged by stage_s3_beaker.sh (.../gradconc/adam/adam_<label>.pt)
   [ "${ADAM_S3:-0}" = 1 ] && s3down "$ROOT/adam" "adam"
@@ -41,7 +41,7 @@ if [ -n "${ADAM_FROM:-}" ]; then cp "$ADAM_FROM" "$OUTROOT/adam_from_${SLURM_JOB
 OPS_RUN_ID="gradgap-${LABEL}-${SLURM_JOB_ID}" OPS_EXPERIMENT=tokdrop_lr OPS_KIND=eval OPS_PARENT_RUN="$CKNAME" \
   OPS_EXPECTED_MINUTES=${MINUTES:-150} OPS_FIRST_OUTPUT=1200 OPS_STALL=1800 \
   bash "$REPO/recipes/env/ops_job.sh" "$PY" -u research/token_routing/grad_concentration/routed_probe.py \
-    --ckpt "$ROOT/ckpts/$CKNAME/model_and_optim" --shards "$ROOT/shards" --label "$LABEL" \
+    --ckpt "${CKPT_PATH:-$ROOT/ckpts/$CKNAME/model_and_optim}" --shards "$ROOT/shards" --label "$LABEL" \
     --save-dir "$OUTROOT/sketches" --out "$OUTROOT/results/${LABEL}_${SLURM_JOB_ID}.json" ${ARGS:-}
 # ADAM_PUBLISH=<path>: copy the factor file (small) to a shared path for jobs on other nodes
 [ -n "${ADAM_PUBLISH:-}" ] && cp "$OUTROOT/adam_${LABEL}.pt" "$ADAM_PUBLISH" && echo "published $ADAM_PUBLISH"
