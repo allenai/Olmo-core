@@ -525,6 +525,9 @@ def main():
     ap.add_argument("--adam-ckpt", default="", help="checkpoint dir with optimizer state (exp_avg_sq)")
     ap.add_argument("--adam-factors", default="", help="precomputed factors (.pt from --only-adam-factors)")
     ap.add_argument("--only-adam-factors", default="", help="write the Adam factors to this .pt and exit")
+    ap.add_argument("--adam-estimate", action="store_true",
+                    help="no optimizer state: estimate the Adam factors from this job's own rows first, then probe "
+                         "(one job per checkpoint, so every batch shares one preconditioner)")
     ap.add_argument("--exact", default="b16.attention.w_out,b20.feed_forward.w2")
     ap.add_argument("--attn-backend", default="flash_2")
     ap.add_argument("--no-ckpt", action="store_true")
@@ -537,6 +540,12 @@ def main():
     torch.manual_seed(0)
     torch.backends.cuda.matmul.allow_tf32 = False
     t00 = time.time()
+    if a.sels:  # selections at other keep fractions (block 7 / 16 only: the oracle scores and router fits exist there)
+        import re as _re
+        for nme in a.sels.split(","):
+            m = _re.fullmatch(r"(og|od|rnd|rtr)_L(7|16)_k([0-9.]+)", nme)
+            if m and float(m.group(3)) not in SPLIT_KS[int(m.group(2))]:
+                SPLIT_KS[int(m.group(2))] = tuple(sorted(SPLIT_KS[int(m.group(2))] + (float(m.group(3)),)))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 
     model = P.build_model(P.find_ckpt(a.ckpt), a.attn_backend)
@@ -552,7 +561,7 @@ def main():
             log(f"adam: no optimizer state found ({adam_diag})")
             if not a.only_adam_factors:
                 raise SystemExit("no optimizer state: run --only-adam-factors (estimates from batches) first")
-    if adam is None and a.only_adam_factors:
+    if adam is None and (a.only_adam_factors or a.adam_estimate):
         tasks_ = a.tasks.split(",")
         seen_ = [os.path.join(a.shards, s_) for s_ in a.seen_shards.split(",") if s_]
         rbt, _ = P.load_rows(a.shards, tasks_, a.rows, a.row_offset, 12288, seen_)
