@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import threading
 
 import numpy as np
 import pytest
@@ -66,6 +67,42 @@ def test_knapsack_matches_brute_force():
         best_val, _ = _brute_force_2d(t, i, max_t, max_i, v)
         got_val = sum(v[j] for j in picked)
         assert abs(got_val - best_val) < 1e-4, (got_val, best_val)
+
+
+def test_knapsack_selections_do_not_depend_on_the_reused_table():
+    """Each packing thread keeps one DP table; calls of every size after other calls, and calls
+    on other threads at the same time, select what a fresh table selects."""
+    rng = np.random.RandomState(1)
+    cases = []
+    for n in (6, 40, 6, 40, 13):
+        t = rng.randint(1, 20, size=n).tolist()
+        i = rng.randint(0, 9, size=n).tolist()
+        v = rng.randint(1, 50, size=n).astype(np.float64).tolist()
+        cases.append((t, i, 64, 16, v))
+
+    def in_fresh_thread(case):
+        out: list = []
+        thread = threading.Thread(target=lambda: out.append(select_subset_2d_knapsack(*case)))
+        thread.start()
+        thread.join()
+        return out[0]
+
+    expected = [in_fresh_thread(case) for case in cases]
+    assert [select_subset_2d_knapsack(*case) for case in cases] == expected
+    results: dict = {}
+    threads = [
+        threading.Thread(
+            target=lambda k=k: results.update(
+                {k: [select_subset_2d_knapsack(*case) for case in cases * 3]}
+            )
+        )
+        for k in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert all(results[k] == expected * 3 for k in range(4))
 
 
 def _packer(seq_len=32, max_crops=4, buffer_size=4):

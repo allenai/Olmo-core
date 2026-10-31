@@ -60,6 +60,32 @@ class ImageProjectorType(StrEnum):
     """
 
 
+def _few_key_attention(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, valid: Optional[torch.Tensor]
+) -> torch.Tensor:
+    """
+    One query's attention over the few keys of its group, for many groups, as elementwise
+    float32 ops. Generic attention kernels tile over long key sequences, and at a handful of keys
+    per group (2x2 or 3x3 pooling windows) most of their work, and their backward, is overhead.
+
+    :param q: ``(G, H, D)``.
+    :param k: ``(G, P, H, D)``.
+    :param v: ``(G, P, H, D)``.
+    :param valid: ``(G, P)`` bool, ``True`` where the key may be attended to; ``None`` when all
+        may.
+    :returns: ``(G, H, D)`` in ``q``'s dtype; zero for a group without any valid key, as
+        :func:`torch.nn.functional.scaled_dot_product_attention` gives.
+    """
+    scores = (q.float()[:, None] * k.float()).sum(-1) * q.shape[-1] ** -0.5  # (G, P, H)
+    if valid is not None:
+        # A finite fill, so a fully masked group's softmax stays finite (and is zeroed below).
+        scores = scores.masked_fill(~valid[:, :, None], torch.finfo(scores.dtype).min)
+    probs = torch.softmax(scores, dim=1)
+    if valid is not None:
+        probs = probs.masked_fill(~valid[:, :, None], 0.0)
+    return (probs[..., None] * v.float()).sum(1).to(q.dtype)
+
+
 class _PoolingCrossAttention(nn.Module):
     """Cross-attention used for patch-group pooling.
 
@@ -120,6 +146,14 @@ class _PoolingCrossAttention(nn.Module):
         :returns: ``(B, 1, emb_dim)``
         """
         B = query.shape[0]
+        if self.num_kv_groups == 1:
+            q = self.wq(query).reshape(B, self.num_heads, self.head_dim)
+            k = self.wk(context).reshape(B, context.shape[1], self.num_heads, self.head_dim)
+            v = self.wv(context).reshape(B, context.shape[1], self.num_heads, self.head_dim)
+            valid = attn_mask.reshape(B, context.shape[1]) if attn_mask is not None else None
+            out = _few_key_attention(q, k, v, valid)
+            return self.wo(out.reshape(B, 1, self.num_heads * self.head_dim))
+
         q = self.wq(query).reshape(B, 1, self.num_heads, self.head_dim)
         k = self.wk(context).reshape(B, context.shape[1], self.num_kv_heads, self.head_dim)
         v = self.wv(context).reshape(B, context.shape[1], self.num_kv_heads, self.head_dim)
@@ -401,8 +435,13 @@ class VisionConnector(nn.Module):
             .view(B, 1, 1)
             .expand(B, n_pooled, pool_size)
         )
-        # (B, n_pooled, pool_size, dim)
-        to_pool = image_features[batch_idx, pooled_patches_idx.clamp(min=0)]
+        # (B, n_pooled, pool_size, dim). A flat ``index_select``, whose backward is one
+        # ``index_add_``, rather than advanced indexing, whose backward sorts the indices to
+        # accumulate (every padded slot reads, and writes its gradient to, the first patch).
+        n_total = image_features.shape[1]
+        flat_idx = (batch_idx * n_total + pooled_patches_idx.clamp(min=0)).reshape(-1)
+        to_pool = image_features.reshape(B * n_total, dim).index_select(0, flat_idx)
+        to_pool = to_pool.view(B, n_pooled, pool_size, dim)
         # Zero out features at padded slots (idx == -1).
         to_pool = to_pool * valid.unsqueeze(-1).to(to_pool.dtype)
 

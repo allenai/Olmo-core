@@ -127,7 +127,8 @@ class Stage1AcademicDatasetConfig(Config):
     """``"all"`` trains every question of an image (up to ``max_questions``) as a sibling branch
     of one example; ``"one"`` keeps a single question per example, chosen per
     ``(seed, index, epoch)`` (for language models that isolate packed examples only by document
-    boundaries, e.g. Kimi Delta Attention)."""
+    boundaries, e.g. Kimi Delta Attention); ``"documents"`` keeps every question, each as its own
+    document sharing the image's crops (the vision encoder runs once for all of them)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "Stage1AcademicDataset":
@@ -204,5 +205,7 @@ class Stage1AcademicDataset(EpochSeededExamples):
             token_ids=cfg.token_ids,
             message_format=cfg.message_format,
             shuffle_rng=rng,
+            branches_as_documents=cfg.annotation_sampling == "documents",
+            document_token_budget=cfg.max_sequence_length,
         )
         return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)

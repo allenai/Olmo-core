@@ -1,11 +1,17 @@
+import copy
+import dataclasses
+
 import pytest
 import torch
+import torch.nn.functional as F
 
 from olmo_core.nn.vision import (
     VisionEncoderConfig,
     VisionEncoderType,
     VisionTransformer,
 )
+from olmo_core.nn.vision.image_vit import ViTAttention, ViTBlock
+from olmo_core.testing import requires_gpu
 
 # ---------------------------------------------------------------------------
 # Tiny configs for fast CPU tests
@@ -147,3 +153,73 @@ class TestSiglipVisionTransformer:
     def test_meta_device_build(self):
         vit = VisionTransformer(_tiny_siglip_cfg(), init_device="meta")
         assert next(iter(vit.parameters())).device.type == "meta"
+
+
+# ---------------------------------------------------------------------------
+# Block internals: fused self-attention projection and LayerNorm
+# ---------------------------------------------------------------------------
+
+
+def _separate_projection_attention(attn: ViTAttention, x: torch.Tensor) -> torch.Tensor:
+    """``attn`` with separate q, k and v projections and explicit softmax attention."""
+    B, N, _ = x.shape
+    q, k, v = (
+        proj(x).reshape(B, N, attn.num_heads, attn.head_dim).transpose(1, 2)
+        for proj in (attn.wq, attn.wk, attn.wv)
+    )
+    probs = (q @ k.transpose(-1, -2) * attn.head_dim**-0.5).softmax(-1)
+    return attn.wo((probs @ v).transpose(1, 2).reshape(B, N, attn.embed_dim))
+
+
+def test_self_attention_matches_separate_projections():
+    torch.manual_seed(0)
+    attn = ViTAttention(_tiny_siglip_cfg())
+    attn.reset_parameters()
+    x = torch.randn(3, 4, 64, requires_grad=True)
+    params = [x, *attn.parameters()]
+    out = attn(x)
+    ref = _separate_projection_attention(attn, x)
+    torch.testing.assert_close(out, ref)
+    for a, b in zip(
+        torch.autograd.grad(out.square().sum(), params),
+        torch.autograd.grad(ref.square().sum(), params),
+    ):
+        torch.testing.assert_close(a, b)
+
+
+@requires_gpu
+def test_self_attention_is_as_accurate_as_the_unfused_path():
+    """At SigLIP's sizes the fused path (cuDNN first on SM100) is as close to float32 as the
+    separate projections on flash or memory-efficient attention (``kv=x`` takes that path)."""
+    torch.manual_seed(0)
+    cfg = dataclasses.replace(
+        _tiny_siglip_cfg(),
+        image_emb_dim=1152,
+        image_num_heads=16,
+        image_num_key_value_heads=16,
+        image_head_dim=72,
+    )
+    attn = ViTAttention(cfg, init_device="cuda")
+    attn.reset_parameters()
+    reference = copy.deepcopy(attn)
+    attn = attn.to(torch.bfloat16)
+    x = torch.randn(4, 729, 1152, device="cuda")
+    ref = _separate_projection_attention(reference, x)
+    with torch.no_grad():
+        fused = attn(x.bfloat16()).float()
+        unfused = attn(x.bfloat16(), kv=x.bfloat16()).float()
+    fused_error = (fused - ref).abs().mean()
+    unfused_error = (unfused - ref).abs().mean()
+    assert fused_error <= 1.25 * unfused_error
+
+
+def test_block_layer_norms_are_torch_layer_norms():
+    block = ViTBlock(_tiny_siglip_cfg())
+    assert isinstance(block.attn_norm, torch.nn.LayerNorm)
+    assert isinstance(block.ffn_norm, torch.nn.LayerNorm)
+    assert {"attn_norm.weight", "attn_norm.bias", "ffn_norm.weight", "ffn_norm.bias"} <= set(
+        block.state_dict()
+    )
+    x = torch.randn(2, 4, 64)
+    norm = block.attn_norm
+    torch.testing.assert_close(norm(x), F.layer_norm(x, (64,), norm.weight, norm.bias, norm.eps))
