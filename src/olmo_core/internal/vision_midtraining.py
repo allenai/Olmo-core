@@ -253,6 +253,9 @@ class MixedMidtrainingRecipeConfig(Config):
     compile_loss: bool = True
     """Run the chunked weighted loss's per-chunk math as static-shape ``torch.compile`` graphs
     (see :attr:`~olmo_core.nn.vision.MultimodalLMConfig.compile_loss`) instead of eagerly."""
+    skip_nonfinite_grad_steps: bool = False
+    """Skip, instead of aborting on, an optimizer step whose total gradient norm is non-finite (see
+    :attr:`~olmo_core.optim.multimodal_optimizer.MultimodalOLMoDDPOptimizerConfig.skip_nonfinite_grad_steps`)."""
     balance_vit_crops: bool = False
     """Share each micro-batch's image crops evenly among all ranks for the vision encoder (see
     :attr:`~olmo_core.train.train_module.transformer.multimodal_train_module.MultimodalOLMoDDPTrainModuleConfig.balance_vit_crops`)."""
@@ -654,6 +657,7 @@ def _build_train_module(
     text: dict | None = None,
     padding_input_token_id: int | None = None,
     balance_vit_crops: bool = False,
+    skip_nonfinite_grad_steps: bool = False,
 ) -> MultimodalOLMoDDPTrainModuleConfig:
     """
     :param padding_input_token_id: With a token id (the merged stage passes EOS), padding slots
@@ -663,6 +667,8 @@ def _build_train_module(
         gradients by about ``1/sqrt(eps)``; in the LM's clip group they would set the clipping
         of every LM parameter.
     :param balance_vit_crops: See :attr:`MixedMidtrainingRecipeConfig.balance_vit_crops`.
+    :param skip_nonfinite_grad_steps: See
+        :attr:`MixedMidtrainingRecipeConfig.skip_nonfinite_grad_steps`.
     """
     optim_settings, module_settings = text_train_settings(text)
     # Two sequences per micro-batch for the vision tower's memory, or the text run's own
@@ -731,6 +737,7 @@ def _build_train_module(
             ],
             foreach_chunk_size=50_000_000,
             clip_grad_norm_by_scheduler_group=True,
+            skip_nonfinite_grad_steps=skip_nonfinite_grad_steps,
             **optim_settings,
         ),
         freeze_params=["vision.*"] if text_only else [],
@@ -1283,6 +1290,7 @@ def build_config(
             text=text,
             padding_input_token_id=tokenizer.eos_token_id if text_source is not None else None,
             balance_vit_crops=recipe.balance_vit_crops,
+            skip_nonfinite_grad_steps=recipe.skip_nonfinite_grad_steps,
         ),
         trainer=_build_trainer(cli, recipe, budget, text, token_ids),
         recipe=recipe,
