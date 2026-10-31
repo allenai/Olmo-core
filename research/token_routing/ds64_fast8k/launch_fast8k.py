@@ -319,6 +319,12 @@ ARM_EXTRA.update({
                              "--st-otr-early-lora-blocks 32")
        for tag, st in (("r20at1", "1:0.2,16:0.07"), ("r20at3", "3:0.2,16:0.07"), ("r20at5", "5:0.2,16:0.07"),
                        ("p50at3", "3:0.5,7:0.2,16:0.07"))},
+    # aggressive budgets (10-31, gradient-gap follow-up): does a model trained at a harder keep co-adapt to it?
+    **{f"lora64all32{tag}": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 "
+                             f"--st-otr-keep-frac {kf} --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 "
+                             f"--st-otr-drop-layer 7 --st-otr-stages {st} --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
+                             "--st-otr-early-lora-blocks 32")
+       for tag, kf, st in (("r10to3", 0.1, "7:0.1,16:0.03"), ("r10to5", 0.1, "7:0.1,16:0.05"))},
     # second stage at block 12 instead of 16 (same budgets)
     "lora64r20to7s12": ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
                         "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "

@@ -1,6 +1,18 @@
 [
  {
   "date": "2026-10-31",
+  "status": "running",
+  "track": "sft4",
+  "who": "main",
+  "title": "Aggressive keep trained directly: 10%@7 → 3% or 5%@16 (gradient-gap follow-up)",
+  "result": "Running: lora64all32r10to3 / r10to5 at f1952 and f3904, LR 1e-5, 1 seed. Tests whether a model trained at a harder keep co-adapts to it (the recipe-trained model's routed gradient at these budgets decays to ≈0.38).",
+  "match": [
+   "r10to3",
+   "r10to5"
+  ]
+ },
+ {
+  "date": "2026-10-31",
   "status": "done",
   "track": "mechanism",
   "who": "agent (Opus)",
