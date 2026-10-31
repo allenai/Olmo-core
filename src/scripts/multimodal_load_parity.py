@@ -20,7 +20,9 @@ names, with this file passed by path::
 the run's sequence length, and writes their sha256 to ``batches.json``. ``score`` refuses a batch
 whose hash differs. ``compare`` passes when the token-weighted CE of every batch agrees within
 ``--tolerance`` (default 1e-3); the largest logit difference over a fixed sample of response
-positions is reported beside it as a diagnostic.
+positions is reported beside it as a diagnostic, for batches with at most ``LOGIT_MAX_POSITIONS``
+supervised positions (a text instance supervises nearly every position, and its response logits
+alone would take ~26 GB in fp32).
 """
 
 import dataclasses
@@ -38,6 +40,7 @@ log = logging.getLogger(__name__)
 
 BATCH_NAMES = ("images", "text")
 LOGIT_SAMPLE = 1024
+LOGIT_MAX_POSITIONS = 16384
 
 
 def _load_config(step_dir: Path):
@@ -162,20 +165,28 @@ def score(step_dir: Path, out_dir: Path, tag: str, compile_model: bool):
             raise click.ClickException(f"batch_{name}.pt hash {actual} != manifest {expected}")
         loss_masks = batch["loss_masks"].float()
         weight = float((loss_masks * (loss_masks > 0)).sum())
+        positions = int((loss_masks > 0).sum())
+        with_logits = positions <= LOGIT_MAX_POSITIONS
         with torch.no_grad():
-            output = train_module.eval_batch(batch, return_response_logits=True)
-        logits = output.logits
-        assert logits is not None
-        # A fixed, evenly spaced sample of the supervised positions, the same on every version.
-        rows = torch.linspace(0, logits.shape[0] - 1, min(LOGIT_SAMPLE, logits.shape[0])).long()
-        torch.save(logits[rows.to(logits.device)].float().cpu(), out_dir / f"logits_{tag}_{name}.pt")
+            output = train_module.eval_batch(batch, return_response_logits=with_logits)
+        if with_logits:
+            logits = output.logits
+            assert logits is not None
+            # A fixed, evenly spaced sample of the supervised positions, the same on every version.
+            rows = torch.linspace(0, logits.shape[0] - 1, min(LOGIT_SAMPLE, logits.shape[0])).long()
+            torch.save(
+                logits[rows.to(logits.device)].float().cpu(), out_dir / f"logits_{tag}_{name}.pt"
+            )
         results[name] = {
             "sha256": expected,
             "ce": float(output.ce_loss) / weight,
             "z_loss": float(output.z_loss) / weight if output.z_loss is not None else None,
             "loss_weight": weight,
-            "response_positions": int(logits.shape[0]),
+            "response_positions": positions,
+            "logits_saved": with_logits,
         }
+        del output
+        torch.cuda.empty_cache()
         log.info("%s %s: CE %.8f over weight %.1f", tag, name, results[name]["ce"], weight)
     (out_dir / f"score_{tag}.json").write_text(json.dumps(results, indent=2))
     print(json.dumps(results, indent=2))
@@ -195,8 +206,11 @@ def compare(out_dir: Path, tag_a: str, tag_b: str, tolerance: float):
     for name in BATCH_NAMES:
         if a[name]["sha256"] != b[name]["sha256"]:
             raise click.ClickException(f"{name}: the two scores read different batches")
-        logits_a = torch.load(out_dir / f"logits_{tag_a}_{name}.pt")
-        logits_b = torch.load(out_dir / f"logits_{tag_b}_{name}.pt")
+        logit_diff = None
+        if a[name].get("logits_saved") and b[name].get("logits_saved"):
+            logits_a = torch.load(out_dir / f"logits_{tag_a}_{name}.pt")
+            logits_b = torch.load(out_dir / f"logits_{tag_b}_{name}.pt")
+            logit_diff = float((logits_a - logits_b).abs().max())
         gap = abs(a[name]["ce"] - b[name]["ce"])
         ok = gap <= tolerance
         passed &= ok
@@ -205,7 +219,7 @@ def compare(out_dir: Path, tag_a: str, tag_b: str, tolerance: float):
             f"ce_{tag_b}": b[name]["ce"],
             "abs_gap": gap,
             "pass": ok,
-            "max_abs_logit_diff": float((logits_a - logits_b).abs().max()),
+            "max_abs_logit_diff": logit_diff,
         }
     report["pass"] = passed
     (out_dir / f"compare_{tag_a}_{tag_b}.json").write_text(json.dumps(report, indent=2))
