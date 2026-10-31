@@ -1,6 +1,18 @@
 [
  {
   "date": "2026-10-31",
+  "status": "running",
+  "track": "mechanism",
+  "who": "agent (Opus)",
+  "title": "Early-phase gradient probe: when does the routed gradient become unbiased?",
+  "result": "Running. Short recipe run with checkpoints at steps 0–244; routed-vs-dense gradient waterfall per checkpoint, incl. aggressive budgets (10% @7, 3% @16).",
+  "match": [
+   "gradgap",
+   "earlyph"
+  ]
+ },
+ {
+  "date": "2026-10-31",
   "status": "done",
   "track": "mechanism",
   "who": "agent (Opus)",
