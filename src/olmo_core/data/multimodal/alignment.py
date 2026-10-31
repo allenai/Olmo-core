@@ -150,6 +150,37 @@ class MultimodalDatasetMixture:
     token_ids: Molmo2TokenIds
 
 
+_TOKENIZER_JSON_PROBES = (
+    "The total was 2024.\n\nNext",
+    "long_caption: A dog, 12 cats.\n",
+    "<|im_start|>assistant\n<think>",
+)
+"""Strings GPT-2's regex and Dolma2's ``tokenizer.json`` split differently."""
+
+
+def _use_tokenizer_json_split(
+    tokenizer: Any, identifier: str, revision: str | None, cache_dir: str | None
+) -> None:
+    """Give ``tokenizer`` the pre-tokenizer of the repository's ``tokenizer.json``.
+
+    :raises ValueError: If ``tokenizer`` still encodes differently from ``tokenizer.json``.
+    """
+    from tokenizers import Tokenizer
+    from transformers.utils.hub import cached_file
+
+    path = cached_file(identifier, "tokenizer.json", revision=revision, cache_dir=cache_dir)
+    if path is None:
+        raise ValueError(f"{identifier} has no tokenizer.json")
+    reference = Tokenizer.from_file(path)
+    tokenizer.backend_tokenizer.pre_tokenizer = reference.pre_tokenizer
+    for text in _TOKENIZER_JSON_PROBES:
+        if (
+            tokenizer.encode(text, add_special_tokens=False)
+            != reference.encode(text, add_special_tokens=False).ids
+        ):
+            raise ValueError(f"Tokenizer still differs from tokenizer.json on {text!r}")
+
+
 @dataclass
 class MultimodalMixtureConfig(Config):
     """Build named map-style sources and calibrate their supervised-loss allocation.
@@ -169,6 +200,11 @@ class MultimodalMixtureConfig(Config):
     """Embedding-table size, including any reserved rows for image tokens."""
     tokenizer_revision: str | None = None
     tokenizer_cache_dir: str | None = None
+    tokenizer_json_split: bool = False
+    """Split text with the pre-tokenizer in ``tokenizer.json``, as the text mixes were tokenized.
+    ``AutoTokenizer`` builds ``GPT2Tokenizer`` for Dolma2, which applies GPT-2's regex instead: the
+    same vocabulary and IDs, but different tokens (``".\\n\\n"`` is three tokens, not one). Off by
+    default, so existing recipes and checkpoints keep the tokens they were trained on."""
 
     def validate(self):
         """Validate source names and loss targets without opening datasets."""
@@ -207,6 +243,10 @@ class MultimodalMixtureConfig(Config):
             cache_dir=self.tokenizer_cache_dir,
             use_fast=False,
         )
+        if self.tokenizer_json_split:
+            _use_tokenizer_json_split(
+                tokenizer, self.tokenizer.identifier, self.tokenizer_revision, self.tokenizer_cache_dir
+            )
         for name in ("eos_token_id", "pad_token_id"):
             if getattr(tokenizer, name) != getattr(self.tokenizer, name):
                 raise ValueError(f"Loaded tokenizer {name} differs from the configured tokenizer")
