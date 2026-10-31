@@ -1090,8 +1090,9 @@ def ftm_rows(S):
              "lora64M7": "Router + adapters 0–6", "lora64r20to10": "Adapters 0–6 + two-stage 20%→10%"}
     out = [f'<tr><td>Dense</td><td class="n">{p["rows"]}</td><td class="n">{p["x"]:.0f}</td><td class="n">{p["y"]:.3f}</td>'
            f'<td class="n">{p["o"]:.3f}</td><td class="n">1.0×</td></tr>' for p in dense]
-    lr_of = {"lora64all32r20to7": "1e-05", "lora64all32p50at3": "1e-05"}
-    names = {"lora64all32r20to7": "Whole-model LoRA + two-stage (LR 1e-5)", "lora64all32p50at3": "Pyramid 50%→20%→7% at blocks 3/7/16 (whole-model LoRA, LR 1e-5)", **names}
+    lr_of = {"lora64all32r20to7": "1e-05", "lora64all32p50at3": "1e-05", "lora64all32r10to3": "1e-05", "lora64all32r10to5": "1e-05"}
+    names = {"lora64all32r20to7": "Whole-model LoRA + two-stage (LR 1e-5)", "lora64all32p50at3": "Pyramid 50%→20%→7% at blocks 3/7/16 (whole-model LoRA, LR 1e-5)",
+             "lora64all32r10to3": "Aggressive keep 10% → 3% (whole-model LoRA, LR 1e-5)", "lora64all32r10to5": "Aggressive keep 10% → 5% (whole-model LoRA, LR 1e-5)", **names}
     for arm, label in names.items():
         for p in pick(S, "mt4", "f", arm, lr_of.get(arm, "5e-06")):
             txt = f'&gt;{x1 / p["x"]:.1f}×' if p["y"] > max(y for _, y in dpts) else f'{need_pf(p["y"]) / p["x"]:.1f}×'

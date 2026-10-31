@@ -100,6 +100,8 @@ def _ops_scores(run):
         m = str(r.get("metric", ""))
         if m.startswith("gradcomp_") or r.get("experiment") == "grad_composition":
             continue  # gradient statistics, not task scores
+        if r.get("task") in ("mt4", "mt11") or r.get("experiment") == "gradgap" or m.startswith(("gap", "gradgap")):
+            continue  # gradient-gap probe metrics recorded against the train run (task = mix name), not task scores
         if m.startswith("answer_") or "_ce" in m or m.endswith("top1"):
             continue  # teacher-forced answer CE / top-1 probes (decay diagnosis) share train runs; not task scores
         k = (r["task"], r["rung"])

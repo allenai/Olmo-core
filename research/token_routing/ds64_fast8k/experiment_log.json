@@ -1,11 +1,11 @@
 [
  {
   "date": "2026-10-31",
-  "status": "running",
+  "status": "partial",
   "track": "sft4",
   "who": "main",
   "title": "Aggressive keep trained directly: 10%@7 → 3% or 5%@16 (gradient-gap follow-up)",
-  "result": "Running: lora64all32r10to3 / r10to5 at f1952 and f3904, LR 1e-5, 1 seed. Tests whether a model trained at a harder keep co-adapts to it (the recipe-trained model's routed gradient at these budgets decays to ≈0.38).",
+  "result": "f1952 (1 seed, eval_size 500/cell): 10%→3% 0.860 at 293 PF (FTM 3.1×), 10%→5% 0.848 at 305 PF (2.4×) vs recipe 0.883 at 345 PF (4.1×). Only ≈12–15% fewer FLOPs than the recipe (blocks 0–6 run dense) for −0.02–0.035 score: worse. f3904 evals running.",
   "match": [
    "r10to3",
    "r10to5"
