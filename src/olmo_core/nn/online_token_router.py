@@ -1104,6 +1104,24 @@ class OnlineTokenRouter:
         if self.gold is not None and not dense:
             gflag = fp["_gold"][..., 0] if "_gold" in fp else self._row_gold(ids, cid)
             self._stat("leak_auc", self._leak_auc(keep, body, cid, gflag))
+            if self._next is not None:
+                # later pyramid stages see compacted rows: hand them the original rows and each token's original column,
+                # so the deepest stage can log its ABSOLUTE per-document kept fraction (leak_auc_abs, keep_frac_abs)
+                fp["_pos0"] = torch.arange(ids.shape[1], device=dev)[None, :].expand(ids.shape[0], -1).contiguous()
+                self._next._leak0 = {"body": body, "cid": cid, "g": gflag}
+        elif self.stage_idx == 0 and self._next is not None:
+            self._next._leak0 = None
+        L0 = getattr(self, "_leak0", None) if self.stage_idx > 0 else None
+        if L0 is not None and not dense and "_pos0" in fp:
+            keep0 = torch.zeros_like(L0["body"])
+            r_, c_ = keep.nonzero(as_tuple=True)
+            keep0[r_, fp["_pos0"][r_, c_]] = True
+            self._stat("leak_auc_abs", self._leak_auc(keep0, L0["body"], L0["cid"], L0["g"]))
+            self._stat("keep_frac_abs", float(keep0.sum()) / max(1.0, float(L0["body"].sum())))
+            if self._next is not None:
+                self._next._leak0 = L0
+        elif self.stage_idx > 0 and self._next is not None:
+            self._next._leak0 = None
         return keep, entry
 
     def mid_compact(self, model, h: torch.Tensor, block_kwargs: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
