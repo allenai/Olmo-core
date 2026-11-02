@@ -32,6 +32,72 @@
    "steps_expected": 6,
    "smoke": true,
    "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop30sd1-f1952-tdx-lr1e-05": {
+   "ex": "01M6F47MBBJNV6C7PFE9MJ014X",
+   "arm": "sbptop30",
+   "seed": 1,
+   "rows": 1952,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 488,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop30sd2-f1952-tdx-lr1e-05": {
+   "ex": "01M6F48N10CYB3MZ5WPW9QSJN1",
+   "arm": "sbptop30",
+   "seed": 2,
+   "rows": 1952,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 488,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbpsmp30sd1-f1952-tdx-lr1e-05": {
+   "ex": "01M6F49H4VJTAT62HG2E2FPPBH",
+   "arm": "sbpsmp30",
+   "seed": 1,
+   "rows": 1952,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 488,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbpsmp30sd2-f1952-tdx-lr1e-05": {
+   "ex": "01M6F4AHASP0E31NPG3QQV0ZH7",
+   "arm": "sbpsmp30",
+   "seed": 2,
+   "rows": 1952,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 488,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32xstepsd1-f1952-tdx-lr1e-05": {
+   "ex": "01M6F4EK4CTMX299D8HP7B159N",
+   "arm": "xstep",
+   "seed": 1,
+   "rows": 1952,
+   "gpus": 2,
+   "micro": 2,
+   "steps_expected": 488,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32xstepsd2-f1952-tdx-lr1e-05": {
+   "ex": "01M6F4FDS9B2RE08SVEY28RPQ8",
+   "arm": "xstep",
+   "seed": 2,
+   "rows": 1952,
+   "gpus": 2,
+   "micro": 2,
+   "steps_expected": 488,
+   "smoke": false,
+   "state": "S"
   }
  },
  "evals": {}
