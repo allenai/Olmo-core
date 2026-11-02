@@ -1,0 +1,11 @@
+{
+ "runs": {
+  "f8k-mt4-lora64all32r20to7ds0f2-f1952-tde-lr1e-05-smoke": {
+   "ex": "01M6F2W4GNYVEDVKBEE1WWVG4H",
+   "arm": "lora64all32r20to7ds0f2",
+   "budget": "f1952",
+   "seed": 0,
+   "max_steps": 4
+  }
+ }
+}

@@ -52,15 +52,50 @@ def run_name(arm, budget, seed, smoke):
     return f"f8k-mt4-{a}-{budget}{SUFFIX}-lr{LR:g}" + ("-smoke" if smoke else "")
 
 
+def do_eval(a, st):
+    """Score each finished run per task on the 8k + 2k rungs x 500 rows, no-cot, query after: the same command
+    ``ds64_fast8k/launch_fast8k.py`` eval mode builds for the recipe runs (``eval_cmd``, mt4 branch)."""
+    sys.path.insert(0, f"{REPO}/research/token_routing/ds64_fast8k")
+    sys.path.insert(0, f"{REPO}/research/token_routing/ds64_fast2k")
+    from launch_fast2k import CKPTS, TOKENIZER, parse_id, sh  # noqa: E402
+    from launch_fast8k import EVAL_LAUNCHER, MT4_TASKS, RUNGS, TASK_KEY  # noqa: E402
+
+    names = a.runs.split(",") if a.runs else [n for n, r in st["runs"].items() if not r.get("max_steps")]
+    for name in names:
+        for task in MT4_TASKS:
+            ename = f"{name}-ev{task}"
+            if st["evals"].get(ename, {}).get("ex"):
+                print(f"[skip] {ename} ({st['evals'][ename]['ex']})")
+                continue
+            cmd = [sys.executable, "-u", EVAL_LAUNCHER, ename, "ai2/jupiter-cirrascale-2",
+                   "--task", TASK_KEY[task], "--variant", "docchunk", "--ckpt", f"{CKPTS}/{name}",
+                   "--query-position", "after", "--cot-mode", "none", "--tokenizer", TOKENIZER, "--ngpu", "2",
+                   "--max-test", "500", "--priority", "urgent", "--max-length", "20000", "--batch-size", "8",
+                   "--dc-rung-files", json.dumps({task: RUNGS[task]}), "--dc-rungs", ",".join(RUNGS[task])]
+            rc, out = sh(cmd)
+            ex = parse_id(out)
+            os.makedirs(f"{HERE}/launch_logs", exist_ok=True)
+            open(f"{HERE}/launch_logs/{ename}.eval.log", "w").write(out)
+            print(f"eval {ename} -> {ex or 'FAILED: ' + out[-400:]}", flush=True)
+            if ex:
+                st["evals"][ename] = {"ex": ex, "train_run": name, "task": task}
+                json.dump(st, open(STATE + ".tmp", "w"), indent=1)
+                os.replace(STATE + ".tmp", STATE)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arms", default="ds0f2")
     ap.add_argument("--budget", default="f1952", choices=sorted(EXPECTED_MIN))
     ap.add_argument("--seed", type=int, default=0, help="0 = the trainer default (as the recipe's seed-0 runs)")
     ap.add_argument("--max-steps", type=int, default=0, help="smoke test: stop after N steps (name gets -smoke)")
-    ap.add_argument("mode", choices=["launch", "dry_run"])
+    ap.add_argument("--runs", default="", help="eval: comma run names (default: every non-smoke run in the state)")
+    ap.add_argument("mode", choices=["launch", "dry_run", "eval"])
     a = ap.parse_args()
     st = json.load(open(STATE)) if os.path.exists(STATE) else {"runs": {}}
+    st.setdefault("evals", {})
+    if a.mode == "eval":
+        return do_eval(a, st)
     for arm in a.arms.split(","):
         name = run_name(arm, a.budget, a.seed, a.max_steps > 0)
         if name in st["runs"] and a.mode == "launch":
