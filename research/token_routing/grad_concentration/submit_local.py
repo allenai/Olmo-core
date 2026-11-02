@@ -24,6 +24,7 @@ ap.add_argument("--minutes", type=int, default=75)
 ap.add_argument("--adam-s3", action="store_true", help="factors from S3 .../gradconc/adam/adam_<label>.pt")
 ap.add_argument("--ckpt-path", default="", help="a node-local checkpoint (no S3 pull), e.g. a local run's step dir")
 ap.add_argument("--dependency", default="")
+ap.add_argument("--script", default="", help="support_probe.py: the support-token probe (sketches -> /data/prasann/gradgap/support)")
 a = ap.parse_args()
 only = [int(x) for x in a.shards.split(",")] if a.shards else range(a.num_shards)
 for i in only:
@@ -33,11 +34,13 @@ for i in only:
         env.append(f"ADAM_FROM={a.adam if a.adam.startswith('/') else os.path.join(HERE, a.adam)}")
     if a.adam_s3:
         env.append("ADAM_S3=1")
+    if a.script:
+        env += [f"SCRIPT={a.script}", "SAVE_SUB=support", "RUN_PREFIX=gradsupp"]
     if a.ckpt_path:
         env.append(f"CKPT_PATH={a.ckpt_path}")
     if a.adam_publish:
         env.append(f"ADAM_PUBLISH={a.adam_publish}")
-    name = f"gradgap-{a.label}-s{i}" if not a.adam_publish else f"gradgap-adam-{a.label}"
+    name = f"{'gradsupp' if a.script else 'gradgap'}-{a.label}-s{i}" if not a.adam_publish else f"gradgap-adam-{a.label}"
     # values may hold commas (--sels lists): pass them through the environment, not --export=K=V
     penv = {**os.environ, **dict(e.split("=", 1) for e in env)}
     cmd = ["sbatch", "-w", a.node, f"--qos={a.qos}", "-J", name, "--export=ALL"]

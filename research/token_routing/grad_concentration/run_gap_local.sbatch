@@ -3,6 +3,7 @@
 # once) to node /data, pulls the model-only checkpoint + probe shards from S3 (stage_s3_beaker.sh put them there), runs.
 #   sbatch -w <node> -J gradgap-<label>-s<i> --export=ALL,SRC=<checkout>,LABEL=<label>,CKNAME=<s3 ckpt dir>,ARGS="..." \
 #     run_gap_local.sbatch          (STAGE_ONLY=1: copy + download, no GPU work)
+#   SCRIPT=support_probe.py SAVE_SUB=support: run the support-token probe instead (same args / staging)
 #SBATCH --partition=jsteinhardt
 #SBATCH --qos=preemptive_high
 #SBATCH --gres=gpu:1
@@ -38,11 +39,11 @@ if [ "${ADAM_S3:-0}" = 1 ]; then ARGS="${ARGS:-} --adam-factors $ROOT/adam/adam_
 # ADAM_FROM=<shared path>: node-local copy of the Adam factors, passed as --adam-factors
 if [ -n "${ADAM_FROM:-}" ]; then cp "$ADAM_FROM" "$OUTROOT/adam_from_${SLURM_JOB_ID}.pt"; ARGS="${ARGS:-} --adam-factors $OUTROOT/adam_from_${SLURM_JOB_ID}.pt"; fi
 [ "${STAGE_ONLY:-0}" = 1 ] && { du -sh $ROOT/*; echo STAGE_DONE; exit 0; }
-OPS_RUN_ID="gradgap-${LABEL}-${SLURM_JOB_ID}" OPS_EXPERIMENT=tokdrop_lr OPS_KIND=eval OPS_PARENT_RUN="$CKNAME" \
+OPS_RUN_ID="${RUN_PREFIX:-gradgap}-${LABEL}-${SLURM_JOB_ID}" OPS_EXPERIMENT=tokdrop_lr OPS_KIND=eval OPS_PARENT_RUN="$CKNAME" \
   OPS_EXPECTED_MINUTES=${MINUTES:-150} OPS_FIRST_OUTPUT=1200 OPS_STALL=1800 \
-  bash "$REPO/recipes/env/ops_job.sh" "$PY" -u research/token_routing/grad_concentration/routed_probe.py \
+  bash "$REPO/recipes/env/ops_job.sh" "$PY" -u research/token_routing/grad_concentration/${SCRIPT:-routed_probe.py} \
     --ckpt "${CKPT_PATH:-$ROOT/ckpts/$CKNAME/model_and_optim}" --shards "$ROOT/shards" --label "$LABEL" \
-    --save-dir "$OUTROOT/sketches" --out "$OUTROOT/results/${LABEL}_${SLURM_JOB_ID}.json" ${ARGS:-}
+    --save-dir "$OUTROOT/${SAVE_SUB:-sketches}" --out "$OUTROOT/results/${LABEL}_${SLURM_JOB_ID}.json" ${ARGS:-}
 # ADAM_PUBLISH=<path>: copy the factor file (small) to a shared path for jobs on other nodes
 [ -n "${ADAM_PUBLISH:-}" ] && cp "$OUTROOT/adam_${LABEL}.pt" "$ADAM_PUBLISH" && echo "published $ADAM_PUBLISH"
 echo "PROBE_DONE $LABEL"
