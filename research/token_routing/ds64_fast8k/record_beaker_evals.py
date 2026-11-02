@@ -33,8 +33,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--suffix", nargs="+", default=["-tdc", "-tdp"])
     ap.add_argument("--experiment", default="tokdrop_lr")
+    ap.add_argument("--state", default=os.path.join(HERE, "state.json"), help="a launcher's state.json")
     a = ap.parse_args()
-    st = json.load(open(os.path.join(HERE, "state.json")))
+    st = json.load(open(a.state))
     have = recorded()
     rows, fetched, empty = [], 0, 0
     for ename, e in st.get("evals", {}).items():

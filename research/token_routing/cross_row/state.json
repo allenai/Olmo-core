@@ -1,0 +1,38 @@
+{
+ "runs": {
+  "f8k-mt4-lora64all32xstepsd1-f1952-tdxsmk-lr1e-05": {
+   "ex": "01M6F387K3QM3QM8FWQ037GRZV",
+   "arm": "xstep",
+   "seed": 1,
+   "rows": 1952,
+   "gpus": 2,
+   "micro": 2,
+   "steps_expected": 6,
+   "smoke": true,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop30sd1-f1952-tdxsmk-lr1e-05": {
+   "ex": "01M6F398AC4K7EA5NB8QEV1JBJ",
+   "arm": "sbptop30",
+   "seed": 1,
+   "rows": 1952,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 6,
+   "smoke": true,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbpsmp30sd1-f1952-tdxsmk-lr1e-05": {
+   "ex": "01M6F3A7DM34D4HYPJGTTZSECM",
+   "arm": "sbpsmp30",
+   "seed": 1,
+   "rows": 1952,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 6,
+   "smoke": true,
+   "state": "S"
+  }
+ },
+ "evals": {}
+}
