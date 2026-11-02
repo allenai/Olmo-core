@@ -40,17 +40,17 @@ ALIGNMENT_LOSS_TARGETS: dict[str, dict[str, float]] = {
 
 ALIGNMENT_MEAN_LOSS_WEIGHTS: dict[str, dict[str, float]] = {
     "bridge": {
-        "pixmo_caption": 28.829104933305643,
-        "pixmo_transcript": 29.77422616124386,
+        "pixmo_caption": 28.504544186405838,
+        "pixmo_transcript": 29.699449828243814,
     },
     "perception": {
-        "audited_alignment": 18.860581716464367,
-        "cosyn_point": 19.9274699697271,
-        "ocr_document": 4.121176112443209,
-        "pixmo_caption": 28.593906218127813,
-        "pixmo_points_basic": 33.50284379025106,
+        "audited_alignment": 18.696413921716157,
+        "cosyn_point": 19.90814993873937,
+        "ocr_document": 4.103901697322726,
+        "pixmo_caption": 28.26835112122353,
+        "pixmo_points_basic": 33.4985158557829,
         "pixmo_points_high_frequency": 27.439346029539593,
-        "pixmo_transcript": 29.704384807148017,
+        "pixmo_transcript": 29.593976828677114,
         "scalar_count": 3.464101552963257,
     },
     "joint": {
@@ -65,23 +65,30 @@ ALIGNMENT_MEAN_LOSS_WEIGHTS: dict[str, dict[str, float]] = {
         "pixmo_transcript": 29.65188992714684,
     },
 }
-"""Loss-weight calibration at 8,192 tokens for each phase."""
+"""Loss-weight calibration at 8,192 tokens for each phase.
+
+Bridge and perception were remeasured on 2026-11-02 with ``tokenizer.json``'s split
+(:attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`);
+the earlier GPT2Tokenizer split gave means up to 1.1% higher. The joint entries are unchanged:
+today's builder no longer reproduces them even with the earlier split (it builds perception's
+sources), so they predate the current code."""
 
 ALIGNMENT_ONE_ANNOTATION_MEAN_LOSS_WEIGHTS: dict[str, dict[str, float]] = {
     "perception": {
-        "cosyn_point": 9.25648039940279,
-        "pixmo_points_basic": 9.418736778199673,
+        "cosyn_point": 9.248663923586719,
+        "pixmo_points_basic": 9.417051777942106,
         "pixmo_points_high_frequency": 18.28113580151694,
     },
     "joint": {
-        "cosyn_point": 9.25648039940279,
-        "pixmo_points_basic": 9.418736778199673,
+        "cosyn_point": 9.248663923586719,
+        "pixmo_points_basic": 9.417051777942106,
         "pixmo_points_high_frequency": 18.28113580151694,
     },
 }
 """Calibration at 8,192 tokens of the multi-annotation sources when each example keeps one
 sampled annotation (``annotation_sampling="one"``, used for language models with document
-boundaries). The other sources keep :data:`ALIGNMENT_MEAN_LOSS_WEIGHTS`."""
+boundaries). The other sources keep :data:`ALIGNMENT_MEAN_LOSS_WEIGHTS`. Remeasured 2026-11-02 with
+``tokenizer.json``'s split (at most 0.1% lower than with the earlier split)."""
 
 ALIGNMENT_ARTIFACT_MANIFESTS: dict[str, str] = {
     "pixmo-cap-content-disjoint-v1/build-state.json": (
@@ -502,33 +509,33 @@ STAGE1_V3_LOSS_TARGETS: dict[str, float] = {
 39.2 / 12.8 / 38.9 / 9.1 / 0.08)."""
 
 STAGE1_V3_MEAN_LOSS_WEIGHTS: dict[str, float] = {
-    "pixmo_caption": 208.78125,
-    "pixmo_transcript": 225.8046875,
+    "pixmo_caption": 203.859375,
+    "pixmo_transcript": 224.28125,
     "pixmo_points_v2": 28.5625,
     "pixmo_count_v2": 34.2265625,
-    "cosyn_point_v2": 21.9375,
-    "olmocr_documents": 766.2734375,
-    "olmocr_books": 506.1484375,
-    "olmocr_loc_transcripts": 345.171875,
-    "olmocr_national_archives": 288.4453125,
-    "text_rich_chart": 204.3828125,
-    "text_rich_diagram": 223.1015625,
-    "text_rich_doc": 276.5703125,
-    "text_rich_graphic": 158.296875,
-    "text_rich_table": 262.3515625,
-    "textocr": 50.953125,
-    "nvidia_synth_en": 183.015625,
-    "synth_receipts_en": 171.2421875,
-    "cosyn_chart_exp": 47.109375,
-    "cosyn_chemical_exp": 45.6015625,
-    "cosyn_diagram_exp": 39.6953125,
-    "cosyn_document": 5.515625,
-    "cosyn_math_exp": 405.0703125,
-    "cosyn_music_exp": 37.3203125,
-    "cosyn_table_exp": 50.9375,
+    "cosyn_point_v2": 21.8984375,
+    "olmocr_documents": 725.8515625,
+    "olmocr_books": 485.2734375,
+    "olmocr_loc_transcripts": 330.25,
+    "olmocr_national_archives": 274.046875,
+    "text_rich_chart": 200.421875,
+    "text_rich_diagram": 218.8359375,
+    "text_rich_doc": 271.1796875,
+    "text_rich_graphic": 155.0,
+    "text_rich_table": 257.9296875,
+    "textocr": 50.234375,
+    "nvidia_synth_en": 180.4453125,
+    "synth_receipts_en": 170.046875,
+    "cosyn_chart_exp": 46.7734375,
+    "cosyn_chemical_exp": 45.390625,
+    "cosyn_diagram_exp": 39.4921875,
+    "cosyn_document": 5.4765625,
+    "cosyn_math_exp": 380.4453125,
+    "cosyn_music_exp": 37.234375,
+    "cosyn_table_exp": 50.8515625,
     "dv_qa": 2.3125,
     "figure_qa": 3.0,
-    "plot_qa": 6.0,
+    "plot_qa": 5.8046875,
     "pixmo_clocks": 10.7421875,
 }
 """Calibration of the stage-1 v3 sources as the alignment recipe builds them for a document-mode
@@ -536,7 +543,10 @@ LM (:func:`build_stage1_v3_sources` with ``annotation_sampling="one"``, dolma2 t
 pinned revision, 8,192 tokens): :meth:`MultimodalMixtureConfig.estimate_mean_loss_weights` with
 128 samples per source, seed 0. Perception and joint build the same sources. Measured again at
 65,536 tokens (2026-10-10): every source's mean is identical, since no sampled example reaches
-8,192 tokens, so these means hold for the merged mid-training + long-context stage too."""
+8,192 tokens, so these means hold for the merged mid-training + long-context stage too.
+Remeasured 2026-11-02 with ``tokenizer.json``'s split
+(:attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`);
+the earlier GPT2Tokenizer split gave means up to 6.1% higher."""
 
 STAGE1_V3_SOURCE_SIZES: dict[str, int] = {
     "pixmo_caption": 714_165,
@@ -573,29 +583,30 @@ the default artifacts (``len`` of each built dataset, 2026-10-11)."""
 
 STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS: dict[str, float] = {
     **STAGE1_V3_MEAN_LOSS_WEIGHTS,
-    "cosyn_chart_exp": 440.2109375,
-    "cosyn_chemical_exp": 285.0546875,
-    "cosyn_diagram_exp": 339.9453125,
-    "cosyn_document": 48.203125,
-    "cosyn_music_exp": 254.953125,
-    "cosyn_point_v2": 98.96875,
-    "cosyn_table_exp": 443.421875,
+    "cosyn_chart_exp": 437.46875,
+    "cosyn_chemical_exp": 283.7890625,
+    "cosyn_diagram_exp": 338.234375,
+    "cosyn_document": 47.7734375,
+    "cosyn_music_exp": 254.3125,
+    "cosyn_point_v2": 98.7578125,
+    "cosyn_table_exp": 442.21875,
     "dv_qa": 26.140625,
     "figure_qa": 40.5703125,
-    "pixmo_points_v2": 375.5078125,
-    "plot_qa": 122.75,
-    "text_rich_chart": 633.125,
-    "text_rich_diagram": 692.6640625,
-    "text_rich_doc": 854.109375,
-    "text_rich_graphic": 528.171875,
-    "text_rich_table": 794.71875,
+    "pixmo_points_v2": 375.4609375,
+    "plot_qa": 118.9140625,
+    "text_rich_chart": 621.0546875,
+    "text_rich_diagram": 679.640625,
+    "text_rich_doc": 837.453125,
+    "text_rich_graphic": 518.2421875,
+    "text_rich_table": 781.3125,
 }
 """Calibration of the stage-1 v3 sources at 65,536 tokens when every annotation of a drawn image is
 its own document sharing the image's crops (``annotation_sampling="documents"``), for the
 multi-annotation sources with more than one annotation per image; the others keep
 :data:`STAGE1_V3_MEAN_LOSS_WEIGHTS`. Same probe (128 rows per source, seed 0, dolma2 at the pinned
 revision), measured 2026-10-20. Documents per draw: PixMo-Points 15.5, PlotQA 20, FigureQA 13.5,
-DVQA 11.4, CoSyn QA 6.3-9.5, CoSyn point 4.5, text-rich captions 3."""
+DVQA 11.4, CoSyn QA 6.3-9.5, CoSyn point 4.5, text-rich captions 3. Remeasured 2026-11-02 with
+``tokenizer.json``'s split (up to 6.1% lower than with the earlier split)."""
 
 STAGE1_V5_POINTING_SCALE: float = 32.64 / 39.39
 """PixMo-Points v2 tokens per unit of loss with one annotation per example (32.64: the v3 merged
@@ -690,21 +701,22 @@ lost 3.3% of openimages_1's images (not on the CVDF mirror), cc3m one image, Tex
 duplicate rows, BabyVision 7% (web images no longer online)."""
 
 STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS: dict[str, float] = {
-    "nemotron_openimages_1": 539.703125,
-    "nemotron_openimages_2": 537.4453125,
-    "nemotron_cc3m": 314.5546875,
-    "nemotron_textcaps": 33.703125,
-    "nemotron_ecd": 2111.140625,
-    "nemotron_deepvision": 2993.09375,
-    "nemotron_babyvision": 1189.1953125,
-    "nemotron_fintabnet": 2540.1875,
-    "nemotron_hopchain": 3271.6328125,
-    "nemotron_raven": 1092.1796875,
+    "nemotron_openimages_1": 519.703125,
+    "nemotron_openimages_2": 516.6875,
+    "nemotron_cc3m": 302.2890625,
+    "nemotron_textcaps": 33.4453125,
+    "nemotron_ecd": 1994.328125,
+    "nemotron_deepvision": 2809.859375,
+    "nemotron_babyvision": 1108.8359375,
+    "nemotron_fintabnet": 2385.5,
+    "nemotron_hopchain": 3044.7734375,
+    "nemotron_raven": 1033.3671875,
 }
 """Calibration of the Nemotron sources as :func:`build_stage1_nemotron_sources` builds them (dolma2
 at the pinned revision, 65,536 tokens, documents mode):
 :meth:`MultimodalMixtureConfig.estimate_mean_loss_weights` with 128 samples per source, seed 0,
-measured 2026-10-25."""
+measured 2026-10-25 and again 2026-11-02 with ``tokenizer.json``'s split (0.8-6.9% lower than
+with the earlier GPT2Tokenizer split)."""
 
 STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS: float = (
     10.0
@@ -713,7 +725,7 @@ STAGE1_V6_REFERENCE_VISUAL_LOSS_MASS: float = (
     / STAGE1_V6_LOSS_TARGETS["pixmo_caption"]
 )
 """Visual loss (response tokens) of a 20,000-step v6 run: PixMo-Cap's caption branch is capped at
-10 passes there, and its loss is this mass times its v6 share (about 16.3B tokens)."""
+10 passes there, and its loss is this mass times its v6 share (about 15.9B tokens)."""
 
 STAGE1_POSITIONS_PER_LOSS_TOKEN: dict[str, float] = {
     "pixmo_caption": 5.577,
@@ -744,17 +756,17 @@ STAGE1_POSITIONS_PER_LOSS_TOKEN: dict[str, float] = {
     "figure_qa": 286.728,
     "plot_qa": 184.216,
     "pixmo_clocks": 93.049,
-    "nemotron_openimages_1": 3.049,
-    "nemotron_openimages_2": 2.969,
-    "nemotron_cc3m": 3.700,
-    "nemotron_textcaps": 32.830,
-    "nemotron_ecd": 1.389,
-    "nemotron_deepvision": 1.449,
-    "nemotron_babyvision": 1.939,
-    "nemotron_fintabnet": 1.468,
-    "nemotron_hopchain": 1.752,
-    "nemotron_raven": 1.977,
-    "gui_syn": 53.249,
+    "nemotron_openimages_1": 3.124,
+    "nemotron_openimages_2": 3.047,
+    "nemotron_cc3m": 3.812,
+    "nemotron_textcaps": 33.046,
+    "nemotron_ecd": 1.424,
+    "nemotron_deepvision": 1.469,
+    "nemotron_babyvision": 2.003,
+    "nemotron_fintabnet": 1.501,
+    "nemotron_hopchain": 1.785,
+    "nemotron_raven": 2.026,
+    "gui_syn": 53.409,
 }
 """Sequence positions (text and image tokens) per response token of each v6 and v7 source as the
 merged stage builds it (dolma2 at the pinned revision, 65,536 tokens, every annotation a document):
@@ -762,7 +774,9 @@ mean ``len(input_ids)`` over 32 draws (seed 0) divided by the source's calibrate
 measured 2026-10-24/25. The Nemotron sources are text-dense (1.4-3.7, a long response per image),
 the OCR captions 2.5-7, pointing and the multi-question academic sets 25-340. GUISyn was measured
 the same way on 2026-10-26: 14.9 element documents per draw, each with its own copy of the
-screenshot's ~1,100 image tokens."""
+screenshot's ~1,100 image tokens. The Nemotron and GUISyn entries were remeasured 2026-11-02 with
+``tokenizer.json``'s split (0.3-3.3% higher); the others are unchanged, because today's builders no
+longer reproduce them even with the earlier split."""
 
 _V7_NEMOTRON_TARGETS = {
     name: epochs
@@ -962,10 +976,10 @@ STAGE1_V7_GUI_SYN_ROWS: int = 36_192
 element, as :class:`~olmo_core.data.multimodal.gui_syn.GuiSynDatasetConfig` builds them; they hold
 1,985,821 usable elements, 550,240 of them drawn per pass (16 per screenshot)."""
 
-STAGE1_V7_GUI_SYN_MEAN_LOSS_WEIGHT: float = 323.875
+STAGE1_V7_GUI_SYN_MEAN_LOSS_WEIGHT: float = 322.6484375
 """GUISyn's mean loss weight per draw in documents mode (each sampled element its own document),
 with the Nemotron probe (128 draws, seed 0, dolma2 at the pinned revision, 65,536 tokens),
-measured 2026-10-26."""
+measured 2026-10-26 and again 2026-11-02 with ``tokenizer.json``'s split (0.4% lower)."""
 
 STAGE1_V7_RUN_STEPS: int = 22_240
 """Steps of the 256K hero stage (373,125,283,840 tokens in 16 Mi-token batches). v7 counts passes
@@ -1005,8 +1019,8 @@ def _v7_step_loss(name: str, passes: float) -> float:
 
 
 STAGE1_V7_POINTS_SCALE: float = 0.5
-"""PixMo-Points' loss per step against the base split: half, 12.7 passes over the hero instead of
-25.4 (the v6 hero's point F1 fell after step 10,000, about 10 passes in)."""
+"""PixMo-Points' loss per step against the base split: half, 12.4 passes over the hero instead of
+24.7 (the v6 hero's point F1 fell after step 10,000, about 10 passes in)."""
 
 STAGE1_V7_RUN_PASS_CAPS: dict[str, float] = {
     "cosyn_point_v2": 5.0,
