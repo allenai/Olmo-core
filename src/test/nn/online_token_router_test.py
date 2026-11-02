@@ -1832,3 +1832,19 @@ def test_forward_only_price_for_a_skipped_backward_cpu():
     assert model._flop_fo_delta == pytest.approx(fo - charged, rel=1e-9)
     assert model._flop_fo_delta < 0
     del model._flop_fo_delta
+
+
+def test_step_keep_mode_later_stage_ignores_full_context_reference():
+    """A later stage's threshold reference comes from routed forwards only: after a full-context step it has none (so
+    the first routed micro-batch sets it), while stage 0 uses the full-context sample."""
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0, keep_mode="step")
+    chain = router.chain()
+    ids, cid, labels = _row(B=2)
+    for r in chain:
+        r.begin_step(1, model=model)
+    model(ids, labels=labels).loss.backward()
+    for r in chain:
+        r.begin_step(2, model=model)
+    assert chain[0]._tau is not None and chain[1]._tau is None
+    model(ids, labels=labels).loss.backward()
+    assert chain[1]._tau is not None

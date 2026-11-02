@@ -1747,7 +1747,11 @@ class OnlineTokenRouter:
             tr, pr = [], []
             for e in self._pending:
                 m = torch.ones_like(e["explore"]) if e.get("dense") else e["explore"]
-                if bool(m.any()):
+                if bool(m.any()) and not (e.get("dense") and self.stage_idx > 0):
+                    # a later stage's reference must be the tokens ENTERING it on a routed step (the earlier stages'
+                    # survivors); on a full-context step every token enters, which mis-calibrates it badly (smoke
+                    # 2026-11-02: stage 2 kept 91% of its input instead of 35%). Without one, the first routed
+                    # micro-batch sets the threshold.
                     ref.append(e["feats"][m].detach())
                 if e["target"] is None or e["pred"] is None:
                     continue
