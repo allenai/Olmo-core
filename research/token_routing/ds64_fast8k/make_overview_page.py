@@ -271,6 +271,13 @@ ol.log li:last-child { border-bottom: 0; }
     <figure><h3>Original pool: mean score vs training FLOPs</h3><div class="chart"><canvas id="f4orig" aria-label="4-task original pool Pareto"></canvas></div>
       <figcaption>ds64 8k pool, 488–1,952 rows/task. Dense includes runs cut short at 31/61 steps for the low end. Seed copies averaged (labels give the seed count).</figcaption></figure>
   </div>
+  <h3 style="margin-top:14px">Primary metric: 8k rung only (4-task mean at 8k context)</h3>
+  <div class="tbl"><table>
+    <tr><th>method (fresh data)</th><th class="n">rows/task</th><th class="n">PF</th><th class="n">8k mean</th><th class="n">dense FLOPs to match (8k)</th><th class="n">same, 8-cell</th></tr>
+    __FTM8__
+  </table></div>
+  <p class="note"><b>Why 8k first (Prasann, 11-02):</b> training rows are 8k; the 2k rung is shorter than anything the drop methods train on and dense is near ceiling there (0.958), so it compresses and distorts the multipliers (most of the recipe's 4.1× → 2.2× decay is outlier@2k). 8k is the primary metric from here on; 2k stays as a secondary column. Caveat: dense's 8k curve is flat from 3,904 rows (0.899 → 0.904), so large-data 8k ratios are imprecise; a "≥" means the run reaches dense's best point.</p>
+  <h3 style="margin-top:14px">Secondary: 8-cell mean (8k + 2k)</h3>
   <div class="tbl" style="margin-top:14px"><table>
     <tr><th>method (fresh data, LR 5e-6, no full-context steps)</th><th class="n">rows/task</th><th class="n">PF</th><th class="n">8-cell mean</th><th class="n">outlier@8k</th><th class="n">dense FLOPs to match</th></tr>
     __FTM__
@@ -1123,6 +1130,47 @@ def ftm_rows(S):
     return "\n".join(out)
 
 
+def ftm8_rows(points_json):
+    """FLOPs-to-match on the 8k rung only (primary since 2026-11-02), alongside the 8-cell number."""
+    import collections
+    R, P = points_json["runs"], points_json["points"]
+    cells = collections.defaultdict(dict)
+    for p in P:
+        cells[p["run"]][(p["task"], p["rung"])] = p["score"]
+    def mean(r, rung=None):
+        v = [s for (t, rg), s in cells[r].items() if rung is None or rg == rung]
+        return sum(v) / len(v) if len(v) == (4 if rung else 8) else None
+    dense = sorted((R[r]["pf"], mean(r, "8k"), mean(r), R[r]["rows"]) for r in R
+                   if R[r].get("mix") == "mt4" and R[r].get("arm") == "dense" and R[r].get("campaign") == "tde"
+                   and R[r].get("lr") == 5e-6 and not R[r].get("max_steps") and f"-f{R[r].get('rows')}-" in r and mean(r, "8k"))
+    if len(dense) < 2:
+        return ""
+    def need(y, pf, k):
+        pts = [(d[0], d[k]) for d in dense]
+        if y >= max(q[1] for q in pts):
+            return f"≥{pts[-1][0] / pf:.1f}×"
+        for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
+            if min(ya, yb) <= y <= max(ya, yb) and ya != yb:
+                return f"{xa * (xb / xa) ** ((y - ya) / (yb - ya)) / pf:.1f}×"
+        (xa, ya), (xb, yb) = pts[0], pts[1]
+        return f"{xa * (xb / xa) ** ((y - ya) / (yb - ya)) / pf:.1f}×"
+    names = {"lora64all32r20to7": "Recipe: whole-model LoRA + 20%→7%", "lora64all32p50at3": "Pyramid 50%→20%→7%",
+             "lora64all32r10to3": "Aggressive 10%→3%", "lora64all32r10to5": "Aggressive 10%→5%",
+             "lora64all32m70c50": "Adaptive stage-2 budget", "lora64all32rnd20to7": "Random tokens (control)",
+             "lora64fa75r3s": "Adapters 0–6 frozen 75% + three-stage", "lora64r20to7": "Adapters 0–6 + 20%→7%",
+             "lora64all32r20at3": "First stage at block 3", "denselora64all": "Dense + whole-model LoRA (no routing)"}
+    out = [f'<tr><td>Dense (LR 5e-6)</td><td class="n">{d[3]:,}</td><td class="n">{d[0]:.0f}</td><td class="n">{d[1]:.3f}</td><td class="n">1.0×</td><td class="n">1.0×</td></tr>' for d in dense]
+    for arm, label in names.items():
+        rs = sorted((R[r]["rows"], r) for r in R if R[r].get("arm") == arm and R[r].get("mix") == "mt4" and R[r].get("campaign") == "tde"
+                    and not R[r].get("max_steps") and f"-f{R[r].get('rows')}-" in r and str(R[r].get("lr")) in ("1e-05", "5e-06")
+                    and (arm != "denselora64all" or R[r].get("lr") == 1e-05) and not R[r].get("seed") and mean(r, "8k") and mean(r))
+        for rows, r in rs:
+            pf = R[r]["pf"]
+            out.append(f'<tr><td>{label}</td><td class="n">{rows:,}</td><td class="n">{pf:.0f}</td><td class="n">{mean(r, "8k"):.3f}</td>'
+                       f'<td class="n"><b>{need(mean(r, "8k"), pf, 1)}</b></td><td class="n">{need(mean(r), pf, 2)}</td></tr>')
+    return "\n".join(out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--points", required=True)
@@ -1204,7 +1252,7 @@ def main():
         compute = json.load(open(__file__.rsplit("/", 1)[0] + "/compute_now.json"))
     except FileNotFoundError:
         compute = {"generated_at": None, "jobs": []}
-    html = PAGE.replace("__LOG__", json.dumps(log).replace("</", "<\\/")).replace("__COMPUTE__", json.dumps(compute).replace("</", "<\\/")).replace("__LORA2X2__", lora2x2).replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__UPDATED__", a.updated or "today")
+    html = PAGE.replace("__LOG__", json.dumps(log).replace("</", "<\\/")).replace("__COMPUTE__", json.dumps(compute).replace("</", "<\\/")).replace("__LORA2X2__", lora2x2).replace("__DATA__", json.dumps(data)).replace("__FTM__", ftm_rows(S)).replace("__FTM8__", ftm8_rows(json.load(open(a.points)))).replace("__UPDATED__", a.updated or "today")
     open(a.out, "w").write(html)
     for k in ("f4fresh", "f4orig", "f11"):
         for s in data[k]:
