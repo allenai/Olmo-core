@@ -279,6 +279,13 @@ ol.log li:last-child { border-bottom: 0; }
 </section>
 <section>
   <h2>Why the multiplier falls with data: dense's ceiling, not the method</h2>
+  <div class="tbl" style="margin-bottom:12px"><table>
+    <tr><th>recipe FLOPs-to-match, by eval length (4-task mean, 1 seed)</th><th class="n">1,952 rows</th><th class="n">3,904 rows</th><th class="n">7,808 rows</th></tr>
+    <tr><td>8k rung (dense best 0.904)</td><td class="n">&gt;4.4×</td><td class="n">3.6×</td><td class="n"><b>≥4.5×</b> (0.904 = dense's best)</td></tr>
+    <tr><td>2k rung (dense best 0.958)</td><td class="n">2.9×</td><td class="n">3.9×</td><td class="n">1.7× (outlier@2k 0.938 vs 0.979)</td></tr>
+    <tr><td>8-cell mean (both rungs)</td><td class="n">4.1×</td><td class="n">3.7×</td><td class="n">2.2×</td></tr>
+  </table></div>
+  <p class="note" style="margin-bottom:12px"><b>Split by eval length:</b> the decay is almost entirely the 2k rung (the recipe trains on 8k rows; 2k rows are shorter than anything it trained on, and dense is near ceiling there). On the 8k rung the recipe at 7,808 rows ties dense's best point, ≥4.5× (a lower bound off a flat curve). 32k was not evaluated on these fresh-pool runs; the launcher supports it (PARITY_RUNGS 8k,32k).</p>
   <div class="figs">
     <figure><h3>How FLOPs-to-match is read off, and why it shrinks</h3><div class="chart"><canvas id="ftmexp" aria-label="FLOPs-to-match construction"></canvas></div>
       <figcaption>8-cell mean vs training PF (log). Dashed lines run from each recipe point right to where dense reaches the same score; the ratio is the multiplier. Dense flattens past ≈3,000 PF, so the match point barely moves while the recipe's FLOPs double. The hollow point is recipe seed 1 at 7,808 rows: +0.003 in score reads 2.8× instead of 2.2×.</figcaption></figure>
