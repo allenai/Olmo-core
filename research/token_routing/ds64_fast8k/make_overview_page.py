@@ -280,6 +280,10 @@ ol.log li:last-child { border-bottom: 0; }
 <section>
   <h2>Why the multiplier falls with data: dense's ceiling, not the method</h2>
   <div class="figs">
+    <figure><h3>How FLOPs-to-match is read off, and why it shrinks</h3><div class="chart"><canvas id="ftmexp" aria-label="FLOPs-to-match construction"></canvas></div>
+      <figcaption>8-cell mean vs training PF (log). Dashed lines run from each recipe point right to where dense reaches the same score; the ratio is the multiplier. Dense flattens past ≈3,000 PF, so the match point barely moves while the recipe's FLOPs double. The hollow point is recipe seed 1 at 7,808 rows: +0.003 in score reads 2.8× instead of 2.2×.</figcaption></figure>
+  </div>
+  <div class="figs">
     <figure><h3>Answer cross-entropy vs rows/task (lower is better)</h3><div class="chart"><canvas id="decayce" aria-label="answer CE vs rows"></canvas></div>
       <figcaption>Teacher-forced answer cross-entropy on the eval rows (8 cells, eval_size 500 each, no-cot). Dense (LR 5e-6) stops improving at 3,904 rows/task; the recipe keeps improving and sits a constant ≈0.01 nats above dense at the same rows. Late keep-widening (35%/15% in the last third) halves that gap at 3,904 rows.</figcaption></figure>
   </div>
@@ -929,6 +933,17 @@ function draw() {
       options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
         scales: { x: { type: "logarithmic", title: { display: true, text: "training step (log; step 0 shown at 1)", color: css("--muted") }, ticks: { color: css("--muted"), callback: v => [1, 8, 16, 31, 61, 122, 244].includes(v) ? v : "" }, grid: { color: css("--rule") } },
                   y: { min: 0, max: 1, title: { display: true, text: "expected cos(routed, dense), Adam", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
+  (() => { const e = document.getElementById("ftmexp"); if (!e || !window.Chart) return;
+    const dense = [[1531, .8876], [3063, .9257], [4595, .928], [6128, .931]], rec = [[345, .883, 1408], [688, .9153, 2520], [1373, .9243, 2969]];
+    const ds = [{ label: "dense", data: dense.map(p => ({ x: p[0], y: p[1] })), borderColor: css("--dense"), backgroundColor: css("--dense"), showLine: true, pointRadius: 4 }];
+    rec.forEach(r => ds.push({ label: "", data: [{ x: r[0], y: r[1] }, { x: r[2], y: r[1] }], borderColor: css("--c3"), borderDash: [5, 4], showLine: true, pointRadius: 0 }));
+    ds.push({ label: "recipe", data: rec.map(r => ({ x: r[0], y: r[1] })), borderColor: css("--c1"), backgroundColor: css("--c1"), showLine: true, pointRadius: 5 });
+    ds.push({ label: "", data: [{ x: 1371, y: .927 }, { x: 3850, y: .927 }], borderColor: css("--c3"), borderDash: [2, 4], showLine: true, pointRadius: 0 });
+    ds.push({ label: "recipe seed 1", data: [{ x: 1371, y: .927 }], borderColor: css("--c1"), backgroundColor: "transparent", pointRadius: 6 });
+    new Chart(e, { type: "scatter", data: { datasets: ds }, options: { responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 }, filter: i => i.text } } },
+      scales: { x: { type: "logarithmic", min: 250, max: 8000, title: { display: true, text: "training PF (log)", color: css("--muted") }, ticks: { color: css("--muted"), callback: v => [300, 1000, 3000, 8000].includes(v) ? v : "" }, grid: { color: css("--rule") } },
+                y: { min: .87, max: .94, title: { display: true, text: "8-cell mean (eval_size 500/cell)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   plot("cptm", [{ label: "whole-model LoRA, frozen output layer", pts: D.cptmfh.map(p => ({ x: p[0], y: p[1] })), col: "--c3" },
                 { label: "whole-model LoRA, trained output layer", pts: D.cptm.map(p => ({ x: p[0], y: p[1] })), col: "--c1", dash: [5, 4] }],
        "dense FLOPs to match (×)", { xlab: "training steps (log)", dp: 2 });

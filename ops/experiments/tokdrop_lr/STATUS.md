@@ -2,21 +2,27 @@
 experiment: tokdrop_lr
 title: LR ablation for token-drop training — dense vs gold_fl20p8_noslot (gfl20p8ns) × LR {5e-6, 1.5e-5, 5e-5}, ONE multi-task job per (arm, LR) on contradiction+nq+outlier+oolong (fast8k mt4 shard), Qwen3.5-4B base
 status: active
-updated: 2026-10-28
-branch: prasann/flopdrop_clean @ eb3c9dd1e (pushed); Beaker -tde runs pinned at origin/claude/online-router-1bc01a 67a28d605
+updated: 2026-11-02
+branch: prasann/flopdrop_clean (pushed; hub/log/launcher); Beaker -tde runs pinned at origin/claude/online-router-1bc01a 67a28d605
 launcher: research/token_routing/ds64_fast8k/launch_fast8k.py (env F8K_SUFFIX=-lra, OPS_EXPERIMENT=tokdrop_lr)
 records:
   - records/flopdrop-final-figures-plan.md
   - records/lora-vs-routing-ablation.md (branch claude/vibrant-williams-4b0f66, unmerged)
   - records/layer-skip-screen.md (branch claude/train-layerskip-35010b, unmerged)
   - records/online-token-router.md (router branch claude/online-router-1bc01a: hill-climb + gradient fidelity v2)
+  - records/multiview-cached-h7.md (branch claude/multiview-h7cache, unmerged: k late-stack views per row from cached h7)
+  - records/tokdrop-large-data-decay.md (branch claude/tokdrop-decay-fix, unmerged)
+  - records/grad-routing-gap.md (branch claude/grad-routing-gap, unmerged; training flags on claude/grad-routing-gap-train)
+  - records/sparse-backward.md (branch claude/sparse-backward, unmerged)
+  - records/tokdrop-model-scale-ablation.md (branch claude/recipe-scale-ablation-71d007, unmerged)
 results:
 experiment_log: research/token_routing/ds64_fast8k/experiment_log.json (standing rule 2026-10-29: keep current, every session; renders in the hub's Experiment log)
 artifacts:
-  - https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (overview, v20, the summary page)
+  - https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (overview hub, v71, the summary page; all results incl. side sessions)
   - https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5
+  - https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ (multi-view block-7 cache, 10-30 overnight)
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/f8k-lra-q35-4b
-next_step: (10-28) RECIPE = whole-model LoRA + two-stage 7:0.2,16:0.07, no full-context steps: dense FLOPs-to-match 3.0x / 3.0x / 2.0x at fresh 1,952 / 3,904 / 7,808 rows/task (f7808 now a point estimate; dense curve extended to f5856/f7808). 2x2: routing is most of the gain, LoRA 15-35% on 4-task. Router hill-climb (threshold, MLP, ctx feats, task id, per-task, keep sched) all tie; early drop (<block 7) fails by bias even for an oracle (fidelity v2). Layer skip (44 runs): ties dense at 0.78-0.89x, hurts on the recipe. IN FLIGHT: m70c50 (adaptive stage-2 budget, 0.870 on 1 seed vs recipe 0.852) seeds 1-2 + mlprg sd1 (router session, Beaker). PENDING PRASANN: fresh-pool curves for layer-skip arms (recommend skip); early-split sweep of the recipe at blocks 1/3/5/7; per-row drop depth; matched SFT+CTC of CPT ckpts. Hourly cron check-in drives this.
+next_step: (11-02) RECIPE unchanged (whole-model LoRA, 7:0.2,16:0.07): FTM 4.1x / 3.7x / 2.2x at fresh 1,952 / 3,904 / 7,808 rows/task; the decay is dense saturating (CE flat from 3,904) + seed noise (recipe sd1 at 7,808 reads 2.8x), not the method degrading. No >=5x idea worked: sparse backward, multi-view, KV-only, layer skip, aggressive keep 10%->3/5% (ties at 3,904; blocks 0-6 dense floor ~0.2x/step), late widening (2 seeds: within noise). Scale: Qwen3.5 gain grows with size (4.8x at 9B, f1952); Qwen3 flat ~2-3x. Gradient-gap: attribution under dense forward is not a proxy; routed-trained model's router gradient is unbiased (exp cos 0.87) from step ~31. NOTHING RUNNING. PENDING PRASANN: larger-data push (15,616 rows, 11-task, 32k-64k); new approach to blocks 0-6; merge side branches.
 ---
 
 # tokdrop_lr
@@ -101,6 +107,38 @@ See `next_step` above.
 - BUG (fixed 2026-10-22, commit after f889c827e): --st-kept-doc-k / --st-keep-token-min / --st-pad-multiple /
   --st-span-len were not SoftTokenOptions fields → silently defaulted. recipes/train/variants_options_test.py guards it.
 
+## Multi-view from a cached block-7 state (2026-10-30 overnight, branch claude/multiview-h7cache)
+- Idea: blocks 0-6 once per row (cache h7), k optimizer steps on blocks 7-31 + head each with a fresh RANDOM 20%/7%
+  subset, one early-stack backward on the MEAN of the k views' dL/dh7. Flag `--st-otr-views k`
+  (src/olmo_core/nn/multiview.py). Record: records/multiview-cached-h7.md.
+- FLOP meter: repeat views log no example lengths and are charged late blocks + head at the kept length (unit-tested;
+  Beaker smoke k=1 vs k=2 on identical rows: same dense-equivalent 19.694 PF, actual 5.981 vs 7.438 PF -> the late
+  stack is ~54% of a routed step; expected full-run cost ~1.54x (k=2) / ~2.08x (k=3) the recipe's PF).
+- FSDP2 trap fixed (1f57a5feb): a backward started from an intermediate block output never fires the ROOT module's
+  pre-backward; the pooled projector (root params) feeds block 0 -> `setStorage ... size 0`. CPU repro in
+  research/token_routing/multiview/fsdp_cpu_repro.py.
+- IN FLIGHT (Beaker jupiter, 2 H100, urgent, launched 10-30 ~09:00Z, commit 1f57a5feb; state
+  research/token_routing/multiview/state.json):
+  f8k-mt4-lora64all32rnd20to7mv2-f1952-tdmv-lr1e-05 (01M660BDJE2ZQA3YE2AQQS20FA),
+  ...mv3-f1952 (01M660CBN2GSBT9AQ954ZB1HGK), ...mv2-f3904 (01M660D44KG044R94YW2CYDC8T),
+  ...mv3-f3904 (01M660DX5J61G6CSZ21MXAF1X3); k=1 same-code-path control ...mv1-f1952 (01M6662Z9T213KKGJC8M3ZA215).
+  mv3-f1952 and both f3904 runs were preempted on jupiter and restarted from step 0.
+- FIRST RESULT (10-30): mv2-f1952 = 0.885 8-cell mean (eval_size 500/cell) at 483.0 PF (0.310x dense). Recipe
+  interpolated at 483 PF = 0.899 -> -0.014 at matched FLOPs (single seed; noise ~+-0.01); vs the recipe at the
+  same rows (0.883 @ 345 PF) only +0.002. The second view buys almost nothing; not a win so far.
+- k=1 CONTROL (same code path, random choice): mv1-f1952 = 0.853 at 343.4 PF (outlier 2k 0.690 drags it; router
+  recipe 0.883). vs that control mv2 gains +0.032 for 1.41x FLOPs. Ambiguous: decided by whether random-k1 at f1952
+  really is 0.03 below the router (seed replicate needed).
+- mv3-f1952 = 0.842 at 622.6 PF (recipe at that PF 0.910 -> -0.068); below k=2 AND the k=1 control (oolong 0.571/0.798,
+  outlier@2k 0.651): a third view overfits. Verdict at f1952: multi-view does not beat the recipe.
+- mv2-f3904 = 0.909 at 965.7 PF (recipe at that PF 0.919 -> -0.011); below the k=1 recipe at the same rows (0.915
+  router / 0.914 random).
+- mv3-f3904 = 0.906 at 1245.4 PF (recipe at that PF 0.923 -> -0.017). VERDICT (all 5 scored): multi-view is
+  NEGATIVE - no k>1 run beats the recipe at matched FLOPs; extra views act like extra epochs. No seed replicate.
+- Collect: when a run finishes, set its state DONE in that state.json, `launch_mv.py eval`, then
+  `ds64_fast8k/record_beaker_evals.py --state research/token_routing/multiview/state.json --suffix -tdmv --out rows.jsonl`
+  and `multiview/collect_mv.py` (8-cell mean vs the recipe curve interpolated in log PF; decisive = +0.01).
+
 ## Open issues / traps
 - The Beaker image (OLMoCoreBeakerImage.stable) now ships torch 2.13.0+cu129, while this branch was
   validated on torch 2.9.1 / fla 0.4.1. The first smoke never reached model init, so this is untested.
@@ -123,3 +161,38 @@ See `next_step` above.
 ## Verified vs unverified
 - Verified 2026-10-19: CPU flag check (above); 7434103af pushed to origin/prasann/flopdrop_clean.
 - UNVERIFIED: everything about training and eval outcomes.
+
+## Large-data decay diagnosis + fixes (2026-10-30, side session; branch claude/tokdrop-decay-fix)
+- Record: records/tokdrop-large-data-decay.md (on that branch). Code/state: research/token_routing/decay_fix/
+  (state.json = every job id; results/ce/*.json answer CE; results/f1_points.json ladder f1).
+- Diagnosis (answer CE, eval_size 500/cell, no-cot): dense CE flat from 3,904 rows (f7808 - f3904 = -0.0017 +- 0.0037);
+  recipe matched-data CE gap +0.010 / +0.014 / +0.008 at 1,952 / 3,904 / 7,808 (no trend). CE FTM 2.7x -> 1.8x,
+  f1 FTM 3.7x -> 2.2x, unsat-4 f1 4.0x -> 2.2x. Verdict: mostly the dense plateau amplifying a constant ~0.01-nat gap.
+- Fixes at f3904 (1 seed): ReLoRA rl25 = no effect (CE +0.003 +- 0.002); late keep-widening lw35 (35%/15% last third,
+  +8% FLOPs) CE -0.0069 +- 0.0022 vs recipe (CE FTM 3.2x), f1 unchanged (0.9157 vs 0.9153).
+- IN FLIGHT (Beaker jupiter): rl25 / lw35 / recipe-sd1 at f7808 (preempted once at step ~1315, restarted from 0),
+  uw25 (uniform 25%/9.7%, compute-matched control) f3904+f7808, lw50 f3904. Collect: fetch_ce.sh, record_ce.py,
+  record_ladder.py, analyze_decay.py / paired_ce.py (commands in the record).
+- 2026-10-30 final (decay fix): lw35 (late keep 35%/15% in the last third) at f7808, 1490 PF: f1 0.9335 (dense f7808
+  0.9310), answer CE 0.1365 (dense 0.1374) -> FTM >= 4.1x f1 / >= 3.1x CE vs recipe 2.2-2.8x / 1.8-2.0x; CE vs recipe
+  seeds -0.0091 +- 0.0027 / -0.0056 +- 0.0025. Uniform 25%/9.7% at equal FLOPs: f1 0.9319, CE 0.1398 (gain not robust
+  across seeds). 1 seed each; next = lw35 seed 2 at f7808. Record: records/tokdrop-large-data-decay.md (branch
+  claude/tokdrop-decay-fix @ a3d8f2e50). Hub pareto_points.json is contaminated by answer_ce rows (collector fix needed).
+- 2026-10-31 REVISED: lw35 seed 2 at f7808 (1490 PF): f1 0.9276, CE 0.1443 (seed 0 was a lucky draw). 2-seed means
+  lw35 0.9306 f1 / 0.1404 CE vs recipe 0.9257 / 0.1439: +0.005 f1 (seed SE ~0.003), -0.0035 CE (+-0.0017 eval-only,
+  ~+-0.004 with seed spread) -> within seed noise, below the +0.006 bar; no dense CE parity. Seed variance at f7808 is as
+  large as the effects; FTM claims here need >= 3 seeds per arm. Branch claude/tokdrop-decay-fix @ b01502969.
+
+## 2026-10-30 → 11-02 summary (main session + overnight agents; details in the hub and records)
+- Large-data decay (claude/tokdrop-decay-fix): dense saturates from 3,904 rows (CE flat); recipe gap ~0.01 nats, no
+  trend; ReLoRA null; late widening 35/15% 2-seed mean within noise (f1 +0.005, CE -0.0035; +8.6% FLOPs). Adds
+  --ephemeral-save-interval / --resume-every (Beaker resume verified).
+- Sparse backward (claude/sparse-backward): 0.11-0.13x/step but -0.2 to -0.37 at matched data. Kept: answer-only head.
+- Multi-view (claude/multiview-h7cache): every k>1 trails the recipe at matched FLOPs.
+- Aggressive keep r10to3 / r10to5 (this branch's launcher): 3.1x / 2.4x at f1952, 3.9x / 3.7x at f3904.
+- Gradient-gap (claude/grad-routing-gap): dense-ckpt routed gradient exp cos 0.04 (router) vs attribution 0.996;
+  recipe ckpt 0.87; early-phase probe: unbiased by step ~31; aggressive budgets decay to ~0.38.
+- Qwen3 sizes (claude/qwen3-recipe-c876d1 @ 5593eb001): 0.6B 2.9/2.9x, 1.7B 2.9/2.9x, 4B 2.1/3.3x, 8B 2.3/2.6x.
+- Scale (claude/recipe-scale-ablation-71d007): 0.8B 1.7x, 2B 2.4x, 4B 4.1x, 9B 4.8x at f1952.
+- Gradient concentration (claude/grad-concentration-d91a37): partial, 8/11 stages; signal more concentrated later.
+- Collector fix: collect_pareto_points drops answer_ce/top1 and gradgap rows (they share train runs).

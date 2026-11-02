@@ -10,3 +10,493 @@ fast8k	4b	outlier	cpi33	16M	f8k-outlier-cpi33-16M	ai2/ceres-cirrascale,ai2/satur
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
 fast8k	4b	outlier	kvgb50	16M	f8k-outlier-kvgb50-16M	ai2/ceres-cirrascale,ai2/saturn-cirrascale,ai2/jupiter-cirrascale-2	2026-09-15 11:54	LAUNCHED	"01M2K6QB53SVSEXJC3PK6Z8SDY   warnings.warn(msg, UserWarning)
 Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	gfl20p8ns	16M	f8k-outlier-gfl20p8ns-16M-lra-lr1.5e-05	ai2/jupiter-cirrascale-2	2026-10-19 12:41	LAUNCHED	"01M5ATXYN75PMM399BVP0RPZ1G transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gfl20p8ns	64M	f8k-mt4-gfl20p8ns-64M-lra-lr1.5e-05	ai2/jupiter-cirrascale-2	2026-10-19 13:17	LAUNCHED	"01M5AWYYKM2N6XWW9RZM8C62MT transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gfl20p8ns	64M	f8k-mt4-gfl20p8ns-64M-lra-lr1.5e-05	ai2/jupiter-cirrascale-2	2026-10-20 11:05	LAUNCHED	"01M5D7VB5SMN56NGKYJMSVCQK3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@31	f8k-mt4-dense-s488st31-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:27	LAUNCHED	"01M5H7Y3QEVXY9GCKAZ4BQPQF6 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@61	f8k-mt4-dense-s488st61-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:27	LAUNCHED	"01M5H7ZF68M3P31YG9F41WBQN7 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488	f8k-mt4-dense-s488-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:27	LAUNCHED	"01M5H80ZA3BEWC744CC156816Q transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s976	f8k-mt4-dense-s976-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:27	LAUNCHED	"01M5H825RM46FQA0E7Q92185G4 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s1464	f8k-mt4-dense-s1464-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:27	LAUNCHED	"01M5H83N5MM11TZ0XG5MS6PE5W transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32	s976	f8k-mt4-tier67a50m32-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H84ZCJRXMBC1YHHRZY7EFS transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32	s1464	f8k-mt4-tier67a50m32-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H86MFFM1CDCF7HK42P53BX transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67flm16	s976	f8k-mt4-tier67flm16-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H87Y8R9GNF4E7PMWTP2YW4 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67flm16	s1464	f8k-mt4-tier67flm16-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H89CPNR6XV8WQRS0H3K7MZ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier33fl	s976	f8k-mt4-tier33fl-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '274a618a7b1045652c5ddc9aa3f48f8fcf453823' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	tier33fl	s1464	f8k-mt4-tier33fl-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '274a618a7b1045652c5ddc9aa3f48f8fcf453823' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	gbflk32p8	s976	f8k-mt4-gbflk32p8-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H8DEZCC162WN9X7GGCZAQ9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbflk32p8	s1464	f8k-mt4-gbflk32p8-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H8F0E7HKB956S8AGQC7EPJ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbflk64p8	s976	f8k-mt4-gbflk64p8-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H8G7DPNJ6YEHBNWQ943RZ9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbflk64p8	s1464	f8k-mt4-gbflk64p8-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H8HNT3C9QHHRJ8BEANEMBR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbfl10m32p8	s976	f8k-mt4-gbfl10m32p8-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H8K115S8ZK083C0QAQB25X transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbfl10m32p8	s1464	f8k-mt4-gbfl10m32p8-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:36	LAUNCHED	"01M5H8MQTKN3W24MSWVS76WBH2 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier33fl	s976	f8k-mt4-tier33fl-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:38	LAUNCHED	"01M5H8QTQ2JDTS2YWZHQAYCJYH transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier33fl	s1464	f8k-mt4-tier33fl-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 00:38	LAUNCHED	"01M5H8RYJBD78RHPAM2KJEY7PA transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk3	s488	f8k-mt4-dense-sk3-s488-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:11	LAUNCHED	"01M5HAFW4S082XBJRMKVA7JJNA transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk3	s976	f8k-mt4-dense-sk3-s976-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:11	LAUNCHED	"01M5HAHKQG588AY2ZG10V8BCDZ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk8	s488	f8k-mt4-dense-sk8-s488-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:11	LAUNCHED	"01M5HAKA1EGR9MEVSVRYGMNJYY transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk8	s976	f8k-mt4-dense-sk8-s976-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:11	LAUNCHED	"01M5HAMYZH9CK4MWMJP6JPYMFY transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-ldl20	s488	f8k-mt4-dense-ldl20-s488-tdb-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:12	LAUNCHED	"01M5HAPBNT8YSNDX2CWM5S89T0 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-sk3	s976	f8k-mt4-tier67a50m32-sk3-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:14	LAUNCHED	"01M5HAQK02EQE54B1V8MF7D9G1 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-ldl20	s976	f8k-mt4-tier67a50m32-ldl20-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:14	LAUNCHED	"01M5HAS3P30WPE4PVSQQT1EAEN transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbflk64p8-sk8	s976	f8k-mt4-gbflk64p8-sk8-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:14	LAUNCHED	"01M5HATTWTFT84ECZ835YQF3B7 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-sk8	s976	f8k-mt4-tier67a50m32-sk8-s976-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:17	LAUNCHED	"01M5HAXFATVT1TSTM0G0VADH29 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-sk8	s1464	f8k-mt4-tier67a50m32-sk8-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:17	LAUNCHED	"01M5HAZGW1WJNHJZTET788JZES transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67flm16-sk8	s1464	f8k-mt4-tier67flm16-sk8-s1464-tdb-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 01:18	LAUNCH-FAILED	"     ^^
+SyntaxError: invalid syntax"
+fast8k	4b	mt4	dense	s488@31	f8k-mt4-dense-s488st31-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:05	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s488@61	f8k-mt4-dense-s488st61-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:05	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s488	f8k-mt4-dense-s488-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:05	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s976	f8k-mt4-dense-s976-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:05	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s1464	f8k-mt4-dense-s1464-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:05	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s488@31	f8k-mt4-dense-s488st31-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:08	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s488@61	f8k-mt4-dense-s488st61-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:08	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s488	f8k-mt4-dense-s488-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:08	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s976	f8k-mt4-dense-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:08	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s1464	f8k-mt4-dense-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:08	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense-sk3	s488	f8k-mt4-dense-sk3-s488-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:12	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense-sk3	s976	f8k-mt4-dense-sk3-s976-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:12	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense-sk8	s488	f8k-mt4-dense-sk8-s488-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:12	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense-sk8	s976	f8k-mt4-dense-sk8-s976-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:12	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	tier67a50m32-sk3	s976	f8k-mt4-tier67a50m32-sk3-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:15	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	tier67a50m32-sk8	s976	f8k-mt4-tier67a50m32-sk8-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:15	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	tier67a50m32-ldl20	s976	f8k-mt4-tier67a50m32-ldl20-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:15	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	gbflk64p8-sk8	s976	f8k-mt4-gbflk64p8-sk8-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:15	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	tier67a50m32-sk8	s1464	f8k-mt4-tier67a50m32-sk8-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:16	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	tier67flm16-sk8	s1464	f8k-mt4-tier67flm16-sk8-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:16	LAUNCH-FAILED	" gantry.exceptions.UnpushedChangesError: Current git ref '252ed3b88d9966b0b20695947a7ac091822745f1' does not appear to exist on the remote!
+Please push your changes and try again."
+fast8k	4b	mt4	dense	s488@31	f8k-mt4-dense-s488st31-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:21	LAUNCHED	"01M5J32FCHDKS4ZNNDWRFXC30T transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@61	f8k-mt4-dense-s488st61-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:21	LAUNCHED	"01M5J33J3YMM0ZYVSH4EEZ0SRR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488	f8k-mt4-dense-s488-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:21	LAUNCHED	"01M5J34RDDBMFC1RPRFXNQJPNR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s976	f8k-mt4-dense-s976-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:21	LAUNCHED	"01M5J36P3YCXRZZXHQ4N1EKXC3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s1464	f8k-mt4-dense-s1464-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:21	LAUNCHED	"01M5J38FW9MGJYBF3ZF0A4855E transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@31	f8k-mt4-dense-s488st31-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:25	LAUNCHED	"01M5J39CJCDBQSY9KN3509FY6J transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@61	f8k-mt4-dense-s488st61-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:25	LAUNCHED	"01M5J3AV2E1ZCHMZWQJJVVDWSR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488	f8k-mt4-dense-s488-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:25	LAUNCHED	"01M5J3BT6RRFA95N79BRMZSM7E transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s976	f8k-mt4-dense-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:25	LAUNCHED	"01M5J3DAMEKGCJ72TQBT30DG24 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s1464	f8k-mt4-dense-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:25	LAUNCHED	"01M5J3F72V2QSYHRXEC88TBHW9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk3	s488	f8k-mt4-dense-sk3-s488-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:30	LAUNCHED	"01M5J3M39XV3V2M05M5FQYE8G9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk3	s976	f8k-mt4-dense-sk3-s976-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:30	LAUNCHED	"01M5J3NBEW7V5M8J1G2W1MT8TA transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk8	s488	f8k-mt4-dense-sk8-s488-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:30	LAUNCHED	"01M5J3Q0D8S8HC5DHPXEFJ9VZD transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense-sk8	s976	f8k-mt4-dense-sk8-s976-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:30	LAUNCHED	"01M5J3RFDP5BNY5JZWP6HQBYNH transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-sk3	s976	f8k-mt4-tier67a50m32-sk3-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:33	LAUNCHED	"01M5J3SGQ9W6KQGY63X62KXJEX transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-sk8	s976	f8k-mt4-tier67a50m32-sk8-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:33	LAUNCHED	"01M5J3TETEB840VSTCNRD02RSK transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-ldl20	s976	f8k-mt4-tier67a50m32-ldl20-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:33	LAUNCHED	"01M5J3W180SD9K9JB3G6C9GS17 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbflk64p8-sk8	s976	f8k-mt4-gbflk64p8-sk8-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:33	LAUNCHED	"01M5J3X3T4PH1S7F57QXT7P6SY transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m32-sk8	s1464	f8k-mt4-tier67a50m32-sk8-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:34	LAUNCHED	"01M5J3YPBJ79X444A0AS2X6GVZ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67flm16-sk8	s1464	f8k-mt4-tier67flm16-sk8-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:34	LAUNCHED	"01M5J40230A3ZVVDSF73QTZ1QN transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m64	s976	f8k-mt4-tier67a50m64-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J44ZAVVJV78KK7ATPRAPRB transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67a50m64	s1464	f8k-mt4-tier67a50m64-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J45X7VFQCJXFCMKZPRE0BK transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67flm16	s976	f8k-mt4-tier67flm16-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J47A8SR9WVGXVFXH47KPMP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier67flm16	s1464	f8k-mt4-tier67flm16-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J48EG4T2G1M4HA3DRQGQ5T transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier33fl	s976	f8k-mt4-tier33fl-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J49DK5G6737RJXC7QFEZWX transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	tier33fl	s1464	f8k-mt4-tier33fl-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J4AE75Z0WZ6N3BEPDYDHFC transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbflk64p8	s976	f8k-mt4-gbflk64p8-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J4C580MQ8DTWWW9P07HHZH transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbflk64p8	s1464	f8k-mt4-gbflk64p8-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J4EM6XK8J1ANFG304PDJBC transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbfl10m32p8	s976	f8k-mt4-gbfl10m32p8-s976-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J4FZPR7JTMM3DM25QQ6HF9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	gbfl10m32p8	s1464	f8k-mt4-gbfl10m32p8-s1464-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 08:44	LAUNCHED	"01M5J4H8QXJBNMTRS682FK531P transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densepf	s488	f8k-mt4-densepf-s488-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 10:47	LAUNCHED	"01M5JBGQCV8ERMTE67ZG18NAYA transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densepf	s976	f8k-mt4-densepf-s976-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 10:47	LAUNCHED	"01M5JBHK2M66BAAX61Z11VV455 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densepf	s1464	f8k-mt4-densepf-s1464-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 10:47	LAUNCHED	"01M5JBJEEMT7YBMQVJ2Z1WD67F transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	contradiction	dense	16M@31	f8k-contradiction-dense-16Mst31-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:42	LAUNCHED	"01M5JENSBMYN457B2J696RFYXR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	contradiction	dense	16M@61	f8k-contradiction-dense-16Mst61-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:42	LAUNCHED	"01M5JEPJVFGTF1SHA2P9HWXPZ3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	contradiction	dense	16M	f8k-contradiction-dense-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:42	LAUNCHED	"01M5JEQBKZYVQBMM6VK3VCN445 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	contradiction	dense	16M@61	f8k-contradiction-dense-16Mst61-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:43	LAUNCHED	"01M5JER688X5SNRX5XNBMTPXCY transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	contradiction	dense	16M	f8k-contradiction-dense-16M-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:43	LAUNCHED	"01M5JERZ5AESWFSFHKEEHYC1B7 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	nq	dense	16M@31	f8k-nq-dense-16Mst31-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:44	LAUNCHED	"01M5JESRTVQYZ3JE0XA13D1TFK transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	nq	dense	16M@61	f8k-nq-dense-16Mst61-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:44	LAUNCHED	"01M5JETJ8J8QZHGS2EEKHH9QSP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	nq	dense	16M	f8k-nq-dense-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:44	LAUNCHED	"01M5JEVBG0A7AZPB0E37PE2H6D transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	nq	dense	16M@61	f8k-nq-dense-16Mst61-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:45	LAUNCHED	"01M5JEW4MFC4ZP2A6PP43W1197 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	nq	dense	16M	f8k-nq-dense-16M-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:45	LAUNCHED	"01M5JEWYMD9VHTQ3GWK0EAWW0P transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	dense	16M@31	f8k-outlier-dense-16Mst31-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:46	LAUNCHED	"01M5JEXQVTBHTPB1YQAXZG5808 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	dense	16M@61	f8k-outlier-dense-16Mst61-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:46	LAUNCHED	"01M5JEYGB6E9S87AY74GR8D89W transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	dense	16M	f8k-outlier-dense-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:46	LAUNCHED	"01M5JEZA6B46NG8YXW1WDZ0B9Q transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	dense	16M@61	f8k-outlier-dense-16Mst61-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:47	LAUNCHED	"01M5JF03QWVPDQ905C7BSZ0R53 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	dense	16M	f8k-outlier-dense-16M-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:47	LAUNCHED	"01M5JF0X2Y6BSA70CQZ5P64KPR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	oolong	dense	16M_eg@31	f8k-oolong-dense-16M_egst31-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:48	LAUNCHED	"01M5JF1QKV6ECX5PKJ3AZHTYTZ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	oolong	dense	16M_eg@61	f8k-oolong-dense-16M_egst61-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:48	LAUNCHED	"01M5JF2H1DMS3DCNZT4ZBEQGFW transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	oolong	dense	16M_eg	f8k-oolong-dense-16M_eg-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:48	LAUNCHED	"01M5JF3BEZM745GAWNKXNGXY1T transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	oolong	dense	16M_eg@61	f8k-oolong-dense-16M_egst61-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:49	LAUNCHED	"01M5JF46ADHGFEGAZ03EPA6C67 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	oolong	dense	16M_eg	f8k-oolong-dense-16M_eg-tdp-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:49	LAUNCHED	"01M5JF4ZMXFC9958YACD8QN7ME transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	contradiction	chk16	16M	f8k-contradiction-chk16-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:50	LAUNCHED	"01M5JF5SZJCPBQAQD2HPAYXV2G transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	contradiction	chk64	16M	f8k-contradiction-chk64-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:50	LAUNCHED	"01M5JF6QH096746P6VQ99AG337 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	nq	kv33	16M	f8k-nq-kv33-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:51	LAUNCHED	"01M5JF7HS27CD7S5VJD0WHYEZ0 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	flk64	16M	f8k-outlier-flk64-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:51	LAUNCHED	"01M5JF8BXVE9K05Z1TB30JYT1X transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	outlier	ck64ds	16M	f8k-outlier-ck64ds-16M-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:51	LAUNCHED	"01M5JF97BZAHQ4QK1NW918GET6 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	oolong	ohdr33	16M_eg	f8k-oolong-ohdr33-16M_eg-tdp-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 11:52	LAUNCHED	"01M5JFA5M9PFNYDH80HMFFYB37 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s1952	f8k-mt4-dense-s1952-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 15:07	LAUNCHED	"01M5JTEWVVCR797N9WJ9BYCG10 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s1952	f8k-mt4-dense-s1952-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 15:07	LAUNCHED	"01M5JTFQ4HG1WG2QG32XCPTAAC transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	dense	s240	f8k-mt11-dense-s240-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 18:53	LAUNCHED	"01M5K7AVSS16SGKHWZYGYZBADD transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	dense	s480	f8k-mt11-dense-s480-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 18:53	LAUNCHED	"01M5K7BPEJ2XVDNEYATY4MEJW4 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	dense	s720	f8k-mt11-dense-s720-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 18:53	LAUNCHED	"01M5K7CHBGC5CDRM620PZ871NN transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	dense	s960	f8k-mt11-dense-s960-tdc-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-22 23:10	LAUNCHED	"01M5KP4DP1M2SE7NXWRFEBER1B transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	dense	s960	f8k-mt11-dense-s960-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 23:11	LAUNCHED	"01M5KP58FV18NVSTWFS6ESMSJP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	otr10M7	s960	f8k-mt11-otr10M7-s960-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 23:13	LAUNCHED	"01M5KP6NYX6Q7ZXRB7HQ628BHB transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	otr10M8	s960	f8k-mt11-otr10M8-s960-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 23:13	LAUNCHED	"01M5KP7GEMJ4NFH5PV8PHG3VV4 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	otr10M7gold	s960	f8k-mt11-otr10M7gold-s960-tdc-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-22 23:13	LAUNCHED	"01M5KP8ENXCCWHB9614J14QY1P transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0	s1464	f8k-mt4-otr10M7de0-s1464-tde-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-23 03:54	LAUNCHED	"01M5M6B3YPWE2DVZBC89ZNWS5M transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0xl3	s1464	f8k-mt4-otr10M7de0xl3-s1464-tde-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-23 03:54	LAUNCHED	"01M5M6BYRJ2GQBFDPSF0083SZK transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0xl3	s488	f8k-mt4-otr10M7de0xl3-s488-tde-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-23 03:55	LAUNCHED	"01M5M6CS2RJ6PBZ921VWT9KGCZ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0xl10	s488	f8k-mt4-otr10M7de0xl10-s488-tde-lr2e-06	ai2/jupiter-cirrascale-2	2026-10-23 03:55	LAUNCHED	"01M5M6DR678BDSWZ89MVJFHYZ0 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	otr10M7de16f16	s720	f8k-mt11-otr10M7de16f16-s720-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:29	LAUNCHED	"01M5PCZ5THSGQNDQZ72PSEKDED transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	otr10M7de16f16pt	s720	f8k-mt11-otr10M7de16f16pt-s720-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:29	LAUNCHED	"01M5PD04S2WC7BADW4VE2GQ6ST transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de16pt	s1464	f8k-mt4-otr10M7de16pt-s1464-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:29	LAUNCHED	"01M5PD13BCG7ZHHAQTR359A4ND transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	otr10M7de0f16	s720	f8k-mt11-otr10M7de0f16-s720-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:40	LAUNCHED	"01M5PDKHFJST396ANG1KSMRSMD transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	otr10M7de0f16pt	s720	f8k-mt11-otr10M7de0f16pt-s720-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:40	LAUNCHED	"01M5PDMC015HMZ4BSS6YB24NGH transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0pt	s1464	f8k-mt4-otr10M7de0pt-s1464-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:40	LAUNCHED	"01M5PDN5GYETJ48QW201AF76QQ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0	s1952	f8k-mt4-otr10M7de0-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PDYFD1GTAMWXFSVX2FQCBP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	fa50M7	s1952	f8k-mt4-fa50M7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PDZ9GXQ73PVAH3XGDFCREE transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	fa75M7	s1952	f8k-mt4-fa75M7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PE06ABXN06M6B1PFFVVQYP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	pfz37M7	s1952	f8k-mt4-pfz37M7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PE1117V1S0K94NEBNB5Z0S transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	r20to7M7de0	s1952	f8k-mt4-r20to7M7de0-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PE1VGJWGV27XA1XWS8XW3Z transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0sk3	s1952	f8k-mt4-otr10M7de0sk3-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PE2MZF6S2QNNQPXEKKVCZ3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0f16	s1952	f8k-mt4-otr10M7de0f16-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PE3NKMSE74YJG7T8X9PTB8 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	mod25	s1952	f8k-mt4-mod25-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PE4EBTNMBFSWKT9WPZW2PM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	mod25t16	s1952	f8k-mt4-mod25t16-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:49	LAUNCHED	"01M5PE58F5D5A6XG3XAB4BXMN8 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	mass80c20M7	s1952	f8k-mt4-mass80c20M7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:52	LAUNCHED	"01M5PE93RT83K1HKS64MYS8MTC transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora16M7	s1952	f8k-mt4-lora16M7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:52	LAUNCHED	"01M5PE9WJZ5J14Q4RC7YCR23AV transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0pt	s1952	f8k-mt4-otr10M7de0pt-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 00:52	LAUNCHED	"01M5PEAPT43W1Q73WQR9VR0CXT transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64M7	s1952	f8k-mt4-lora64M7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 05:18	LAUNCHED	"01M5PXHMH40WPMGFT8XBECR12C transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f1952	f8k-mt4-dense-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 10:58	LAUNCHED	"01M5QGZ7BXVERPKX365GRS0VH4 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f3904	f8k-mt4-dense-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 10:58	LAUNCHED	"01M5QH036NM7RNSPY6V56CCG2G transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0	f1952	f8k-mt4-otr10M7de0-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH0XACADZVQA6B8WB4F0CM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0	f3904	f8k-mt4-otr10M7de0-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH1S3N35TF94V9NMVR8QYP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0	f7808	f8k-mt4-otr10M7de0-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH2NCHPJJEP892N5MJ9ZSJ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	fa50M7	f1952	f8k-mt4-fa50M7-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH3FD2SKS4WKTENMA4MKV8 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	fa50M7	f3904	f8k-mt4-fa50M7-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH49S5RCJ65FZK3SENJY6Q transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	fa50M7	f7808	f8k-mt4-fa50M7-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH55RK2JTHQ8BTVA6XJXSR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64M7	f1952	f8k-mt4-lora64M7-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH5YWZCE30M1CTR9QE19NM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64M7	f3904	f8k-mt4-lora64M7-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH6RZG1ZMH9VCDMW6M61HN transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64M7	f7808	f8k-mt4-lora64M7-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH7Q30G66S7TQND79TVJVP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75M7	f1952	f8k-mt4-lora64fa75M7-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH8G6J9DEEN9DZJB2W3R1C transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75M7	f3904	f8k-mt4-lora64fa75M7-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QH99M3T77C266YEMGASB3H transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75M7	f7808	f8k-mt4-lora64fa75M7-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:03	LAUNCHED	"01M5QHA3FRQ3G9A5HRR98M5H2Q transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0pt	f3904	f8k-mt4-otr10M7de0pt-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:04	LAUNCHED	"01M5QHAX16YNTM48MCJZEKSNF0 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0sk3	f3904	f8k-mt4-otr10M7de0sk3-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:37	LAUNCHED	"01M5QK6AF7JXR70673Q4PQ78S9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	otr10M7de0sk3	f7808	f8k-mt4-otr10M7de0sk3-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:37	LAUNCHED	"01M5QK743515ANJ2BNACVJ4CFM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	r20to7M7de0	f3904	f8k-mt4-r20to7M7de0-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:37	LAUNCHED	"01M5QK7X7S7Y6CN81T1SGZMVN5 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	r20to7M7de0	f7808	f8k-mt4-r20to7M7de0-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 11:37	LAUNCHED	"01M5QK8R20JBEMNXE6N559Z78W transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r20to7	f1952	f8k-mt4-lora64fa75r20to7-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 14:16	LAUNCHED	"01M5QW96BPYJ52GARJBCJ71NQ3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r20to7	f3904	f8k-mt4-lora64fa75r20to7-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 14:16	LAUNCHED	"01M5QWA7M0ZC6C9Z7YE1J0Q05B transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r20to7	f7808	f8k-mt4-lora64fa75r20to7-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 14:16	LAUNCHED	"01M5QWBEFX55CAST0DAGEAW0YR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r20to10	f1952	f8k-mt4-lora64fa75r20to10-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 18:56	LAUNCHED	"01M5RC6BAB6DANY3QC1X918NER transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r20to10	f3904	f8k-mt4-lora64fa75r20to10-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 18:56	LAUNCHED	"01M5RC7BBY2B4DQSV3W7GE0185 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r20to10	f7808	f8k-mt4-lora64fa75r20to10-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 18:56	LAUNCHED	"01M5RC8CY3XYW46J389KTYZCCX transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r3s	f1952	f8k-mt4-lora64fa75r3s-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 18:56	LAUNCHED	"01M5RC9AP3753DYNYDY9HBGJAN transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r3s	f3904	f8k-mt4-lora64fa75r3s-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 18:56	LAUNCHED	"01M5RCAE9KM5DP2C79Q8QZ497W transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64fa75r3s	f7808	f8k-mt4-lora64fa75r3s-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 18:56	LAUNCHED	"01M5RCBD754HYDNX7D7RBTKYFM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7	f1952	f8k-mt4-lora64r20to7-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 19:57	LAUNCHED	"01M5RFQFNF77Y1XRBKJNR5S3K4 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7	f3904	f8k-mt4-lora64r20to7-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 19:57	LAUNCHED	"01M5RFREDMSNY2GTN8KVE7Z2Y1 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7	f7808	f8k-mt4-lora64r20to7-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 19:57	LAUNCHED	"01M5RFSE75MEGQ9SD42NNYE8ZV transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to10	f1952	f8k-mt4-lora64r20to10-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 19:57	LAUNCHED	"01M5RFT98WMZV86M4RM8JA5Z6B transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to10	f3904	f8k-mt4-lora64r20to10-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 19:57	LAUNCHED	"01M5RFVB86W8ZXDX0FAQDKWF2N transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to10	f7808	f8k-mt4-lora64r20to10-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 19:57	LAUNCHED	"01M5RFWFY7BYBN45625M6HC4ZB transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	dense	s240@32	f8k-mt11-dense-s240st32-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 22:28	LAUNCHED	"01M5RRFW30GD4GD30VQN6MC67N transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	dense	s240@64	f8k-mt11-dense-s240st64-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 22:28	LAUNCHED	"01M5RRGMWFMYA3R0Q97DAC6WSF transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7	s1952	f8k-mt4-lora64r20to7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWMJNWFPM1WEP71NT25VSC transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7ffn50e	s1952	f8k-mt4-lora64r20to7ffn50e-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWNBARAV2BBPS18CNJANRD transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7ffn50a	s1952	f8k-mt4-lora64r20to7ffn50a-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWP6X6P777JG43MQ5P66ZM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7ffn25e	s1952	f8k-mt4-lora64r20to7ffn25e-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWQ0MD85JZ0NFQQRGTFSSD transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7ffn25a	s1952	f8k-mt4-lora64r20to7ffn25a-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWQRN5P8E0PB2TH7MRVNFJ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7	s1952	f8k-mt4-lora64all32r20to7-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWRT308RATPH6PT9DVCXMD transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	denseffn50	s1952	f8k-mt4-denseffn50-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWT0NBTQKRBXJ8DGY0YNC8 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	denseffn25	s1952	f8k-mt4-denseffn25-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:44	LAUNCHED	"01M5RWV4CFW5QV2EAKYTSCDAAT transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7	s1952	f8k-mt4-lora64all32r20to7-s1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-24 23:45	LAUNCHED	"01M5RWWDSEQ8HA24G5RJ249C2T transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	lora64r20to7ffn50e	s720	f8k-mt11-lora64r20to7ffn50e-s720-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:46	LAUNCHED	"01M5RWXHW9J8KQBQD1F09E6DZW transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	lora64all32r20to7	s720	f8k-mt11-lora64all32r20to7-s720-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:46	LAUNCHED	"01M5RWYQ7DQR75ZC42TB3TYPE0 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f5856	f8k-mt4-dense-f5856-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:52	LAUNCHED	"01M5RX8TEC0VTPFG16BEPV6NXJ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f7808	f8k-mt4-dense-f7808-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-24 23:52	LAUNCHED	"01M5RXA2XQPHWS71B23GA21NPZ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7ffn50e	s1952	f8k-mt4-lora64r20to7ffn50e-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-25 16:08	LAUNCHED	"01M5TN4968YDV48FRDGMT4185Y transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7	f1952	f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:19	LAUNCHED	"01M5VH5APW70Y48FW01Y7W3BVF transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7	f3904	f8k-mt4-lora64all32r20to7-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:19	LAUNCHED	"01M5VH6FK7J23RHG272XB796M5 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20to7	f7808	f8k-mt4-lora64all32r20to7-f7808-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:19	LAUNCHED	"01M5VH7FE3H2ER7VKEV2J50KBE transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64r20to7s12	s1952	f8k-mt4-lora64r20to7s12-s1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:19	LAUNCHED	"01M5VH8BYN5G3XF5384W9TSFCR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	denselora64all	f1952	f8k-mt4-denselora64all-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:38	LAUNCHED	"01M5VJ9PJ6K1AEY2B88GPQV1MJ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	denselora64all	f3904	f8k-mt4-denselora64all-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:38	LAUNCHED	"01M5VJAFD8D68WRVF0W82PC4VK transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	denselora64all	s1464	f8k-mt4-denselora64all-s1464-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:38	LAUNCHED	"01M5VJB7N8V32VQE2MK5GM7Q6H transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	denselora64all	f1952	f8k-mt4-denselora64all-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:39	LAUNCHED	"01M5VJCA287GR61PKYDZXHHVKJ transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	denselora64all	f3904	f8k-mt4-denselora64all-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:39	LAUNCHED	"01M5VJD3NYTH12QRSVNCFBNFMX transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32rnd20to7	s1464	f8k-mt4-lora64all32rnd20to7-s1464-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:40	LAUNCHED	"01M5VJDXBRXYRVRNCVDTBKDD33 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32rnd20to7	f3904	f8k-mt4-lora64all32rnd20to7-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:40	LAUNCHED	"01M5VJEQ5XNKE75FWTGAN29993 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f1952	f8k-mt4-dense-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:42	LAUNCHED	"01M5VJFG3DAR7DVYHBRB1Q2X2N transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f3904	f8k-mt4-dense-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:42	LAUNCHED	"01M5VJG9JFVG5EWQJFPF1JFR6X transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@31	f8k-mt4-dense-s488st31-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:42	LAUNCHED	"01M5VJH2M1XA180E0PHXWCACF9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@61	f8k-mt4-dense-s488st61-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:42	LAUNCHED	"01M5VJHV8G994SEPCYZ8SEH9TM transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f1952	f8k-mt4-dense-f1952-tde-lr2e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:44	LAUNCHED	"01M5VJJP0DM0QT06TJSZTJ892V transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	f3904	f8k-mt4-dense-f3904-tde-lr2e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:44	LAUNCHED	"01M5VJKFS361EY3DBY8FGW8MCT transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@31	f8k-mt4-dense-s488st31-tde-lr2e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:44	LAUNCHED	"01M5VJM8WGH8J84BBBBESPCN2N transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	dense	s488@61	f8k-mt4-dense-s488st61-tde-lr2e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:44	LAUNCHED	"01M5VJN3KSPC4H8VWVF7F7MB5C transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densesp	f1952	f8k-mt4-densesp-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:55	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	f3904	f8k-mt4-densesp-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:55	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	s488@31	f8k-mt4-densesp-s488st31-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:55	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	s488@61	f8k-mt4-densesp-s488st61-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:55	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	s1464	f8k-mt4-densesp-s1464-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:55	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	f1952	f8k-mt4-densesp-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:56	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	s488@61	f8k-mt4-densesp-s488st61-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 00:56	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	f1952	f8k-mt4-densesp-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 00:57	LAUNCH-FAILED	"                            {launch,dry_run}
+beaker_ctc_suite.py: error: argument --extra-args: expected one argument"
+fast8k	4b	mt4	densesp	f1952	f8k-mt4-densesp-f1952-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 01:00	LAUNCHED	"01M5VKG1RY0WCSHB6DPQ3691TH transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densesp	f3904	f8k-mt4-densesp-f3904-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 01:00	LAUNCHED	"01M5VKGTBNBMPN74R4YV0XN1V3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densesp	s488@31	f8k-mt4-densesp-s488st31-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 01:00	LAUNCHED	"01M5VKHKW5J9E94PBDKSC4A6C2 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densesp	s488@61	f8k-mt4-densesp-s488st61-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 01:00	LAUNCHED	"01M5VKJJB03HXEGB7J623XSS3T transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densesp	s1464	f8k-mt4-densesp-s1464-tde-lr5e-06	ai2/jupiter-cirrascale-2	2026-10-26 01:00	LAUNCHED	"01M5VKKJHB46Z58E14SFX4KQKR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densesp	f1952	f8k-mt4-densesp-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 01:01	LAUNCHED	"01M5VKMBQ5Q6K2WQP9ZZF3PDAC transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	densesp	s488@61	f8k-mt4-densesp-s488st61-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-26 01:01	LAUNCHED	"01M5VKN5Q3BM348RRTDK62JMJ4 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32m70c50	f1952	f8k-mt4-lora64all32m70c50-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 23:34	LAUNCHED	"01M635V4NPPGSMZR2GB39NXRQ7 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32m70c50	f3904	f8k-mt4-lora64all32m70c50-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 23:34	LAUNCHED	"01M635VXEJ3RYHTW30M06DRWYT transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32m70c50	f7808	f8k-mt4-lora64all32m70c50-f7808-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 23:34	LAUNCHED	"01M635WPJE48V1TRZTA7V7S3G3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt11	lora64all32m70c50f16	s720	f8k-mt11-lora64all32m70c50f16-s720-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-28 23:35	LAUNCHED	"01M635XHGG56K30BWSMZGF7H5P transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20at1	f3904	f8k-mt4-lora64all32r20at1-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 07:37	LAUNCHED	"01M641DMW3SH1CKAF8EZ62VZJP transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20at3	f3904	f8k-mt4-lora64all32r20at3-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 07:37	LAUNCHED	"01M641EM9FX2CWA16W8G5937D7 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r20at5	f3904	f8k-mt4-lora64all32r20at5-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 07:37	LAUNCHED	"01M641FDHJ2KYXF9816H265RBE transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32p50at3	f3904	f8k-mt4-lora64all32p50at3-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 07:37	LAUNCHED	"01M641G5Y4QYVCE4F3SRE2H8K9 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32p50at3	f3904	f8k-mt4-lora64all32p50at3sd1-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 12:37	LAUNCHED	"01M64JNDQW0D50903PRS4YAP1Q transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32p50at3	f3904	f8k-mt4-lora64all32p50at3sd2-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 12:37	LAUNCHED	"01M64JP6E9JN8BZQQ9P7204YQR transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32p50at3	f1952	f8k-mt4-lora64all32p50at3-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 12:38	LAUNCHED	"01M64JQ1K7EJZXK5WA1JXH4R16 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32p50at3	f7808	f8k-mt4-lora64all32p50at3-f7808-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-29 12:38	LAUNCHED	"01M64JQX6PV459APPPDA8SVNPH transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r10to3	f1952	f8k-mt4-lora64all32r10to3-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-31 01:37	LAUNCHED	"01M68HM4HVF6B4GPXE8Q2Z275M transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r10to3	f3904	f8k-mt4-lora64all32r10to3-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-31 01:37	LAUNCHED	"01M68HMZP8YV6R42Q7ED81HS56 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r10to5	f1952	f8k-mt4-lora64all32r10to5-f1952-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-31 01:37	LAUNCHED	"01M68HNRVJDXAF1EPNEWQGEDJ6 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
+fast8k	4b	mt4	lora64all32r10to5	f3904	f8k-mt4-lora64all32r10to5-f3904-tde-lr1e-05	ai2/jupiter-cirrascale-2	2026-10-31 01:37	LAUNCHED	"01M68HPJ22N93G8BDG4GZDY7R3 transformer_engine unavailable, disabling TE attention: No module named 'transformer_engine'
+Secret 'PRASANNS_COMET_API_KEY' not configured in beaker workspace ai2/flex2"
