@@ -14,6 +14,9 @@ from launch_gap import GAP_DIR, CKPTS as GAP_CKPTS, W, load, submit  # noqa: F40
 from launch import CKPTS as BASE_CKPTS  # noqa: E402
 
 SUPPORT_DIR = f"{W}/gradgap/support"
+#: ~21 H100-hours per checkpoint at 512 rows (vs ~40 for the full default): splits 7 / 16, fewer k, no token x layer cells
+PRESETS = {"trimmed": "--splits 7,16 --gs-ks 0.01,0.02,0.03,0.05,0.1,0.2 --gs-ks-other 0.01,0.03,0.07,0.1 "
+                       "--parts q1,gs,joint,hh", "full": ""}
 CKPTS = {**BASE_CKPTS, **GAP_CKPTS}
 
 
@@ -24,6 +27,7 @@ def main():
     ap.add_argument("--shards-only", default="")
     ap.add_argument("--rows", type=int, default=128)
     ap.add_argument("--extra", default="")
+    ap.add_argument("--preset", default="trimmed", choices=sorted(PRESETS))
     ap.add_argument("--prefix", default="sup-")
     ap.add_argument("--cluster", default="ai2/jupiter-cirrascale-2")
     ap.add_argument("--minutes", type=int, default=90)
@@ -46,7 +50,7 @@ def main():
                 print(f"[skip] {key} {st[key]['ex']}")
                 continue
             extra = (f"--ckpt {ck} --label {lab} --rows {a.rows} --num-shards {a.num_shards} --shard {sh} "
-                     f"--save-dir {SUPPORT_DIR} --adam-factors {GAP_DIR}/adam_{lab}.pt {a.extra}").strip()
+                     f"--save-dir {SUPPORT_DIR} --adam-factors {GAP_DIR}/adam_{lab}.pt {PRESETS[a.preset]} {a.extra}").strip()
             submit("research/token_routing/grad_concentration/support_probe.py", extra, a.cluster, a.minutes,
                    f"gradsupp-{lab}-s{sh}of{a.num_shards}", key, st, {"label": lab, "shard": sh, "num_shards": a.num_shards})
 

@@ -28,7 +28,7 @@ ap.add_argument("--script", default="", help="support_probe.py: the support-toke
 a = ap.parse_args()
 only = [int(x) for x in a.shards.split(",")] if a.shards else range(a.num_shards)
 for i in only:
-    args = f"--num-shards {a.num_shards} --shard {i} {a.args}".strip() if not a.adam_publish else a.args
+    args = (f"--num-shards {a.num_shards} --shard {i} {a.args}".strip() if not a.adam_publish and a.script != "soft_parity.py" else a.args)
     env = [f"SRC={REPO}", f"LABEL={a.label}", f"CKNAME={a.ckname}", f"MINUTES={a.minutes}", f"ARGS={args}"]
     if a.adam:
         env.append(f"ADAM_FROM={a.adam if a.adam.startswith('/') else os.path.join(HERE, a.adam)}")

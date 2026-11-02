@@ -62,6 +62,8 @@ GATE_MASS = 0.95
 SPLITS = (0, 3, 7, 16)
 ALLOCS = ("glob", "row", "doc")
 GS_KS = (0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.2)
+GS_MAIN = 7  # the headline split gets every k (and g1); the others GS_KS_OTHER
+GS_KS_OTHER = (0.01, 0.03, 0.07, 0.1, 0.2)
 GS_DEFAULT = (("en", ALLOCS), ("g05", ALLOCS), ("g1", ("row",)), ("rnd", ("doc",)))
 HH_KS = {7: (0.03, 0.1, 0.3), 16: (0.01, 0.03, 0.1)}
 HH_RULES = ("enhalf", "enattn", "engate")
@@ -155,12 +157,30 @@ class QKCap:
 
 
 # ----------------------------------------------------------------------------------------------------- forwards
-def math_sdpa():
-    """soft_keep attention runs SDPA with a dense additive bias; the memory-efficient kernel's backward fails on these
-    shapes ("LSE is not correctly aligned (strideH)"), so gate passes use the math kernel (forward AND the
-    checkpoint recompute in backward)."""
-    from torch.nn.attention import SDPBackend, sdpa_kernel
-    return sdpa_kernel([SDPBackend.MATH])
+class fp32_attn:
+    """soft_keep attention runs SDPA with a dense additive bias. In bf16 the math kernel is off by up to ~16% in summed
+    answer CE at 8k (soft_parity.py), and the memory-efficient kernel's backward fails on these shapes ("LSE is not
+    correctly aligned (strideH)"). This swaps pooled_soft_token.masked_sdpa for an explicit attention with fp32
+    scores / softmax / accumulation for the duration (forward AND the checkpoint recompute in backward)."""
+
+    def __enter__(self):
+        import olmo_core.nn.pooled_soft_token as pst
+
+        def masked_sdpa_fp32(q, k, v, bias, scale):
+            n_rep = q.shape[2] // k.shape[2]
+            if n_rep > 1:
+                k = k.repeat_interleave(n_rep, dim=2)
+                v = v.repeat_interleave(n_rep, dim=2)
+            qf, kf, vf = (t.transpose(1, 2).float() for t in (q, k, v))
+            p = (torch.matmul(qf, kf.transpose(-1, -2)) * scale + bias.float()).softmax(-1)
+            return torch.matmul(p, vf).to(q.dtype).transpose(1, 2).contiguous()
+        self.pst, self.orig = pst, pst.masked_sdpa
+        pst.masked_sdpa = masked_sdpa_fp32
+        return self
+
+    def __exit__(self, *exc):
+        self.pst.masked_sdpa = self.orig
+        return False
 
 
 def gate_grad(model, r, L, gval, cell=False):
@@ -169,7 +189,7 @@ def gate_grad(model, r, L, gval, cell=False):
     bidx = torch.nonzero(r["body"], as_tuple=True)[0]
     shape = (NB - L, bidx.numel()) if cell else (bidx.numel(),)
     z = torch.full(shape, float(gval), device=bidx.device, requires_grad=True)
-    with math_sdpa():
+    with fp32_attn():
         ce = run_soft(model, r, L, z, cell)
         ce.backward()
     if cell:
@@ -292,7 +312,9 @@ def main():
     ap.add_argument("--max-batches", type=int, default=0)
     ap.add_argument("--parts", default="q1,gs,joint,hh", help="subset of q1,gs,joint,hh,q3")
     ap.add_argument("--splits", default=",".join(map(str, SPLITS)), help="q1 / gs / joint splits")
-    ap.add_argument("--gs-ks", default=",".join(f"{k:g}" for k in GS_KS))
+    ap.add_argument("--gs-ks", default=",".join(f"{k:g}" for k in GS_KS), help="k at the headline split (block 7)")
+    ap.add_argument("--gs-ks-other", default=",".join(f"{k:g}" for k in GS_KS_OTHER),
+                    help="k at the other splits; '' = same as --gs-ks")
     ap.add_argument("--gs-rules", default="", help="cross product rules x --gs-allocs (default: GS_DEFAULT)")
     ap.add_argument("--gs-allocs", default="glob,row,doc")
     ap.add_argument("--selfcheck", action="store_true", help="also run an unrouted pass in 'sum' mode (== D)")
@@ -306,6 +328,10 @@ def main():
     parts = set(a.parts.split(","))
     splits = tuple(int(x) for x in a.splits.split(","))
     gs_ks = tuple(float(x) for x in a.gs_ks.split(","))
+    gs_ks_other = tuple(float(x) for x in a.gs_ks_other.split(",")) if a.gs_ks_other else gs_ks
+
+    def ks_at(L):
+        return gs_ks if L == GS_MAIN else gs_ks_other
     gs_spec = (tuple((r_, tuple(a.gs_allocs.split(","))) for r_ in a.gs_rules.split(",")) if a.gs_rules
                else GS_DEFAULT)
 
@@ -341,8 +367,8 @@ def main():
     dev = torch.device("cuda")
 
     # ------------------------------------------------------------------------------------ selection names
-    s_gs = ([f"{rule}_{al}_L{L}_k{k:g}" for L in splits for k in gs_ks for rule, als in gs_spec for al in als]
-            if "gs" in parts else [])
+    s_gs = ([f"{rule}_{al}_L{L}_k{k:g}" for L in splits for k in ks_at(L) for rule, als in gs_spec for al in als
+             if a.gs_rules or rule != "g1" or L == GS_MAIN] if "gs" in parts else [])
     s_hh = ([f"hh_{rule}_L{L}_k{k:g}" for L, ks in HH_KS.items() for k in ks for rule in HH_RULES]
             if "hh" in parts else [])
     s_q3 = [f"q3_{rule}_k{k:g}" for k in Q3_KS for rule in Q3_RULES] if "q3" in parts else []
@@ -510,7 +536,7 @@ def main():
             for al in ALLOCS:
                 re_, rg_ = rf_of("en", al, L), rf_of("g05", al, L)
                 jac = []
-                for k in gs_ks:
+                for k in ks_at(L):
                     inter = sum(int(((e < k) & (g < k)).sum()) for e, g in zip(re_, rg_))
                     uni = sum(int(((e < k) | (g < k)).sum()) for e, g in zip(re_, rg_))
                     jac.append(inter / max(1, uni))
@@ -713,7 +739,7 @@ def main():
         log(f"batch {J} done ({bj + 1}/{len(mine)}), {time.time() - t0:.0f}s")
         meta = dict(label=a.label, ckpt=a.ckpt, shard=a.shard, num_shards=a.num_shards, batches=mine[:bj + 1],
                     tasks=tasks, sels=allsels, s_grid=s_grid, s_gs=s_gs, s_hh=s_hh, s_q3=s_q3, splits=splits,
-                    gs_ks=gs_ks, grid=GRID, target=TARGET, gate_mass=GATE_MASS, hh_ks=HH_KS, q3_ks=Q3_KS,
+                    gs_ks=gs_ks, gs_ks_other=gs_ks_other, gs_main=GS_MAIN, grid=GRID, target=TARGET, gate_mass=GATE_MASS, hh_ks=HH_KS, q3_ks=Q3_KS,
                     sketch_dim=a.sketch_dim, adam=adam is not None, adam_source=(adam_diag or {}).get("_source"),
                     batch_stats=out_batches, rows=out_rows, seconds=time.time() - t00)
         json.dump(meta, open(a.out, "w"))
