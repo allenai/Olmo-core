@@ -24,6 +24,15 @@ def academic():
     return vision_academic
 
 
+@pytest.mark.parametrize(
+    "dataset, expected",
+    [({"tokenizer_json_split": True}, True), ({"tokenizer_json_split": False}, False), ({}, False)],
+)
+def test_checkpoint_tokenizer_split_follows_its_saved_config(academic, dataset, expected):
+    """Checkpoints saved before ``tokenizer_json_split`` existed trained on GPT2Tokenizer's split."""
+    assert academic._checkpoint_tokenizer_json_split({"dataset": dataset}) is expected
+
+
 def test_standard_task_metrics(academic):
     assert academic._normalize_vqa_answer("The red,blue cats?") == "red blue cats"
     assert academic._normalize_vqa_answer("One cat, don't go!") == "1 cat don't go"
