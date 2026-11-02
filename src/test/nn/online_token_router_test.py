@@ -1685,3 +1685,150 @@ def test_nonfinite_targets_are_dropped_from_the_fit():
     r._current = None
     r.begin_step(2, model=m)
     assert r.w is not None and bool(torch.isfinite(r.w).all())
+
+
+# ---------------------------------------------------------------- keep_mode step (cross-row allocation, 2026-11-02)
+def test_step_keep_mode_one_threshold_across_rows_with_cap_and_floor():
+    """keep_mode step: a FIXED step threshold (not refit to the micro-batch): the hard row keeps more than its budget,
+    the easy one less, the cap bounds the hard row, and every document keeps its floor token."""
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=2)
+    body = (cid >= 0) & (ids != DS) & (ids != DE)
+    r = _router(use_hidden=False, keep_frac=0.2, keep_mode="step", row_cap=2.0, min_per_doc=1)
+    _routed(r, m)
+    hard = torch.zeros(ids.shape)
+    hard[0] = 5.0
+    r.score = lambda fp: hard + 1e-3 * torch.rand(ids.shape)
+    r._tau = 1.0  # between the rows: row 0 clears it everywhere, row 1 nowhere
+    keep = r.select(m, ids, cid, labels)
+    nb = body.sum(dim=1)
+    k = torch.ceil(nb.float() * 0.2)
+    k0, k1 = int((keep[0] & body[0]).sum()), int((keep[1] & body[1]).sum())
+    assert k0 == int(torch.ceil(k[0] * 2.0))  # admitted everywhere, cut at the cap
+    assert k1 == 3  # only the floor (one token per document)
+    for d in (1000, 2000, 3000):
+        for b in (0, 1):
+            assert bool((keep[b] & body[b] & (ids[b] >= d) & (ids[b] < d + 100)).any())
+    assert r._step_cnt[0] == k0 + k1 and r._step_cnt[1] == int(nb.sum())
+    # the same threshold on an all-easy micro-batch keeps only the floor: no per-micro-batch renormalisation
+    r.score = lambda fp: torch.zeros(ids.shape) + 1e-3 * torch.rand(ids.shape)
+    keep2 = r.select(m, ids, cid, labels)
+    assert int((keep2 & body).sum()) == 6
+
+
+def test_step_keep_mode_threshold_from_rescored_reference_and_controller():
+    """At begin_step the controller moves the admitted share by keep_frac - realised, and the threshold is the
+    (1 - admitted) quantile of the NEW weights' scores on the previous step's uniform (exploration) sample."""
+    r = _router(use_hidden=False, keep_frac=0.2, keep_mode="step", step_gain=1.0)
+    F = r.n_features
+    r.w = torch.zeros(F)
+    r.step = 3
+    a0 = r._admit
+    r._step_cnt = [30.0, 100.0]  # realised 0.30 > 0.20
+    r._row_kf = [0.5, 0.1]
+    feats = torch.zeros(1000, F)
+    feats[:, 0] = 1.0
+    feats[:, 1] = torch.linspace(0, 1, 1000)
+    r._pending = [{"rows": torch.zeros(1000, dtype=torch.long), "pos": torch.arange(1000), "feats": feats,
+                   "explore": torch.ones(1000, dtype=torch.bool), "pred": None, "target": None, "dense": False,
+                   "task": None, "ok": torch.ones(1000, dtype=torch.bool)}]
+    w_fit = torch.zeros(F)
+    w_fit[1] = 2.0
+    r.w = w_fit  # no targets this step, so the refit keeps these weights; the threshold must use them
+    r.begin_step(4, model=None)
+    assert r._admit == pytest.approx(a0 - 0.1)
+    assert r._tau == pytest.approx(float(torch.quantile(2.0 * torch.linspace(0, 1, 1000), 1.0 - r._admit)), rel=1e-4)
+    mets = r.metrics()
+    assert mets["online_router/step_keep_frac"] == pytest.approx(0.3)
+    assert mets["online_router/step_row_keep_cv"] > 0
+
+
+def test_step_keep_mode_fit_keeps_across_row_level_differences():
+    """Per-row centring (topk) removes a row-level target offset; keep_mode step centres over the whole step, so a
+    feature that separates rows learns the offset (scores carry across-row difficulty)."""
+    def fit(mode):
+        r = _router(use_hidden=False, keep_mode=mode, ridge=1e-6)
+        F = r.n_features
+        n = 400
+        feats = torch.zeros(n, F)
+        feats[:, 0] = 1.0
+        rows = torch.arange(n) % 2
+        feats[:, 5] = rows.float()  # a feature that is 1 on row 1 only
+        tgt = 3.0 * rows.float() + 0.01 * torch.randn(n)
+        r._pending = [{"rows": rows, "pos": torch.arange(n), "feats": feats, "explore": torch.zeros(n, dtype=torch.bool),
+                       "pred": None, "target": tgt, "dense": True, "task": None,
+                       "ok": torch.ones(n, dtype=torch.bool)}]
+        r.step = 1
+        r.begin_step(2, model=None)
+        return float(r.w[5])
+
+    assert abs(fit("topk")) < 0.1
+    assert fit("step") == pytest.approx(3.0, abs=0.1)
+
+
+def test_step_keep_mode_validate():
+    with pytest.raises(ValueError):
+        _router(keep_mode="step", mass_target=0.8)
+    with pytest.raises(ValueError):
+        _router(keep_mode="step", mlp_hidden=8)
+    with pytest.raises(ValueError):
+        _router(keep_mode="step", row_cap=0.5)
+
+
+def test_step_keep_mode_pyramid_runs_and_holds_the_budget_cpu():
+    """Two-stage step mode on the CPU model: every stage sets a threshold from its reference after the first fit, and
+    the controller pulls the realised keep toward each stage's budget."""
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0, keep_mode="step", row_cap=3.0)
+    chain = router.chain()
+    torch.manual_seed(0)
+    ids, cid, labels = _row(B=2)
+    for n in range(1, 9):
+        model.zero_grad(set_to_none=True)
+        for r in chain:
+            r.begin_step(n, model=model)
+            r.metrics()
+        out = model(ids, labels=labels)
+        assert torch.isfinite(out.loss)
+        out.loss.backward()
+    for r in chain:
+        assert r._tau is not None and r.w is not None
+    m = chain[0].metrics()
+    assert 0.0 < m["online_router/step_keep_frac_mb"] <= 1.0
+
+
+def test_forward_only_price_for_a_skipped_backward_cpu():
+    """With model._flop_fo_delta set (selective backprop), each stage adds (forward-only cost) - (what it charged):
+    the blocks, the head and the adapters at 1/3 of forward + backward."""
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, install_early_lora
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, early_lora=4, early_lora_blocks=4)
+    install_early_lora(model, 4, 4, scale=8.0)
+    ids, cid, labels = _row(B=1)
+    blocks = list(model.blocks.values())
+    flops = []
+    orig = router._flop
+    router._flop = lambda m, v: (flops.append(float(v)), orig(m, v))
+    for n in (1, 2):
+        router.begin_step(n, model=model)
+        router.metrics()
+        model._flop_fo_delta = 0.0
+        flops.clear()
+        out = model(ids, labels=labels)
+        out.loss.backward()
+    assert model._flop_fo_set
+    real = int((ids != PH).sum())
+    kept = int(round(router.metrics()["online_router/mid_row_frac"] * real))
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    fpb = early_lora_flops_per_block(model)
+    dense = real * (sum(f(b, real) for b in blocks) + head)
+    fo = ((real * (f(blocks[0], real) + f(blocks[1], real)) + kept * (f(blocks[2], kept) + f(blocks[3], kept) + head)
+           + real * (fpb[0] + fpb[1]) + kept * (fpb[2] + fpb[3])) / 3.0 - dense)
+    charged = ((2 / 3) * (real * (f(blocks[0], real) + f(blocks[1], real)) + kept * (f(blocks[2], kept)
+                                                                                     + f(blocks[3], kept)))
+               + kept * head + real * (fpb[0] + fpb[1]) + kept * (fpb[2] + fpb[3]) - dense)
+    assert any(abs(v - charged) < 1e-6 * abs(charged) for v in flops), (charged, flops)
+    assert model._flop_fo_delta == pytest.approx(fo - charged, rel=1e-9)
+    assert model._flop_fo_delta < 0
+    del model._flop_fo_delta

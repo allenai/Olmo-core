@@ -450,10 +450,19 @@ class TransformerTrainModule(TrainModule):
         micro_batches = split_batch(batch, self.rank_microbatch_size // seq_len)
         num_micro_batches = len(micro_batches)
 
+        # Selective backprop (olmo_core.train.selective_backprop; research option, set by the recipe): every
+        # micro-batch runs forward, only the high-loss ones run backward. Off for the trainer's dry-run batch.
+        sbp = None if dry_run else getattr(self, "selective_backprop", None)
+        if sbp is not None:
+            sbp.begin_batch()
+
         # Train one micro-batch at a time.
         for micro_batch_idx, micro_batch in enumerate(micro_batches):
-            with self._train_microbatch_context(micro_batch_idx, num_micro_batches):
+            with self._train_microbatch_context(micro_batch_idx, num_micro_batches, every_backward_last=sbp is not None):
                 input_ids, labels, model_kwargs = self._prepare_batch(micro_batch)
+                if sbp is not None:
+                    self.model._flop_fo_delta = 0.0  # type: ignore[assignment]
+                    self.model._flop_fo_set = False  # type: ignore[assignment]
 
                 # Run forward pass, get losses.
                 _, loss, ce_loss, z_loss = self.model_forward(
@@ -468,7 +477,8 @@ class TransformerTrainModule(TrainModule):
                 )
 
                 # Update total batch CE and Z loss.
-                ce_batch_loss += get_local_tensor(ce_loss.detach())
+                ce_mb = get_local_tensor(ce_loss.detach())
+                ce_batch_loss += ce_mb
                 del ce_loss
                 if z_batch_loss is not None:
                     assert z_loss is not None
@@ -476,9 +486,27 @@ class TransformerTrainModule(TrainModule):
                     del z_loss
 
                 # Run backward pass.
-                loss.backward()
+                if sbp is None:
+                    loss.backward()
+                else:
+                    score = sbp.unit_score(ce_mb * batch_num_tokens_for_loss)
+                    run, weight = sbp.decide(score, micro_batch_idx, num_micro_batches)
+                    if run:
+                        (loss * weight if weight != 1.0 else loss).backward()
+                    else:
+                        if not getattr(self.model, "_flop_fo_set", False):
+                            raise RuntimeError("selective backprop: no forward-only FLOP price for this micro-batch "
+                                               "(it needs the mid-stack online token router)")
+                        self.model._flop_extra_actual = float(  # type: ignore[assignment]
+                            getattr(self.model, "_flop_extra_actual", 0.0)) + float(self.model._flop_fo_delta)
+                        del loss
 
         del batch  # In case this helps with memory utilization.
+
+        if sbp is not None:
+            del self.model._flop_fo_delta, self.model._flop_fo_set  # the router prices only while these exist
+            for k, v in sbp.metrics().items():
+                self.record_metric(k, v, ReduceType.mean, namespace="train")
 
         self.model.post_batch(dry_run=dry_run)
 
@@ -623,9 +651,11 @@ class TransformerTrainModule(TrainModule):
 
     @contextlib.contextmanager
     def _train_microbatch_context(
-        self, micro_batch_idx: int, num_micro_batches: int
+        self, micro_batch_idx: int, num_micro_batches: int, every_backward_last: bool = False
     ) -> Generator[None, None, None]:
-        is_last_mb = micro_batch_idx == num_micro_batches - 1
+        # every_backward_last (selective backprop): any micro-batch's backward may be the step's last one that runs,
+        # so each waits on its own gradient reduction (FSDP2 still reduce-scatters and accumulates on every backward)
+        is_last_mb = every_backward_last or micro_batch_idx == num_micro_batches - 1
         with contextlib.ExitStack() as stack:
             if isinstance(self.model, FSDPModule):
                 assert self.dp_config is not None

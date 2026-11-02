@@ -160,7 +160,16 @@ class OnlineRouterConfig:
     total; per-row cap ``row_cap`` x budget, per-document floor (``min_per_doc``) counted against the budget. The fit
     then centres its targets over the BATCH instead of per row, so scores carry the across-row difficulty too."""
     row_cap: float = 2.0
-    """``keep_mode='threshold'``: a row keeps at most ``row_cap`` x its budget (memory and padding bound)."""
+    """``keep_mode='threshold'`` / ``'step'``: a row keeps at most ``row_cap`` x its budget (memory and padding bound)."""
+    step_gain: float = 1.0
+    """``keep_mode='step'`` (2026-11-02, cross-row allocation): ONE score threshold per optimizer step, shared by every
+    row of the step on every rank. After each refit the threshold is the (1 - a) quantile of the NEW scores of a uniform
+    body-token sample from the previous step (its exploration tokens; every sampled token on a full-context step),
+    pooled over ranks; ``a`` (the admitted share) is an integral controller, ``a += step_gain * (keep_frac -
+    realised)`` per step, so the run-average keep matches ``keep_frac`` (FLOPs match the per-row recipe) while hard
+    rows keep more and easy ones less. Per-row cap ``row_cap`` x budget; the exploration draw and the per-document
+    floor (``min_per_doc``) are always kept. The fit centres its targets over the whole step (all ranks), so the
+    scores carry across-row difficulty. Ridge scorer only (no MLP / per-task fits)."""
     keep_sched: str = ""
     """Training-time budget schedule ``"a:b"``: the first stage's keep fraction is multiplied by a factor going
     linearly from ``a`` to ``b`` over training (e.g. ``1.33:0.67`` = more early, less late at about the same total);
@@ -360,10 +369,15 @@ class OnlineRouterConfig:
             raise ValueError("online router ctx_feats needs use_hidden and use_query (they derive from cos_h_q)")
         if self.task_onehot < 0:
             raise ValueError("online router task_onehot must be >= 0")
-        if self.keep_mode not in ("topk", "threshold"):
-            raise ValueError(f"online router keep_mode must be topk / threshold, got {self.keep_mode!r}")
-        if self.keep_mode == "threshold" and (self.mass_target > 0 or self.row_cap < 1.0):
-            raise ValueError("online router keep_mode threshold is exclusive with mass_target and needs row_cap >= 1")
+        if self.keep_mode not in ("topk", "threshold", "step"):
+            raise ValueError(f"online router keep_mode must be topk / threshold / step, got {self.keep_mode!r}")
+        if self.keep_mode in ("threshold", "step") and (self.mass_target > 0 or self.row_cap < 1.0):
+            raise ValueError(f"online router keep_mode {self.keep_mode} is exclusive with mass_target and needs "
+                             "row_cap >= 1")
+        if self.keep_mode == "step" and (self.mlp_hidden > 0 or self.per_task_key_tokens > 0 or self.later_mass_target
+                                         or not 0.0 < self.step_gain <= 2.0):
+            raise ValueError("online router keep_mode step: ridge scorer only (no mlp_hidden / per_task_key_tokens / "
+                             "later_mass_target) and 0 < step_gain <= 2")
         if self.keep_sched:
             a, _, b = self.keep_sched.partition(":")
             if not (float(a) > 0 and float(b) > 0):
@@ -677,6 +691,12 @@ class OnlineTokenRouter:
         self._current: Optional[Dict[str, Any]] = None
         self._stats: Dict[str, List[float]] = {}
         self.last_metrics: Dict[str, float] = {}
+        # keep_mode step: this step's threshold (None = no reference yet: the micro-batch's own quantile), the admitted
+        # share the controller holds, and this step's realised (kept, body) counts and per-row keep shares on this rank
+        self._tau: Optional[float] = None
+        self._admit = float(cfg.keep_frac * (1.0 - cfg.explore_frac))
+        self._step_cnt = [0.0, 0.0]
+        self._row_kf: List[float] = []
 
     # ------------------------------------------------------------------ naming
     _marker_free: bool = False
@@ -1010,7 +1030,7 @@ class OnlineTokenRouter:
             if c.keep_first > 0:
                 self._stat("forced_frac", float(forced.sum()) / max(1.0, float(body.sum())))
             keep = explore | forced
-            kd = 0.0 if (c.mass_target > 0 or c.keep_mode == "threshold") else kf * c.doc_share
+            kd = 0.0 if (c.mass_target > 0 or c.keep_mode in ("threshold", "step")) else kf * c.doc_share
             if c.mass_target > 0:
                 keep = keep | self._mass_keep(score, body, cid, c.mass_target)
             if kd > 0:
@@ -1049,6 +1069,8 @@ class OnlineTokenRouter:
                 capped = keep & ~(rank_c < cap[:, None])
                 self._stat("mass_capped_frac", float(capped.sum()) / max(1.0, float(body.sum())))
                 keep = keep & ~capped
+            elif c.keep_mode == "step":
+                keep = self._step_keep(score, body, keep, k, c.row_cap)
             elif c.keep_mode == "threshold":
                 # one threshold over the micro-batch: the remaining batch budget goes to the highest scores anywhere,
                 # each row capped at row_cap x its budget
@@ -1105,6 +1127,77 @@ class OnlineTokenRouter:
             gflag = fp["_gold"][..., 0] if "_gold" in fp else self._row_gold(ids, cid)
             self._stat("leak_auc", self._leak_auc(keep, body, cid, gflag))
         return keep, entry
+
+    def _step_keep(self, score: torch.Tensor, body: torch.Tensor, forced: torch.Tensor, k: torch.Tensor,
+                   row_cap: float) -> torch.Tensor:
+        """keep_mode step: ``forced`` (exploration / header / floor tokens) plus every other body token scoring at or
+        above this step's threshold, each row capped at ``row_cap`` x its budget ``k`` (forced first, then by score)."""
+        sc = score.float()
+        elig = body & ~forced
+        if self._tau is None:
+            # no reference sample yet (the first routed forward): this micro-batch's own quantile at the admitted share
+            vals = sc[elig]
+            n_adm = int(round(self._admit * float(body.sum())))
+            self._tau = (float(torch.topk(vals, min(max(1, n_adm), vals.numel())).values[-1]) if vals.numel()
+                         else 0.0)
+            self._stat("step_tau_from_batch", 1.0)
+        admit = elig & (sc >= self._tau)
+        cap = torch.ceil(k.to(torch.float32) * row_cap).to(torch.long)
+        room = (cap - forced.sum(dim=1)).clamp(min=0)
+        pri = torch.where(admit, sc, torch.full_like(sc, -float("inf")))
+        rank = (-pri).argsort(dim=1).argsort(dim=1)
+        capped = admit & ~(rank < room[:, None])
+        keep = forced | (admit & ~capped)
+        nb = body.sum(dim=1)
+        kept = (keep & body).sum(dim=1)
+        self._step_cnt[0] += float(kept.sum())
+        self._step_cnt[1] += float(nb.sum())
+        self._row_kf += [float(a) / max(1.0, float(b)) for a, b in zip(kept.tolist(), nb.tolist()) if b > 0]
+        self._stat("step_capped_frac", float(capped.sum()) / max(1.0, float(body.sum())))
+        self._stat("step_keep_frac_mb", float(kept.sum()) / max(1.0, float(nb.sum())))
+        return keep
+
+    def _step_threshold(self, ref: List[torch.Tensor], dev) -> None:
+        """keep_mode step, at the start of a step (after the refit): the controller update from the last step's
+        realised keep (all ranks) and the new threshold = the (1 - admitted share) quantile of the new weights' scores on
+        the previous step's uniform body sample (all ranks)."""
+        import torch.distributed as dist
+
+        ddp = dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
+        cnt = torch.tensor(self._step_cnt, dtype=torch.float64, device=dev)
+        if ddp:
+            dist.all_reduce(cnt)
+        kept, nb = float(cnt[0]), float(cnt[1])
+        if nb > 0:
+            r = kept / nb
+            self._admit = min(1.0, max(0.0, self._admit + self.cfg.step_gain * (self.cfg.keep_frac - r)))
+            self._stat("step_keep_frac", r)
+            if len(self._row_kf) > 1:
+                rk = torch.tensor(self._row_kf, dtype=torch.float64)
+                self._stat("step_row_keep_cv", float(rk.std() / rk.mean().clamp(min=1e-9)))
+                self._stat("step_row_keep_max", float(rk.max()))
+                self._stat("step_row_keep_min", float(rk.min()))
+        self._step_cnt = [0.0, 0.0]
+        self._row_kf = []
+        self._stat("step_admit", self._admit)
+        N = 4096
+        if self.w is None:
+            return
+        w = self.w.to(dev, torch.float32)
+        loc = torch.cat([x.to(dev, torch.float32) @ w for x in ref]) if ref else torch.zeros(0, device=dev)
+        if loc.numel() > N:
+            loc = loc[torch.randperm(loc.numel(), device=dev)[:N]]
+        buf = torch.full((N,), float("nan"), device=dev)
+        buf[: loc.numel()] = loc
+        if ddp:
+            parts = [torch.empty_like(buf) for _ in range(dist.get_world_size())]
+            dist.all_gather(parts, buf)
+            buf = torch.cat(parts)
+        vals = buf[torch.isfinite(buf)]
+        if vals.numel() >= 16:
+            self._tau = float(torch.quantile(vals, min(1.0, max(0.0, 1.0 - self._admit))))
+            self._stat("step_tau", self._tau)
+            self._stat("step_ref_samples", float(vals.numel()))
 
     def mid_compact(self, model, h: torch.Tensor, block_kwargs: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Mid-stack drop at block ``drop_layer``: score the forward's own hidden state, gather the kept
@@ -1222,27 +1315,49 @@ class OnlineTokenRouter:
         L0 = self.cfg.drop_layer
         head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
         headx = head * (2.0 / 3.0 if getattr(model, "_head_frozen", False) else 1.0)  # frozen head: no weight grad
-        adj = 0.0
         # early_nograd / freeze: blocks below _nograd_until ran forward-only (1/3 of forward + backward); frozen blocks
         # at or above L0 skipped only their weight gradient (2/3)
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
         ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
-        for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
-            fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
-            fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
-            if self.stage_idx == 0:
-                actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
-                          + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
-                adj += actual - L * (sum(fb) + head)
-                # adapters: blocks below the drop at the full length, the rest at the kept length
-                adj += L * sum(ab[:L0]) + Lk * sum(ab[L0:])
-            else:
-                # a later pyramid stage: the earlier stages already charged blocks >= L0 at THIS stage's entry length L
-                adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx)
-                        - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + headx))
-                adj += (Lk - L) * sum(ab[L0:])
+        lens = list(zip(real.sum(dim=1).tolist(), counts.tolist()))
+
+        def charge(fac, ab, headx):
+            adj = 0.0
+            for L, Lk in lens:
+                fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
+                fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
+                if self.stage_idx == 0:
+                    actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
+                              + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
+                    adj += actual - L * (sum(fb) + head)
+                    # adapters: blocks below the drop at the full length, the rest at the kept length
+                    adj += L * sum(ab[:L0]) + Lk * sum(ab[L0:])
+                else:
+                    # a later pyramid stage: the earlier stages already charged blocks >= L0 at THIS stage's entry
+                    # length L
+                    adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx)
+                            - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + headx))
+                    adj += (Lk - L) * sum(ab[L0:])
+            return adj
+
+        adj = charge(fac, ab, headx)
         self._flop(model, adj)
+        if model.training and hasattr(model, "_flop_fo_delta"):
+            # selective backprop (olmo_core.train.selective_backprop): what this forward costs if its backward is then
+            # skipped -- every block, adapter and the head forward-only (1/3) -- minus what was just charged
+            n = len(blocks)
+            fo = [1.0 / 3.0] * n
+            ab_fo = [0.0] * n
+            st_l = getattr(model, "_early_lora", None)
+            if st_l:
+                self._lora_block_charges(model)  # caches st_l["fpb"]: per-block adapter forward + backward
+                ab_fo = [a / 3.0 for a in st_l["fpb"]]
+            fw = getattr(model, "_ffn_width", None)
+            if fw is not None:
+                ab_fo = [a + f * c for a, f, c in zip(ab_fo, fo, fw.credits_per_block(n))]
+            model._flop_fo_delta = float(model._flop_fo_delta) + charge(fo, ab_fo, head / 3.0) - adj
+            model._flop_fo_set = True
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         if self._next is not None:
             self._next._mid = self._stash_for_next(fp, ids, cid, Tr, Tw, order, valid)
@@ -1624,6 +1739,26 @@ class OnlineTokenRouter:
         if self.step == 0:
             self._pending = []  # forwards before the first step = the trainer's dry-run batch
         X, y, rows_all, expl, preds, dense_e, gns, tks = [], [], [], [], [], [], [], []
+        ref: List[torch.Tensor] = []
+        if self.cfg.keep_mode == "step":
+            # the threshold's reference: a uniform body-token sample of this step (exploration tokens on routed forwards,
+            # every sampled token on full-context ones), rescored after the refit; and whether the scores rank ROWS
+            # (row-mean prediction vs row-mean measured log gradient norm, on the same uniform tokens, this rank)
+            tr, pr = [], []
+            for e in self._pending:
+                m = torch.ones_like(e["explore"]) if e.get("dense") else e["explore"]
+                if bool(m.any()):
+                    ref.append(e["feats"][m].detach())
+                if e["target"] is None or e["pred"] is None:
+                    continue
+                mm = m & e["ok"] & torch.isfinite(e["target"])
+                for rid in torch.unique(e["rows"][mm]).tolist():
+                    sel = mm & (e["rows"] == rid)
+                    tr.append(float(e["target"][sel].float().mean()))
+                    pr.append(float(e["pred"][sel].float().mean()))
+            if len(tr) >= 4:
+                self._stat("step_row_corr", _spearman(torch.tensor(pr, dtype=torch.float64),
+                                                      torch.tensor(tr, dtype=torch.float64)))
         for e in self._pending:
             if e["target"] is None:
                 continue
@@ -1639,7 +1774,10 @@ class OnlineTokenRouter:
             nb = int(r.max()) + 1
             s = torch.zeros(nb, device=t.device).index_add_(0, r, t)
             n = torch.zeros(nb, device=t.device).index_add_(0, r, torch.ones_like(t))
-            t = t - t.mean() if self.cfg.keep_mode == "threshold" else t - (s / n.clamp(min=1))[r]
+            if self.cfg.keep_mode == "threshold":
+                t = t - t.mean()
+            elif self.cfg.keep_mode != "step":  # step: centred over the whole step (all ranks) below
+                t = t - (s / n.clamp(min=1))[r]
             X.append(e["feats"][ok])
             y.append(t)
             if e.get("task") is not None:
@@ -1657,6 +1795,8 @@ class OnlineTokenRouter:
             dev = next(model.parameters()).device
         elif X:
             dev = X[0].device
+        elif ref:
+            dev = ref[0].device
         if dev is None:
             return
         if X:
@@ -1665,6 +1805,11 @@ class OnlineTokenRouter:
         else:
             Xc = torch.zeros(0, F, dtype=torch.float64, device=dev)
             yc = torch.zeros(0, dtype=torch.float64, device=dev)
+        if self.cfg.keep_mode == "step":
+            sm = torch.tensor([float(yc.sum()), float(yc.numel())], dtype=torch.float64, device=dev)
+            if dist.is_available() and dist.is_initialized():
+                dist.all_reduce(sm)
+            yc = yc - float(sm[0]) / max(1.0, float(sm[1]))
         # online held-out quality of the CURRENT weights (before refitting on these targets)
         if preds and len(preds) == len(X):
             pc = torch.cat(preds).to(dev, torch.float64)
@@ -1752,6 +1897,10 @@ class OnlineTokenRouter:
             self._fit_per_task(model, Xc, yc, torch.cat(tks).to(dev) if len(tks) == len(X) and tks else None, dev)
         if self.cfg.mlp_hidden > 0 and self.w is not None:
             self._train_mlp(model, Xc, yc, dev)
+        if self.cfg.keep_mode == "step":
+            self._step_threshold(ref, dev)
+            if model is not None and ref:
+                self._flop(model, 2.0 * F * float(sum(x.shape[0] for x in ref)))
         self.step = int(step)
 
     def _train_mlp(self, model, Xc: torch.Tensor, yc: torch.Tensor, dev) -> None:

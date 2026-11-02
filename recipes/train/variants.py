@@ -351,6 +351,11 @@ class SoftTokenOptions(VariantOptions):
     st_otr_later_max_keep_frac: float = 1.0
     st_otr_task_onehot: int = 0
     st_otr_row_cap: float = 2.0
+    st_otr_step_gain: float = 1.0
+    st_otr_sbp_mode: str = "off"
+    st_otr_sbp_q: float = 0.3
+    st_otr_sbp_window: int = 48
+    st_otr_sbp_min_p: float = 0.05
     st_otr_keep_sched: str = ""
     st_otr_mass_target: float = 0.0
     st_otr_max_keep_frac: float = 1.0
@@ -1237,6 +1242,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         later_max_keep_frac=o.st_otr_later_max_keep_frac,
         task_onehot=o.st_otr_task_onehot,
         row_cap=o.st_otr_row_cap,
+        step_gain=o.st_otr_step_gain,
         keep_sched=o.st_otr_keep_sched,
         mass_target=o.st_otr_mass_target,
         max_keep_frac=o.st_otr_max_keep_frac,
@@ -1454,6 +1460,16 @@ class SoftToken(Variant):
         # smallcat_keep is gold-blind by construction; gold_plus_wholecats installs the hook with
         # n_random=0 so the holder's mask is exactly the gold set for the model to grow. The online
         # router never keeps a document whole; it reads gold (if asked) from the sidecar itself.
+        if o.st_keep_token_rule == "online" and o.st_otr_sbp_mode != "off":
+            from olmo_core.train.selective_backprop import SelectiveBackprop, SelectiveBackpropConfig
+
+            if not (o.st_otr_drop_layer > 0 or o.st_otr_stages):
+                raise SystemExit("--st-otr-sbp-mode needs the mid-stack router (--st-otr-drop-layer / --st-otr-stages): "
+                                 "it prices a skipped backward")
+            train_module.selective_backprop = SelectiveBackprop(SelectiveBackpropConfig(
+                mode=o.st_otr_sbp_mode, q=o.st_otr_sbp_q, window=o.st_otr_sbp_window, min_p=o.st_otr_sbp_min_p,
+                warmup_steps=max(1, o.st_otr_warmup_steps), seed=ctx.seed))
+            print(f"[variants] softtoken: selective backprop {train_module.selective_backprop.cfg}", flush=True)
         if o.st_gold_blind or o.st_keep_mode == "smallcat_keep" or o.st_keep_token_rule == "online":
             return
         whole = o.st_keep_mode == "gold_plus_wholecats"

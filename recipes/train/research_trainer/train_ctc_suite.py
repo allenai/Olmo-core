@@ -1986,11 +1986,26 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-task-onehot", type=int, default=0,
                     help="online router: hashed 31-way task one-hot (task key = hash of the first N tokens) in the "
                     "shared fit. 0 = off")
-    ap.add_argument("--st-otr-keep-mode", choices=["topk", "threshold"], default="topk",
+    ap.add_argument("--st-otr-keep-mode", choices=["topk", "threshold", "step"], default="topk",
                     help="online router: threshold = one score threshold over the micro-batch (hard docs / rows keep "
                     "more, easy ones less, same total), per-row cap --st-otr-row-cap x budget, floor counted; the fit "
-                    "centres over the batch")
-    ap.add_argument("--st-otr-row-cap", type=float, default=2.0, help="keep-mode threshold: per-row cap (x budget)")
+                    "centres over the batch; step = ONE threshold per optimizer step over every row on every rank "
+                    "(a rescored uniform-sample quantile; an integral controller holds the run-average keep at each "
+                    "stage's budget; the fit centres over the step)")
+    ap.add_argument("--st-otr-row-cap", type=float, default=2.0,
+                    help="keep-mode threshold / step: per-row cap (x budget)")
+    ap.add_argument("--st-otr-step-gain", type=float, default=1.0,
+                    help="keep-mode step: integral gain of the admitted-share controller (per step, in keep-fraction "
+                    "units); the run-average realised keep tracks --st-otr-keep-frac / each stage's budget")
+    ap.add_argument("--st-otr-sbp-mode", choices=["off", "top", "sample"], default="off",
+                    help="selective backprop (olmo_core.train.selective_backprop): forward every micro-batch, "
+                    "back-propagate only high-answer-loss ones -- top = the running (1 - q) quantile cut, sample = "
+                    "loss-proportional with 1/p weights. Unit = one micro-batch index across ranks (micro-batch 1 on "
+                    "1 GPU = per row). Skipped backwards are charged forward-only. Needs the mid-stack router")
+    ap.add_argument("--st-otr-sbp-q", type=float, default=0.3, help="selective backprop: target share back-propagated")
+    ap.add_argument("--st-otr-sbp-window", type=int, default=48,
+                    help="selective backprop: units in the running loss distribution")
+    ap.add_argument("--st-otr-sbp-min-p", type=float, default=0.05, help="selective backprop sample: min probability")
     ap.add_argument("--st-otr-keep-sched", default="",
                     help="online router: 'a:b' multiplies the first stage's keep linearly from a to b over training "
                     "(later stages keep their absolute budgets)")
