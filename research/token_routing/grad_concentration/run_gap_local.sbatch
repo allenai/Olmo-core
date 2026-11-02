@@ -34,6 +34,7 @@ s.ROOT = 'checkpoints/prasanns/_transfer/gradconc'; sys.argv = ['s3_sync', 'down
   for S in ${TRAIN_SHARDS:-}; do s3down "$ROOT/shards/$S" "shards/$S"; done
   # ADAM_S3=1: Adam factor files staged by stage_s3_beaker.sh (.../gradconc/adam/adam_<label>.pt)
   [ "${ADAM_S3:-0}" = 1 ] && s3down "$ROOT/adam" "adam"
+  true  # a false test above must not end the subshell non-zero under set -e
 ) 9>"$ROOT/stage.lock"
 if [ "${ADAM_S3:-0}" = 1 ]; then ARGS="${ARGS:-} --adam-factors $ROOT/adam/adam_${LABEL}.pt"; fi
 # ADAM_FROM=<shared path>: node-local copy of the Adam factors, passed as --adam-factors

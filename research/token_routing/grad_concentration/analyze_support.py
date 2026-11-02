@@ -78,14 +78,14 @@ def main():
                 v = [r[key][s] for r in rows if s in r.get(key, {})]
                 if v:
                     o[key] = AG.ms(v)
-            if s.startswith("q1_"):
-                k = s[3:]
-                o["fstar"] = AG.ms([b["q1"][k]["fstar"] for b in bst])
-                o["keep_batch"] = AG.ms([b["q1"][k]["keep_frac"] for b in bst])
-                o["attr_cos_at_fstar"] = AG.ms([b["q1"][k]["attr_cos"] for b in bst])
-                o["curve_raw"] = np.mean([b["q1"][k]["curve_raw"] for b in bst], 0).tolist()
-                if bst[0]["q1"][k].get("curve_adam"):
-                    o["curve_adam"] = np.mean([b["q1"][k]["curve_adam"] for b in bst], 0).tolist()
+            gk = ("en_" + s[3:]) if s.startswith("q1_") else (s[3:] if s.startswith("jt_") else None)
+            if gk is not None:
+                o["fstar"] = AG.ms([b["grid"][gk]["fstar"] for b in bst])
+                o["keep_batch"] = AG.ms([b["grid"][gk]["keep_frac"] for b in bst])
+                o["attr_cos_at_fstar"] = AG.ms([b["grid"][gk]["attr_cos"] for b in bst])
+                if bst[0]["grid"][gk].get("g95_frac") is not None:
+                    o["g95_frac"] = AG.ms([b["grid"][gk]["g95_frac"] for b in bst])
+            o["step"] = {k_: AG.ms([b["step"][s][k_] for b in bst]) for k_ in ("keep", "ce_routed")}
             res["sels"][s] = o
             r_ = o["raw"]
             ad = o.get("adam", {})
@@ -96,8 +96,28 @@ def main():
                   f"{ce.get('all', {}).get('dense', [float('nan')])[0]:.3f})")
         res["dense"] = {"dense_cos_E": res["sels"][meta["sels"][0]]["raw"].get("dense_cos_E"),
                         "pair_cos_dense": res["sels"][meta["sels"][0]]["raw"].get("pair_cos_dense")}
-        res["spearman_gate_en"] = {L: AG.ms([r["spearman_gate_en"][L] for r in rows if L in r["spearman_gate_en"]])
-                                   for L in ("7", "16")}
+        sk = sorted({k_ for r in rows for k_ in r["spearman_gate_en"]})
+        res["spearman_gate_en"] = {k_: AG.ms([r["spearman_gate_en"][k_] for r in rows if k_ in r["spearman_gate_en"]])
+                                   for k_ in sk}
+        grid = meta["grid"]
+
+        def first(c, thr):
+            return next((grid[j] for j, v in enumerate(c) if v >= thr), 1.0)
+        res["conc"] = {}
+        for key in bst[0]["conc"]:
+            o = {}
+            for kind in ("plain", "sq"):
+                cs = [b["conc"][key][kind] for b in bst]
+                o[kind] = {"curve": np.mean(cs, 0).tolist(),
+                           **{f"f{int(t * 100)}": AG.ms([first(c, t) for c in cs]) for t in (0.7, 0.9, 0.95)}}
+            res["conc"][key] = o
+        res["grid_curves"] = {key: {"raw": np.mean([b["grid"][key]["curve_raw"] for b in bst], 0).tolist(),
+                                    "f95": AG.ms([b["grid"][key]["fstar"] for b in bst]),
+                                    "keep": AG.ms([b["grid"][key]["keep_frac"] for b in bst])}
+                              for key in bst[0]["grid"]}
+        res["jaccard"] = {key: np.mean([b["jaccard"][key] for b in bst], 0).tolist() for key in bst[0]["jaccard"]}
+        res["gs_ks"] = meta.get("gs_ks")
+        res["ce_dense_step"] = AG.ms([b["ce_dense"] for b in bst])
         res["selfcheck"] = [b.get("selfcheck_0") for b in bst if "selfcheck_0" in b]
         res["grid"] = meta["grid"]
         allout[lab] = res

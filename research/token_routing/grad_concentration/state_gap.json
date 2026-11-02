@@ -157,5 +157,13 @@
   "ex": "01M68A1TXCWQNE5DCBCX8GAC2C",
   "commit": "8025fddc4c3d36b0f40c717f6f9e885e03579f10",
   "extra": "--gap-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap --labels e0,e8,e16,e31,e61,e122,e244"
+ },
+ "smoke-recipe-s0of1": {
+  "ex": "01M6F3APB9FESS7G45SBNMQRCY",
+  "commit": "77221a9d093cbc0c51482c9a364a3f4fb599b842",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt --rows 2 --batch 4 --max-batches 1 --selfcheck",
+  "label": "recipe",
+  "shard": 0,
+  "num_shards": 1
  }
 }
