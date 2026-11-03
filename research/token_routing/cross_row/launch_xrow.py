@@ -82,6 +82,9 @@ def do_train(a):
                        "--run-name", name, "--exact-run-name", "--num-nodes", "1", "--num-gpus", str(gpus),
                        "--epochs", "1", "--lr", LR, "--cluster", CLUSTER, "--wandb-group", "f8k-q35-4b",
                        "--priority", "urgent", "--no-follow", "--no-compile", "--seed", str(seed),
+                       # a 1-GPU selective-backprop run needs ~100 min; with minRuntime 1h jupiter preempted 3 of 4 runs
+                       # right after the hour, twice (2026-11-02), restarting them from step 0
+                       "--min-runtime", os.environ.get("XROW_MIN_RUNTIME", "1h"),
                        "--experiment", "tokdrop_lr", "--expected-minutes", str(exp_min),
                        "--seq-len", "12288", "--global-batch", "16", "--micro-batch-instances", str(micro),
                        "--base-checkpoint", BASE, "--extra-args", f"{RECIPE} {extra}"]

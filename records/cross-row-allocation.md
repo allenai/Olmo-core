@@ -77,4 +77,21 @@ Unit tests (`src/test/nn/online_token_router_test.py` step-mode tests, `src/test
 
 ## Results
 
-PENDING.
+Recipe references (fresh pools, LR 1e-5, eval_size 500 per cell, no-cot): at 1,952 rows/task two seeds, 8k mean
+0.845 / 0.847 (2k 0.921 / 0.913) at 345 PF, FTM 4.6x; at 3,904 rows/task 0.882 / 0.889 (2k 0.949 / 0.945) at 688 PF.
+Fresh dense 8k means 0.843 / 0.899 / 0.901 / 0.904 at 1531 / 3063 / 4595 / 6128 PF.
+
+### A. Step-level threshold, 1,952 rows/task (Beaker jupiter, 2 H100, micro-batch 2)
+
+| run | Beaker | PF | contra 8k | nq 8k | outlier 8k | oolong 8k | **8k mean** | 2k mean | FTM (8k) |
+|---|---|---|---|---|---|---|---|---|---|
+| xstep sd1 | 01M6F4EK4CTMX299D8HP7B159N | 333.8 | 0.964 | 0.904 | 0.821 | 0.647 | **0.834** | 0.905 | 4.0x |
+| xstep sd2 | 01M6F4FDS9B2RE08SVEY28RPQ8 | 332.9 | 0.962 | 0.888 | 0.809 | 0.663 | **0.831** | 0.924 | 4.0x |
+| recipe (2 seeds) | | 345 | 0.957 | 0.917 | 0.861 | 0.651 | 0.846 | 0.917 | 4.6x |
+
+At matched FLOPs (0.97x the recipe's PF) the step threshold is 0.014 below the recipe at 8k, against a recipe seed
+spread of 0.002; almost all of it is outlier at 8k (-0.04 to -0.05). Diagnostics (seed 2, steps 20-310, logged every 10
+steps): the budget does move across rows (per-row keep CV 0.80 at stage 1, 0.49 at stage 2) but the router barely
+ranks rows: Spearman of row-mean score vs row-mean measured log gradient norm is 0.13 at stage 1, 0.30 at stage 2. So
+budget moves on noise, and losing the recipe's per-document share (each document keeps 20%) costs outlier, which needs
+every document represented.
