@@ -55,6 +55,13 @@
    "budget": "f1952",
    "seed": 1,
    "max_steps": 0
+  },
+  "f8k-mt4-lora64all32r20to7ds0-f3904-tde-lr1e-05": {
+   "ex": "01M6HCRGTD1AZB2YKX2FAQ53TR",
+   "arm": "lora64all32r20to7ds0",
+   "budget": "f3904",
+   "seed": 0,
+   "max_steps": 0
   }
  },
  "evals": {
