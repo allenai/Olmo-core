@@ -98,6 +98,50 @@
    "steps_expected": 488,
    "smoke": false,
    "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05": {
+   "ex": "01M6FJBRK6MKFA4AD4XTXZGPXK",
+   "arm": "xstep",
+   "seed": 1,
+   "rows": 3904,
+   "gpus": 2,
+   "micro": 2,
+   "steps_expected": 976,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05": {
+   "ex": "01M6FJCPJAAXMJDQCXHT06QAHQ",
+   "arm": "xstep",
+   "seed": 2,
+   "rows": 3904,
+   "gpus": 2,
+   "micro": 2,
+   "steps_expected": 976,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05": {
+   "ex": "01M6FJDXCT92FFGXBSC7JB35C3",
+   "arm": "sbptop50",
+   "seed": 1,
+   "rows": 3904,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 976,
+   "smoke": false,
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05": {
+   "ex": "01M6FJFF6Y39384X13NDKFS2YN",
+   "arm": "sbptop50",
+   "seed": 2,
+   "rows": 3904,
+   "gpus": 1,
+   "micro": 1,
+   "steps_expected": 976,
+   "smoke": false,
+   "state": "S"
   }
  },
  "evals": {
