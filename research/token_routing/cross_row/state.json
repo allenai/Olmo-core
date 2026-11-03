@@ -130,7 +130,7 @@
    "micro": 1,
    "steps_expected": 976,
    "smoke": false,
-   "state": "S"
+   "state": "DONE"
   },
   "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05": {
    "ex": "01M6FJFF6Y39384X13NDKFS2YN",
@@ -141,7 +141,7 @@
    "micro": 1,
    "steps_expected": 976,
    "smoke": false,
-   "state": "S"
+   "state": "DONE"
   }
  },
  "evals": {
@@ -336,6 +336,54 @@
    "train_run": "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05",
    "task": "oolong",
    "state": "DONE"
+  },
+  "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M6G3R93YM6DJ3TE069QV7W9Q",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05",
+   "task": "contradiction",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05-evnq": {
+   "ex": "01M6G3S32XKBM9ER5GJYSBAT3Z",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05",
+   "task": "nq",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05-evoutlier": {
+   "ex": "01M6G3SW6KJXPQVZEH0JNPXNKR",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05",
+   "task": "outlier",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05-evoolong": {
+   "ex": "01M6G3TPTW5SEGV0D9X5BFP7ZP",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05",
+   "task": "oolong",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M6G3VH73KQRF9N4V00REK2NY",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05",
+   "task": "contradiction",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05-evnq": {
+   "ex": "01M6G3W9XBGHHCKBQZ63KKM5B5",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05",
+   "task": "nq",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05-evoutlier": {
+   "ex": "01M6G3X39DXRA15EGGMX50K92E",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05",
+   "task": "outlier",
+   "state": "S"
+  },
+  "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05-evoolong": {
+   "ex": "01M6G3XVSXFXYES1X71ZBQY693",
+   "train_run": "f8k-mt4-lora64all32sbptop50sd2-f3904-tdx-lr1e-05",
+   "task": "oolong",
+   "state": "S"
   }
  }
 }
