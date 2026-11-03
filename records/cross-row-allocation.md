@@ -100,13 +100,22 @@ every document represented.
 
 | run | Beaker | PF | x recipe PF | contra 8k | nq 8k | outlier 8k | oolong 8k | **8k mean** | 2k mean |
 |---|---|---|---|---|---|---|---|---|---|
+| sbptop30 sd1 | 01M6FERDDQ0Z68VSGRBPZMVN4F | 225.2 | 0.65 | 0.926 | 0.632 | 0.610 | 0.495 | **0.666** | 0.818 |
 | sbptop30 sd2 | 01M6F48N10CYB3MZ5WPW9QSJN1 | 225.0 | 0.65 | 0.924 | 0.726 | 0.509 | 0.645 | **0.701** | 0.773 |
+| sbpsmp30 sd1 | 01M6FES5AY6CX28TXHH6N4W5AP | 222.8 | 0.65 | 0.901 | 0.900 | 0.644 | 0.551 | **0.749** | 0.900 |
+| sbpsmp30 sd2 | 01M6FESYFQNADZYK82FJ3N1GN2 | 222.0 | 0.64 | 0.929 | 0.856 | 0.569 | 0.559 | **0.728** | 0.847 |
+| recipe (2 seeds) | | 345 | 1.00 | 0.957 | 0.917 | 0.861 | 0.651 | 0.846 | 0.917 |
 
-Top-30% selective backprop costs 0.65x the recipe (as designed) but loses 0.145 at 8k (2k: -0.144), far outside seed
-noise; outlier collapses (0.51 at 8k, 0.44 at 2k) and nq drops. Two candidate reasons: (1) at 1,952 rows/task training
-is not saturated, so the 70% of rows skipped still carry gradient, and the run trains on about 590 rows/task of signal;
-(2) ranking by SUMMED answer CE is biased across tasks by answer length and difficulty, so some tasks (outlier) are
-rarely back-propagated. The unbiased `sample` arm separates the two.
+Both modes cost 0.65x the recipe (as designed: the FLOP meter charges skipped rows forward-only) and both lose badly.
+Their 8k means (0.67-0.75) fall below the whole fresh-dense curve, so FTM is an extrapolation (0.8x-2.2x by the
+collector) and not meaningful; against the recipe itself at matched FLOPs (recipe at 1,464 rows/task, older pool, 8k
+mean 0.804 over 4 runs at ~259 PF; log-PF interpolation to 222 PF ~0.78), sample mode is ~-0.04 and top mode ~-0.10.
+The unbiased `sample` mode beats `top` by ~0.05 at 8k and ~0.08 at 2k, so the deterministic cut's bias costs
+something, but the main loss is reason (1): with 70% of backwards skipped the model trains on ~590 rows/task of
+gradient, and at this data size those rows were not solved. Training CE on fresh rows (each row seen once, routed
+forward, every row counted) lags from the first 50 steps: steps 150-200 recipe 0.161, xstep 0.185, top 0.228-0.238,
+sample 0.243-0.253; steps 400-489 recipe 0.090, xstep 0.120, top 0.147.
 
 Preemption note: 3 of the 4 selective-backprop runs were preempted on jupiter right after their 1 h minRuntime, twice
-each, restarting from step 0 (no mid-run checkpoints); relaunched with minRuntime 2h (`XROW_MIN_RUNTIME`).
+each, restarting from step 0 (no mid-run checkpoints); relaunched with minRuntime 2h (`XROW_MIN_RUNTIME`). The table
+lists the final attempts' Beaker ids.
