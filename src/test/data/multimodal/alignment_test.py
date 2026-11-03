@@ -138,6 +138,21 @@ def test_build_tokenizer_uses_configured_identity(monkeypatch, tokenizer_json_sp
         config.build_tokenizer()
 
 
+@pytest.mark.parametrize(
+    "dataset, expected",
+    [
+        ({"tokenizer_json_split": True}, True),
+        ({"tokenizer_json_split": False}, False),
+        ({}, False),
+        (None, False),
+    ],
+)
+def test_saved_configs_without_the_setting_used_the_earlier_split(dataset, expected):
+    from olmo_core.data.multimodal.alignment import saved_tokenizer_json_split
+
+    assert saved_tokenizer_json_split(dataset) is expected
+
+
 def test_tokenizer_json_split_is_the_default():
     config = MultimodalMixtureConfig(tokenizer=TokenizerConfig.dolma2())
     assert config.tokenizer_json_split is True

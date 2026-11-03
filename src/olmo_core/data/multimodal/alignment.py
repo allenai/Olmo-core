@@ -150,6 +150,17 @@ class MultimodalDatasetMixture:
     token_ids: Molmo2TokenIds
 
 
+def saved_tokenizer_json_split(dataset: Any) -> bool:
+    """The tokenizer split a run used, from the ``dataset`` section of its saved config.
+
+    A config saved before :attr:`MultimodalMixtureConfig.tokenizer_json_split` existed used the
+    ``GPT2Tokenizer`` split, so a missing value means ``False``.
+
+    :param dataset: The saved ``dataset`` config as a dict, or ``None``.
+    """
+    return isinstance(dataset, dict) and dataset.get("tokenizer_json_split") is True
+
+
 @dataclass
 class MultimodalMixtureConfig(Config):
     """Build named map-style sources and calibrate their supervised-loss allocation.

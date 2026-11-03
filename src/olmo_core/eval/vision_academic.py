@@ -1238,7 +1238,9 @@ def _checkpoint_tokenizer_json_split(saved: Mapping[str, Any]) -> bool:
     """Whether the checkpoint trained on ``tokenizer.json``'s split; see
     :attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`.
     Configs saved before that setting existed trained on ``GPT2Tokenizer``'s split."""
-    return saved.get("dataset", {}).get("tokenizer_json_split") is True
+    from olmo_core.data.multimodal.alignment import saved_tokenizer_json_split
+
+    return saved_tokenizer_json_split(saved.get("dataset"))
 
 
 def _load_tokenizer(
