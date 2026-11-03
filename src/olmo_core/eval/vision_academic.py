@@ -1336,6 +1336,10 @@ def _definition(checkpoint: Path, manifest: Mapping[str, Any]) -> dict[str, Any]
             "forward_context": "eager_grad_enabled",
             "sequence_bucket_size": 128,
             "torch_version": torch.__version__,
+            # Results tokenized with tokenizer.json's split must not mix with the earlier
+            # evaluator's for the same checkpoint. Recorded only for that split, so the
+            # definitions (and saved results) of earlier checkpoints are unchanged.
+            **({"tokenizer_json_split": True} if _checkpoint_tokenizer_json_split(saved) else {}),
         },
     }
 

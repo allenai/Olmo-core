@@ -507,6 +507,46 @@ def _panel_result(academic, manifest, examples):
     }
 
 
+def test_tokenizer_json_split_results_do_not_mix_with_earlier_ones(
+    academic, selected_panel, tmp_path
+):
+    """A tokenizer.json-split checkpoint's definition differs from the one the earlier evaluator
+    recorded for the same config; earlier checkpoints keep their definition."""
+    manifest, examples = selected_panel
+    checkpoint = tmp_path / "step500"
+    (checkpoint / "model_and_optim").mkdir(parents=True)
+    (checkpoint / "model_and_optim" / ".metadata").write_bytes(b"state metadata")
+    (checkpoint / ".metadata.json").write_text("{}")
+    saved = {
+        "dataset": {
+            "tokenizer": {"identifier": academic.TOKENIZER_ID, "pad_token_id": 100277},
+            "tokenizer_revision": academic.TOKENIZER_REVISION,
+        },
+        "model": {"vision": {}, "lm": {"vocab_size": 100352}, "image_patch_token_id": 100280},
+    }
+    (checkpoint / "config.json").write_text(json.dumps(saved))
+    assert "tokenizer_json_split" not in academic._definition(checkpoint, manifest)["execution"]
+    saved["dataset"]["tokenizer_json_split"] = True
+    (checkpoint / "config.json").write_text(json.dumps(saved))
+    definition = academic._definition(checkpoint, manifest)
+    assert definition["execution"]["tokenizer_json_split"] is True
+    earlier = copy.deepcopy(definition)
+    del earlier["execution"]["tokenizer_json_split"]
+    output = tmp_path / "academic.json"
+    academic._write_result(
+        academic._task_path(output, "docvqa"),
+        {
+            "format": academic.RESULT_FORMAT,
+            "definition": earlier,
+            "task": "docvqa",
+            "completed": True,
+            "result": _panel_result(academic, manifest, examples),
+        },
+    )
+    with pytest.raises(ValueError, match="mismatched"):
+        academic.merge_results(output, manifest, definition)
+
+
 def test_atomic_task_resume_and_cpu_merge(academic, selected_panel, tmp_path, monkeypatch):
     manifest, examples = selected_panel
     result = _panel_result(academic, manifest, examples)
