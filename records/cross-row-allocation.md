@@ -95,3 +95,18 @@ steps): the budget does move across rows (per-row keep CV 0.80 at stage 1, 0.49 
 ranks rows: Spearman of row-mean score vs row-mean measured log gradient norm is 0.13 at stage 1, 0.30 at stage 2. So
 budget moves on noise, and losing the recipe's per-document share (each document keeps 20%) costs outlier, which needs
 every document represented.
+
+### B. Selective backprop, 1,952 rows/task (Beaker jupiter, 1 H100, micro-batch 1)
+
+| run | Beaker | PF | x recipe PF | contra 8k | nq 8k | outlier 8k | oolong 8k | **8k mean** | 2k mean |
+|---|---|---|---|---|---|---|---|---|---|
+| sbptop30 sd2 | 01M6F48N10CYB3MZ5WPW9QSJN1 | 225.0 | 0.65 | 0.924 | 0.726 | 0.509 | 0.645 | **0.701** | 0.773 |
+
+Top-30% selective backprop costs 0.65x the recipe (as designed) but loses 0.145 at 8k (2k: -0.144), far outside seed
+noise; outlier collapses (0.51 at 8k, 0.44 at 2k) and nq drops. Two candidate reasons: (1) at 1,952 rows/task training
+is not saturated, so the 70% of rows skipped still carry gradient, and the run trains on about 590 rows/task of signal;
+(2) ranking by SUMMED answer CE is biased across tasks by answer length and difficulty, so some tasks (outlier) are
+rarely back-propagated. The unbiased `sample` arm separates the two.
+
+Preemption note: 3 of the 4 selective-backprop runs were preempted on jupiter right after their 1 h minRuntime, twice
+each, restarting from step 0 (no mid-run checkpoints); relaunched with minRuntime 2h (`XROW_MIN_RUNTIME`).
