@@ -108,7 +108,7 @@
    "micro": 2,
    "steps_expected": 976,
    "smoke": false,
-   "state": "S"
+   "state": "DONE"
   },
   "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05": {
    "ex": "01M6FJCPJAAXMJDQCXHT06QAHQ",
@@ -119,7 +119,7 @@
    "micro": 2,
    "steps_expected": 976,
    "smoke": false,
-   "state": "S"
+   "state": "DONE"
   },
   "f8k-mt4-lora64all32sbptop50sd1-f3904-tdx-lr1e-05": {
    "ex": "01M6FJDXCT92FFGXBSC7JB35C3",
@@ -286,6 +286,54 @@
   "f8k-mt4-lora64all32sbpsmp30sd2-f1952-tdx-lr1e-05-evoolong": {
    "ex": "01M6FPC1EKM84867R14BKP5PV4",
    "train_run": "f8k-mt4-lora64all32sbpsmp30sd2-f1952-tdx-lr1e-05",
+   "task": "oolong",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M6FTER5XGRF19WP4TED0VV2E",
+   "train_run": "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05",
+   "task": "contradiction",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05-evnq": {
+   "ex": "01M6FTFR3GKRQ0NVVYKJ2Y6G0F",
+   "train_run": "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05",
+   "task": "nq",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05-evoutlier": {
+   "ex": "01M6FTGRWJB79EVCJ2PWR0FSXY",
+   "train_run": "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05",
+   "task": "outlier",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05-evoolong": {
+   "ex": "01M6FTJ9QAXNFJYQ35Z2N75ZD4",
+   "train_run": "f8k-mt4-lora64all32xstepsd1-f3904-tdx-lr1e-05",
+   "task": "oolong",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05-evcontradiction": {
+   "ex": "01M6FWDCCPJDM8QYXB8H7X9C1F",
+   "train_run": "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05",
+   "task": "contradiction",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05-evnq": {
+   "ex": "01M6FWE9QJ87389XZHX7K3V027",
+   "train_run": "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05",
+   "task": "nq",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05-evoutlier": {
+   "ex": "01M6FWF5Q9EV5060WDAB5REW75",
+   "train_run": "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05",
+   "task": "outlier",
+   "state": "DONE"
+  },
+  "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05-evoolong": {
+   "ex": "01M6FWG2ARPM55CC6RQDB4J0ZC",
+   "train_run": "f8k-mt4-lora64all32xstepsd2-f3904-tdx-lr1e-05",
    "task": "oolong",
    "state": "DONE"
   }

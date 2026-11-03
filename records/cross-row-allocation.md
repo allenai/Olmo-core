@@ -119,3 +119,17 @@ sample 0.243-0.253; steps 400-489 recipe 0.090, xstep 0.120, top 0.147.
 Preemption note: 3 of the 4 selective-backprop runs were preempted on jupiter right after their 1 h minRuntime, twice
 each, restarting from step 0 (no mid-run checkpoints); relaunched with minRuntime 2h (`XROW_MIN_RUNTIME`). The table
 lists the final attempts' Beaker ids.
+
+### 3,904 rows/task (Beaker jupiter, H100)
+
+| run | Beaker | GPUs | PF | contra 8k | nq 8k | outlier 8k | oolong 8k | **8k mean** | 2k mean | FTM (8k) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| xstep sd1 | 01M6FJBRK6MKFA4AD4XTXZGPXK | 2 | 666.3 | 0.972 | 0.922 | 0.979 | 0.680 | **0.888** | 0.948 | 4.0x |
+| xstep sd2 | 01M6FJCPJAAXMJDQCXHT06QAHQ | 2 | 665.2 | 0.982 | 0.932 | 0.973 | 0.688 | **0.894** | 0.948 | 4.3x |
+| recipe | 01M5VH6FK7J23RHG272XB796M5 | 2 | 688.1 | 0.977 | 0.918 | 0.970 | 0.663 | 0.882 | 0.949 | 3.6x |
+| recipe sd1 | 01M62CQ8YR3Y2GHHRG0WENVP88 | 2 | 686.0 | 0.973 | 0.926 | 0.967 | 0.689 | 0.889 | 0.945 | 3.9x |
+
+At 3,904 rows/task the step threshold ties the recipe: 2-seed 8k mean 0.891 vs 0.885 (+0.006) at 0.97x its PF, inside
+the seed spread (recipe seeds differ by 0.007; eval SE of a 4-cell mean ~0.006); 2k identical (0.948 vs 0.947). The
+outlier deficit at 1,952 rows/task is gone (0.976 vs 0.969). Row-level router predictiveness stays weak
+(step_row_corr 0.10 / 0.13 at stage 1). FTM 4.0x / 4.3x vs the recipe's 3.6x / 3.9x: a hint, not a result.
