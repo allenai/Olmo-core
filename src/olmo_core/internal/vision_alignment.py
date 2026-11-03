@@ -21,7 +21,7 @@ from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.distributed.utils import barrier, get_local_rank
 from olmo_core.exceptions import OLMoConfigurationError
-from olmo_core.io import is_url, normalize_path, resource_path
+from olmo_core.io import file_exists, is_url, normalize_path, resource_path
 from olmo_core.launch.beaker import (
     BeakerEnvSecret,
     BeakerEnvVar,
@@ -1493,7 +1493,8 @@ def keep_resumed_tokenizer_split(config: Any) -> None:
     existed would otherwise resume with the new default split and the means measured for it. When
     the save folder holds a checkpoint, the run keeps that checkpoint's split (a saved config without
     it means the earlier GPT2Tokenizer split) and, where that differs from the config's, the mean
-    loss weights it trained with. The in-loop evaluator always tokenizes as training does.
+    loss weights it trained with. Checkpoints whose config was not saved yet are skipped in favor of
+    the newest one that has it. The in-loop evaluator always tokenizes as training does.
 
     :raises OLMoConfigurationError: If the split differs and the checkpoint's saved means do not
         cover exactly this mixture's sources.
@@ -1502,9 +1503,16 @@ def keep_resumed_tokenizer_split(config: Any) -> None:
 
     dataset = config.dataset
     try:
-        latest = Checkpointer.latest_checkpoint(config.trainer.save_folder)
+        checkpoints = sorted(
+            Checkpointer.find_checkpoints(config.trainer.save_folder), reverse=True
+        )
     except FileNotFoundError:
-        latest = None
+        checkpoints = []
+    # A save can finish before its config callback (the alignment pipeline recovers that
+    # metadata after resuming), so read the newest checkpoint that has a config.
+    latest = next((path for _, path in checkpoints if file_exists(f"{path}/config.json")), None)
+    if checkpoints and latest is None:
+        log.warning("No checkpoint config to recover the tokenizer split from; using the config's")
     if latest is not None:
         saved = _read_checkpoint_config(latest).get("dataset")
         split = saved_tokenizer_json_split(saved)
