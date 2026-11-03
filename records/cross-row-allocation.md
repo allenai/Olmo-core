@@ -8,7 +8,7 @@ kind: result
 status: current
 superseded_by:
 artifact:
-summary: Cross-row allocation does not reach 5x. At 1,952 rows/task both variants lose to the recipe at the 8k rung (step threshold -0.014 at equal FLOPs; selective backprop at q 0.3 -0.10 to -0.16 at 0.65x FLOPs). At 3,904 rows/task the step threshold ties (+0.006, 0.97x FLOPs) and top-50% selective backprop is +0.008 over the recipe interpolated to its 0.74x FLOPs (FTM 4.5x vs 3.8x, within noise). The router barely ranks rows (row-level Spearman 0.1-0.3).
+summary: Cross-row allocation does not reach 5x. At 1,952 rows/task both variants lose to the recipe at the 8k rung (step threshold -0.014 at equal FLOPs; selective backprop at q 0.3, 0.65x FLOPs: -0.10 to -0.18 vs the recipe at the same rows, ~-0.04 (sample) / ~-0.10 (top) at matched FLOPs). At 3,904 rows/task the step threshold ties (+0.006, 0.97x FLOPs) and top-50% selective backprop is +0.008 over the recipe interpolated to its 0.74x FLOPs (FTM 4.5x vs 3.8x, within noise). The router barely ranks rows (row-level Spearman 0.1-0.3).
 ---
 # Cross-row token allocation (tokdrop_lr, 2026-11-02)
 
