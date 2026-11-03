@@ -8,12 +8,28 @@ kind: result
 status: current
 superseded_by:
 artifact:
-summary: Two ways to let the token budget move across rows in the token-drop recipe -- one router threshold per optimizer step, and skipping the backward for low-answer-loss rows (selective backprop). RESULTS PENDING (runs in flight).
+summary: Cross-row allocation does not reach 5x. At 1,952 rows/task both variants lose to the recipe at the 8k rung (step threshold -0.014 at equal FLOPs; selective backprop at q 0.3 -0.10 to -0.16 at 0.65x FLOPs). At 3,904 rows/task the step threshold ties (+0.006, 0.97x FLOPs) and top-50% selective backprop is +0.008 over the recipe interpolated to its 0.74x FLOPs (FTM 4.5x vs 3.8x, within noise). The router barely ranks rows (row-level Spearman 0.1-0.3).
 ---
 # Cross-row token allocation (tokdrop_lr, 2026-11-02)
 
 Branch `claude/cross-row-alloc` (cut from `claude/online-router-1bc01a` @ `8ce5fd22a`). Launcher
 `research/token_routing/cross_row/launch_xrow.py`, state `research/token_routing/cross_row/state.json`.
+
+## Verdict (8k rung primary; 2 seeds per cell, eval_size 500 per task/rung, no-cot)
+
+- **Neither variant beats the recipe at 1,952 rows/task.** Step threshold: 8k mean 0.832 vs 0.846 at 0.97x its PF
+  (FTM 4.0x vs 4.6x); the loss is outlier at 8k. Selective backprop at q 0.3 (0.65x PF): 0.68 (top) / 0.74 (sample)
+  vs ~0.78 for the recipe interpolated to the same PF: skipping 70% of backwards discards gradient that still matters
+  at this data size.
+- **At 3,904 rows/task both are at best ties.** Step threshold 0.891 vs 0.885 at 0.97x PF (FTM 4.2x vs 3.8x).
+  Top-50% selective backprop 0.876 at 0.74x PF (510 PF) vs the recipe interpolated to 510 PF ~0.868 (+0.008) and vs
+  the recipe at the same rows 0.885 (-0.009); FTM 4.5x vs 3.8x; 2k 0.944 vs 0.947. Differences are within seed + eval
+  noise (~+-0.006 per 2-seed mean).
+- The selective-backprop gain grows with data (at 1,952 rows/task far below the recipe; at 3,904 a tie at 26% fewer
+  FLOPs), consistent with "most rows are solved late" holding only once the data is large. It is the variant worth a
+  larger-data test (7,808 rows/task), not a >=5x result.
+- The step threshold's premise fails on the scorer: router scores barely rank rows by measured gradient norm
+  (row-level Spearman 0.10-0.13 at stage 1, 0.30 at stage 2), so budget moves across rows mostly on noise.
 
 ## Why
 
@@ -133,3 +149,36 @@ At 3,904 rows/task the step threshold ties the recipe: 2-seed 8k mean 0.891 vs 0
 the seed spread (recipe seeds differ by 0.007; eval SE of a 4-cell mean ~0.006); 2k identical (0.948 vs 0.947). The
 outlier deficit at 1,952 rows/task is gone (0.976 vs 0.969). Row-level router predictiveness stays weak
 (step_row_corr 0.10 / 0.13 at stage 1). FTM 4.0x / 4.3x vs the recipe's 3.6x / 3.9x: a hint, not a result.
+
+| run | Beaker | GPUs | PF | x recipe PF | rows back-propagated | contra 8k | nq 8k | outlier 8k | oolong 8k | **8k mean** | 2k mean | FTM (8k) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| sbptop50 sd1 | 01M6FJDXCT92FFGXBSC7JB35C3 | 1 | 512.1 | 0.74 | 49.9% | 0.967 | 0.902 | 0.966 | 0.658 | **0.873** | 0.946 | 4.35x |
+| sbptop50 sd2 | 01M6FJFF6Y39384X13NDKFS2YN | 1 | 509.1 | 0.74 | 49.5% | 0.976 | 0.920 | 0.973 | 0.648 | **0.879** | 0.942 | 4.71x |
+
+Top-50% selective backprop at 3,904 rows/task: 8k 0.876 (2 seeds) at 510 PF. The recipe interpolated in log PF between
+its 1,952 and 3,904 rows/task points (0.846 @ 345, 0.885 @ 687) gives ~0.868 at 510 PF, so +0.008 at matched FLOPs;
+against the recipe at the same rows it is -0.009 for 26% fewer FLOPs. 2k: 0.944 vs 0.947. Training CE on fresh rows
+over steps 500-600: recipe 0.088, top-50% 0.111 / 0.095, step threshold 0.097.
+
+## Costs
+
+| arm | realised keep (stage 1 / stage 2 of its input) | rows back-propagated per step | actual / dense-equivalent FLOPs |
+|---|---|---|---|
+| recipe | 0.21-0.22 / 0.39-0.40 (log means) | 16 of 16 | ~0.22 |
+| xstep | 0.19-0.21 / 0.38-0.45 (log means; PF 0.97x the recipe) | 16 of 16 | 0.213-0.214 |
+| sbptop30 / sbpsmp30 | recipe's | 30.5% / 29.8-30.5% (~4.8 of 16) | 0.143-0.145 |
+| sbptop50 | recipe's | 49.5-49.9% (8 of 16) | 0.163-0.164 |
+
+Realised backprop shares (run totals incl. the full warmup step) from each run's `wandb-summary.json`
+(`read_summaries_beaker.sh`, job 01M6G3YH60GWAEARN55F7VMSH5); keep shares are unweighted means of the router's
+every-10-step log lines (`collect_xrow.py`); PF from each run's `flops.json`.
+
+## Where things are
+
+- Code: `src/olmo_core/nn/online_token_router.py` (`keep_mode="step"`, `_step_keep`, `_step_threshold`, forward-only
+  pricing in `mid_compact`), `src/olmo_core/train/selective_backprop.py`, hook in
+  `src/olmo_core/train/train_module/transformer/train_module.py`, flags in `train_ctc_suite.py` / `variants.py`.
+- Launch / collect: `research/token_routing/cross_row/{launch_xrow.py,collect_xrow.py,read_summaries_beaker.sh,state.json}`;
+  results JSON in `research/token_routing/cross_row/results/`; scores in ops (`ops result show --train-run <run>`).
+- Smokes ran on jsteinhardt cubbins (H200) at `/data/prasann/ctc_suite/ckpts/*tdxsmk*` (bf16 copy of the base); all
+  full runs on Beaker jupiter (H100), checkpoints at `ctc_suite/ckpts/<run>` on weka.
