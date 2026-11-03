@@ -1485,21 +1485,62 @@ def parse_cli_args() -> CliContext:
     return CliContext(script, SubCmd(cmd), run_name, cluster, overrides)
 
 
+def _restore_earlier_split_calibration(config: Any, saved: dict, checkpoint: str) -> None:
+    """Put back the loss calibration a run on the earlier tokenizer split trained with.
+
+    The means in code are calibrated for the new split, and the recipes derive the loss targets
+    (and the train module's copy of them) from those means, so all three come from the checkpoint.
+    """
+    dataset, module = config.dataset, getattr(config, "train_module", None)
+    current = {
+        "mean_loss_weight": dataset.mean_loss_weight,
+        "target_loss_mass": dataset.target_loss_mass,
+    }
+    restored = {name: saved["dataset"].get(name) for name in current}
+    if getattr(module, "source_loss_mass_targets", None):
+        current["source_loss_mass_targets"] = module.source_loss_mass_targets
+        restored["source_loss_mass_targets"] = (saved.get("train_module") or {}).get(
+            "source_loss_mass_targets"
+        )
+    for name, value in restored.items():
+        if not isinstance(value, dict) or set(value) != set(current[name]):
+            raise OLMoConfigurationError(
+                f"{checkpoint} trained with tokenizer_json_split=False, and its saved {name} does "
+                "not cover this mixture's sources; set dataset.tokenizer_json_split and the run's "
+                "loss calibration explicitly"
+            )
+    restored = {
+        name: {key: float(weight) for key, weight in value.items()}
+        for name, value in restored.items()
+    }
+    if dataset.tokenizer_json_split or any(restored[name] != current[name] for name in restored):
+        log.warning(
+            "Resuming %s with the tokenizer split it trained with (tokenizer_json_split=False) and "
+            "its saved loss calibration",
+            checkpoint,
+        )
+    dataset.tokenizer_json_split = False
+    dataset.mean_loss_weight = restored["mean_loss_weight"]
+    dataset.target_loss_mass = restored["target_loss_mass"]
+    if "source_loss_mass_targets" in restored:
+        module.source_loss_mass_targets = restored["source_loss_mass_targets"]
+
+
 def keep_resumed_tokenizer_split(config: Any) -> None:
     """Resume a run with the tokenizer split and loss calibration it trained with.
 
     The recipes rebuild the mixture from code, so a run saved before
     :attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`
-    existed would otherwise resume with the new default split and the means measured for it. When
-    the save folder holds a checkpoint, the run keeps that checkpoint's split (a saved config without
-    it means the earlier GPT2Tokenizer split). A checkpoint on the earlier split also keeps the mean
-    loss weights it trained with, even when the config already sets
-    ``tokenizer_json_split=False``: the means in code are calibrated for the new split. Checkpoints
-    whose config was not saved yet are skipped in favor of the newest one that has it. The in-loop
+    existed would otherwise resume with the new default split and the calibration measured for it.
+    When the save folder holds a checkpoint, the run keeps that checkpoint's split (a saved config
+    without it means the earlier GPT2Tokenizer split). A checkpoint on the earlier split also keeps
+    the calibration it trained with (mean loss weights, loss targets, and the train module's loss
+    targets), even when the config already sets ``tokenizer_json_split=False``. Checkpoints whose
+    config was not saved yet are skipped in favor of the newest one that has it. The in-loop
     evaluator always tokenizes as training does.
 
-    :raises OLMoConfigurationError: If the checkpoint is on the earlier split and its saved means do
-        not cover exactly this mixture's sources.
+    :raises OLMoConfigurationError: If the checkpoint is on the earlier split and its saved
+        calibration does not cover exactly this mixture's sources.
     """
     from olmo_core.train.checkpoint import Checkpointer
 
@@ -1515,29 +1556,15 @@ def keep_resumed_tokenizer_split(config: Any) -> None:
     latest = next((path for _, path in checkpoints if file_exists(f"{path}/config.json")), None)
     if checkpoints and latest is None:
         log.warning("No checkpoint config to recover the tokenizer split from; using the config's")
-    saved = _read_checkpoint_config(latest).get("dataset") if latest is not None else None
-    if isinstance(saved, dict) and not saved_tokenizer_json_split(saved):
-        means = saved.get("mean_loss_weight")
-        if not isinstance(means, dict) or set(means) != set(dataset.mean_loss_weight):
-            raise OLMoConfigurationError(
-                f"{latest} trained with tokenizer_json_split=False, and its saved mean loss "
-                "weights do not cover this mixture's sources; set dataset.tokenizer_json_split "
-                "and dataset.mean_loss_weight to the run's values"
-            )
-        means = {name: float(value) for name, value in means.items()}
-        if dataset.tokenizer_json_split or means != dataset.mean_loss_weight:
+    saved = _read_checkpoint_config(latest) if latest is not None else {}
+    if isinstance(saved.get("dataset"), dict):
+        if not saved_tokenizer_json_split(saved["dataset"]):
+            _restore_earlier_split_calibration(config, saved, cast(str, latest))
+        elif not dataset.tokenizer_json_split:
             log.warning(
-                "Resuming %s with the tokenizer split it trained with (tokenizer_json_split=False) "
-                "and its saved mean loss weights",
-                latest,
+                "Resuming %s with the split it trained with (tokenizer_json_split=True)", latest
             )
-        dataset.tokenizer_json_split = False
-        dataset.mean_loss_weight = means
-    elif isinstance(saved, dict) and not dataset.tokenizer_json_split:
-        log.warning(
-            "Resuming %s with the split it trained with (tokenizer_json_split=True)", latest
-        )
-        dataset.tokenizer_json_split = True
+            dataset.tokenizer_json_split = True
     evaluator = config.trainer.callbacks.get("multimodal_evaluator")
     if evaluator is not None:
         evaluator.eval_dataset.tokenizer_json_split = dataset.tokenizer_json_split
