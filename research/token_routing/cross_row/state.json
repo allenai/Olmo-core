@@ -34,7 +34,7 @@
    "state": "S"
   },
   "f8k-mt4-lora64all32sbptop30sd1-f1952-tdx-lr1e-05": {
-   "ex": "01M6F47MBBJNV6C7PFE9MJ014X",
+   "ex": "01M6FERDDQ0Z68VSGRBPZMVN4F",
    "arm": "sbptop30",
    "seed": 1,
    "rows": 1952,
@@ -56,7 +56,7 @@
    "state": "DONE"
   },
   "f8k-mt4-lora64all32sbpsmp30sd1-f1952-tdx-lr1e-05": {
-   "ex": "01M6F49H4VJTAT62HG2E2FPPBH",
+   "ex": "01M6FES5AY6CX28TXHH6N4W5AP",
    "arm": "sbpsmp30",
    "seed": 1,
    "rows": 1952,
@@ -67,7 +67,7 @@
    "state": "S"
   },
   "f8k-mt4-lora64all32sbpsmp30sd2-f1952-tdx-lr1e-05": {
-   "ex": "01M6F4AHASP0E31NPG3QQV0ZH7",
+   "ex": "01M6FESYFQNADZYK82FJ3N1GN2",
    "arm": "sbpsmp30",
    "seed": 2,
    "rows": 1952,
