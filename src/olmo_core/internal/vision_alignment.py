@@ -1513,11 +1513,11 @@ def keep_resumed_tokenizer_split(config: Any) -> None:
     latest = next((path for _, path in checkpoints if file_exists(f"{path}/config.json")), None)
     if checkpoints and latest is None:
         log.warning("No checkpoint config to recover the tokenizer split from; using the config's")
-    if latest is not None:
-        saved = _read_checkpoint_config(latest).get("dataset")
+    saved = _read_checkpoint_config(latest).get("dataset") if latest is not None else None
+    if isinstance(saved, dict):
         split = saved_tokenizer_json_split(saved)
         if split != dataset.tokenizer_json_split:
-            means = (saved or {}).get("mean_loss_weight")
+            means = saved.get("mean_loss_weight")
             if not isinstance(means, dict) or set(means) != set(dataset.mean_loss_weight):
                 raise OLMoConfigurationError(
                     f"{latest} trained with tokenizer_json_split={split}, and its saved mean loss "

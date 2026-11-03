@@ -16,6 +16,13 @@ from olmo_core.train.checkpoint import Checkpointer
 from olmo_core.train.common import Duration
 
 
+@pytest.fixture(autouse=True)
+def no_split_recovery(monkeypatch):
+    """The stage configs here are stand-ins without a mixture; tokenizer-split recovery itself is
+    tested in vision_alignment_resume_test.py, and its ordering below."""
+    monkeypatch.setattr(pipeline, "keep_resumed_tokenizer_split", Mock())
+
+
 @pytest.fixture
 def cli():
     return CliContext(
@@ -469,6 +476,36 @@ def test_train_stage_recovers_final_checkpoint_without_rewriting_model_state(
     assert writes == [*([] if not missing_config else ["config.json"]), pipeline._SUCCESS_FILE]
     assert {path: path.read_bytes() for path in initial_files} == initial_files
     assert pipeline._stage_complete(config, str(checkpoint))
+
+
+def test_missing_config_records_the_recovered_tokenizer_split(config_factory, monkeypatch):
+    """The repaired config.json is taken after the resumed run's tokenizer split is recovered."""
+    config = config_factory()
+    checkpoint = _write_checkpoint(config)
+    (checkpoint / "config.json").unlink()
+
+    def recover(resumed_config):
+        resumed_config.recovered_split = False
+
+    config.as_config_dict = lambda: {
+        **_checkpoint_config(config),
+        "tokenizer_json_split": getattr(config, "recovered_split", True),
+    }
+    monkeypatch.setattr(pipeline, "keep_resumed_tokenizer_split", Mock(side_effect=recover))
+    written = {}
+
+    def write_file(name, contents, *, dir=None, save_overwrite=False):
+        written[name] = json.loads(contents)
+        (Path(dir or config.trainer.save_folder) / name).write_text(contents)
+
+    trainer = SimpleNamespace(is_canceled=False, global_step=10, write_file=write_file)
+    monkeypatch.setattr(pipeline, "write_file_overwrite", _overwrite_through_trainer)
+    monkeypatch.setattr(pipeline, "train", Mock(return_value=trainer))
+    monkeypatch.setattr(pipeline, "barrier", Mock())
+    monkeypatch.setattr(pipeline, "get_rank", lambda: 0)
+    monkeypatch.setattr(pipeline, "_validate_endpoint", Mock())
+    pipeline._train_stage(config)
+    assert written["config.json"]["tokenizer_json_split"] is False
 
 
 def test_missing_config_is_not_repaired_when_final_evaluation_fails(config_factory, monkeypatch):

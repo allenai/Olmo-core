@@ -93,3 +93,12 @@ def test_checkpoints_without_any_config_keep_the_config(tmp_path):
     keep_resumed_tokenizer_split(config)
     assert config.dataset.tokenizer_json_split is True
     assert config.dataset.mean_loss_weight == MEANS
+
+
+def test_a_checkpoint_config_without_a_dataset_section_gives_nothing_to_recover(tmp_path):
+    _checkpoint(tmp_path, 100, None)
+    (tmp_path / "step100" / "config.json").write_text(json.dumps({"model": {}}))
+    config = _config(tmp_path)
+    keep_resumed_tokenizer_split(config)
+    assert config.dataset.tokenizer_json_split is True
+    assert config.dataset.mean_loss_weight == MEANS
