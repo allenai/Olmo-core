@@ -102,3 +102,24 @@ def test_a_checkpoint_config_without_a_dataset_section_gives_nothing_to_recover(
     keep_resumed_tokenizer_split(config)
     assert config.dataset.tokenizer_json_split is True
     assert config.dataset.mean_loss_weight == MEANS
+
+
+def test_a_legacy_run_resumed_with_the_split_already_off_still_gets_its_means(tmp_path):
+    """``--dataset.tokenizer_json_split=false`` alone leaves the code's means, calibrated for the
+    new split; the checkpoint's own means must still replace them."""
+    _checkpoint(tmp_path, 100, {"mean_loss_weight": LEGACY_MEANS})
+    config = _config(tmp_path)
+    config.dataset.tokenizer_json_split = False
+    keep_resumed_tokenizer_split(config)
+    assert config.dataset.tokenizer_json_split is False
+    assert config.dataset.mean_loss_weight == LEGACY_MEANS
+    assert _evaluator_split(config) is False
+
+
+def test_a_new_split_checkpoint_resumes_with_it(tmp_path):
+    _checkpoint(tmp_path, 100, {"tokenizer_json_split": True, "mean_loss_weight": MEANS})
+    config = _config(tmp_path)
+    config.dataset.tokenizer_json_split = False
+    keep_resumed_tokenizer_split(config)
+    assert config.dataset.tokenizer_json_split is True
+    assert config.dataset.mean_loss_weight == MEANS
