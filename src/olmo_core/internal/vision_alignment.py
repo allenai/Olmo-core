@@ -12,7 +12,10 @@ from typing import Any, Dict, List, Optional, Protocol, cast
 
 from olmo_core.config import Config, DType, StrEnum, _clean_opts
 from olmo_core.data import TokenizerConfig
-from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
+from olmo_core.data.multimodal.alignment import (
+    MultimodalMixtureConfig,
+    saved_tokenizer_json_split,
+)
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
 from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.distributed.parallel import DataParallelType
@@ -1482,10 +1485,55 @@ def parse_cli_args() -> CliContext:
     return CliContext(script, SubCmd(cmd), run_name, cluster, overrides)
 
 
+def keep_resumed_tokenizer_split(config: Any) -> None:
+    """Resume a run with the tokenizer split and loss calibration it trained with.
+
+    The recipes rebuild the mixture from code, so a run saved before
+    :attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`
+    existed would otherwise resume with the new default split and the means measured for it. When
+    the save folder holds a checkpoint, the run keeps that checkpoint's split (a saved config without
+    it means the earlier GPT2Tokenizer split) and, where that differs from the config's, the mean
+    loss weights it trained with. The in-loop evaluator always tokenizes as training does.
+
+    :raises OLMoConfigurationError: If the split differs and the checkpoint's saved means do not
+        cover exactly this mixture's sources.
+    """
+    from olmo_core.train.checkpoint import Checkpointer
+
+    dataset = config.dataset
+    try:
+        latest = Checkpointer.latest_checkpoint(config.trainer.save_folder)
+    except FileNotFoundError:
+        latest = None
+    if latest is not None:
+        saved = _read_checkpoint_config(latest).get("dataset")
+        split = saved_tokenizer_json_split(saved)
+        if split != dataset.tokenizer_json_split:
+            means = (saved or {}).get("mean_loss_weight")
+            if not isinstance(means, dict) or set(means) != set(dataset.mean_loss_weight):
+                raise OLMoConfigurationError(
+                    f"{latest} trained with tokenizer_json_split={split}, and its saved mean loss "
+                    "weights do not cover this mixture's sources; set dataset.tokenizer_json_split "
+                    "and dataset.mean_loss_weight to the run's values"
+                )
+            log.warning(
+                "Resuming %s with the tokenizer split it trained with (tokenizer_json_split=%s) and "
+                "its saved mean loss weights",
+                latest,
+                split,
+            )
+            dataset.tokenizer_json_split = split
+            dataset.mean_loss_weight = {name: float(value) for name, value in means.items()}
+    evaluator = config.trainer.callbacks.get("multimodal_evaluator")
+    if evaluator is not None:
+        evaluator.eval_dataset.tokenizer_json_split = dataset.tokenizer_json_split
+
+
 def train(config: VisionAlignmentExperimentConfig) -> Trainer:
     """Build the model, train module, data loader and trainer, train, and return the trainer."""
     # Before the data sources import ``datasets``; the launch environment normally has it.
     export_hf_datasets_cache(config.recipe.hf_datasets_cache_dir)
+    keep_resumed_tokenizer_split(config)
     seed_all(config.init_seed)
     model = config.model.build(init_device="meta")
     train_module = config.train_module.build(model)

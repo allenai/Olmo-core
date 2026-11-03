@@ -1,0 +1,75 @@
+"""Resuming a multimodal run keeps the tokenizer split and loss calibration it trained with."""
+
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from olmo_core.data import TokenizerConfig
+from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
+from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.internal.vision_alignment import keep_resumed_tokenizer_split
+
+MEANS = {"pixmo_caption": 28.5, "text_midtraining": 65535.0}
+LEGACY_MEANS = {"pixmo_caption": 28.8, "text_midtraining": 65535.0}
+
+
+def _config(save_folder):
+    mixture = MultimodalMixtureConfig(
+        tokenizer=TokenizerConfig.dolma2(), mean_loss_weight=dict(MEANS)
+    )
+    evaluator = SimpleNamespace(
+        eval_dataset=MultimodalMixtureConfig(tokenizer=TokenizerConfig.dolma2())
+    )
+    return SimpleNamespace(
+        dataset=mixture,
+        trainer=SimpleNamespace(
+            save_folder=str(save_folder), callbacks={"multimodal_evaluator": evaluator}
+        ),
+    )
+
+
+def _checkpoint(folder, step, dataset):
+    path = folder / f"step{step}"
+    (path / "train").mkdir(parents=True)
+    (path / "model_and_optim").mkdir()
+    (path / "train" / "rank0.pt").write_bytes(b"")
+    (path / "model_and_optim" / ".metadata").write_bytes(b"")
+    (path / ".metadata.json").write_text(json.dumps({"ephemeral": False}))
+    (path / "config.json").write_text(json.dumps({"dataset": dataset}))
+
+
+def _evaluator_split(config):
+    return config.trainer.callbacks["multimodal_evaluator"].eval_dataset.tokenizer_json_split
+
+
+def test_a_new_run_keeps_the_default(tmp_path):
+    config = _config(tmp_path / "missing")
+    keep_resumed_tokenizer_split(config)
+    assert config.dataset.tokenizer_json_split is True
+    assert config.dataset.mean_loss_weight == MEANS
+    assert _evaluator_split(config) is True
+
+
+def test_a_run_saved_before_the_setting_resumes_with_its_split_and_means(tmp_path):
+    _checkpoint(tmp_path, 100, {"mean_loss_weight": LEGACY_MEANS})
+    config = _config(tmp_path)
+    keep_resumed_tokenizer_split(config)
+    assert config.dataset.tokenizer_json_split is False
+    assert config.dataset.mean_loss_weight == LEGACY_MEANS
+    assert _evaluator_split(config) is False
+
+
+def test_a_run_with_the_setting_resumes_unchanged(tmp_path):
+    _checkpoint(tmp_path, 100, {"mean_loss_weight": LEGACY_MEANS})
+    _checkpoint(tmp_path, 200, {"tokenizer_json_split": True, "mean_loss_weight": MEANS})
+    config = _config(tmp_path)
+    keep_resumed_tokenizer_split(config)
+    assert config.dataset.tokenizer_json_split is True
+    assert config.dataset.mean_loss_weight == MEANS
+
+
+def test_a_legacy_run_whose_saved_means_do_not_match_is_rejected(tmp_path):
+    _checkpoint(tmp_path, 100, {"mean_loss_weight": {"other_source": 1.0}})
+    with pytest.raises(OLMoConfigurationError, match="tokenizer_json_split=False"):
+        keep_resumed_tokenizer_split(_config(tmp_path))
