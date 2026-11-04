@@ -1,0 +1,13 @@
+{
+ "runs": {
+  "f8k-mt4-orcbatchr2-f1952st3-orc-lr1e-05": {
+   "ex": "01M6JVQHDG1Z6XVR6KE1090EHT",
+   "arm": "orcbatchr2",
+   "budget": "f1952@3",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchr2-f1952st3-orc-lr1e-05/oracle_meta"
+  }
+ },
+ "evals": {}
+}

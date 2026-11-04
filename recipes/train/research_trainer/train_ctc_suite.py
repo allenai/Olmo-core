@@ -1214,7 +1214,8 @@ def build_and_fit(opts: argparse.Namespace) -> None:
 
         install_oracle(train_module, scope=opts.oracle_scope, target=opts.oracle_target,
                        random_mult=opts.oracle_random_mult, curve_scopes=opts.oracle_curve_scopes,
-                       out_dir=f"{save_folder}/oracle_meta", npz_every=opts.oracle_npz_every, seed=opts.seed)
+                       out_dir=f"{save_folder}/oracle_meta", npz_every=opts.oracle_npz_every, seed=opts.seed,
+                       routed_target=opts.oracle_routed_target, view=opts.oracle_view)
     for variant, vopts in active:
         for cb_name, cb in variant.extra_callbacks(vopts, vctx).items():
             trainer_config = trainer_config.with_callback(cb_name, cb)
@@ -2061,6 +2062,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--oracle-curve-scopes", default="",
                     help="--oracle-scope: extra scopes (comma list of doc,row,batch) whose exact cos curves are also "
                     "measured and logged every step (each costs one more set of bin accumulators)")
+    ap.add_argument("--oracle-view", choices=["body", "all"], default="body",
+                    help="--oracle-scope: which gradient the attribution cos is taken on. body (default): the body "
+                    "tokens' part only (the always-kept prompt/query/answer/marker tokens left out of both sides; "
+                    "they alone already give cos ~0.96 of the whole gradient, which makes 'all' trivially easy); "
+                    "all: the whole gradient, non-body included in both")
+    ap.add_argument("--oracle-routed-target", type=float, default=0.0,
+                    help="--oracle-scope: grow every stage's k (+3 grid points per try, ~2x) until the ROUTED LoRA "
+                    "gradient's cos with the dense one reaches this (0 = off; extra routed passes per step)")
     ap.add_argument("--oracle-npz-every", type=int, default=1,
                     help="--oracle-scope: write the selected tokens + energies (npz per rank) every N steps; 0 = never")
     ap.add_argument("--st-otr-score", choices=["router", "random", "first_last", "dh", "oracle"], default="router",

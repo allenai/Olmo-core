@@ -37,6 +37,7 @@ RECIPE = ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-o
           "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
           "--st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-score oracle")
 _ALL = "--oracle-curve-scopes doc,row,batch"  # every run logs the exact cos curves of all three scopes
+# default selection view = "body": cos on the body tokens' part of the gradient (see --oracle-view)
 
 ARMS = {
     "orcdoc": f"{RECIPE} --oracle-scope doc {_ALL}",
@@ -45,6 +46,10 @@ ARMS = {
     # + uniformly random extra body tokens = 2x the oracle set (per row, per stage): are "negatives" needed?
     "orcbatchr2": f"{RECIPE} --oracle-scope batch --oracle-random-mult 2 {_ALL}",
     "orcdocr2": f"{RECIPE} --oracle-scope doc --oracle-random-mult 2 {_ALL}",
+    # the literal rule: cos on the WHOLE gradient (non-body tokens in both sides; they alone give ~0.96)
+    "orcbatchall": f"{RECIPE} --oracle-scope batch --oracle-view all {_ALL}",
+    # the truer upper bound: grow every stage's k (~2x per try) until the ROUTED LoRA gradient has cos >= 0.95
+    "orcbatchrc": f"{RECIPE} --oracle-scope batch --oracle-routed-target 0.95 {_ALL}",
 }
 
 

@@ -42,7 +42,7 @@ log = logging.getLogger(__name__)
 __all__ = ["install_oracle", "KS"]
 
 #: grid of body-token shares (per allocation group) at which the attribution cosine is measured
-KS = (0.0025, 0.005, 0.0075, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05, 0.07, 0.1, 0.13, 0.17, 0.22, 0.3, 0.4, 0.55,
+KS = (0.0005, 0.001, 0.0015, 0.0025, 0.005, 0.0075, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05, 0.07, 0.1, 0.13, 0.17, 0.22, 0.3, 0.4, 0.55,
       0.75, 1.0)
 SCOPES = ("doc", "row", "batch")
 
@@ -222,7 +222,7 @@ def _gather_cat(x: torch.Tensor) -> List[torch.Tensor]:
 # ------------------------------------------------------------------------------------------------------- installer
 class _Oracle:
     def __init__(self, tm, scope: str, target: float, random_mult: float, curve_scopes: List[str], out_dir: str,
-                 npz_every: int, seed: int):
+                 npz_every: int, seed: int, routed_target: float = 0.0, view: str = "body"):
         self.tm = tm
         self.model = tm.model
         self.router = getattr(self.model, "_online_token_router", None)
@@ -236,6 +236,10 @@ class _Oracle:
         if scope not in SCOPES:
             raise SystemExit(f"--oracle-scope {scope!r}: one of {SCOPES}")
         self.scope, self.target, self.random_mult = scope, float(target), float(random_mult)
+        self.routed_target = float(routed_target)
+        if view not in ("body", "all"):
+            raise SystemExit(f"--oracle-view {view!r}: body or all")
+        self.view = view
         self.curve_scopes = list(dict.fromkeys([scope] + [s for s in curve_scopes if s]))
         self.tap = _Tap(lora["modules"], self.cuts, self.curve_scopes)
         self.out_dir = out_dir
@@ -408,10 +412,40 @@ class _Oracle:
             r._stats = s0
         model.reset_auxiliary_metrics()
 
-        # ---- C: routed pass (applied)
-        fx1 = float(getattr(model, "_flop_extra_actual", 0.0))
-        ceC, rowsC, _ = self._pass(batch, mbs, None, masks=masks)
-        routed_extra = float(getattr(model, "_flop_extra_actual", 0.0)) - fx1
+        # ---- C: routed pass (applied). With routed_target > 0 the set grows (every stage +3 grid points, ~2x k)
+        # until cos(routed LoRA grad, dense LoRA grad) >= routed_target; only the last try's gradient is applied
+        tries, extras = [], []
+        while True:
+            meter1 = {k: copy.deepcopy(getattr(model, k, None)) for k in _METER_ATTRS}
+            rstats1 = [dict(r._stats) for r in self.chain]
+            tm.zero_grads()
+            fx1 = float(getattr(model, "_flop_extra_actual", 0.0))
+            ceC, rowsC, _ = self._pass(batch, mbs, None, masks=masks)
+            extras.append(float(getattr(model, "_flop_extra_actual", 0.0)) - fx1)
+            if self.routed_target <= 0:
+                break
+            gst = self._grad_cos(dense_g)
+            nk = torch.tensor([float(sum(m[g].sum() for m in masks)) for g in range(len(self.cuts))]
+                              + [float(sum(b.sum() for b in info["body"]))], device=dev, dtype=torch.float64)
+            if _ws() > 1:
+                dist.all_reduce(nk)
+            tries.append({"j": list(sel["j"]), "k": list(sel["k"]), "routed_cos_lora": gst["lora_all"]["cos"],
+                          "routed_cos_all": gst["all"]["cos"], "keep_frac": [float(x / nk[-1]) for x in nk[:-1]]})
+            if gst["lora_all"]["cos"] >= self.routed_target or all(j >= len(KS) - 1 for j in sel["j"]):
+                break
+            for k, v in meter1.items():
+                if v is None:
+                    if hasattr(model, k):
+                        delattr(model, k) if k != "_flop_extra_actual" else setattr(model, k, 0.0)
+                else:
+                    setattr(model, k, v)
+            for r, s1 in zip(self.chain, rstats1):
+                r._stats = s1
+            model.reset_auxiliary_metrics()
+            masks, sel = self._select(mbs, seen, curves, info, js=[min(len(KS) - 1, j + 3) for j in sel["j"]])
+        routed_extra = extras[-1]
+        sel["routed_tries"] = tries
+        sel["routed_extras_all_tries"] = extras
         tC = time.time()
         model.post_batch(dry_run=False)
         from olmo_core.optim import SkipStepOptimizer
@@ -509,21 +543,38 @@ class _Oracle:
                         t.div_(_ws())
             res = []
             for g in range(len(self.cuts)):
-                dot = torch.zeros(len(KS), device=self.tm.device, dtype=torch.float64)
-                nrm = torch.zeros_like(dot)
+                # view "all": G = every token's term, G_S = non-body (bin 0, always kept) + top-k body bins.
+                # view "body": the body tokens' part of the gradient only, G_body vs G_S,body (bin 0 left out of both)
+                z = lambda: torch.zeros(len(KS), device=self.tm.device, dtype=torch.float64)  # noqa: E731
+                dot, nrm, dotb, nrmb = z(), z(), z(), z()
                 tot = torch.zeros((), device=self.tm.device, dtype=torch.float64)
+                totb, nb0, cross0 = torch.zeros_like(tot), torch.zeros_like(tot), torch.zeros_like(tot)
                 for (m, grp), a in zip(self.tap.lins, accs):
                     if grp != g:
                         continue
                     for t in a.values():
                         T = t.sum(0)
-                        cs = t.cumsum(0)[1:]  # prefix up to bin j+1 (bin 0 = always kept)
+                        Tb = T - t[0]
+                        csb = t[1:].cumsum(0)  # body bins 1..j+1
+                        cs = csb + t[0][None]  # + always-kept non-body
                         dot += (cs * T[None]).flatten(1).sum(1).double()
                         nrm += cs.square().flatten(1).sum(1).double()
                         tot += T.square().sum().double()
-                cos = dot / (nrm.clamp(min=1e-300) * tot.clamp(min=1e-300)).sqrt()
-                res.append({"cos": cos.tolist(), "proj": (dot / tot.clamp(min=1e-300)).tolist(),
-                            "rel_norm": (nrm / tot.clamp(min=1e-300)).sqrt().tolist()})
+                        dotb += (csb * Tb[None]).flatten(1).sum(1).double()
+                        nrmb += csb.square().flatten(1).sum(1).double()
+                        totb += Tb.square().sum().double()
+                        nb0 += t[0].square().sum().double()
+                        cross0 += (t[0] * T).sum().double()
+                eps = 1e-300
+                cos = dot / (nrm.clamp(min=eps) * tot.clamp(min=eps)).sqrt()
+                cosb = dotb / (nrmb.clamp(min=eps) * totb.clamp(min=eps)).sqrt()
+                res.append({"cos": cos.tolist(), "proj": (dot / tot.clamp(min=eps)).tolist(),
+                            "rel_norm": (nrm / tot.clamp(min=eps)).sqrt().tolist(),
+                            "cos_body": cosb.tolist(), "proj_body": (dotb / totb.clamp(min=eps)).tolist(),
+                            "rel_norm_body": (nrmb / totb.clamp(min=eps)).sqrt().tolist(),
+                            # the always-kept non-body tokens alone: cos with G, and the body share of |G|^2
+                            "cos_nonbody_only": float(cross0 / (nb0.clamp(min=eps) * tot.clamp(min=eps)).sqrt()),
+                            "body_norm_share": float((totb / tot.clamp(min=eps)).sqrt())})
             out[s] = res
         # check (step 1 and every 50): the summed bins equal the dense LoRA gradient of a few tapped linears
         if self.step == 1 or self.step % 50 == 0:
@@ -542,17 +593,20 @@ class _Oracle:
             out["_check_bins_vs_grad_cos"] = cs
         return out
 
-    def _select(self, mbs, seen, curves, info):
-        """stage masks per micro-batch (original columns) from the chosen grid k per stage."""
+    def _select(self, mbs, seen, curves, info, js=None):
+        """stage masks per micro-batch (original columns) from the chosen grid k per stage (``js`` overrides)."""
         dev = self.tm.device
         cur = curves[self.scope]
-        js = []
-        for g in range(len(self.cuts)):
-            c = cur[g]["cos"]
-            j = next((i for i, v in enumerate(c) if v >= self.target), len(KS) - 1)
-            js.append(j)
-        gen = torch.Generator(device=dev).manual_seed(self.seed * 1_000_003 + self.step * 7919 + _rank() * 104_729)
+        if js is None:
+            js = []
+            for g in range(len(self.cuts)):
+                c = cur[g]["cos_body" if self.view == "body" else "cos"]
+                j = next((i for i, v in enumerate(c) if v >= self.target), len(KS) - 1)
+                js.append(j)
+        gen = torch.Generator(device=dev).manual_seed(self.seed * 1_000_003 + self.step * 7919 + _rank() * 104_729
+                                                      + 31 * sum(js))
         masks, sel = [], {"j": js, "k": [KS[j] for j in js], "cos_at_j": [cur[g]["cos"][j] for g, j in enumerate(js)],
+                          "cos_body_at_j": [cur[g]["cos_body"][j] for g, j in enumerate(js)],
                           "rnd": []}
         for mi in range(len(mbs)):
             body = info["body"][mi]
@@ -689,16 +743,19 @@ class _Oracle:
         except Exception:  # noqa: BLE001
             lora_tok = 0.0
         dense_flops += lora_tok * float(sum(int((ci != -2).sum()) for ci in info["cid"]))
-        fl = torch.tensor([dense_flops, routed_extra], device=dev, dtype=torch.float64)
+        ex_all = sel.get("routed_extras_all_tries") or [routed_extra]
+        fl = torch.tensor([dense_flops, routed_extra, sum(ex_all)], device=dev, dtype=torch.float64)
         if _ws() > 1:
             dist.all_reduce(fl)
-        dense_step, routed_adj = fl.tolist()
+        dense_step, routed_adj, routed_adj_all = fl.tolist()
         routed_step = dense_step + routed_adj
+        routed_all = len(ex_all) * dense_step + routed_adj_all
         n_cut = len(self.cuts)
         rec: Dict[str, Any] = {
             "step": step, "scope": self.scope, "target": self.target, "random_mult": self.random_mult,
             "time_s": {"dense_energy": times[0], "dense_bins_select": times[1], "routed": times[2]},
-            "ks": list(KS), "chosen_j": sel["j"], "chosen_k": sel["k"], "attr_cos_at_k": sel["cos_at_j"],
+            "view": self.view, "ks": list(KS), "chosen_j": sel["j"], "chosen_k": sel["k"],
+            "attr_cos_at_k": sel["cos_at_j"], "attr_cos_body_at_k": sel["cos_body_at_j"],
             "curves": {s: v for s, v in curves.items() if not s.startswith("_")},
             "check_bins_vs_grad_cos": curves.get("_check_bins_vs_grad_cos"),
             "counts": C,
@@ -716,7 +773,9 @@ class _Oracle:
             "row_answer_tokens": [int(n) for _, n in ra_all.tolist()],
             "row_body_keep": pr_all,
             "grad": gstats,
-            "flops": {"dense_pass": dense_step, "routed_pass": routed_step, "actual_3pass": 2 * dense_step + routed_step,
+            "routed_tries": sel.get("routed_tries"),
+            "flops": {"dense_pass": dense_step, "routed_pass": routed_step, "routed_tries": len(ex_all),
+                      "actual_3pass": 2 * dense_step + routed_all,
                       "routed_over_dense": routed_step / max(1.0, dense_step)},
         }
         if pd_all is not None and pd_all.numel():
@@ -734,6 +793,9 @@ class _Oracle:
             tm.record_metric(f"keep_frac_s{g}", rec["keep_frac_body"][g], None, namespace="oracle")
             tm.record_metric(f"k_s{g}", rec["chosen_k"][g], None, namespace="oracle")
             tm.record_metric(f"attr_cos_s{g}", rec["attr_cos_at_k"][g], None, namespace="oracle")
+            tm.record_metric(f"attr_cos_body_s{g}", rec["attr_cos_body_at_k"][g], None, namespace="oracle")
+            tm.record_metric(f"nonbody_only_cos_s{g}", curves[self.scope][g]["cos_nonbody_only"], None,
+                             namespace="oracle")
             tm.record_metric(f"gold_keep_frac_s{g}", rec["gold_keep_frac"][g], None, namespace="oracle")
             tm.record_metric(f"distractor_keep_frac_s{g}", rec["distractor_keep_frac"][g], None, namespace="oracle")
         for k, v in gstats.items():
@@ -749,9 +811,10 @@ class _Oracle:
             self.jsonl.write(json.dumps(rec) + "\n")
             self.jsonl.flush()
             g = gstats.get("all", {})
-            log.info("[oracle] step %d k=%s attr_cos=%s keep=%s gcos(all)=%.3f adam=%.3f ce dense %.4f routed %.4f "
+            log.info("[oracle] step %d k=%s attr_cos(%s view)=%s keep=%s gcos(all)=%.3f adam=%.3f ce dense %.4f routed %.4f "
                      "routed/dense flops %.3f t=%.0f/%.0f/%.0fs check=%s", step,
-                     [round(x, 4) for x in rec["chosen_k"]], [round(x, 3) for x in rec["attr_cos_at_k"]],
+                     [round(x, 4) for x in rec["chosen_k"]], self.view,
+                     [round(x, 3) for x in (rec["attr_cos_body_at_k"] if self.view == "body" else rec["attr_cos_at_k"])],
                      [round(x, 4) for x in rec["keep_frac_body"]], g.get("cos", float("nan")),
                      g.get("cos_adam", float("nan")), rec["ce_dense"], rec["ce_routed"],
                      rec["flops"]["routed_over_dense"], *times, rec["check_bins_vs_grad_cos"])
@@ -812,10 +875,11 @@ def _full_like_grad(p: torch.Tensor, g_local: torch.Tensor) -> Optional[torch.Te
 
 
 def install_oracle(train_module, *, scope: str, target: float = 0.95, random_mult: float = 0.0,
-                   curve_scopes: str = "", out_dir: str, npz_every: int = 1, seed: int = 0) -> _Oracle:
+                   curve_scopes: str = "", out_dir: str, npz_every: int = 1, seed: int = 0,
+                   routed_target: float = 0.0, view: str = "body") -> _Oracle:
     """Replace ``train_module.train_batch`` with the 3-pass oracle step (module docstring)."""
     o = _Oracle(train_module, scope, target, random_mult, [s for s in curve_scopes.replace("+", ",").split(",") if s], out_dir,
-                npz_every, seed)
+                npz_every, seed, routed_target, view)
     train_module.train_batch = o.train_batch
     train_module._oracle = o
     return o
