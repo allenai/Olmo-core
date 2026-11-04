@@ -1207,6 +1207,14 @@ def build_and_fit(opts: argparse.Namespace) -> None:
     train_module = train_module_config.build(model)
     for variant, vopts in active:
         variant.post_build_train_module(train_module, vopts, vctx)
+    if getattr(opts, "oracle_scope", ""):
+        # oracle token selection (olmo_core.nn.oracle_token_select): dense pass -> exact per-token LoRA-gradient
+        # attribution -> the smallest top-k set with attribution cos >= --oracle-target -> routed pass (applied)
+        from olmo_core.nn.oracle_token_select import install_oracle
+
+        install_oracle(train_module, scope=opts.oracle_scope, target=opts.oracle_target,
+                       random_mult=opts.oracle_random_mult, curve_scopes=opts.oracle_curve_scopes,
+                       out_dir=f"{save_folder}/oracle_meta", npz_every=opts.oracle_npz_every, seed=opts.seed)
     for variant, vopts in active:
         for cb_name, cb in variant.extra_callbacks(vopts, vctx).items():
             trainer_config = trainer_config.with_callback(cb_name, cb)
@@ -2042,7 +2050,20 @@ def parse_args() -> argparse.Namespace:
                     help="online router: share of the budget spread over documents in proportion to length "
                     "(each keeps its own top tokens by score); the rest goes to the row-level top scores. "
                     "1.0 = within-document choice only (per-document density cannot name gold)")
-    ap.add_argument("--st-otr-score", choices=["router", "random", "first_last", "dh"], default="router",
+    ap.add_argument("--oracle-scope", choices=["", "doc", "row", "batch"], default="",
+                    help="oracle token selection (needs --st-otr-score oracle + --st-otr-early-lora): every step runs a "
+                    "dense pass, picks per stage the smallest top-k set (by per-token LoRA-gradient energy; k per "
+                    "document / row / whole batch) whose EXACT attribution cos with the dense gradient is >= "
+                    "--oracle-target, and applies the routed pass on that set. See olmo_core.nn.oracle_token_select")
+    ap.add_argument("--oracle-target", type=float, default=0.95, help="--oracle-scope: attribution cos target")
+    ap.add_argument("--oracle-random-mult", type=float, default=0.0,
+                    help="--oracle-scope: also keep uniformly random extra body tokens, this many x the oracle set per row")
+    ap.add_argument("--oracle-curve-scopes", default="",
+                    help="--oracle-scope: extra scopes (comma list of doc,row,batch) whose exact cos curves are also "
+                    "measured and logged every step (each costs one more set of bin accumulators)")
+    ap.add_argument("--oracle-npz-every", type=int, default=1,
+                    help="--oracle-scope: write the selected tokens + energies (npz per rank) every N steps; 0 = never")
+    ap.add_argument("--st-otr-score", choices=["router", "random", "first_last", "dh", "oracle"], default="router",
                     help="online router: who picks the kept tokens -- the learned scorer, or a control with the same "
                     "budget, allocation and drop point (random; each document's first and last tokens; dh = fit-free "
                     "rule, top tokens by residual change ||h^L - h^0||, mid-stack only)")

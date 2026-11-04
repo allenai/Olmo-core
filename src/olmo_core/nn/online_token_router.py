@@ -291,7 +291,7 @@ class OnlineRouterConfig:
             raise ValueError(f"online router min_per_doc must be >= 0, got {self.min_per_doc}")
         if self.keep_first < 0:
             raise ValueError(f"online router keep_first must be >= 0, got {self.keep_first}")
-        if self.score not in ("router", "random", "first_last", "dh"):
+        if self.score not in ("router", "random", "first_last", "dh", "oracle"):
             raise ValueError(f"online router score must be router / random / first_last / dh, got {self.score!r}")
         if self.score == "dh" and self.drop_layer <= 0:
             raise ValueError("online router score 'dh' needs the mid-stack drop (drop_layer > 0)")
@@ -820,6 +820,10 @@ class OnlineTokenRouter:
         rep = torch.log1p(cnt[key]) / 5.0
         out: Dict[str, torch.Tensor] = {"body": body, "query": qm, "_edge": torch.minimum(offs["j"], offs["r"]),
                                         "_j": offs["j"], "_cid": chunk_ids.to(torch.long)}
+        if c.score == "oracle":
+            # original column of every token: later pyramid stages gather it with the rest of fp, so an oracle mask given
+            # in the original (uncompacted) frame can be read in any stage's compacted frame
+            out["_col"] = torch.arange(T, device=input_ids.device)[None, :].expand(B, T).contiguous()
         out["_s0"] = torch.cat([struct, (in_q * body).unsqueeze(-1), (rep * body).unsqueeze(-1)], dim=-1)
         if c.use_gold:
             out["_gold"] = (self._row_gold(input_ids, chunk_ids) * body).unsqueeze(-1)
@@ -983,7 +987,9 @@ class OnlineTokenRouter:
             score = self.score(fp)
             self._flop(model, 2.0 * self.n_features * (1 + self.cfg.mlp_hidden * int(getattr(self, "_mlp", None)
                                                                                    is not None)) * float(body.sum()))
-        if dense:
+        if c.score == "oracle":
+            keep, dense = self._oracle_pick(fp, body, ids, cid, score)
+        elif dense:
             keep = body.clone()
         else:
             assert score is not None or warm_rand
@@ -1105,6 +1111,33 @@ class OnlineTokenRouter:
             gflag = fp["_gold"][..., 0] if "_gold" in fp else self._row_gold(ids, cid)
             self._stat("leak_auc", self._leak_auc(keep, body, cid, gflag))
         return keep, entry
+
+    def _oracle_pick(self, fp, body, ids, cid, score) -> Tuple[torch.Tensor, bool]:
+        """score == "oracle": the keep set is chosen OUTSIDE the router (``olmo_core.nn.oracle_token_select``) from the
+        step's own dense gradient. ``_oracle_keep`` = (B, T) bool over ORIGINAL columns for this stage (None or
+        ``_force_dense`` = keep every body token: the dense passes). The router itself is still fit online (a shadow
+        router); when it has weights, the overlap of its same-size top-k with the oracle set is logged."""
+        m = getattr(self, "_oracle_keep", None)
+        if getattr(self, "_force_dense", False) or m is None:
+            if self.stage_idx == 0:
+                # the oracle trainer reads the router's own body / chunk ids / gold flags of the dense pass
+                gold = self._row_gold(ids, cid) if self.gold is not None else None
+                self._oracle_seen = {"body": body.detach().clone(), "cid": cid.detach().clone(),
+                                     "gold": None if gold is None else gold.detach().clone()}
+            return body.clone(), True
+        col = fp["_col"].clamp(min=0)
+        m = m.to(body.device)
+        if m.shape[1] <= int(col.max().item()):
+            m = torch.nn.functional.pad(m, (0, int(col.max().item()) + 1 - m.shape[1]))
+        keep = body & torch.gather(m, 1, col)
+        if score is not None:
+            # shadow-router agreement: its own top-|keep_r| body tokens per row vs the oracle's
+            sc = torch.where(body, score.float(), torch.full_like(score.float(), -float("inf")))
+            rank = (-sc).argsort(dim=1).argsort(dim=1)
+            top = body & (rank < keep.sum(dim=1, keepdim=True))
+            self._stat("oracle_router_overlap", float((top & keep).sum()) / max(1.0, float(keep.sum())))
+            self._stat("oracle_router_overlap_chance", float(keep.sum()) / max(1.0, float(body.sum())))
+        return keep, False
 
     def mid_compact(self, model, h: torch.Tensor, block_kwargs: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Mid-stack drop at block ``drop_layer``: score the forward's own hidden state, gather the kept
