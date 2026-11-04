@@ -22,7 +22,8 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcrow-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcrow-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
   },
   "f8k-mt4-orcbatch-f1952-orc-lr1e-05": {
    "ex": "01M6JW9GWP8TQQJGYGP2Z8X7HF",
@@ -38,7 +39,8 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchr2-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchr2-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
   },
   "f8k-mt4-orcdocr2-f1952-orc-lr1e-05": {
    "ex": "01M6JWBA5QB2XFERTEJP4V9NE8",
@@ -46,7 +48,8 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcdocr2-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcdocr2-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
   },
   "f8k-mt4-orcbatchall-f1952-orc-lr1e-05": {
    "ex": "01M6JWCDX361B4AKASH0DX1EGA",
@@ -62,7 +65,56 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchrc-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchrc-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05": {
+   "ex": "01M6JWZPQ1P5GDCC1FEEQHYT38",
+   "arm": "orc1doc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05": {
+   "ex": "01M6JX0JHJY66CTBYPZRGHJ213",
+   "arm": "orc1row",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1row-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05": {
+   "ex": "01M6JX1FT7R5RA0F8GA6QYCXC5",
+   "arm": "orc1batch",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batch-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JX2RDW6G050C4BSP1K6GN7",
+   "arm": "orc1batchr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchr2-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1docr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JX3MX70CKYTERC8GP48JB7",
+   "arm": "orc1docr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1docr2-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05": {
+   "ex": "01M6JX4KV5GP3MK75XHBGRMRH5",
+   "arm": "orc1batchrc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchrc-f1952-orc-lr1e-05/oracle_meta"
   }
  },
  "evals": {}
