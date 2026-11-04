@@ -42,7 +42,10 @@ Base: the recipe `lora64all32r20to7` (repaired Qwen3.5-4B, whole-model LoRA r64 
 gradient (the always-kept tokens' terms left out of both sides). Reason (smoke, step 1-3): the always-kept
 non-body tokens (4.4% of real tokens) ALONE give attribution cos 0.94 (stage 1) / 0.98 (stage 2) with the whole
 LoRA gradient, so under `all` the rule is met at the grid floor with ~0.25% of body tokens -- a selection that
-says nothing about which context tokens matter. `orcbatchall` runs the literal rule anyway.
+says nothing about which context tokens matter. `orcbatchall` runs the literal rule anyway. Correction from the full
+run (Beaker, step 7): the domination is an early-training effect (LoRA B starts at zero, so only the dL/dB terms
+exist); by step 7 the `all` view already needs 10% / 1.5% of body tokens (batch scope), close to the body view's
+10% / 3% at step 4 of `orcbatch`.
 
 ## Arms (Beaker jupiter, urgent, 2 GPUs, f1952)
 | arm | scope | view | extra |

@@ -37,6 +37,7 @@ cd "$CODE"
 RECIPE="--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 \
 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 \
 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-score oracle"
+[ -n "${SINGLE_CUT:-}" ] && RECIPE="${RECIPE/--st-otr-stages 7:0.2,16:0.07 /}"
 OPS_RUN_ID="$RUN" OPS_EXPERIMENT=tokdrop_lr OPS_KIND=train OPS_EXPECTED_MINUTES=${MINUTES:-60} OPS_FIRST_OUTPUT=1200 \
   OPS_STALL=1800 bash "$REPO/recipes/env/ops_job.sh" \
   "$PY" -m torch.distributed.run --nproc_per_node=${NGPU:-2} --master_port=$((29000 + RANDOM % 1000)) \
