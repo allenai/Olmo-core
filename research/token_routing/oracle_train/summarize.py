@@ -19,18 +19,27 @@ def load(path):
 
 def row(r):
     g = r["grad"]
-    out = {"step": r["step"], "k_s0": r["chosen_k"][0], "k_s1": r["chosen_k"][1],
-           "keep_s0": r["keep_frac_body"][0], "keep_s1": r["keep_frac_body"][1],
-           "attr_s0": r["attr_cos_at_k"][0], "attr_s1": r["attr_cos_at_k"][1],
-           "gcos_all": g["all"]["cos"], "gcos_adam_all": g["all"]["cos_adam"],
-           "ce_dense": r["ce_dense"], "ce_routed": r["ce_routed"],
-           "routed_over_dense": r["flops"]["routed_over_dense"],
-           "actual_over_dense": r["flops"]["actual_3pass"] / max(1.0, r["flops"]["dense_pass"]),
-           "gold_keep_s1": r["gold_keep_frac"][1], "distr_keep_s1": r["distractor_keep_frac"][1]}
-    for k in ("lora_s0", "lora_s1", "lora_s2", "head"):
-        if k in g:
-            out[f"gcos_{k}"] = g[k]["cos"]
+    out = {"step": r["step"]}
+    for i in range(len(r["chosen_k"])):
+        out[f"k_s{i}"] = r["chosen_k"][i]
+        out[f"keep_s{i}"] = r["keep_frac_body"][i]
+        out[f"attr_s{i}"] = (r.get("attr_cos_body_at_k") or r["attr_cos_at_k"])[i]
+    out.update({"gcos_all": g["all"]["cos"], "gcos_adam_all": g["all"]["cos_adam"],
+                "gcos_lora": g["lora_all"]["cos"],
+                "gnorm_ratio": g["all"]["norm_routed"] / max(1e-30, g["all"]["norm_dense"]),
+                "ce_dense": r["ce_dense"], "ce_routed": r["ce_routed"],
+                "routed_over_dense": r["flops"]["routed_over_dense"],
+                "actual_over_dense": r["flops"]["actual_3pass"] / max(1.0, r["flops"]["dense_pass"])})
     return out
+
+
+def dedupe(rows):
+    """a preempted-and-restarted run appends a second pass from step 1: keep the LAST segment"""
+    cut = 0
+    for i in range(1, len(rows)):
+        if rows[i]["step"] <= rows[i - 1]["step"]:
+            cut = i
+    return rows[cut:]
 
 
 def main():
@@ -39,7 +48,7 @@ def main():
     ap.add_argument("--every", type=int, default=25)
     ap.add_argument("--json", default="")
     a = ap.parse_args()
-    rs = [row(r) for r in load(a.path)]
+    rs = [row(r) for r in dedupe(load(a.path))]
     if not rs:
         raise SystemExit("no steps")
     keys = list(rs[0])
