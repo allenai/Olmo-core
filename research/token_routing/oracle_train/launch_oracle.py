@@ -39,7 +39,18 @@ RECIPE = ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-o
 _ALL = "--oracle-curve-scopes doc,row,batch"  # every run logs the exact cos curves of all three scopes
 # default selection view = "body": cos on the body tokens' part of the gradient (see --oracle-view)
 
+#: HEADLINE (Prasann via parent, 2026-11-04): ONE cut at block 7 -- a token is kept or dropped in every block from 7 on,
+#: blocks 0-6 dense; the oracle set holds attribution cos 0.95 over the blocks after the cut
+RECIPE1 = RECIPE.replace("--st-otr-stages 7:0.2,16:0.07 ", "")
 ARMS = {
+    "orc1doc": f"{RECIPE1} --oracle-scope doc {_ALL}",
+    "orc1row": f"{RECIPE1} --oracle-scope row {_ALL}",
+    "orc1batch": f"{RECIPE1} --oracle-scope batch {_ALL}",
+    "orc1batchr2": f"{RECIPE1} --oracle-scope batch --oracle-random-mult 2 {_ALL}",
+    "orc1docr2": f"{RECIPE1} --oracle-scope doc --oracle-random-mult 2 {_ALL}",
+    "orc1batchrc": f"{RECIPE1} --oracle-scope batch --oracle-routed-target 0.95 {_ALL}",
+    "orc1batchall": f"{RECIPE1} --oracle-scope batch --oracle-view all {_ALL}",
+    # secondary: the recipe's two-cut shape (7:0.2, 16:0.07 nested)
     "orcdoc": f"{RECIPE} --oracle-scope doc {_ALL}",
     "orcrow": f"{RECIPE} --oracle-scope row {_ALL}",
     "orcbatch": f"{RECIPE} --oracle-scope batch {_ALL}",

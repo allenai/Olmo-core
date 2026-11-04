@@ -801,6 +801,7 @@ class _Oracle:
         for k, v in gstats.items():
             tm.record_metric(f"gcos_{k}", v["cos"], None, namespace="oracle")
             tm.record_metric(f"gcos_adam_{k}", v["cos_adam"], None, namespace="oracle")
+            tm.record_metric(f"gnorm_ratio_{k}", v["norm_routed"] / max(1e-30, v["norm_dense"]), None, namespace="oracle")
         tm.record_metric("ce_dense", rec["ce_dense"], None, namespace="oracle")
         tm.record_metric("ce_routed", rec["ce_routed"], None, namespace="oracle")
         tm.record_metric("routed_over_dense_flops", rec["flops"]["routed_over_dense"], None, namespace="oracle")
