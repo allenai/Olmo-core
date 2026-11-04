@@ -98,7 +98,7 @@ olmo-eval path, 6 tasks.
 | 256k (eval_size 125) | -0.071 (hotpotqa -0.17, contradiction -0.10, nq -0.10) | -0.083 (hotpotqa -0.14, contradiction -0.06) |
 
 At dense f2's FLOPs, m16-dense-s770 (9,792 PF) vs 64k-data dense at the same PF: 2k +0.007, 8k +0.015, 16k +0.039,
-32k +0.012, 64k -0.064 (native; contradiction -0.25), 128k -0.100 (contradiction -0.35, hotpotqa -0.16), 256k -0.076
+32k +0.012, 64k -0.064 (native; -0.063 on olmo-eval; contradiction -0.25), 128k -0.100 (contradiction -0.35, hotpotqa -0.16), 256k -0.076
 (contradiction -0.20, hotpotqa -0.19). Twice the data does not shrink the long-rung loss.
 
 More short rows at the same FLOPs help a little at the short rungs (xabsence +0.08..+0.25 at 8k-32k) and cost a
