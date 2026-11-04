@@ -15,5 +15,46 @@
    "max_steps": 0
   }
  },
- "evals": {}
+ "evals": {
+  "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05-evcontradiction": {
+   "ex": "01M6MEWXYEVKZE4NX459EFQW53",
+   "train_run": "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05-evnq": {
+   "ex": "01M6MEXTY9HQZHQ55KATJQC8KS",
+   "train_run": "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05-evoutlier": {
+   "ex": "01M6MEYVP07876ZRVN44E37N0Y",
+   "train_run": "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05-evoolong": {
+   "ex": "01M6MEZW8F2DBZXX8TF4520E4Q",
+   "train_run": "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05-evcontradiction": {
+   "ex": "01M6MF0Y9Y18WYJRAARSQSWZQS",
+   "train_run": "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05-evnq": {
+   "ex": "01M6MF1Z2MDCT7F5GYVT8V2ARM",
+   "train_run": "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05-evoutlier": {
+   "ex": "01M6MF33DNAK7SAX2BVJCMDSH5",
+   "train_run": "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05-evoolong": {
+   "ex": "01M6MF3Y4FBTVXXGC1WEQ0RD28",
+   "train_run": "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05",
+   "task": "oolong"
+  }
+ }
 }
