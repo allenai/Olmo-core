@@ -266,6 +266,41 @@ def build_global_indices(
     return indices
 
 
+def sample_global_indices(
+    total_instances: int,
+    num_instances: int,
+    *,
+    sequence_length: int,
+    max_sequence_length: int,
+    seed: int,
+    dtype: NumpyUIntTypes = np.uint32,
+) -> np.ndarray:
+    """
+    Randomly sample ``num_instances`` of ``total_instances`` instances, in a random order, keeping
+    the instances of each ``max_sequence_length`` chunk together like :func:`build_global_indices`.
+
+    Unlike shuffling all of :func:`build_global_indices` and keeping a prefix, this doesn't need
+    to materialize a permutation of every instance when ``num_instances`` is much smaller.
+    """
+    assert total_instances < np.iinfo(dtype).max
+    assert max_sequence_length % sequence_length == 0
+    chunk_size = max_sequence_length // sequence_length
+    assert total_instances % chunk_size == 0
+    assert num_instances % chunk_size == 0
+    assert num_instances <= total_instances
+
+    rng = get_rng(seed)
+    chunk_indices = rng.choice(
+        total_instances // chunk_size, size=num_instances // chunk_size, replace=False
+    ).astype(dtype)
+
+    if chunk_size == 1:
+        return chunk_indices
+
+    indices = chunk_indices.reshape((-1, 1)) * chunk_size + np.arange(chunk_size, dtype=dtype)
+    return indices.reshape(-1)
+
+
 class _NOT_SET_INT_TYPE(int):
     pass
 

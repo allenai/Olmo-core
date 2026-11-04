@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed `ComposableDataLoader` with `shuffle_strategy="interleaved_source"` always using the first instances of every source larger than the smallest one. Larger sources are now shuffled in full before being trimmed to the smallest source's size, so each epoch draws a different random subset.
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
 - Preserve 16-byte parameter alignment in OLMoDDP flat model buffers so compiled kernels remain valid after small BF16 parameters are packed.

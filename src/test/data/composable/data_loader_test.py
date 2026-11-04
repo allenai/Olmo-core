@@ -7,7 +7,10 @@ from olmo_core.data.collator import DataCollator
 from olmo_core.data.composable.concat_and_chunk_instance_source import (
     ConcatAndChunkInstanceSource,
 )
-from olmo_core.data.composable.data_loader import ComposableDataLoader
+from olmo_core.data.composable.data_loader import (
+    ComposableDataLoader,
+    ShuffleStrategy,
+)
 from olmo_core.data.composable.token_source import InMemoryTokenSource
 from olmo_core.data.tokenizer import TokenizerConfig
 
@@ -146,3 +149,45 @@ def test_data_loader_save_and_restore(tmp_path: Path):
     assert n_batches == len(data_loader) == data_loader.batches_processed
     assert all_tokens == set(range(128, 192))
     data_loader.reset()
+
+
+def test_interleaved_source_draws_from_the_whole_larger_source(tmp_path: Path):
+    tokenizer = TokenizerConfig(vocab_size=32000, eos_token_id=0, pad_token_id=-1)
+    large = ConcatAndChunkInstanceSource(
+        InMemoryTokenSource(tokens=list(range(640)), work_dir=tmp_path),
+        sequence_length=8,
+        work_dir=tmp_path,
+    )
+    small = ConcatAndChunkInstanceSource(
+        InMemoryTokenSource(tokens=list(range(640, 704)), work_dir=tmp_path),
+        sequence_length=8,
+        work_dir=tmp_path,
+    )
+    data_loader = ComposableDataLoader(
+        large,
+        small,
+        collator=DataCollator(pad_token_id=tokenizer.pad_token_id),
+        tokenizer=tokenizer,
+        work_dir=tmp_path,
+        global_batch_size=16,
+        seed=0,
+        shuffle_strategy=ShuffleStrategy.interleaved_source,
+        num_workers=0,
+        num_threads=0,
+    )
+    # Each source contributes as many instances as the smallest one has.
+    assert data_loader.total_instances == 16
+
+    seen_large = set()
+    for epoch in range(1, 4):
+        data_loader.reshuffle(epoch=epoch)
+        indices = data_loader.get_global_indices()
+        large_indices = set(indices[0::2].tolist())
+        assert len(large_indices) == 8
+        assert large_indices <= set(range(80))
+        assert set(indices[1::2].tolist()) == set(range(80, 88))
+        seen_large |= large_indices
+
+    # The larger source contributes a fresh random subset each epoch, not only its first 8
+    # instances every epoch.
+    assert len(seen_large) > 8

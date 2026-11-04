@@ -35,6 +35,7 @@ from .utils import (
     build_global_indices,
     format_fname_from_fields,
     resolve_seed,
+    sample_global_indices,
 )
 
 log = logging.getLogger(__name__)
@@ -611,7 +612,11 @@ class ComposableDataLoader(TextDataLoaderBase):
             interleaved_indices = np.empty((num_sources * source_size,), dtype=np.uint32)
             offset = 0
             for i, source in enumerate(self.sources_for_this_epoch):
-                indices = build_global_indices(
+                # Draw ``source_size`` instances from the whole source, so that larger sources
+                # contribute a different random subset each epoch instead of always their first
+                # ``source_size`` instances.
+                indices = sample_global_indices(
+                    len(source),
                     source_size,
                     sequence_length=self.sequence_length,
                     max_sequence_length=self.max_sequence_length,
