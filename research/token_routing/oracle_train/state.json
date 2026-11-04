@@ -69,12 +69,15 @@
    "cancelled": "2026-11-04 superseded by single-cut orc1*"
   },
   "f8k-mt4-orc1doc-f1952-orc-lr1e-05": {
-   "ex": "01M6JWZPQ1P5GDCC1FEEQHYT38",
    "arm": "orc1doc",
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/data/prasann/oracle/runs/f8k-mt4-orc1doc-f1952-orc-lr1e-05/oracle_meta (mooney)",
+   "beaker_cancelled": "01M6JWZPQ1P5GDCC1FEEQHYT38",
+   "slurm": "4150057",
+   "cluster": "jsteinhardt mooney",
+   "data": "/data/prasann/oracle/shards/mt4f1952 (merge_tasks first-1952 of the *_fresh pools; no gold sidecar)"
   },
   "f8k-mt4-orc1row-f1952-orc-lr1e-05": {
    "ex": "01M6JX0JHJY66CTBYPZRGHJ213",
@@ -85,12 +88,15 @@
    "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1row-f1952-orc-lr1e-05/oracle_meta"
   },
   "f8k-mt4-orc1batch-f1952-orc-lr1e-05": {
-   "ex": "01M6JX1FT7R5RA0F8GA6QYCXC5",
    "arm": "orc1batch",
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batch-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/data/prasann/oracle/runs/f8k-mt4-orc1batch-f1952-orc-lr1e-05/oracle_meta (mooney)",
+   "beaker_cancelled": "01M6JX1FT7R5RA0F8GA6QYCXC5",
+   "slurm": "4150058",
+   "cluster": "jsteinhardt mooney",
+   "data": "/data/prasann/oracle/shards/mt4f1952 (merge_tasks first-1952 of the *_fresh pools; no gold sidecar)"
   },
   "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05": {
    "ex": "01M6JX2RDW6G050C4BSP1K6GN7",
