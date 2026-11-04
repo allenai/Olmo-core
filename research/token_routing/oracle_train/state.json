@@ -164,5 +164,35 @@
    "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
    "task": "oolong"
   }
+ },
+ "insurance": {
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney": {
+   "slurm": "4150110",
+   "node": "mooney",
+   "of": "f8k-mt4-orc1row-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney": {
+   "slurm": "4150112",
+   "node": "mooney",
+   "of": "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05@lambda": {
+   "slurm": "114897",
+   "node": "lambda-hyperplane02",
+   "save": "/tmp/prasann/oracle/runs/f8k-mt4-orc1batchr2-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orc1docr2-f1952-orc-lr1e-05@lambda": {
+   "slurm": "114898",
+   "node": "lambda-hyperplane02",
+   "save": "/tmp/prasann/oracle/runs/f8k-mt4-orc1docr2-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-lam": {
+   "slurm": "114900",
+   "node": "lambda-hyperplane02"
+  },
+  "f8k-mt4-orcbatch-f1952-orc-lr1e-05-lam": {
+   "slurm": "114901",
+   "node": "lambda-hyperplane02"
+  }
  }
 }
