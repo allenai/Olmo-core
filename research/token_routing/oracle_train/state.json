@@ -193,6 +193,26 @@
    "ex": "01M6KS3XQJK5STG2QB4E3PHZ42",
    "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
    "task": "oolong"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evcontradiction": {
+   "ex": "01M6KT009CPRE6KEMYV6ZF6VFD",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evnq": {
+   "ex": "01M6KT0SMP8EF8E2KN9JDN89FC",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evoutlier": {
+   "ex": "01M6KT1KMC6R670FMBJQ0KYBHM",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evoolong": {
+   "ex": "01M6KT2DA7QMBQGKGNKAZ4BXAJ",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "oolong"
   }
  },
  "insurance": {
