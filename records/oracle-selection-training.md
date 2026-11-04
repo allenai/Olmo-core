@@ -7,7 +7,7 @@ area: token_routing
 kind: result
 status: complete (9 arms, f1952, 1 seed each)
 superseded_by: 
-artifact: 
+artifact: https://claude.ai/artifact/9vAYqzh69sXf1RjVFfsnNV
 summary: Per-step oracle token selection in training (dense backward picks the smallest top-k body set with exact LoRA-gradient attribution cos >= 0.95; routed pass applied), f1952. Attribution sets give routed-grad cos only ~0.5 and tie dense only with per-document allocation at one cut (35% kept, 8k 0.850 vs 0.843); per-row / batch / two-cut variants break outlier (0.155-0.635). Random negatives repair a lot (batch 0.756 -> 0.806). A set that keeps the ROUTED gradient (cos 0.95) needs 71% of body tokens and ties dense (0.837).
 ---
 # Oracle token selection in training
