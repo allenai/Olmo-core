@@ -47,11 +47,14 @@ from launch_fast8k import ARM_EXTRA, SUITE_EVAL_ENV, SUITE_EVAL_TASKS, TASK_KEY 
 
 LAUNCHER = f"{REPO}/recipes/train/research_trainer/beaker_ctc_suite.py"
 EVAL_LAUNCHER = f"{REPO}/recipes/eval/legacy_native/run_q4b_beaker_multirung_eval.py"
-STATE = os.path.join(HERE, "state.json")
+STATE = os.environ.get("M64_STATE", os.path.join(HERE, "state.json"))
 SHARD = os.environ.get("M64_SHARD", f"{W}/mt11_64k/shards/mt11L64")
 #: realised rows of the shard (build log 01M5KQ85DJ4H4GD8SYCQ8HBD7C / reports/verify_mt11L64.json)
 ROWS = int(os.environ.get("M64_ROWS", "156587"))
-SEQ_LEN = 65536
+#: training window. Length-generalization arm (2026-11-04): M64_SEQ_LEN=16384 M64_SHARD=$W/mt11_64k/shards/mt11L16
+#: M64_PREFIX=m16 M64_STATE=.../state_lengen.json, budget sNNN (explicit steps chosen to match a 64k run's PF)
+SEQ_LEN = int(os.environ.get("M64_SEQ_LEN", "65536"))
+PREFIX = os.environ.get("M64_PREFIX", "m64")
 GB = 128
 #: 8 by default; M64_NGPU=4 when whole nodes queue for hours (2026-10-23: 99 urgent whole-node jobs ahead). Rows/step
 #: and micro-batch are unchanged, so scores and FLOPs are unaffected; only wall-clock changes (compare like with like).
@@ -91,6 +94,8 @@ SMOKE_STEPS = 10
 
 
 def steps_for(budget):
+    if budget.startswith("s") and budget[1:].isdigit():  # explicit step count
+        return int(budget[1:])
     return SMOKE_STEPS if budget == "smk" else math.ceil(STEPS_FULL / FRACTIONS[budget])
 
 
@@ -106,7 +111,7 @@ def min_runtime(arm, steps):
 
 
 def run_name(arm, budget, lr, seed=0):
-    return f"m64-{arm}-{budget}-lr{lr:g}" + (f"-sd{seed}" if seed else "")
+    return f"{PREFIX}-{arm}-{budget}-lr{lr:g}" + (f"-sd{seed}" if seed else "")
 
 
 def train_cmd(arm, budget, lr, mode, seed=0):
