@@ -5,10 +5,10 @@ updated: 2026-11-04
 experiment: mt11_64k
 area: token_routing
 kind: result
-status: complete for the 64k-data checkpoints and the two <=16k s380 runs; m16-dense-s770 (f2 PF) evals pending
+status: complete (single seed)
 superseded_by: 
 artifact: https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n
-summary: mt11 64k checkpoints scored at 64k/128k/256k (olmo-eval, r256k YaRN x2; agrees with the native ladder at 64k to +-0.002). Universal recipe f4 matched-FLOP gain persists past the 64k train length (+0.046/+0.033/+0.054 6-task mean); router f2 +0.040/+0.042/+0.023; router f1 fades (+0.025/+0.013/-0.005). Training on rows <= 16k at the same FLOPs: >= 0 at 2k-32k, then -0.07 to -0.08 (dense) and -0.05 to -0.08 (recipe) from 64k to 256k. Single seed; r256k eval_size 125.
+summary: mt11 64k checkpoints scored at 64k/128k/256k (olmo-eval, r256k YaRN x2; agrees with the native ladder at 64k to +-0.002). Universal recipe f4 matched-FLOP gain persists past the 64k train length (+0.046/+0.033/+0.054 6-task mean); router f2 +0.040/+0.042/+0.023; router f1 fades (+0.025/+0.013/-0.005). Training on rows <= 16k at the same FLOPs: >= 0 at 2k-32k, then -0.06 to -0.10 (dense, at f4 and f2 FLOPs) and -0.05 to -0.08 (recipe) from 64k to 256k. Single seed; r256k eval_size 125.
 ---
 
 # Length generalization of the mt11 64k runs
@@ -97,7 +97,9 @@ olmo-eval path, 6 tasks.
 | 128k | -0.080 (contradiction -0.18, hotpotqa -0.19, nq -0.07) | -0.064 (contradiction -0.12, hotpotqa -0.06) |
 | 256k (eval_size 125) | -0.071 (hotpotqa -0.17, contradiction -0.10, nq -0.10) | -0.083 (hotpotqa -0.14, contradiction -0.06) |
 
-m16-dense-s770 (9,792 PF, ~dense f2): evals pending.
+At dense f2's FLOPs, m16-dense-s770 (9,792 PF) vs 64k-data dense at the same PF: 2k +0.007, 8k +0.015, 16k +0.039,
+32k +0.012, 64k -0.064 (native; contradiction -0.25), 128k -0.100 (contradiction -0.35, hotpotqa -0.16), 256k -0.076
+(contradiction -0.20, hotpotqa -0.19). Twice the data does not shrink the long-rung loss.
 
 More short rows at the same FLOPs help a little at the short rungs (xabsence +0.08..+0.25 at 8k-32k) and cost a
 roughly constant 0.05-0.08 from 64k to 256k, mostly on contradiction and hotpotqa. The gap appears at 64k (past the
@@ -118,5 +120,6 @@ models are extrapolating.
 
 ## Open
 
-- m16-dense-s770 (rows <= 16k at dense f2's FLOPs) evals.
+- Seeds; r256k is capped at the 125 rows the suite ships.
+- Not tested: a length curriculum or a small share of long rows (does a few-% 64k tail recover the long rungs?).
 - Single seed throughout; r256k at eval_size 125.
