@@ -237,6 +237,11 @@ class OnlineRouterConfig:
     min_per_doc: int = 0
     """Per-document token FLOOR: every document keeps max(its share, ``min_per_doc``) body tokens (its top ones by score;
     all of a shorter document), counted against the budget. 0 = no floor."""
+    reset_positions: bool = False
+    """ABLATION (default off): after each mid-stack cut, renumber the kept row's ``position_ids`` contiguously (0..k-1 in
+    row order, as if the dropped tokens never existed) instead of keeping each token's ORIGINAL position. RoPE in the
+    full-attention blocks then sees the compacted distances; eval is dense, so train and test positions disagree.
+    Applies at every stage (stage 2 renumbers stage 1's renumbered row) and on packed rows (per document)."""
     keep_first: int = 0
     """Always keep each document's first ``keep_first`` body tokens (its header / id span); they count against the
     budget (and their document's share), and the router picks the rest. 0 = everything is routable."""
@@ -1201,7 +1206,11 @@ class OnlineTokenRouter:
         valid = torch.arange(W, device=h.device)[None, :] < counts[:, None]
         h_new = torch.gather(src, 1, order[..., None].expand(B, W, D)) * valid[..., None].to(h.dtype)
         pnew = torch.gather(pid_src, 1, order)
-        kw["position_ids"] = torch.where(valid, pnew, pid.max(dim=1, keepdim=True).values.expand_as(pnew))
+        if self.cfg.reset_positions:
+            # ablation: contiguous positions over the kept row (pads continue the count; they are masked out)
+            kw["position_ids"] = torch.arange(W, device=h.device, dtype=pid.dtype)[None, :].expand(B, W).contiguous()
+        else:
+            kw["position_ids"] = torch.where(valid, pnew, pid.max(dim=1, keepdim=True).values.expand_as(pnew))
         if self.mod_layers:
             return self._mod_begin(model, h, block_kwargs, entry, real, counts, order, valid, kw["position_ids"])
         self._mid_gather = (order, valid, n_extra)
@@ -1312,6 +1321,10 @@ class OnlineTokenRouter:
         if pid is None:
             pid = (torch.arange(h.shape[1], device=dev)[None, :])
         pos_new = pid[:, kidx]
+        if self.cfg.reset_positions:
+            # ablation: each document's kept tokens renumbered 0..k_d-1
+            start = (torch.cumsum(counts, 0) - counts).repeat_interleave(counts)
+            pos_new = (torch.arange(W, device=dev) - start).to(pid.dtype)[None, :]
         cu = block_kwargs["cu_doc_lens"]
         dl = counts.to(cu.dtype)
         if tail:

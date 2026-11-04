@@ -1950,6 +1950,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-min-per-doc", type=int, default=0,
                     help="online router: per-document token floor -- every document keeps max(its share, K) body tokens "
                     "(its top ones by score), counted against the budget")
+    ap.add_argument("--st-otr-reset-positions", action="store_true",
+                    help="online router, mid-stack ABLATION: after each cut renumber the kept tokens' position_ids "
+                    "0..k-1 (as if the dropped tokens never existed) instead of keeping their original positions")
     ap.add_argument("--st-otr-freeze-early", action="store_true",
                     help="online router, mid-stack: freeze the embeddings and blocks [0, drop_layer) (no grads, no "
                     "optimizer state; forward-only on every step)")

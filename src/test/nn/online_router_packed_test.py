@@ -92,3 +92,17 @@ def test_packed_route_min_len_routes_long_documents_only():
     assert m_full["online_router/mid_row_frac"] == pytest.approx(1.0)
     assert m["online_router/mid_row_frac"] < 1.0
     out.loss.backward()
+
+
+@requires_gpu
+@requires_fla
+def test_packed_reset_positions_matches_padded():
+    """reset_positions on packed rows renumbers each document's kept tokens 0..k-1: the same loss as the padded path
+    (which renumbers each row), and a different loss from the original-position default."""
+    model, router = _model(reset_positions=True)
+    out_pad, _, _ = _run(model, router, packed=False)
+    out_pk, _, _ = _run(model, router, packed=True)
+    assert torch.allclose(out_pk.loss.float(), out_pad.loss.float(), rtol=2e-2, atol=2e-2), (out_pk.loss, out_pad.loss)
+    base, brouter = _model()
+    out_base, _, _ = _run(base, brouter, packed=False)
+    assert not torch.allclose(out_base.loss.float(), out_pad.loss.float(), rtol=1e-3, atol=1e-3)

@@ -315,6 +315,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_merge_dropped: bool = False
     st_otr_freeze_early: bool = False
     st_otr_min_per_doc: int = 0
+    st_otr_reset_positions: bool = False
     st_otr_freeze_after: int = 0
     st_otr_exit_loss_weight: float = 0.0
     st_otr_dense_keep_frac: float = 1.0
@@ -1203,6 +1204,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         merge_dropped=o.st_otr_merge_dropped,
         freeze_early=o.st_otr_freeze_early,
         min_per_doc=o.st_otr_min_per_doc,
+        reset_positions=o.st_otr_reset_positions,
         freeze_after=o.st_otr_freeze_after,
         exit_loss_weight=o.st_otr_exit_loss_weight,
         dense_keep_frac=o.st_otr_dense_keep_frac,

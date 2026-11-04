@@ -1748,3 +1748,57 @@ def test_pyramid_per_row_budget_with_floor_cpu(floor):
     assert m1["online_router/s1_keep_frac_abs"] == pytest.approx(k1 / n_body)
     for v in (m0["online_router/leak_auc"], m1["online_router/s1_leak_auc_abs"]):
         assert 0.0 <= v <= 1.0
+
+
+def _routed_positions(reset, B=2, packed=False):
+    """Two-stage drop (blocks 1 and 2): the position_ids each block receives on a routed step, and the step's loss."""
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0, reset_positions=reset)
+    seen = {}
+    for i, b in enumerate(model.blocks.values()):
+        b.register_forward_pre_hook(
+            (lambda i: lambda mod, args, kw: seen.__setitem__(i, kw.get("position_ids")))(i), with_kwargs=True)
+    ids, cid, labels = _row(B=B)
+    for n in (1, 2):  # step 1 is the dense warmup, step 2 routes
+        model.zero_grad(set_to_none=True)
+        for r in router.chain():
+            r.begin_step(n, model=model)
+            r.metrics()
+        seen.clear()
+        out = model(ids, labels=labels)
+        out.loss.backward()
+    return seen, out.loss.detach(), ids
+
+
+def test_reset_positions_renumbers_kept_tokens_cpu():
+    """reset_positions: after each cut the kept row's positions are 0..W-1 (stage 2 renumbers stage 1's row); the default
+    keeps every kept token's ORIGINAL position (gaps where tokens were dropped). Stage 1 picks the same tokens either way
+    (its choice precedes any position change), so the two runs differ only through RoPE from block 1 on."""
+    base, loss0, ids = _routed_positions(False)
+    reset, loss1, _ = _routed_positions(True)
+    T = ids.shape[1]
+    assert torch.equal(base[0], reset[0])  # block 0 (before the first cut): the full row, unchanged
+    for i in (1, 2, 3):
+        W = reset[i].shape[1]
+        assert torch.equal(reset[i], torch.arange(W)[None, :].expand(ids.shape[0], W))
+    W1, W2 = base[1].shape[1], base[2].shape[1]
+    assert W2 < W1 < T and reset[1].shape[1] == W1
+    # default: original positions -- strictly increasing with gaps, reaching the row's last real token
+    assert bool((base[1][:, 1:] > base[1][:, :-1]).all()) and int(base[1].max()) == T - 1
+    assert int(base[2].max()) == T - 1 and int(base[2][0, -1]) > W2
+    assert not torch.equal(loss0, loss1)
+
+
+def test_reset_positions_off_matches_default_cpu():
+    """reset_positions=False is the default path: identical positions and a bit-identical loss."""
+    a, la, _ = _routed_positions(False)
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0)
+    assert router.cfg.reset_positions is False
+    ids, cid, labels = _row(B=2)
+    for n in (1, 2):
+        model.zero_grad(set_to_none=True)
+        for r in router.chain():
+            r.begin_step(n, model=model)
+            r.metrics()
+        out = model(ids, labels=labels)
+        out.loss.backward()
+    assert torch.equal(out.loss.detach(), la)
