@@ -99,8 +99,13 @@ def matched(rows, pf):
     for r in rows:
         if r["run"] in DENSE or r["run"] not in pf:
             continue
-        curve = [(pf[d], by[(d, r["task"], r["rung"])]["value"]) for d in DENSE if (d, r["task"], r["rung"]) in by]
-        ref, extrap = interp_log(curve, pf[r["run"]]) if len(curve) >= 2 else (None, True)
+        # interpolate only between the TRUE neighbours in DENSE (a missing middle point must not be skipped)
+        x = pf[r["run"]]
+        pts = sorted((pf[d], d) for d in DENSE if d in pf)
+        lo, hi = [p for p in pts if p[0] <= x], [p for p in pts if p[0] >= x]
+        keys = [(lo[-1][1], r["task"], r["rung"]), (hi[0][1], r["task"], r["rung"])] if lo and hi else []
+        curve = [(pf[k[0]], by[k]["value"]) for k in keys if k in by]
+        ref, extrap = interp_log(curve, x) if len(curve) == 2 else (None, not keys)
         out.append(dict(run=r["run"], task=r["task"], rung=r["rung"], pf=pf[r["run"]], score=r["value"],
                         dense_at_pf=ref, delta=None if ref is None else r["value"] - ref, extrapolated=extrap,
                         eval_size=r["eval_size"], n_dense=len(curve)))

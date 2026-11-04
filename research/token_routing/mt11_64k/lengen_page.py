@@ -19,6 +19,7 @@ POINTS = ("/accounts/projects/berkeleynlp/prasann/projects/OLMo-core/.claude/wor
           "mt11_64k/results/points.json")
 TASKS = ["nq", "hotpotqa", "qdmatch_nq", "outlier", "oolong", "contradiction"]
 RUNGS = ["r64k", "r128k", "r256k"]
+FULL = {"r64k": 500, "r128k": 500, "r256k": 125}
 DENSE = ["m64-dense-f16-lr5e-06", "m64-dense-f8-lr5e-06", "m64-dense-f4-lr5e-06", "m64-dense-f2-lr5e-06",
          "m64-dense-f1-lr5e-06"]
 METHODS = {"m64-lora64r20to7f16-f4-lr5e-06": "recipe f4", "m64-otr10M7-f2-lr5e-06": "otr10M7 f2",
@@ -51,6 +52,23 @@ def interp(curve, x):
     (x0, y0), (x1, y1) = (pts[0], pts[1]) if x < pts[0][0] else (pts[-2], pts[-1])
     w = (lx - math.log(x0)) / (math.log(x1) - math.log(x0))
     return y0 + w * (y1 - y0), True
+
+
+def bracketed(by, pf, t, rung, run):
+    """Score of dense interpolated at run's PF from its TRUE neighbours in DENSE (both must have the cell), else None."""
+    x = pf.get(run)
+    pts = sorted((pf[d], d) for d in DENSE if d in pf)
+    lo = [p for p in pts if p[0] <= x] if x else []
+    hi = [p for p in pts if p[0] >= x] if x else []
+    if not lo or not hi:
+        return None
+    a, b = lo[-1][1], hi[0][1]
+    if (a, t, rung) not in by or (b, t, rung) not in by:
+        return None
+    if a == b:
+        return by[(a, t, rung)]["value"]
+    ref, _ = interp([(pf[a], by[(a, t, rung)]["value"]), (pf[b], by[(b, t, rung)]["value"])], x)
+    return ref
 
 
 def dcell(d, extra=""):
@@ -115,9 +133,8 @@ def section():
         for rung in RUNGS:
             ds = []
             for t in TASKS:
-                curve = [(pf[d], by[(d, t, rung)]["value"]) for d in DENSE if (d, t, rung) in by and d in pf]
-                if (run, t, rung) in by and len(curve) >= 2 and run in pf:
-                    ref, _ = interp(curve, pf[run])
+                ref = bracketed(by, pf, t, rung, run)
+                if (run, t, rung) in by and ref is not None and by[(run, t, rung)]["eval_size"] == FULL[rung]:
                     ds.append(by[(run, t, rung)]["value"] - ref)
             if len(ds) == len(TASKS):
                 ahead = sum(d > 0 for d in ds)
@@ -131,9 +148,8 @@ def section():
         for rung in RUNGS[1:]:
             tds = []
             for t in TASKS:
-                curve = [(pf[d], by[(d, t, rung)]["value"]) for d in DENSE if (d, t, rung) in by and d in pf]
-                if (run, t, rung) in by and len(curve) >= 2 and run in pf:
-                    ref, _ = interp(curve, pf[run])
+                ref = bracketed(by, pf, t, rung, run)
+                if (run, t, rung) in by and ref is not None and by[(run, t, rung)]["eval_size"] == FULL[rung]:
                     tds.append(dcell(by[(run, t, rung)]["value"] - ref))
                 else:
                     tds.append('<td class="na">·</td>')
