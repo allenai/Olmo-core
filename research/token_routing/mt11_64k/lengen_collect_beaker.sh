@@ -2,6 +2,7 @@
 # CPU gantry job: print every olmo-eval CTC job result (metrics.json) under _olmoeval_ctc/<GLOB> as one line each,
 # so lengen_pool.py can pool them on the login node (weka is not mounted there).
 #   GLOB='m11lg-*' bash research/token_routing/mt11_64k/lengen_collect_beaker.sh   -> prints the Beaker experiment id
+# GANTRY_REF=<pushed sha>: run from that commit (the code is inline; for when the local tip is not pushed).
 # Lines: LGM<TAB><run><TAB><job><TAB><json tasks>; plus LGEMPTY lines (empty-generation counts per task) when the
 # job directory holds prediction files.
 set -euo pipefail
@@ -12,7 +13,7 @@ GANTRY="${GANTRY:-/scratch/users/prasann/conda/envs/corpus-reasoning-olmo/bin/ga
   --gpus 0 --cpus 2 --memory 8GiB --priority urgent --min-runtime 1h \
   --beaker-image tylerr/olmo-core-tch291cu128-2025-11-25 --no-python \
   --weka oe-training-default:/weka/oe-training-default \
-  --env GLOB="$GLOB" --allow-dirty --timeout 0 --yes -- /opt/conda/bin/python -c '
+  ${GANTRY_REF:+--ref $GANTRY_REF} --env GLOB="$GLOB" --allow-dirty --timeout 0 --yes -- /opt/conda/bin/python -c '
 import glob, json, os
 root = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/_olmoeval_ctc"
 shown = set()
