@@ -6,6 +6,7 @@ tokens only, which no cut ever drops, so the CE is comparable between arms), and
 from ``ops result`` (f1; oolong ``score``; eval_size 500 each).
 
     python research/token_routing/online_router/collect_posid_reset.py [--json out.json] [--cache DIR]
+    python research/token_routing/online_router/collect_posid_reset.py --state tail_rule_state.json  # tail-rule arms
 """
 from __future__ import annotations
 
@@ -40,8 +41,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default="")
     ap.add_argument("--cache", default=os.environ.get("TMPDIR", "/tmp"))
+    ap.add_argument("--state", default=STATE, help="launcher state.json (relative paths: next to this script)")
     a = ap.parse_args()
-    st = json.load(open(STATE)) if os.path.exists(STATE) else {"runs": {}}
+    sp = a.state if os.path.isabs(a.state) else os.path.join(HERE, a.state)
+    st = json.load(open(sp)) if os.path.exists(sp) else {"runs": {}}
     runs = dict(REFERENCE)
     runs.update({n: r["ex"] for n, r in st["runs"].items() if not r.get("max_steps")})
     sc = scores()
