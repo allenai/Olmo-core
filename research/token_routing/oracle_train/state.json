@@ -173,6 +173,26 @@
    "ex": "01M6KE04E9Q4CR56X2GBGXRNC4",
    "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
    "task": "oolong"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KS1K0J2C2JAPK115TAX60H",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KS2BES2KT58MWCDY4FAYKM",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KS349178GPYE9WH17SV8FV",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KS3XQJK5STG2QB4E3PHZ42",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "oolong"
   }
  },
  "insurance": {
