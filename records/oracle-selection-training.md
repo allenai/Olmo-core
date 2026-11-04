@@ -8,7 +8,7 @@ kind: result
 status: headline single-cut doc + batch done; row, random-2x, routed-target and two-cut arms in progress
 superseded_by: 
 artifact: 
-summary: Per-step oracle token selection in training (dense backward picks the smallest top-k body set with exact LoRA-gradient attribution cos >= 0.95, routed pass applied), single cut at block 7, f1952. Per-document oracle (~36% of body tokens kept) ties dense at 8k (0.850 vs 0.843); batch-global oracle (~19%) loses outlier (8k 0.537 vs 0.817; mean 0.756). Routed-gradient cos only ~0.5-0.6 for both.
+summary: Per-step oracle token selection in training (dense backward picks the smallest top-k body set with exact LoRA-gradient attribution cos >= 0.95, routed pass applied), f1952. Single cut at block 7: per-document oracle (35% kept) ties dense at 8k (0.850 vs 0.843); per-row (29%) and batch-global (19%) break outlier (8k 0.155 / 0.537; means 0.674 / 0.756); two cuts per document 0.716 (outlier 0.351). Routed-gradient cos ~0.5 in all.
 ---
 # Oracle token selection in training
 
@@ -83,6 +83,8 @@ steps.jsonl holds both passes; `summarize.py` keeps the last). Insurance copies 
 | recipe lora64all32r20to7 (router) | 0.959 | 0.912 | 0.862 | 0.648 | **0.845** | 0.977 | 0.970 | 0.880 | 0.856 | 0.921 |
 | orc1doc (oracle, per document) | 0.973 | 0.930 | 0.828 | 0.669 | **0.850** | 0.985 | 0.978 | 0.789 | 0.856 | 0.902 |
 | orc1batch (oracle, batch-global) | 0.963 | 0.900 | 0.537 | 0.626 | **0.756** | 0.982 | 0.966 | 0.442 | 0.828 | 0.804 |
+| orc1row (oracle, per row; mooney copy) | 0.949 | 0.914 | 0.155 | 0.680 | **0.674** | 0.969 | 0.978 | 0.466 | 0.852 | 0.816 |
+| orcdoc (TWO cuts 7+16, per document) | 0.968 | 0.916 | 0.351 | 0.627 | **0.716** | 0.980 | 0.974 | 0.510 | 0.850 | 0.829 |
 
 SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
 
@@ -91,13 +93,16 @@ SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
 |---|---|---|---|---|---|---|---|
 | orc1doc | 35.5% (39% -> 30% over training) | 0.959 | 0.58 / 0.66 | 1.25 | 0.148 -> 0.151 | 0.38 | 2.38 |
 | orc1batch | 19.1% (13% -> 26%) | 0.960 | 0.52 / 0.55 | 1.24 | 0.166 -> 0.121 | 0.29 | 2.29 |
+| orc1row | 29.1% | 0.959 | 0.48 / 0.51 | 0.81 | 0.180 -> 0.104 | 0.34 | 2.34 |
 
 ### Reading
-- **Per-document allocation is what matters, not the token count.** The per-document oracle ties dense at 8k
-  (0.850 vs 0.843, within noise; outlier 2k is lower, 0.789 vs 0.911). The batch-global oracle -- half the tokens,
-  the same attribution cos 0.96 on the body gradient -- breaks outlier (8k 0.537, 2k 0.442) and drops oolong.
-  Batch-global k concentrates on the few rows / documents with the largest gradient energy and leaves most
-  documents with nothing, which outlier (find the off-topic document) cannot survive.
+- **Only per-document allocation survives outlier.** Per document (35% kept): 8k 0.850, ties dense. Per row (29%):
+  outlier 8k 0.155. Batch-global (19%): outlier 0.537. Two cuts per document (7 + 16): outlier 0.351. Every arm that
+  lets some documents go empty -- or, with the second cut, thins every document to a few tokens through blocks 16-31
+  -- breaks outlier (find the off-topic document), while contradiction / nq / oolong stay near dense in all of them.
+  The router recipe (two cuts, 20% / 7%) keeps outlier (0.862): the oracle's gradient-energy ranking, not the drop
+  structure, is what fails it. The oracle's selection is per-step greedy on the CURRENT gradient; outlier's useful
+  tokens (what makes a document off-topic) apparently carry little immediate gradient energy.
 - **Matching the attribution gradient does not match the routed gradient**, in either arm: routed cos ~0.5-0.6
   all run, routed grad norm 1.25x dense, no loss spikes. The batch oracle's routed train CE falls far BELOW dense
   (0.121 vs 0.166): the model fits the oracle-chosen subset, an easier task than the full context.
