@@ -134,6 +134,14 @@
    "slurm": "4150110",
    "cluster": "jsteinhardt mooney",
    "data": "/data/prasann/oracle/shards/mt4f1952 (no gold sidecar)"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney": {
+   "arm": "orc1batchrc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "slurm": "4150112",
+   "cluster": "jsteinhardt mooney"
   }
  },
  "evals": {
