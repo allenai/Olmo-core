@@ -5,10 +5,10 @@ updated: 2026-11-04
 experiment: mt11_64k
 area: token_routing
 kind: result
-status: in progress (recipe f4 and router f2 complete; router f1 and the <=16k-data runs partly scored; m16-dense-s770 training)
+status: complete for the 64k-data checkpoints and the two <=16k s380 runs; m16-dense-s770 (f2 PF) evals pending
 superseded_by: 
 artifact: https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n
-summary: mt11 64k checkpoints scored at 64k/128k/256k (olmo-eval, r256k YaRN x2). Universal recipe f4 matched-FLOP gain persists past the 64k train length (+0.046/+0.033/+0.054 6-task mean at 64k/128k/256k); router f2 +0.040/+0.042/+0.023; router f1 fades at 256k (-0.005). Training on rows <= 16k at the same FLOPs is >= 0 at 2k-32k but loses -0.08 at 64k and 128k, -0.10 at 256k. Single seed; r256k eval_size 125.
+summary: mt11 64k checkpoints scored at 64k/128k/256k (olmo-eval, r256k YaRN x2; agrees with the native ladder at 64k to +-0.002). Universal recipe f4 matched-FLOP gain persists past the 64k train length (+0.046/+0.033/+0.054 6-task mean); router f2 +0.040/+0.042/+0.023; router f1 fades (+0.025/+0.013/-0.005). Training on rows <= 16k at the same FLOPs: >= 0 at 2k-32k, then -0.07 to -0.08 (dense) and -0.05 to -0.08 (recipe) from 64k to 256k. Single seed; r256k eval_size 125.
 ---
 
 # Length generalization of the mt11 64k runs
@@ -64,7 +64,7 @@ eval_size 125 per cell (binomial SE +-0.03-0.045). No-cot. Single seed.
 |---|---|---|---|
 | recipe f4 (1,696) | +0.046 (5/6) | +0.033 (6/6) | +0.054 (5/6) |
 | otr10M7 f2 (3,725) | +0.040 (4/6) | +0.042 (6/6) | +0.023 (5/6) |
-| otr10M7 f1 (7,439) | partial | partial | -0.005 (3/6) |
+| otr10M7 f1 (7,439) | +0.025 (5/6) | +0.013 (4/6) | -0.005 (3/6) |
 
 Per task, recipe f4: contradiction +0.126 / +0.055 / +0.116, hotpotqa +0.046 / +0.065 / +0.095, nq +0.023 / +0.033 /
 +0.070, oolong +0.036 / +0.029 / +0.044, outlier -0.007 / +0.013 / -0.005, qdmatch_nq +0.048 / +0.006 / +0.005.
@@ -75,8 +75,11 @@ Router f2: contradiction +0.101 / +0.132 / +0.104, outlier +0.085 at 64k, nq -0.
 - outlier and qdmatch_nq are at the floor at 128k/256k for every checkpoint (outlier 0.000-0.13, qdmatch 0.01-0.13):
   they carry no signal there. Parse rate 1.000 and no empty generations on those cells (dense f16 outlier r256k =
   0.000 is a real floor).
-- The full-epoch router (f1) loses its edge at 256k (oolong -0.060, contradiction -0.027). Its native-ladder gain was
-  +0.028 at 2k-64k.
+- The full-epoch router (f1) loses its edge with length: +0.025 / +0.013 / -0.005 (oolong -0.060, contradiction -0.027 at
+  256k). Its native-ladder gain was +0.028 at 2k-64k.
+- **Anchor:** the two eval paths agree at 64k on all 8 checkpoints: 6-task mean native vs olmo-eval within +-0.002, every
+  task within +-0.01 (e.g. dense f1 0.708 / 0.707, recipe f4 0.538 / 0.538). The long-rung numbers are on the same scale
+  as the base record's 64k numbers, and the recipe's LoRA adapters load identically on both paths.
 
 ## Results: training on rows <= 16k at matched FLOPs
 
@@ -84,18 +87,22 @@ Mean delta vs the 64k-data model at the same PF (dense: 64k-data dense interpola
 recipe f4 directly). 2k-64k: native ladder, 10 tasks (no-signal cells reorder 8k/16k, grouping 32k excluded). 128k/256k:
 olmo-eval path, 6 tasks.
 
-| rung | rows<=16k dense vs 64k-data dense | rows<=16k recipe vs 64k-data recipe |
+| rung | rows<=16k dense (4,839 PF) vs 64k-data dense | rows<=16k recipe (1,836 PF) vs 64k-data recipe (1,696 PF) |
 |---|---|---|
 | 2k | +0.001 | +0.003 |
-| 8k | +0.020 | +0.014 |
-| 16k | +0.029 | +0.016 |
+| 8k | +0.023 | +0.018 |
+| 16k | +0.019 | +0.016 |
 | 32k | +0.004 | -0.012 |
-| 64k | -0.081 (contradiction -0.20, hotpotqa -0.15) | -0.055 |
-| 128k | -0.080 (6 tasks; contradiction -0.18, hotpotqa -0.19, nq -0.07) | -0.098 (3 tasks, partial) |
-| 256k (eval_size 125) | -0.100 (3 tasks, partial: hotpotqa -0.17, nq -0.10) | pending |
+| 64k native / olmo-eval | -0.081 / -0.079 (contradiction -0.20, hotpotqa -0.15) | -0.055 / -0.053 |
+| 128k | -0.080 (contradiction -0.18, hotpotqa -0.19, nq -0.07) | -0.064 (contradiction -0.12, hotpotqa -0.06) |
+| 256k (eval_size 125) | -0.071 (hotpotqa -0.17, contradiction -0.10, nq -0.10) | -0.083 (hotpotqa -0.14, contradiction -0.06) |
 
-More short rows at the same FLOPs help a little at the short rungs (xabsence +0.08..+0.25 at 8k-32k) and cost
-0.08-0.10 from 64k up, mostly on contradiction and hotpotqa.
+m16-dense-s770 (9,792 PF, ~dense f2): evals pending.
+
+More short rows at the same FLOPs help a little at the short rungs (xabsence +0.08..+0.25 at 8k-32k) and cost a
+roughly constant 0.05-0.08 from 64k to 256k, mostly on contradiction and hotpotqa. The gap appears at 64k (past the
+16k-data model's training length but within the 64k-data model's) and does not keep growing at 128k/256k, where both
+models are extrapolating.
 
 ## Traps hit
 
@@ -111,5 +118,5 @@ More short rows at the same FLOPs help a little at the short rungs (xabsence +0.
 
 ## Open
 
-- Router f1 at 64k/128k (resubmitted bins), the <=16k runs' remaining long cells, m16-dense-s770 (f2 PF) and its evals.
+- m16-dense-s770 (rows <= 16k at dense f2's FLOPs) evals.
 - Single seed throughout; r256k at eval_size 125.
