@@ -93,9 +93,15 @@ with its own expectation is 0.045), so these are noisier than the per-step numbe
 | block 16, 0.95 (blocks 16-31) | 0.91 / 0.91 / 0.97 | 0.22 / 0.28 / 0.05 | 0.10 / 0.17 / 0.01 | 7 / 4 / 11 |
 
 The attribution sets keep their 0.95 in expectation, so the oracle is not a per-step artifact. The routed gradient's
-expected direction, though, is unrelated to the dense one (about 0 at block 7) and an order of magnitude larger. The
-expected numbers for 7,808 rows/task (job `gradsupp-analyze-q1tok512-f7808`) were still waiting for a Beaker GPU
-when this was written.
+expected direction, though, is unrelated to the dense one (about 0 at block 7) and an order of magnitude larger.
+
+**7,808 rows/task: the expected dense gradient is not resolvable over 32 steps** (Beaker
+01M6K82NTBWYYN2K0H9R70EY9D, after fix c3df16e02). The debiased ||E[D]||^2 is negative for the whole model and for
+blocks 7-31, i.e. the mean dense gradient is below the step-to-step noise: a step's cos with the mean of the other
+31 is 0.009 ± 0.004 (0.045 at 1,952). Expected cosines there are undefined. Only blocks 16-31 resolve: attribution
+0.98-0.99 and routed 0.16 / 0.15 / 0.14 (global / per row / per document, threshold 0.95), with routed norm 50-160x
+(inflated by the small dense mean). So the per-step numbers are the usable view at 7,808; both views agree that
+routed sets do not reproduce the dense gradient.
 
 Reading:
 - **Larger budgets do not fix it within this range.** The per-document budget (16-20%, near the recipe's 20% at
@@ -123,7 +129,8 @@ passes use fp32 attention. The full gate sweep (`launch_support.py --labels f195
 - Frozen checkpoints: a model trained under the selection may adapt (the router-trained recipe's routed gradient is
   near-unbiased, `records/grad-routing-gap.md`). The oracle-train session (full training) answers that.
 - Raw gradient only (no Adam view for these runs). Headline cosines are per step (16 rows), averaged over 32
-  steps. The debiased expected cosine is in for 1,952 rows/task (above); 7,808 rows/task is still queued.
+  steps. The debiased expected cosine is in for 1,952 rows/task; at 7,808 rows/task it is only defined for blocks
+  16-31 (the mean dense gradient is below the noise over 32 steps elsewhere; more steps would be needed).
 - The fraction grid is coarse, so budgets are rounded up by up to one grid step.
 - Sketched gradients (TensorSketch dim 8192 per group): self-check cos(D summed, D binned) 0.99995.
 
