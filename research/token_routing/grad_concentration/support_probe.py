@@ -18,6 +18,9 @@ Allocations (rank fraction r = rank / unit size within the unit; keep r < k): gl
 Parts (--parts):
   q1     q1_<alloc>_L<L>: the smallest en set (fraction grid GRID) whose ATTRIBUTION cosine (dense terms of the kept
          tokens + every token before the split + every non-body token, vs the dense gradient) reaches 0.95 this step.
+         --q1-variants t95wm,t90dn,...: one selection per (threshold, cosine scope) as q1_<alloc>_L<L>_t<thr><scope>;
+         scope wm = whole model (all 64 groups), dn = only the weights of blocks >= L (probe.py's down<L> scope, the
+         oracle-table convention). L = 0 is the whole-model drop: ranked by whole-model energy, removed from every block.
   gs     <score>_<alloc>_L<L>_k<k>: fixed keep fraction k (default: en and g05 x 3 allocations, g1 per row, rnd per
          document; splits 0/3/7/16; k 0.5-20%; override with --gs-*).
   joint  per allocation and split: jt_union_* = (smallest g05 set holding 95% of the batch's gate mass) + the
@@ -317,6 +320,8 @@ def main():
                     help="k at the other splits; '' = same as --gs-ks")
     ap.add_argument("--gs-rules", default="", help="cross product rules x --gs-allocs (default: GS_DEFAULT)")
     ap.add_argument("--gs-allocs", default="glob,row,doc")
+    ap.add_argument("--q1-variants", default="", help="e.g. t95wm,t95dn,t90wm,t90dn (default: 0.95 whole model, "
+                    "named q1_<alloc>_L<L>)")
     ap.add_argument("--selfcheck", action="store_true", help="also run an unrouted pass in 'sum' mode (== D)")
     ap.add_argument("--save-dir", default="")
     ap.add_argument("--out", required=True)
@@ -375,7 +380,13 @@ def main():
     named = s_gs + s_hh + s_q3  # known before the dense sketch pass
     grid_kinds = (["en"] if ("q1" in parts or "joint" in parts) else []) + (["comb", "union"] if "joint" in parts else [])
     grid_keys = [(kind, al, L) for L in splits for al in ALLOCS for kind in grid_kinds]
-    s_grid = ([f"q1_{al}_L{L}" for L in splits for al in ALLOCS] if "q1" in parts else []) + \
+    q1v = [(int(v[1:3]) / 100, v[3:]) for v in a.q1_variants.split(",")] if a.q1_variants else []
+
+    def q1_names(al, L):  # [(name, thr, scope)]; dn == wm at L = 0
+        if not q1v:
+            return [(f"q1_{al}_L{L}", TARGET, "wm")]
+        return [(f"q1_{al}_L{L}_t{round(t * 100)}{sc}", t, sc) for t, sc in q1v if not (L == 0 and sc == "dn")]
+    s_grid = ([n for L in splits for al in ALLOCS for n, _, _ in q1_names(al, L)] if "q1" in parts else []) + \
              ([f"jt_{kind}_{al}_L{L}" for L in splits for al in ALLOCS for kind in ("union", "comb")]
               if "joint" in parts else [])
     allsels = s_grid + named
@@ -605,11 +616,13 @@ def main():
         o = 1
         for kind, al, L in grid_keys:
             C = [to_real(tap.accM[spi][:, o:o + ng]) for spi in range(sp)]  # (NG, ng, m)
-            curves = []
+            curves, curves_dn = [], []
             for spi in range(sp):
-                ip = torch.einsum("gjm,gm->j", C[spi].double(), SD[spi].double())
-                nn_ = C[spi].double().pow(2).sum((0, 2))
-                curves.append((ip / torch.sqrt(nn_ * SD[spi].double().pow(2).sum())).tolist())
+                for cl, g0 in ((curves, 0), (curves_dn, 2 * L)):  # group = 2 * block + part
+                    Cg, Dg = C[spi][g0:].double(), SD[spi][g0:].double()
+                    ip = torch.einsum("gjm,gm->j", Cg, Dg)
+                    nn_ = Cg.pow(2).sum((0, 2))
+                    cl.append((ip / torch.sqrt(nn_ * Dg.pow(2).sum())).tolist())
             if kind == "en":
                 ok = [c >= TARGET for c in curves[0]]
                 name = f"q1_{al}_L{L}"
@@ -629,10 +642,26 @@ def main():
                 fstar=fstar, keep_frac=kept / max(1, nbody), attr_cos=curves[0][js] if js is not None else 1.0,
                 curve_raw=curves[0], curve_adam=curves[1] if sp > 1 else None,
                 g95_frac=g95.get((al, L)), gate_mass=(gm if kind != "en" else None))
-            if name in s_grid:
-                A_vec[name] = [(C[spi][:, js].clone() if js is not None else SD[spi].clone()) for spi in range(sp)]
+            bres["grid"][f"{kind}_{al}_L{L}"]["curve_raw_dn"] = curves_dn[0]
+            variants = q1_names(al, L) if kind == "en" and "q1" in parts else [(name, None, None)]
+            for vname, thr, sc in variants:
+                if vname not in s_grid:
+                    continue
+                if thr is not None:
+                    cv = curves[0] if sc == "wm" else curves_dn[0]
+                    jv = first_reaching(cv, thr)
+                    fv = GRID[jv] if jv is not None else 1.0
+                    kept_v = sum(int(((rk_rows[i] < fv) & R[i]["body"]).sum()) for i in range(len(R)))
+                    bres["grid"]["en_" + vname[3:]] = dict(fstar=fv, keep_frac=kept_v / max(1, nbody),
+                                                           attr_cos=cv[jv] if jv is not None else 1.0,
+                                                           attr_cos_wm=curves[0][jv] if jv is not None else 1.0,
+                                                           attr_cos_dn=curves_dn[0][jv] if jv is not None else 1.0,
+                                                           curve_raw=curves[0], curve_raw_dn=curves_dn[0])
+                else:
+                    jv, fv = js, fstar
+                A_vec[vname] = [(C[spi][:, jv].clone() if jv is not None else SD[spi].clone()) for spi in range(sp)]
                 for i, r in enumerate(R):
-                    r["K"][name] = (rk_rows[i] < fstar) & r["body"]
+                    r["K"][vname] = (rk_rows[i] < fv) & r["body"]
             del C
             o += ng
         for s in named:
@@ -709,6 +738,9 @@ def main():
         for s in allsels:
             st = {}
             for spi, sn in enumerate(("raw", "adam")[:sp]):
+                g0 = 2 * split_of(s) if not s.startswith("q3_") else 2 * Q3_L
+                st[sn + "_dn"] = dict(routed_cos=cosv(SR[s][spi][g0:], SD[spi][g0:]),
+                                      attr_cos=cosv(A_vec[s][spi][g0:], SD[spi][g0:]))
                 st[sn] = dict(routed_cos=cosv(SR[s][spi], SD[spi]), attr_cos=cosv(A_vec[s][spi], SD[spi]),
                               routed_vs_attr=cosv(SR[s][spi], A_vec[s][spi]),
                               norm_ratio=float(SR[s][spi].double().norm() / SD[spi].double().norm()))
@@ -720,7 +752,8 @@ def main():
             "cos(R,D) adam | |R|/|D| | routed CE")
         for s in allsels:
             st = bres["step"][s]
-            log(f"  {s:24s} {st['keep']:.4f} | {st['raw']['attr_cos']:.3f} | {st['raw']['routed_cos']:.3f} | "
+            log(f"  {s:24s} {st['keep']:.4f} | {st['raw']['attr_cos']:.3f} | {st['raw']['routed_cos']:.3f} "
+                f"(blocks>=L: attr {st['raw_dn']['attr_cos']:.3f} routed {st['raw_dn']['routed_cos']:.3f}) | "
                 f"{st.get('adam', {}).get('routed_cos', float('nan')):.3f} | {st['raw']['norm_ratio']:.2f} | "
                 f"{st['ce_routed']:.3f}")
         if save_dir:
@@ -739,7 +772,7 @@ def main():
         log(f"batch {J} done ({bj + 1}/{len(mine)}), {time.time() - t0:.0f}s")
         meta = dict(label=a.label, ckpt=a.ckpt, shard=a.shard, num_shards=a.num_shards, batches=mine[:bj + 1],
                     tasks=tasks, sels=allsels, s_grid=s_grid, s_gs=s_gs, s_hh=s_hh, s_q3=s_q3, splits=splits,
-                    gs_ks=gs_ks, gs_ks_other=gs_ks_other, gs_main=GS_MAIN, grid=GRID, target=TARGET, gate_mass=GATE_MASS, hh_ks=HH_KS, q3_ks=Q3_KS,
+                    gs_ks=gs_ks, gs_ks_other=gs_ks_other, gs_main=GS_MAIN, grid=GRID, target=TARGET, q1_variants=a.q1_variants, gate_mass=GATE_MASS, hh_ks=HH_KS, q3_ks=Q3_KS,
                     sketch_dim=a.sketch_dim, adam=adam is not None, adam_source=(adam_diag or {}).get("_source"),
                     batch_stats=out_batches, rows=out_rows, seconds=time.time() - t00)
         json.dump(meta, open(a.out, "w"))

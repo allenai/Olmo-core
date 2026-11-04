@@ -21,13 +21,19 @@ sys.path.insert(0, HERE)
 import analyze_gap as AG  # noqa: E402
 
 
-def deq(z, key):
-    return AG.deq(z, key).reshape(-1)
+def deq(z, key, g0=0):
+    return AG.deq(z, key)[g0:].reshape(-1)  # (NG, m), group = 2 * block + part
 
 
-def sel_metrics(zs, s, pre):
+def split_of(s):
+    return 7 if s.startswith("q3_") else int(s.split("_L")[1].split("_")[0])
+
+
+def sel_metrics(zs, s, pre, g0=0):
+    """g0 = first group kept: 0 = whole model, 2 * L = only the weights of blocks >= L."""
     B = len(zs)
-    V = torch.stack([torch.stack([deq(z, f"{pre}D"), deq(z, f"{pre}A_{s}"), deq(z, f"{pre}R_{s}")]) for z in zs])
+    V = torch.stack([torch.stack([deq(z, f"{pre}D", g0), deq(z, f"{pre}A_{s}", g0), deq(z, f"{pre}R_{s}", g0)])
+                     for z in zs])
     V = V.reshape(B * 3, -1).to(AG.dev()).double()
     G = (V @ V.T).cpu().numpy()
     M = {}
@@ -65,6 +71,8 @@ def main():
         has_adam = "adam_tot_D" in zs[0]
         for s in meta["sels"]:
             o = {"raw": sel_metrics(zs, s, "tot_")}
+            if split_of(s) > 0:
+                o["raw_dn"] = sel_metrics(zs, s, "tot_", 2 * split_of(s))
             if has_adam:
                 o["adam"] = sel_metrics(zs, s, "adam_tot_")
             ce = {}
@@ -83,16 +91,25 @@ def main():
                 o["fstar"] = AG.ms([b["grid"][gk]["fstar"] for b in bst])
                 o["keep_batch"] = AG.ms([b["grid"][gk]["keep_frac"] for b in bst])
                 o["attr_cos_at_fstar"] = AG.ms([b["grid"][gk]["attr_cos"] for b in bst])
+                for sc in ("wm", "dn"):
+                    if f"attr_cos_{sc}" in bst[0]["grid"][gk]:
+                        o[f"attr_cos_{sc}_at_fstar"] = AG.ms([b["grid"][gk][f"attr_cos_{sc}"] for b in bst])
                 if bst[0]["grid"][gk].get("g95_frac") is not None:
                     o["g95_frac"] = AG.ms([b["grid"][gk]["g95_frac"] for b in bst])
             o["step"] = {k_: AG.ms([b["step"][s][k_] for b in bst]) for k_ in ("keep", "ce_routed")}
+            for sn in ("raw", "raw_dn"):
+                if sn in bst[0]["step"][s]:
+                    for k_ in ("routed_cos", "attr_cos"):
+                        o["step"][f"{sn}_{k_}"] = AG.ms([b["step"][s][sn][k_] for b in bst])
             res["sels"][s] = o
             r_ = o["raw"]
             ad = o.get("adam", {})
             print(f"  {s:22s} keep {o.get('keep', [float('nan')])[0]:.4f} attr {r_['attr_cos'][0]:.3f} | routed "
                   f"{r_['routed_cos'][0]:.3f}±{r_['routed_cos'][1]:.3f} | exp {r_.get('exp_cos_routed', float('nan')):.3f}"
                   f" / adam {ad.get('exp_cos_routed', float('nan')):.3f} | norm {r_.get('exp_norm_ratio_routed', float('nan')):.2f}"
-                  f" | CE {ce.get('all', {}).get('routed', [float('nan')])[0]:.3f} (dense "
+                  + (f" | dn: attr {o['raw_dn']['attr_cos'][0]:.3f} routed {o['raw_dn']['routed_cos'][0]:.3f}"
+                     f" exp {o['raw_dn'].get('exp_cos_routed', float('nan')):.3f}" if "raw_dn" in o else "")
+                  + f" | CE {ce.get('all', {}).get('routed', [float('nan')])[0]:.3f} (dense "
                   f"{ce.get('all', {}).get('dense', [float('nan')])[0]:.3f})")
         res["dense"] = {"dense_cos_E": res["sels"][meta["sels"][0]]["raw"].get("dense_cos_E"),
                         "pair_cos_dense": res["sels"][meta["sels"][0]]["raw"].get("pair_cos_dense")}
@@ -104,7 +121,7 @@ def main():
         def first(c, thr):
             return next((grid[j] for j, v in enumerate(c) if v >= thr), 1.0)
         res["conc"] = {}
-        for key in bst[0]["conc"]:
+        for key in bst[0].get("conc", {}):
             o = {}
             for kind in ("plain", "sq"):
                 cs = [b["conc"][key][kind] for b in bst]
@@ -115,7 +132,7 @@ def main():
                                     "f95": AG.ms([b["grid"][key]["fstar"] for b in bst]),
                                     "keep": AG.ms([b["grid"][key]["keep_frac"] for b in bst])}
                               for key in bst[0]["grid"]}
-        res["jaccard"] = {key: np.mean([b["jaccard"][key] for b in bst], 0).tolist() for key in bst[0]["jaccard"]}
+        res["jaccard"] = {key: np.mean([b["jaccard"][key] for b in bst], 0).tolist() for key in bst[0].get("jaccard", {})}
         res["gs_ks"] = meta.get("gs_ks")
         res["ce_dense_step"] = AG.ms([b["ce_dense"] for b in bst])
         res["selfcheck"] = [b.get("selfcheck_0") for b in bst if "selfcheck_0" in b]
