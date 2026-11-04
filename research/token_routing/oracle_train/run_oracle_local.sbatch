@@ -39,7 +39,7 @@ RECIPE="--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-
 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-score oracle"
 OPS_RUN_ID="$RUN" OPS_EXPERIMENT=tokdrop_lr OPS_KIND=train OPS_EXPECTED_MINUTES=${MINUTES:-60} OPS_FIRST_OUTPUT=1200 \
   OPS_STALL=1800 bash "$REPO/recipes/env/ops_job.sh" \
-  "$PY" -m torch.distributed.run --nproc_per_node=2 --master_port=$((29000 + RANDOM % 1000)) \
+  "$PY" -m torch.distributed.run --nproc_per_node=${NGPU:-2} --master_port=$((29000 + RANDOM % 1000)) \
   recipes/train/research_trainer/train_ctc_suite.py \
   --task mt4 --variant softtoken --model-family qwen3_5 --model-scale 4b \
   --run-name "$RUN" --wandb-group "${WANDB_GROUP:-f8k-oracle}" --base-checkpoint "$BASE" \

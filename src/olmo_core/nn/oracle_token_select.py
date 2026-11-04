@@ -337,7 +337,7 @@ class _Oracle:
             if mode == "energy":
                 self.tap.E = [None] * len(self.cuts)
             with tm._train_microbatch_context(mi, len(mbs)):
-                input_ids, labels, kw = tm._prepare_batch(mb)
+                input_ids, labels, kw = tm._prepare_batch(dict(mb))  # it pops keys: keep mb reusable
                 self.tap.curB = int(input_ids.shape[0])
                 with set_checkpoint_early_stop(False):
                     _, loss, ce, _ = tm.model_forward(input_ids, labels=labels, ignore_index=tm.label_ignore_index,
@@ -439,12 +439,17 @@ class _Oracle:
         """per micro-batch: body (B, T), doc/row group ids, energies per stage in original columns, and bins per
         (scope, stage)."""
         rank, dev = _rank(), self.tm.device
-        rows_per_rank = sum(int(mb["input_ids"].shape[0]) for mb in mbs)
+        rows_per_rank = sum(int(sn["body"].shape[0]) for sn in seen)
         info = {"body": [], "cid": [], "gold": [], "E": [], "rowid": []}
         r0 = rank * rows_per_rank
         for mi, (mb, sn) in enumerate(zip(mbs, seen)):
             body, cid = sn["body"], sn["cid"]
             B, Tr = body.shape
+            real = cid != -2
+            if not bool((real.long().cumsum(1) == torch.arange(1, Tr + 1, device=dev)[None].clamp(
+                    max=real.sum(1, keepdim=True))).all()):
+                # the energy columns (compacted hidden at the cut) map to original columns only for right-padded rows
+                raise RuntimeError("oracle: real tokens are not a prefix of the row (left padding?)")
             E = []
             for g in range(len(self.cuts)):
                 e = self._E[mi][g]
@@ -643,13 +648,15 @@ class _Oracle:
                 [info["E"][mi][g][stage[g]].sum() for g in range(len(self.cuts))] + \
                 [info["E"][mi][g][gb].sum() for g in range(len(self.cuts))]
             c += torch.stack([v.double() for v in vals])
-            for b in range(body.shape[0]):
-                per_row.append([float(body[b].sum())] + [float(stage[g][b].sum()) for g in range(len(self.cuts))])
-                ids = cid[b][body[b]].unique()
-                for d in ids.tolist():
-                    dm = body[b] & (cid[b] == d)
-                    per_doc.append([float(dm.sum()), float((dm & gb[b]).any())] +
-                                   [float((stage[g][b] & dm).sum()) for g in range(len(self.cuts))])
+            per_row += torch.stack([body.sum(1)] + [s.sum(1) for s in stage], 1).float().tolist()
+            # per document (vectorised): key = row * ND + chunk id over body tokens
+            ND = int(cid.max().item()) + 2
+            key = (torch.arange(body.shape[0], device=dev)[:, None] * ND + cid.clamp(min=0).long())[body]
+            uk, inv = torch.unique(key, return_inverse=True)
+            cols = [torch.ones_like(key, dtype=torch.float32), gb[body].float()] + [s[body].float() for s in stage]
+            sums = torch.stack([torch.zeros(len(uk), device=dev).index_add_(0, inv, v) for v in cols], 1)
+            sums[:, 1] = (sums[:, 1] > 0).float()
+            per_doc += sums.tolist()
         if _ws() > 1:
             dist.all_reduce(c)
         C = dict(zip(cnt_names, c.tolist()))
@@ -807,7 +814,7 @@ def _full_like_grad(p: torch.Tensor, g_local: torch.Tensor) -> Optional[torch.Te
 def install_oracle(train_module, *, scope: str, target: float = 0.95, random_mult: float = 0.0,
                    curve_scopes: str = "", out_dir: str, npz_every: int = 1, seed: int = 0) -> _Oracle:
     """Replace ``train_module.train_batch`` with the 3-pass oracle step (module docstring)."""
-    o = _Oracle(train_module, scope, target, random_mult, [s for s in curve_scopes.split(",") if s], out_dir,
+    o = _Oracle(train_module, scope, target, random_mult, [s for s in curve_scopes.replace("+", ",").split(",") if s], out_dir,
                 npz_every, seed)
     train_module.train_batch = o.train_batch
     train_module._oracle = o
