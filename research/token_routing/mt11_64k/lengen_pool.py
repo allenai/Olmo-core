@@ -36,12 +36,33 @@ DENSE = ["m64-dense-f16-lr5e-06", "m64-dense-f8-lr5e-06", "m64-dense-f4-lr5e-06"
 RUNGS = ["r64k", "r128k", "r256k"]
 
 
+#: launch-run suffixes of the same checkpoint (titan resubmission). A checkpoint with a suffixed launch is pooled
+#: from that launch only, so a bin that also finished under the cancelled original is never double-counted.
+SUFFIXES = ("-ti",)
+
+
+def base_run(src):
+    run = src.replace("m11lg-", "")
+    for suf in SUFFIXES:
+        if run.endswith(suf):
+            return run[: -len(suf)]
+    return run
+
+
 def pool(log_text):
     acc, empty = {}, {}
-    for line in log_text.splitlines():
-        parts = line.split("\t")
+    lines = [l.split("\t") for l in log_text.splitlines()]
+    srcs = {p[1] for p in lines if len(p) >= 4 and p[0].endswith("LGM")}
+    use = {}
+    for src in sorted(srcs):  # prefer the suffixed (later) launch of a checkpoint
+        b = base_run(src)
+        if b not in use or src != f"m11lg-{b}":
+            use[b] = src
+    for parts in lines:
         if len(parts) >= 4 and parts[0].endswith("LGM"):
-            run = parts[1].replace("m11lg-", "")
+            run = base_run(parts[1])
+            if use.get(run) != parts[1]:
+                continue
             for t in json.loads(parts[3]):
                 name, scorer = t["primary_metric"].split(":")
                 v, n = t["metrics"][name][scorer], t["num_instances"]
@@ -49,7 +70,9 @@ def pool(log_text):
                 a["sum"] += v * n
                 a["n"] += n
         elif len(parts) >= 6 and parts[0].endswith("LGEMPTY"):
-            k = parts[1].replace("m11lg-", "")
+            k = base_run(parts[1])
+            if use.get(k) != parts[1]:
+                continue
             e = empty.setdefault(k, [0, 0])
             e[0] += int(parts[4])
             e[1] += int(parts[5])
