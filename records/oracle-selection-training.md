@@ -86,6 +86,7 @@ steps.jsonl holds both passes; `summarize.py` keeps the last). Insurance copies 
 | orc1row (oracle, per row; mooney copy) | 0.949 | 0.914 | 0.155 | 0.680 | **0.674** | 0.969 | 0.978 | 0.466 | 0.852 | 0.816 |
 | orc1batchr2 (batch oracle + random 2x) | 0.968 | 0.922 | 0.737 | 0.599 | **0.806** | 0.986 | 0.982 | 0.890 | 0.831 | 0.922 |
 | orc1batchrc (grow until ROUTED cos >= 0.95; mooney copy) | 0.964 | 0.912 | 0.843 | 0.629 | **0.837** | 0.990 | 0.978 | 0.921 | 0.855 | 0.936 |
+| orc1docr2 (doc oracle + random 2x; Lambda, keep ~0.9-1.0 = ~dense) | 0.973 | 0.926 | 0.920 | 0.647 | **0.867** | 0.986 | 0.982 | 0.913 | 0.849 | 0.933 |
 | orcbatchall (TWO cuts, batch, literal whole-gradient cos; mooney copy) | 0.958 | 0.894 | 0.501 | 0.591 | **0.736** | 0.985 | 0.976 | 0.570 | 0.853 | 0.846 |
 | orcdoc (TWO cuts 7+16, per document) | 0.968 | 0.916 | 0.351 | 0.627 | **0.716** | 0.980 | 0.974 | 0.510 | 0.850 | 0.829 |
 
