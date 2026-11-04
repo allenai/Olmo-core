@@ -31,7 +31,8 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatch-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatch-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 repeatedly preempted; insurance copy carries the arm"
   },
   "f8k-mt4-orcbatchr2-f1952-orc-lr1e-05": {
    "ex": "01M6JWAAQTE8G77PV52EF64X4B",
@@ -57,7 +58,8 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchall-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchall-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 repeatedly preempted; insurance copy carries the arm"
   },
   "f8k-mt4-orcbatchrc-f1952-orc-lr1e-05": {
    "ex": "01M6JWD6HQEBY5Q6C69FXQXSZF",
@@ -121,7 +123,8 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchrc-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchrc-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 repeatedly preempted; insurance copy carries the arm"
   },
   "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney": {
    "arm": "orc1row",
