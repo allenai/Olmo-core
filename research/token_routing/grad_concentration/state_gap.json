@@ -165,5 +165,183 @@
   "label": "recipe",
   "shard": 0,
   "num_shards": 1
+ },
+ "smoke2-recipe-s0of1": {
+  "ex": "01M6F50NS04RYSMM1XV7V89JXT",
+  "commit": "9682de9f99127db352f7f6a4b7126ec1e3b9dea6",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05 --label recipe --rows 128 --num-shards 1 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_recipe.pt --splits 7,16 --gs-ks 0.01,0.02,0.03,0.05,0.1,0.2 --gs-ks-other 0.01,0.03,0.07,0.1 --parts q1,gs,joint,hh --rows 2 --batch 4 --max-batches 1 --selfcheck --label smoke-recipe",
+  "label": "recipe",
+  "shard": 0,
+  "num_shards": 1
+ },
+ "q1tok64-f7808-s0of4": {
+  "ex": "01M6JTPAWMVY0VFTC8ZMC0D6H1",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 16 --num-shards 4 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok64-f7808",
+  "label": "f7808",
+  "shard": 0,
+  "num_shards": 4
+ },
+ "q1tok64-f7808-s1of4": {
+  "ex": "01M6JTQ7VP4TKEWH8SPR6MB431",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 16 --num-shards 4 --shard 1 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok64-f7808",
+  "label": "f7808",
+  "shard": 1,
+  "num_shards": 4
+ },
+ "q1tok64-f7808-s2of4": {
+  "ex": "01M6JTR2APM0X5JVZ34MSE5J3X",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 16 --num-shards 4 --shard 2 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok64-f7808",
+  "label": "f7808",
+  "shard": 2,
+  "num_shards": 4
+ },
+ "q1tok64-f7808-s3of4": {
+  "ex": "01M6JTRZCT3MQNMWC8W3XWYER9",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 16 --num-shards 4 --shard 3 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok64-f7808",
+  "label": "f7808",
+  "shard": 3,
+  "num_shards": 4
+ },
+ "q1tok512-f1952-s0of8": {
+  "ex": "01M6JV49RJ3PTZEPMK1R3SVJ26",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 0,
+  "num_shards": 8
+ },
+ "q1tok512-f1952-s1of8": {
+  "ex": "01M6JV55Q3ZBQAWGBGEZDPWRXE",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 1 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 1,
+  "num_shards": 8
+ },
+ "q1tok512-f1952-s2of8": {
+  "ex": "01M6JV619SVY5D3GBE1DJDNV2Q",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 2 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 2,
+  "num_shards": 8
+ },
+ "q1tok512-f1952-s3of8": {
+  "ex": "01M6JV6TFZXGW685K5TFAJVJYW",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 3 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 3,
+  "num_shards": 8
+ },
+ "q1tok512-f1952-s4of8": {
+  "ex": "01M6JV7PQH217BCJXAK7PSD0E6",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 4 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 4,
+  "num_shards": 8
+ },
+ "q1tok512-f1952-s5of8": {
+  "ex": "01M6JV8JG55EXTTCRWGV5VZ8R7",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 5 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 5,
+  "num_shards": 8
+ },
+ "q1tok512-f1952-s6of8": {
+  "ex": "01M6JV9K7Z7MTNSNPGRK9V4ZG9",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 6 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 6,
+  "num_shards": 8
+ },
+ "q1tok512-f1952-s7of8": {
+  "ex": "01M6JVADDCEP85JA3HPW7917N7",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f1952-tde-lr5e-06 --label f1952 --rows 128 --num-shards 8 --shard 7 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f1952.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f1952",
+  "label": "f1952",
+  "shard": 7,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s0of8": {
+  "ex": "01M6JVBBCH3MH9MAE8Y0JDH5YP",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 0 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 0,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s1of8": {
+  "ex": "01M6JVC839WCWJV6CEJKXZ6Q0B",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 1 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 1,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s2of8": {
+  "ex": "01M6JVD0QZBQ51QC1R2TEN6AA8",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 2 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 2,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s3of8": {
+  "ex": "01M6JVDW7PARJDHR8Z7DXFPR1P",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 3 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 3,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s4of8": {
+  "ex": "01M6JVESB0HJZQND6QVGM7F30F",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 4 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 4,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s5of8": {
+  "ex": "01M6JVFHKYH2VPB54DWT4RR60A",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 5 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 5,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s6of8": {
+  "ex": "01M6JVGG5WWKXSS0XF2E96YVR2",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 6 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 6,
+  "num_shards": 8
+ },
+ "q1tok512-f7808-s7of8": {
+  "ex": "01M6JVHCSFKTY364AWF8QJSP1N",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--ckpt /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f7808-tde-lr5e-06 --label f7808 --rows 128 --num-shards 8 --shard 7 --save-dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --adam-factors /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/adam_f7808.pt  --parts q1 --splits 0,7,16 --q1-variants t95wm,t95dn,t90wm,t90dn --adam-factors= --label q1tok512-f7808",
+  "label": "f7808",
+  "shard": 7,
+  "num_shards": 8
+ },
+ "q1tok512-analyze-q1tok512-f1952": {
+  "ex": "01M6JXS9ZTGE4EW0TK4SXDEN9G",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --labels q1tok512-f1952"
+ },
+ "q1tok512-analyze-q1tok512-f7808": {
+  "ex": "01M6JYMNSJ68R58X1658C1EHFX",
+  "commit": "d68125b5a0d1f567a30f2e4acbf26f69d352e584",
+  "extra": "--dir /weka/oe-training-default/ai2-llm/checkpoints/prasanns/gradgap/support --labels q1tok512-f7808"
  }
 }

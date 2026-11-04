@@ -8,7 +8,7 @@ kind: result
 status: complete for dense 1,952 and 7,808 rows/task (eval_size 512 rows each); gate-gradient selection only a 16-row quick pass (unconfirmed); full gate sweep on hold (Prasann 11-03)
 superseded_by: 
 artifact: 
-summary: The 0.95 gradient-concentration oracle (already token-level: a token is kept or dropped in all of blocks 7-31) does not survive forward removal. On frozen dense checkpoints the oracle budgets reproduce (1,952 / 7,808 rows/task, block 7, global 2.0 / 0.6%, per row 9.0 / 5.6%, per doc 19.5 / 15.9%), but the true routed gradient keeps per-step cos 0.08-0.19 with the dense gradient (whole model 0.07-0.15) and is 2-25x its norm (raw, per step); at attribution 0.9, 0.04-0.07. Dropping the tokens from every block (split 0, whole-model ranking) is no better (0.03-0.13); block 16 is the best case (0.04-0.40). eval_size 512 rows per checkpoint. Frozen-model reference for the oracle-train session.
+summary: The 0.95 gradient-concentration oracle (already token-level: a token is kept or dropped in all of blocks 7-31) does not survive forward removal. On frozen dense checkpoints the oracle budgets reproduce (1,952 / 7,808 rows/task, block 7, global 2.0 / 0.6%, per row 9.0 / 5.6%, per doc 19.5 / 15.9%), but the true routed gradient keeps per-step cos 0.08-0.19 with the dense gradient (whole model 0.07-0.15) and is 2-25x its norm (raw, per step); at attribution 0.9, 0.04-0.07. Dropping the tokens from every block (split 0, whole-model ranking) is no better (0.03-0.13); block 16 is the best case (0.04-0.40). Expected (debiased) routed cos at 1,952 rows/task is about 0 at block 7 (-0.25 to 0.11) while attribution keeps 0.94-0.98. eval_size 512 rows per checkpoint. Frozen-model reference for the oracle-train session.
 ---
 # The gradient-concentration oracle under true routing
 
@@ -79,6 +79,24 @@ Other variants, routed cos over blocks >= L / whole model (keep):
 | block 0, 0.9 | 0.057 / 0.030 / 0.024 (1.2 / 6.7 / 19.1%) | 0.050 / 0.028 / 0.024 (0.4 / 3.9 / 14.0%) |
 | block 16, 0.95 (blocks 16-31) | 0.259 / 0.398 / 0.188, whole 0.378 / 0.466 / 0.283 (0.15 / 0.77 / 2.3%) | 0.038 / 0.094 / 0.079, whole 0.048 / 0.100 / 0.121 (0.08 / 0.31 / 2.0%) |
 
+**Expected (debiased) cosine, 1,952 rows/task** (`analyze_support.py`, cross-step terms over the 32 steps;
+Beaker 01M6JXS9ZTGE4EW0TK4SXDEN9G). It is the cosine of the expected routed gradient with the expected dense
+gradient, i.e. what accumulates over many steps. The dense gradient is noise-dominated per step (a single step's cos
+with its own expectation is 0.045), so these are noisier than the per-step numbers above. There is no SE; treat
+|cos| < ~0.15 as zero. Columns are global / per row / per document.
+
+| variant | exp cos, attribution (blocks >= L) | exp cos, routed (blocks >= L) | exp cos, routed (whole model) | exp norm ratio, routed (whole) |
+|---|---|---|---|---|
+| block 7, 0.95 (blocks 7-31) | 0.94 / 0.94 / 0.98 | 0.03 / -0.27 / 0.13 | 0.01 / -0.25 / 0.11 | 12 / 4.5 / 13 |
+| block 7, 0.9 | 0.84 / 0.85 / 0.96 | 0.03 / -0.11 / 0.07 | 0.01 / -0.08 / 0.06 | 14 / 9 / 13 |
+| block 0, 0.95 whole-model | 0.94 / 0.95 / 0.99 | = whole | -0.01 / -0.20 / 0.09 | 8 / 8 / 15 |
+| block 16, 0.95 (blocks 16-31) | 0.91 / 0.91 / 0.97 | 0.22 / 0.28 / 0.05 | 0.10 / 0.17 / 0.01 | 7 / 4 / 11 |
+
+The attribution sets keep their 0.95 in expectation, so the oracle is not a per-step artifact. The routed gradient's
+expected direction, though, is unrelated to the dense one (about 0 at block 7) and an order of magnitude larger. The
+expected numbers for 7,808 rows/task (job `gradsupp-analyze-q1tok512-f7808`) were still waiting for a Beaker GPU
+when this was written.
+
 Reading:
 - **Larger budgets do not fix it within this range.** The per-document budget (16-20%, near the recipe's 20% at
   block 7) is no better than the global one; dropping from every block needs up to a third of the body for
@@ -104,9 +122,8 @@ passes use fp32 attention. The full gate sweep (`launch_support.py --labels f195
 
 - Frozen checkpoints: a model trained under the selection may adapt (the router-trained recipe's routed gradient is
   near-unbiased, `records/grad-routing-gap.md`). The oracle-train session (full training) answers that.
-- Raw gradient only (no Adam view for these runs). Cosines are per step (16 rows), averaged over 32 steps. The
-  debiased expected cosine (cross-step terms, `analyze_support.py`) is queued on Beaker (jobs
-  `gradsupp-analyze-q1tok512-{f1952,f7808}`) and not in this record yet.
+- Raw gradient only (no Adam view for these runs). Headline cosines are per step (16 rows), averaged over 32
+  steps. The debiased expected cosine is in for 1,952 rows/task (above); 7,808 rows/task is still queued.
 - The fraction grid is coarse, so budgets are rounded up by up to one grid step.
 - Sketched gradients (TensorSketch dim 8192 per group): self-check cos(D summed, D binned) 0.99995.
 
