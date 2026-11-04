@@ -27,7 +27,7 @@ for d in sorted(glob.glob(os.path.join(root, os.environ["GLOB"]))):
         slim = [{k: t.get(k) for k in ("task", "primary_metric", "metrics", "num_instances")} for t in tasks]
         s = json.dumps(slim)
         print("LGM\t%s\t%s\t%s" % (run, job, s), flush=True)
-        # empty generations: the *-predictions.jsonl files beside metrics.json (first record's keys printed once)
+        # empty generations: the *-predictions.jsonl files beside metrics.json (keys of the first record printed once)
         for p in glob.glob(os.path.join(os.path.dirname(m), "predictions", "**", "*-predictions.jsonl"), recursive=True):
             n = e = 0
             def gen_text(r):
