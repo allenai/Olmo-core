@@ -86,6 +86,7 @@ steps.jsonl holds both passes; `summarize.py` keeps the last). Insurance copies 
 | orc1row (oracle, per row; mooney copy) | 0.949 | 0.914 | 0.155 | 0.680 | **0.674** | 0.969 | 0.978 | 0.466 | 0.852 | 0.816 |
 | orc1batchr2 (batch oracle + random 2x) | 0.968 | 0.922 | 0.737 | 0.599 | **0.806** | 0.986 | 0.982 | 0.890 | 0.831 | 0.922 |
 | orc1batchrc (grow until ROUTED cos >= 0.95; mooney copy) | 0.964 | 0.912 | 0.843 | 0.629 | **0.837** | 0.990 | 0.978 | 0.921 | 0.855 | 0.936 |
+| orcbatchall (TWO cuts, batch, literal whole-gradient cos; mooney copy) | 0.958 | 0.894 | 0.501 | 0.591 | **0.736** | 0.985 | 0.976 | 0.570 | 0.853 | 0.846 |
 | orcdoc (TWO cuts 7+16, per document) | 0.968 | 0.916 | 0.351 | 0.627 | **0.716** | 0.980 | 0.974 | 0.510 | 0.850 | 0.829 |
 
 SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
@@ -97,6 +98,7 @@ SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
 | orc1batch | 19.1% (13% -> 26%) | 0.960 | 0.52 / 0.55 | 1.24 | 0.166 -> 0.121 | 0.29 | 2.29 |
 | orc1row | 29.1% | 0.959 | 0.48 / 0.51 | 0.81 | 0.180 -> 0.104 | 0.34 | 2.34 |
 | orc1batchrc | 71.3% (63% -> 77-80%); first try (attribution set, 5.4%) routed cos 0.30; ~4 tries/step | 0.9997 | 0.993 / 0.990 | 1.007 | 0.143 -> 0.146 | 0.59 | 3.41 |
+| orcbatchall (two cuts) | 23% / 16% | (all view) | 0.59 / 0.62 | 1.15 | 0.178 -> 0.129 | 0.28 | 2.28 |
 | orc1batchr2 (from the Beaker log) | 30.2% = 13.0% oracle + 17.2% random | 0.96 | 0.74 / 0.76 | - | 0.147 -> 0.149 | 0.35 | 2.35 |
 
 ### Reading
