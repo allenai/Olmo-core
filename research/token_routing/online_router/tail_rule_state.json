@@ -1,0 +1,19 @@
+{
+ "runs": {
+  "f8k-mt4-lora64all32t10-f1952-tde-lr1e-05": {
+   "ex": "01M6MC1WN4S0QGCFFYMV89820T",
+   "arm": "lora64all32t10",
+   "budget": "f1952",
+   "seed": 0,
+   "max_steps": 0
+  },
+  "f8k-mt4-lora64all32t20to7-f1952-tde-lr1e-05": {
+   "ex": "01M6MC2T4E8HMVRZAHRM38X939",
+   "arm": "lora64all32t20to7",
+   "budget": "f1952",
+   "seed": 0,
+   "max_steps": 0
+  }
+ },
+ "evals": {}
+}
