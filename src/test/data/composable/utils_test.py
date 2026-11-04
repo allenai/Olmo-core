@@ -6,6 +6,7 @@ from olmo_core.data.composable.utils import (
     calculate_sample_sizes,
     reset_composable_seed,
     resolve_seed,
+    sample_global_indices,
     set_composable_seed,
 )
 
@@ -97,3 +98,25 @@ def test_set_and_resolve_seed():
         assert seed2 != seed
     finally:
         reset_composable_seed()
+
+
+def test_sample_global_indices():
+    # One instance per chunk: a random subset of distinct indices.
+    indices = sample_global_indices(
+        1_000_000, 500, sequence_length=8, max_sequence_length=8, seed=0
+    )
+    assert indices.dtype == np.uint32
+    assert len(indices) == len(set(indices.tolist())) == 500
+    assert indices.max() < 1_000_000
+    assert indices.max() >= 500  # not just the first instances
+
+    # Several instances per chunk: chunks stay whole and contiguous.
+    indices = sample_global_indices(1000, 40, sequence_length=4, max_sequence_length=16, seed=0)
+    chunks = indices.reshape(-1, 4)
+    assert (chunks[:, 0] % 4 == 0).all()
+    assert (np.diff(chunks, axis=1) == 1).all()
+    assert len(set(chunks[:, 0].tolist())) == 10
+
+    # Taking every instance is a permutation.
+    indices = sample_global_indices(64, 64, sequence_length=8, max_sequence_length=16, seed=1)
+    assert sorted(indices.tolist()) == list(range(64))
