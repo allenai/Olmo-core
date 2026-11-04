@@ -85,7 +85,8 @@
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
-   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1row-f1952-orc-lr1e-05/oracle_meta"
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1row-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by the finished mooney copy"
   },
   "f8k-mt4-orc1batch-f1952-orc-lr1e-05": {
    "arm": "orc1batch",
@@ -121,6 +122,15 @@
    "lr": 1e-05,
    "seed": 0,
    "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchrc-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney": {
+   "arm": "orc1row",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "slurm": "4150110",
+   "cluster": "jsteinhardt mooney",
+   "data": "/data/prasann/oracle/shards/mt4f1952 (no gold sidecar)"
   }
  },
  "evals": {
@@ -193,6 +203,11 @@
   "f8k-mt4-orcbatch-f1952-orc-lr1e-05-lam": {
    "slurm": "114901",
    "node": "lambda-hyperplane02"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney": {
+   "slurm": "4150169",
+   "node": "mooney",
+   "of": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05"
   }
  }
 }
