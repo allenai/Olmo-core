@@ -36,9 +36,11 @@ DENSE = ["m64-dense-f16-lr5e-06", "m64-dense-f8-lr5e-06", "m64-dense-f4-lr5e-06"
 RUNGS = ["r64k", "r128k", "r256k"]
 
 
-#: launch-run suffixes of the same checkpoint (titan resubmission). A checkpoint with a suffixed launch is pooled
-#: from that launch only, so a bin that also finished under the cancelled original is never double-counted.
-SUFFIXES = ("-ti",)
+#: launch-run suffixes of the same checkpoint (titan resubmission "-ti", jupiter hedge "-jp"). Each (checkpoint, task)
+#: cell is pooled from ONE source launch: the first in SRC_PREF order whose cell is complete, else the largest.
+SUFFIXES = ("-ti", "-jp", "-jq")
+SRC_PREF = ("-ti", "-jp", "-jq", "")
+FULL_N = {"r64k": 500, "r128k": 500, "r256k": 125}
 
 
 def base_run(src):
@@ -49,33 +51,35 @@ def base_run(src):
     return run
 
 
+def src_suffix(src):
+    for suf in SUFFIXES:
+        if src.endswith(suf):
+            return suf
+    return ""
+
+
 def pool(log_text):
-    acc, empty = {}, {}
-    lines = [l.split("\t") for l in log_text.splitlines()]
-    srcs = {p[1] for p in lines if len(p) >= 4 and p[0].endswith("LGM")}
-    use = {}
-    for src in sorted(srcs):  # prefer the suffixed (later) launch of a checkpoint
-        b = base_run(src)
-        if b not in use or src != f"m11lg-{b}":
-            use[b] = src
-    for parts in lines:
+    per_src, empty = {}, {}
+    for parts in (l.split("\t") for l in log_text.splitlines()):
         if len(parts) >= 4 and parts[0].endswith("LGM"):
-            run = base_run(parts[1])
-            if use.get(run) != parts[1]:
-                continue
             for t in json.loads(parts[3]):
                 name, scorer = t["primary_metric"].split(":")
                 v, n = t["metrics"][name][scorer], t["num_instances"]
-                a = acc.setdefault((run, t["task"]), {"metric": t["primary_metric"], "sum": 0.0, "n": 0})
+                a = per_src.setdefault((base_run(parts[1]), t["task"], parts[1]),
+                                       {"metric": t["primary_metric"], "sum": 0.0, "n": 0})
                 a["sum"] += v * n
                 a["n"] += n
         elif len(parts) >= 6 and parts[0].endswith("LGEMPTY"):
-            k = base_run(parts[1])
-            if use.get(k) != parts[1]:
-                continue
-            e = empty.setdefault(k, [0, 0])
+            e = empty.setdefault(base_run(parts[1]), [0, 0])
             e[0] += int(parts[4])
             e[1] += int(parts[5])
+    acc = {}
+    for (run, task, src), a in per_src.items():
+        full = FULL_N.get(task.split(":")[1], 500)
+        key = (a["n"] >= full, -SRC_PREF.index(src_suffix(src)), a["n"])
+        if (run, task) not in acc or key > acc[(run, task)][0]:
+            acc[(run, task)] = (key, a)
+    acc = {k: v[1] for k, v in acc.items()}
     rows = []
     for (run, task), a in sorted(acc.items()):
         row, rung = task.split(":")
