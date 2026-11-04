@@ -84,6 +84,7 @@ steps.jsonl holds both passes; `summarize.py` keeps the last). Insurance copies 
 | orc1doc (oracle, per document) | 0.973 | 0.930 | 0.828 | 0.669 | **0.850** | 0.985 | 0.978 | 0.789 | 0.856 | 0.902 |
 | orc1batch (oracle, batch-global) | 0.963 | 0.900 | 0.537 | 0.626 | **0.756** | 0.982 | 0.966 | 0.442 | 0.828 | 0.804 |
 | orc1row (oracle, per row; mooney copy) | 0.949 | 0.914 | 0.155 | 0.680 | **0.674** | 0.969 | 0.978 | 0.466 | 0.852 | 0.816 |
+| orc1batchr2 (batch oracle + random 2x) | 0.968 | 0.922 | 0.737 | 0.599 | **0.806** | 0.986 | 0.982 | 0.890 | 0.831 | 0.922 |
 | orcdoc (TWO cuts 7+16, per document) | 0.968 | 0.916 | 0.351 | 0.627 | **0.716** | 0.980 | 0.974 | 0.510 | 0.850 | 0.829 |
 
 SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
@@ -94,6 +95,7 @@ SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
 | orc1doc | 35.5% (39% -> 30% over training) | 0.959 | 0.58 / 0.66 | 1.25 | 0.148 -> 0.151 | 0.38 | 2.38 |
 | orc1batch | 19.1% (13% -> 26%) | 0.960 | 0.52 / 0.55 | 1.24 | 0.166 -> 0.121 | 0.29 | 2.29 |
 | orc1row | 29.1% | 0.959 | 0.48 / 0.51 | 0.81 | 0.180 -> 0.104 | 0.34 | 2.34 |
+| orc1batchr2 (from the Beaker log) | 30.2% = 13.0% oracle + 17.2% random | 0.96 | 0.74 / 0.76 | - | 0.147 -> 0.149 | 0.35 | 2.35 |
 
 ### Reading
 - **Only per-document allocation survives outlier.** Per document (35% kept): 8k 0.850, ties dense. Per row (29%):
@@ -103,6 +105,11 @@ SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
   The router recipe (two cuts, 20% / 7%) keeps outlier (0.862): the oracle's gradient-energy ranking, not the drop
   structure, is what fails it. The oracle's selection is per-step greedy on the CURRENT gradient; outlier's useful
   tokens (what makes a document off-topic) apparently carry little immediate gradient energy.
+- **Random "negatives" help a lot.** At a matched ~30% keep, per-row oracle tokens only (orc1row) score 0.674 at 8k,
+  while a 13% batch oracle set plus 17% uniformly random body tokens (orc1batchr2) scores 0.806 (2k 0.922, near
+  dense), outlier 8k 0.155 -> 0.737. The random tokens lift the routed-gradient cos from ~0.5 to 0.74 and keep the
+  routed train CE at the dense level instead of below it: they stop the model from fitting the oracle-chosen subset.
+  (orc1docr2 is uninformative: a 30-40% per-document oracle set + 2x random covers ~all tokens, keep ~0.9-1.0.)
 - **Matching the attribution gradient does not match the routed gradient**, in either arm: routed cos ~0.5-0.6
   all run, routed grad norm 1.25x dense, no loss spikes. The batch oracle's routed train CE falls far BELOW dense
   (0.121 vs 0.166): the model fits the oracle-chosen subset, an easier task than the full context.
