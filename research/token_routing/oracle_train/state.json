@@ -272,6 +272,26 @@
    "ex": "01M6M1WFS853PD1MJ0GQ0YWC4E",
    "train_run": "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney",
    "task": "oolong"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evcontradiction": {
+   "ex": "01M6M5G2DXG040X8C9R1XW773R",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evnq": {
+   "ex": "01M6M5GWFRE58CR0C7NNGQGG1M",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "nq"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evoutlier": {
+   "ex": "01M6M5HPCS58119HXEJ7G7JQSJ",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "outlier"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evoolong": {
+   "ex": "01M6M5JHT82PNEWRJSH2H2S46E",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "oolong"
   }
  },
  "insurance": {
