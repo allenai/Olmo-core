@@ -7,6 +7,62 @@
    "lr": 1e-05,
    "seed": 0,
    "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchr2-f1952st3-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05": {
+   "ex": "01M6JW7VN6M2YCBY0NCHDVRA8G",
+   "arm": "orcdoc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcdoc-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcrow-f1952-orc-lr1e-05": {
+   "ex": "01M6JW8MQHZZY64DYP4SF1B9F3",
+   "arm": "orcrow",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcrow-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcbatch-f1952-orc-lr1e-05": {
+   "ex": "01M6JW9GWP8TQQJGYGP2Z8X7HF",
+   "arm": "orcbatch",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatch-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcbatchr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JWAAQTE8G77PV52EF64X4B",
+   "arm": "orcbatchr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchr2-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcdocr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JWBA5QB2XFERTEJP4V9NE8",
+   "arm": "orcdocr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcdocr2-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05": {
+   "ex": "01M6JWCDX361B4AKASH0DX1EGA",
+   "arm": "orcbatchall",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchall-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcbatchrc-f1952-orc-lr1e-05": {
+   "ex": "01M6JWD6HQEBY5Q6C69FXQXSZF",
+   "arm": "orcbatchrc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchrc-f1952-orc-lr1e-05/oracle_meta"
   }
  },
  "evals": {}
