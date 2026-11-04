@@ -98,10 +98,10 @@ def pf_table():
 
 
 def matched(rows, pf):
-    by = {(r["run"], r["task"], r["rung"]): r for r in rows}
+    by = {(r["run"], r["task"], r["rung"]): r for r in rows if r["eval_size"] >= FULL_N.get(r["rung"], 500)}
     out = []
     for r in rows:
-        if r["run"] in DENSE or r["run"] not in pf:
+        if r["run"] in DENSE or r["run"] not in pf or r["eval_size"] < FULL_N.get(r["rung"], 500):
             continue
         # interpolate only between the TRUE neighbours in DENSE (a missing middle point must not be skipped)
         x = pf[r["run"]]

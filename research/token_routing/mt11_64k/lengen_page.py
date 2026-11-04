@@ -114,6 +114,38 @@ def chart(rung, means, pf, w=260, h=170):
             + "".join(g) + "</svg></div>")
 
 
+def short16_table():
+    """Rows <= 16k vs rows <= 64k at matched FLOPs: mean delta per rung (native 2k..64k ladder, then olmo-eval long rungs)."""
+    p = os.path.join(RES, "short16.json")
+    if not os.path.exists(p):
+        return ""
+    d = json.load(open(p))
+    cells = d["native"] + d["long"]
+    rungs = ["2k", "8k", "16k", "32k", "64k", "r64k", "r128k", "r256k"]
+    lab = {"2k": "2k", "8k": "8k", "16k": "16k", "32k": "32k", "64k": "64k", "r64k": "64k*", "r128k": "128k*",
+           "r256k": "256k* ⚠125"}
+    rows = []
+    for run, name in SHORT.items():
+        if not any(c["run"] == run for c in cells):
+            rows.append(f"<tr><th>{esc(name)}</th><td class='na' colspan='{len(rungs) * 2}'>pending</td></tr>")
+            continue
+        for key, what in (("d_dense", "vs 64k-data dense at same PF"), ("d_recipe", "vs 64k-data recipe")):
+            if key == "d_recipe" and "recipe" not in run:
+                continue
+            tds = []
+            for rg in rungs:
+                ds = [c[key] for c in cells if c["run"] == run and c["rung"] == rg and c[key] is not None]
+                tds.append(dcell(sum(ds) / len(ds), f" <span class='muted'>({len(ds)})</span>") if ds
+                           else '<td class="na">pending</td>')
+            pfv = next((c["pf"] for c in cells if c["run"] == run), float("nan"))
+            rows.append(f"<tr><th>{esc(name)} · {pfv:,.0f} PF<br><span class='muted'>{what}</span></th>{''.join(tds)}</tr>")
+    head = "".join(f"<th>{lab[r]}</th>" for r in rungs)
+    return ("<p>Mean Δ over the tasks scored at each rung (count in brackets). 2k–64k: native ladder, 10 tasks "
+            "(no-signal cells reorder 8k/16k and grouping 32k excluded); * = olmo-eval path, 6 tasks. "
+            "Training rows ≤16,384 tokens, mostly ≤ the 8k rung; the 64k-data runs saw rows to 65,536.</p>"
+            f"<div class='tw'><table><thead><tr><th>run</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
+
+
 def section():
     lg = json.load(open(os.path.join(RES, "lengen.json"))) if os.path.exists(os.path.join(RES, "lengen.json")) else {}
     rows, pf = lg.get("rows", []), lg.get("pf", {})
@@ -183,7 +215,7 @@ def section():
             lm = sum(leg[run].values()) / len(TASKS)
             anc.append(f"<tr><th>{esc(METHODS.get(run, run.replace('m64-', '')))}</th><td>{lm:.3f}</td>"
                        f"<td>{means['r64k'][run]:.3f}</td>{dcell(means['r64k'][run] - lm)}</tr>")
-    short_html = prog.get("short16_html", "")
+    short_html = prog.get("short16_html", "") or short16_table()
     status = "".join(f"<li>{esc(x)}</li>" for x in prog.get("status", []))
     verdict = prog.get("verdict", "Results pending: the long-rung eval wave is running.")
     return f"""<!-- lengen:start -->
