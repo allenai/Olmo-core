@@ -2045,10 +2045,11 @@ def parse_args() -> argparse.Namespace:
                     help="online router: share of the budget spread over documents in proportion to length "
                     "(each keeps its own top tokens by score); the rest goes to the row-level top scores. "
                     "1.0 = within-document choice only (per-document density cannot name gold)")
-    ap.add_argument("--st-otr-score", choices=["router", "random", "first_last", "dh"], default="router",
+    ap.add_argument("--st-otr-score", choices=["router", "random", "first_last", "dh", "tail"], default="router",
                     help="online router: who picks the kept tokens -- the learned scorer, or a control with the same "
                     "budget, allocation and drop point (random; each document's first and last tokens; dh = fit-free "
-                    "rule, top tokens by residual change ||h^L - h^0||, mid-stack only)")
+                    "rule, top tokens by residual change ||h^L - h^0||, mid-stack only; tail = fixed content-blind rule, each "
+                    "document's LAST tokens, nested across stages, no exploration, router FLOPs not charged)")
     ap.add_argument("--st-otr-feature-layer", type=int, default=0,
                     help="online router: hidden features at this layer (0 = input embedding, free; L > 0 = a "
                     "no-grad prefix pass through blocks [0, L) on the full row, charged to the FLOP meter)")

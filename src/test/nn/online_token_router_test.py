@@ -1802,3 +1802,58 @@ def test_reset_positions_off_matches_default_cpu():
         out = model(ids, labels=labels)
         out.loss.backward()
     assert torch.equal(out.loss.detach(), la)
+
+
+def _expected_tail(ids, cid, fracs):
+    """Original columns kept after nested per-document tail cuts: every real non-body token, plus each document's last
+    ceil(f * |entering body|) body tokens at each stage in turn (at least 1)."""
+    import math
+
+    from olmo_core.nn.online_token_router import structural_features as sf
+
+    _, body = sf(ids, cid, doc_start_id=DS, doc_end_id=DE)
+    out = []
+    for b in range(ids.shape[0]):
+        keep = {int(t) for t in ((cid[b] != -2) & ~body[b]).nonzero().flatten()}
+        for d in sorted({int(x) for x in cid[b][body[b]]}):
+            cols = [int(t) for t in (body[b] & (cid[b] == d)).nonzero().flatten()]
+            for f in fracs:
+                cols = cols[len(cols) - max(1, math.ceil(f * len(cols))):]
+            keep |= set(cols)
+        out.append(keep)
+    return out
+
+
+@pytest.mark.parametrize("stages,fracs", [("1:0.5", [0.5]), ("1:0.5,2:0.25", [0.5, 0.5])])
+def test_tail_rule_keeps_exactly_each_documents_tail_cpu(stages, fracs):
+    """score='tail': on a routed step each stage keeps exactly every document's last ceil(f * |body|) body tokens (the
+    second stage a nested tail of the first), every non-body token, no exploration; the router is still fit, but none
+    of its scoring / target / fit FLOPs are charged."""
+    import inspect
+
+    model, router = _mid_model(4, stages=stages, dense_every=0, score="tail", samples_per_row=8)
+    seen, charged = {}, []
+    for i, b in enumerate(model.blocks.values()):
+        b.register_forward_pre_hook(
+            (lambda i: lambda mod, args, kw: seen.__setitem__(i, kw.get("position_ids")))(i), with_kwargs=True)
+    for r in router.chain():
+        orig = r._flop
+        r._flop = (lambda o: lambda m, v: (charged.append(inspect.stack()[1].function), o(m, v)))(orig)
+    ids, cid, labels = _row(B=2)
+    for n in (1, 2, 3):  # step 1 dense warmup, then routed
+        model.zero_grad(set_to_none=True)
+        for r in router.chain():
+            r.begin_step(n, model=model)
+            r.metrics()
+        seen.clear()
+        model(ids, labels=labels).loss.backward()
+    assert all(r.w is not None for r in router.chain())  # the fit ran
+    assert "_flop_router" not in charged and "mid_compact" in charged
+    n_st = len(fracs)
+    for s in range(1, n_st + 1):
+        blk = 1 if s == 1 else 2  # first block after each cut
+        pos = seen[blk]
+        exp = _expected_tail(ids, cid, fracs[:s])
+        for b in range(ids.shape[0]):
+            got = {int(p) for p in pos[b]}  # original positions = original columns (pads repeat the row's max)
+            assert got == exp[b], (s, b, sorted(got ^ exp[b]))
