@@ -15,6 +15,7 @@ GANTRY="${GANTRY:-/scratch/users/prasann/conda/envs/corpus-reasoning-olmo/bin/ga
   --env GLOB="$GLOB" --allow-dirty --timeout 0 --yes -- /opt/conda/bin/python -c '
 import glob, json, os
 root = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/_olmoeval_ctc"
+shown = set()
 for d in sorted(glob.glob(os.path.join(root, os.environ["GLOB"]))):
     run = os.path.basename(d)
     for m in sorted(glob.glob(os.path.join(d, "job*", "metrics.json"))):
@@ -26,18 +27,31 @@ for d in sorted(glob.glob(os.path.join(root, os.environ["GLOB"]))):
         slim = [{k: t.get(k) for k in ("task", "primary_metric", "metrics", "num_instances")} for t in tasks]
         s = json.dumps(slim)
         print("LGM\t%s\t%s\t%s" % (run, job, s), flush=True)
-        # empty generations: any *.jsonl prediction file beside metrics.json
-        for p in glob.glob(os.path.join(os.path.dirname(m), "**", "*.jsonl"), recursive=True):
+        # empty generations: the *-predictions.jsonl files beside metrics.json (first record's keys printed once)
+        for p in glob.glob(os.path.join(os.path.dirname(m), "predictions", "**", "*-predictions.jsonl"), recursive=True):
             n = e = 0
+            def gen_text(r):
+                for k in ("generation", "generations", "prediction", "predictions", "completion", "completions",
+                          "output", "outputs", "response", "responses", "model_output", "text"):
+                    if k in r:
+                        g = r[k]
+                        while isinstance(g, list):
+                            g = g[0] if g else ""
+                        if isinstance(g, dict):
+                            g = g.get("text") or g.get("generation") or g.get("completion") or ""
+                        return str(g or "")
+                return None
             try:
-                for line in open(p):
+                for i, line in enumerate(open(p)):
                     r = json.loads(line); n += 1
-                    g = r.get("generation") or r.get("prediction") or r.get("output") or r.get("response")
-                    if isinstance(g, list): g = g[0] if g else ""
-                    if isinstance(g, dict): g = g.get("text", "")
-                    if not str(g or "").strip(): e += 1
+                    if i == 0 and run not in shown:
+                        shown.add(run)
+                        print("LGKEYS\t%s\t%s" % (run, json.dumps({k: str(v)[:120] for k, v in r.items()})), flush=True)
+                    g = gen_text(r)
+                    if g is not None and not g.strip():
+                        e += 1
             except Exception:
                 continue
-            print(f"LGEMPTY\t{run}\t{job}\t{os.path.relpath(p, d)}\t{n}\t{e}", flush=True)
+            print("LGEMPTY\t%s\t%s\t%s\t%d\t%d" % (run, job, os.path.basename(p), n, e), flush=True)
 print("LGDONE")
 ' 2>&1 | grep -oE "ex/[A-Z0-9]{26}" | head -1
