@@ -5,10 +5,10 @@ updated: 2026-11-04
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: headline single-cut doc + batch done; row, random-2x, routed-target and two-cut arms in progress
+status: complete (9 arms, f1952, 1 seed each)
 superseded_by: 
 artifact: 
-summary: Per-step oracle token selection in training (dense backward picks the smallest top-k body set with exact LoRA-gradient attribution cos >= 0.95, routed pass applied), f1952. Single cut at block 7: per-document oracle (35% kept) ties dense at 8k (0.850 vs 0.843); per-row (29%) and batch-global (19%) break outlier (8k 0.155 / 0.537; means 0.674 / 0.756); two cuts per document 0.716 (outlier 0.351). Routed-gradient cos ~0.5 in all.
+summary: Per-step oracle token selection in training (dense backward picks the smallest top-k body set with exact LoRA-gradient attribution cos >= 0.95; routed pass applied), f1952. Attribution sets give routed-grad cos only ~0.5 and tie dense only with per-document allocation at one cut (35% kept, 8k 0.850 vs 0.843); per-row / batch / two-cut variants break outlier (0.155-0.635). Random negatives repair a lot (batch 0.756 -> 0.806). A set that keeps the ROUTED gradient (cos 0.95) needs 71% of body tokens and ties dense (0.837).
 ---
 # Oracle token selection in training
 
@@ -89,6 +89,7 @@ steps.jsonl holds both passes; `summarize.py` keeps the last). Insurance copies 
 | orc1docr2 (doc oracle + random 2x; Lambda, keep ~0.9-1.0 = ~dense) | 0.973 | 0.926 | 0.920 | 0.647 | **0.867** | 0.986 | 0.982 | 0.913 | 0.849 | 0.933 |
 | orcbatchall (TWO cuts, batch, literal whole-gradient cos; mooney copy) | 0.958 | 0.894 | 0.501 | 0.591 | **0.736** | 0.985 | 0.976 | 0.570 | 0.853 | 0.846 |
 | orcdoc (TWO cuts 7+16, per document) | 0.968 | 0.916 | 0.351 | 0.627 | **0.716** | 0.980 | 0.974 | 0.510 | 0.850 | 0.829 |
+| orcbatch (TWO cuts 7+16, batch; Lambda copy) | 0.954 | 0.934 | 0.635 | 0.648 | **0.793** | 0.984 | 0.980 | 0.500 | 0.833 | 0.824 |
 
 SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
 
@@ -99,8 +100,24 @@ SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
 | orc1batch | 19.1% (13% -> 26%) | 0.960 | 0.52 / 0.55 | 1.24 | 0.166 -> 0.121 | 0.29 | 2.29 |
 | orc1row | 29.1% | 0.959 | 0.48 / 0.51 | 0.81 | 0.180 -> 0.104 | 0.34 | 2.34 |
 | orc1batchrc | 71.3% (63% -> 77-80%); first try (attribution set, 5.4%) routed cos 0.30; ~4 tries/step | 0.9997 | 0.993 / 0.990 | 1.007 | 0.143 -> 0.146 | 0.59 | 3.41 |
+| orcbatch (two cuts; Lambda) | 34% / 28% | 0.966 / 0.967 | 0.75 / 0.76 | 1.23 | 0.162 -> 0.133 | 0.35 | 2.35 |
+| orc1docr2 (Lambda) | 94% = 37% oracle + random | 0.960 | 0.96 / 0.97 | 1.02 | 0.136 -> 0.137 | 0.72 | 2.72 |
 | orcbatchall (two cuts) | 23% / 16% | (all view) | 0.59 / 0.62 | 1.15 | 0.178 -> 0.129 | 0.28 | 2.28 |
 | orc1batchr2 (from the Beaker log) | 30.2% = 13.0% oracle + 17.2% random | 0.96 | 0.74 / 0.76 | - | 0.147 -> 0.149 | 0.35 | 2.35 |
+
+### Verdict
+1. **Exact gradient attribution is a poor per-step selector.** Sets holding attribution cos 0.95 on the body gradient
+   (19-35% of body tokens) give a ROUTED gradient with cos only ~0.5 to the dense one, in every scope.
+2. **Only per-document allocation at a single cut trains as well as dense** (orc1doc, 35% kept: 8k 0.850 vs 0.843).
+   Per row (0.674), batch-global (0.756), and two cuts (per doc 0.716, batch 0.793; literal whole-gradient rule
+   0.736) all break outlier (8k 0.155-0.635 vs 0.817) while contradiction / nq / oolong stay near dense.
+3. **Random negatives repair much of it**: batch oracle 13% + 17% random (orc1batchr2) 0.806 / 2k 0.922, outlier
+   0.537 -> 0.737, routed cos 0.52 -> 0.74.
+4. **The gradient-faithful upper bound needs most of the context**: keeping the ROUTED gradient at cos 0.95
+   (orc1batchrc) takes 71% of body tokens (63% -> 80% over training) and ties dense (0.837 / 0.936).
+5. So the recipe's 20% / 7% router (0.845) is not a gradient approximation: it trains well because the model
+   co-adapts to a stable selection rule (consistent with the router-trained checkpoint's unbiased routed gradient,
+   records/grad-routing-gap.md). A per-step oracle chases the instantaneous gradient, which is a moving target.
 
 ### Reading
 - **Only per-document allocation survives outlier.** Per document (35% kept): 8k 0.850, ties dense. Per row (29%):
