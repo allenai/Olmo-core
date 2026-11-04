@@ -39,6 +39,7 @@ def ref_scores(run):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", default="")
+    ap.add_argument("--only", default="", help="comma list of training runs whose rows go to --rows (avoid re-adding)")
     a = ap.parse_args()
     st = json.load(open(os.path.join(HERE, "state.json")))
     runs = {}
@@ -53,7 +54,8 @@ def main():
             se = math.sqrt(max(float(v) * (1 - float(v)), 0) / max(int(n), 1))
             rows.append({"experiment": "tokdrop_lr", "run_id": ename, "train_run": e["train_run"], "task": task,
                          "rung": rung, "metric": metric, "value": float(v), "se": round(se, 4),
-                         "eval_size": int(n), "cot": "no-cot", "notes": "oracle-selection training"})
+                         "eval_size": int(n), "cot_label": "no-cot", "eval_backend": "legacy_native_multirung", "eval_job_id": e["ex"], "git_commit": "00771d815",
+                         "ckpt_path": f"/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/{e['train_run']}"})
     refs = {k: ref_scores(v) for k, v in REFS.items()}
     hdr = "| run | " + " | ".join(f"{t[:6]} 8k" for t in TASKS) + " | mean 8k | " + \
         " | ".join(f"{t[:6]} 2k" for t in TASKS) + " | mean 2k |"
@@ -73,6 +75,8 @@ def main():
     if a.rows:
         with open(a.rows, "w") as f:
             for r in rows:
+                if a.only and r["train_run"] not in a.only.split(","):
+                    continue
                 f.write(json.dumps(r) + "\n")
         print(f"wrote {len(rows)} rows -> {a.rows}")
 
