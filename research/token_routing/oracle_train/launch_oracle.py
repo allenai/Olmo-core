@@ -49,7 +49,7 @@ ARMS = {
 
 
 def run_name(arm, budget, lr, seed=0):
-    return f"f8k-mt4-{arm}{f'sd{seed}' if seed else ''}-{budget}{SUFFIX}-lr{lr:g}"
+    return f"f8k-mt4-{arm}{f'sd{seed}' if seed else ''}-{budget.replace('@', 'st')}{SUFFIX}-lr{lr:g}"
 
 
 def load():
