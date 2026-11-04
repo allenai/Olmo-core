@@ -85,6 +85,7 @@ steps.jsonl holds both passes; `summarize.py` keeps the last). Insurance copies 
 | orc1batch (oracle, batch-global) | 0.963 | 0.900 | 0.537 | 0.626 | **0.756** | 0.982 | 0.966 | 0.442 | 0.828 | 0.804 |
 | orc1row (oracle, per row; mooney copy) | 0.949 | 0.914 | 0.155 | 0.680 | **0.674** | 0.969 | 0.978 | 0.466 | 0.852 | 0.816 |
 | orc1batchr2 (batch oracle + random 2x) | 0.968 | 0.922 | 0.737 | 0.599 | **0.806** | 0.986 | 0.982 | 0.890 | 0.831 | 0.922 |
+| orc1batchrc (grow until ROUTED cos >= 0.95; mooney copy) | 0.964 | 0.912 | 0.843 | 0.629 | **0.837** | 0.990 | 0.978 | 0.921 | 0.855 | 0.936 |
 | orcdoc (TWO cuts 7+16, per document) | 0.968 | 0.916 | 0.351 | 0.627 | **0.716** | 0.980 | 0.974 | 0.510 | 0.850 | 0.829 |
 
 SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
@@ -95,6 +96,7 @@ SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
 | orc1doc | 35.5% (39% -> 30% over training) | 0.959 | 0.58 / 0.66 | 1.25 | 0.148 -> 0.151 | 0.38 | 2.38 |
 | orc1batch | 19.1% (13% -> 26%) | 0.960 | 0.52 / 0.55 | 1.24 | 0.166 -> 0.121 | 0.29 | 2.29 |
 | orc1row | 29.1% | 0.959 | 0.48 / 0.51 | 0.81 | 0.180 -> 0.104 | 0.34 | 2.34 |
+| orc1batchrc | 71.3% (63% -> 77-80%); first try (attribution set, 5.4%) routed cos 0.30; ~4 tries/step | 0.9997 | 0.993 / 0.990 | 1.007 | 0.143 -> 0.146 | 0.59 | 3.41 |
 | orc1batchr2 (from the Beaker log) | 30.2% = 13.0% oracle + 17.2% random | 0.96 | 0.74 / 0.76 | - | 0.147 -> 0.149 | 0.35 | 2.35 |
 
 ### Reading
@@ -105,6 +107,13 @@ SE per cell ±0.007-0.022 (binomial, eval_size 500). Single seed each.
   The router recipe (two cuts, 20% / 7%) keeps outlier (0.862): the oracle's gradient-energy ranking, not the drop
   structure, is what fails it. The oracle's selection is per-step greedy on the CURRENT gradient; outlier's useful
   tokens (what makes a document off-topic) apparently carry little immediate gradient energy.
+- **The true upper bound needs most of the context.** Growing the batch-global set until the ROUTED LoRA gradient has
+  cos >= 0.95 with the dense one (orc1batchrc) takes 71% of body tokens on average, rising over training (63% in the
+  first quarter -> 77-80% late); the attribution-chosen set at that step (5% of body tokens) gives routed cos 0.30.
+  That run reproduces the dense gradient (cos 0.993, norm ratio 1.007, train CE = dense) and ties dense downstream
+  (8k 0.837 / 2k 0.936 vs 0.843 / 0.933; outlier 0.843). So a per-step token set that keeps the dense gradient
+  exists only at ~70%+ of the body: the 20% / 7% recipe trains well because the model co-adapts to its own selection
+  rule, not because its gradient matches dense.
 - **Random "negatives" help a lot.** At a matched ~30% keep, per-row oracle tokens only (orc1row) score 0.674 at 8k,
   while a 13% batch oracle set plus 17% uniformly random body tokens (orc1batchr2) scores 0.806 (2k 0.922, near
   dense), outlier 8k 0.155 -> 0.737. The random tokens lift the routed-gradient cos from ~0.5 to 0.74 and keep the
