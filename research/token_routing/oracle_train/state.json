@@ -213,6 +213,26 @@
    "ex": "01M6KT2DA7QMBQGKGNKAZ4BXAJ",
    "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
    "task": "oolong"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KV8ENWHH1S0ZS60MW3CX33",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KV97VM3T5VHXNSBE611DWS",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KVA0YTFQVK8HZQ6MHAJ9V8",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KVATAM092DHDHDTJSVAFEK",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "oolong"
   }
  },
  "insurance": {
