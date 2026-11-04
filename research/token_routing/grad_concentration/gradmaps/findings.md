@@ -112,6 +112,30 @@ cell-level (token x layer) dropping. Experiment `tokdrop_lr`, branch `claude/gra
 7. **2k vs 8k** (⚠ eval_size 128, `sum_*_2k.png`, `summary_2k.json`). Same picture; concentration is weaker per row
    because rows are shorter (95% of energy needs 4.5-55% of tokens and 2.5-35% of cells).
 
+## Linear color scale (`*_lin.png`, `*_linclip.png`; added 2026-11-04 at Prasann's request)
+
+The map_ / zoom_ / routed_ PNGs are redrawn from the same arrays with raw E and ||dL/dh|| (10 ** stored log10). `_lin`
+runs each panel from 0 to its max with no clipping; `_linclip` caps it at the panel's 99th percentile (the cap and the max
+are in each title). Zoom windows each get their own range and colorbar. The routed ratio panels are the linear ratio
+on a diverging map centred at 1, linear on each side (0 .. 1 .. max); a plain 0 .. max map was unreadable because the
+max is 50-8,000x. The log versions are unchanged.
+
+- **`_lin` is black except the answer / query columns.** The panel max is 1,000-10,000x the 99th percentile (nq 8k E:
+  base 6.8e4 vs 11.6, dense 1,952 1.8 vs 0.0015, dense 7,808 0.24 vs 2.5e-5, recipe 106 vs 0.08). On a linear scale,
+  the update of a trained checkpoint is the answer tokens and nothing else; every document cell is under 0.1% of the
+  answer spike.
+- **`_linclip` shows how sparse the document gradient is, which the log scale hid.** On log, gold documents look like
+  uniformly bright full-height columns. On a linear scale:
+  - the document energy sits in a handful of documents (on nq 8k, the gold one plus 3-4 distractors);
+  - it sits almost entirely in blocks 0-15, with only isolated tokens above 16;
+  - inside the gold document it is a few tokens (the answer-bearing span; `zoom_nq_8k_lin.png`).
+- **Depth.** On a linear scale, ||dL/dh|| on document tokens is concentrated in blocks 0-7 (`map_oolong_8k_A_linclip.png`).
+  The steady 3-4 orders-of-magnitude decay that looks gentle on log means that, in absolute terms, nearly all of it
+  sits in the bottom layers.
+- **Routed ratio (linear).** In blocks 0-6, the tokens the router drops at block 7 are mostly below 1 (blue). The kept,
+  gold and high-energy documents are at or above 1. The large ratios (up to 50x for ||dL/dh||, 8,000x for E) are
+  isolated cells whose dense energy was near zero.
+
 ## Files
 
 | Files | What |
@@ -119,6 +143,7 @@ cell-level (token x layer) dropping. Experiment `tokdrop_lr`, branch `claude/gra
 | `map_<task>_<2k-solved\|2k-unsolved\|8k>_{E,A}.png` | full-row maps, 4 checkpoints stacked, oracle / router strips, segment bar |
 | `zoom_<task>_<kind>.png` | token-resolution windows (gold document; query + answer) with token text |
 | `routed_<task>_<kind>.png` | recipe: dense vs routed maps and the normalized ratio, for E and A |
+| `*_lin.png` / `*_linclip.png` | the same map_ / zoom_ / routed_ PNGs on a linear scale (0 .. max / 0 .. 99th pct) |
 | `sum_{layer,type,cumshare,layer_corr,routed}_{8k,2k}.png` | summaries over every row of the set |
 | `summary_{8k,2k}.json` | the numbers above, per checkpoint and task, with eval_size |
 
@@ -129,5 +154,5 @@ cell-level (token x layer) dropping. Experiment `tokdrop_lr`, branch `claude/gra
 - Compute: jsteinhardt / mooney H200, `--qos=preemptive_high`, 1 GPU per job.
   - 8k: slurm 4150467-8 (all 4 checkpoints in about 7-10 min each).
   - 2k: slurm 4150478-9 (rows built by 4150469).
-  - Plots: slurm 4150485 / 4150488.
+  - Plots: slurm 4150485 / 4150488; linear-scale redraw 4150621-4 (CPU, `--scale lin|linclip --maps-only`).
 - Raw per-row arrays (log10 E / A, token types, keep sets) are on mooney `/data/prasann/gradmap/{out,out2k}/<label>/`.

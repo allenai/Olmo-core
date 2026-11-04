@@ -8,6 +8,10 @@ worst-solved row; --rung 8k: per task one median-CE row among the longest quarte
 panel per checkpoint), zoom_<task>_<kind>.png (gold document and query + answer at token resolution),
 routed_<task>_<kind>.png (recipe: dense vs routed). Summaries over every row of the set (eval_size in each title):
 sum_{layer,type,cumshare,layer_corr,routed}_<rung>.png and summary_<rung>.json.
+
+--scale lin / linclip redraws the map_ / zoom_ / routed_ PNGs on a linear color scale (raw E and ||dL/dh||, 0 .. panel
+max, or 0 .. the panel's 99th percentile) with suffix _lin / _linclip; the routed ratio panel becomes a linear ratio on
+a diverging map centred at 1. --maps-only skips the summaries.
 """
 from __future__ import annotations
 
@@ -39,6 +43,30 @@ SEG_NAME = ["instruction / markers", "distractor doc", "gold doc", "query", "ans
 TY = ("answer", "prompt+query", "gold doc", "distractor doc")
 GRID = np.array([0.001, 0.002, 0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1.0])
 DPI = 110
+#: map color scale: "log" (log10, 1st-99.8th pct), "lin" (raw values, 0 .. panel max), "linclip" (raw, 0 .. 99th pct)
+SCALE = "log"
+SUFFIX = {"log": "", "lin": "_lin", "linclip": "_linclip"}
+
+
+def scaled(M, others=()):
+    """M holds log10 values (NaN = dropped cell). Returns (matrix to draw, vmin, vmax, range text) for SCALE;
+    `others` are further log10 arrays that share the range (the routed pair)."""
+    if SCALE == "log":
+        f = np.concatenate([x[np.isfinite(x)] for x in (M, *others)])
+        lo, hi = np.percentile(f, 1), np.percentile(f, 99.8)
+        return M, lo, hi, f"log10 {lo:.1f} .. {hi:.1f}"
+    L = 10.0 ** M
+    f = np.concatenate([10.0 ** x[np.isfinite(x)] for x in (M, *others)])
+    mx = float(f.max())
+    if SCALE == "lin":
+        return L, 0.0, mx, f"linear 0 .. max {mx:.3g}"
+    hi = float(np.percentile(f, 99))
+    return L, 0.0, hi, f"linear 0 .. {hi:.3g} = CAPPED at the 99th pct (max {mx:.3g})"
+
+
+def qname(qty):
+    return ("weight-gradient energy" if qty == "E" else "||dL/dh||") if SCALE != "log" else (
+        "log10 weight-gradient energy" if qty == "E" else "log10 ||dL/dh||")
 
 
 def segs(d):
@@ -215,15 +243,13 @@ def draw_maps(lab_list, data, items, thr, task, kind, out, qty):
                             gridspec_kw=dict(height_ratios=hr + [0.25], hspace=0.22))
     ces = "  ".join(f"{lab} {items[lab]['ce_tok']:.3f}" for lab in lab_list)
     fig.suptitle(title_of(task, items[lab_list[0]], d0) + f"\nanswer CE per token: {ces}   "
-                 + ("color: log10 weight-gradient energy per (block, token) = sum over the block's linears of "
-                    "||dL/dy_t||^2 ||x_t||^2" if qty == "E" else "color: log10 ||dL/dh_l[t]|| at block l's input"),
+                 + (f"color: {qname('E')} per (block, token) = sum over the block's linears of "
+                    "||dL/dy_t||^2 ||x_t||^2" if qty == "E" else f"color: {qname('A')} at block l's input"),
                  fontsize=9, y=0.995)
     for i, lab in enumerate(lab_list):
         d = data[lab]
-        M = d[qty].astype(np.float64)
-        f = M[np.isfinite(M)]
-        vmin, vmax = np.percentile(f, 1), np.percentile(f, 99.8)
-        im = panel(axs[2 * i], M, f"{NAMES.get(lab, lab)}   (color range per panel: log10 {vmin:.1f} .. {vmax:.1f}; "
+        M, vmin, vmax, rng = scaled(d[qty].astype(np.float64))
+        im = panel(axs[2 * i], M, f"{NAMES.get(lab, lab)}   (color range per panel: {rng}; "
                    f"dashed = blocks 7 / 16 cuts)", vmin, vmax)
         plt.colorbar(im, ax=axs[2 * i], pad=0.005, fraction=0.012)
         ms, (fg, fr, fd) = oracle_masks(lab, d, thr[lab])
@@ -239,7 +265,7 @@ def draw_maps(lab_list, data, items, thr, task, kind, out, qty):
     segbar(axs[-1], d0, T)
     legend(fig)
     fig.subplots_adjust(left=0.13, right=0.95, top=1 - 0.75 / H, bottom=0.8 / H)
-    fig.savefig(os.path.join(out, f"map_{task}_{kind}_{qty}.png"), dpi=DPI)
+    fig.savefig(os.path.join(out, f"map_{task}_{kind}_{qty}{SUFFIX[SCALE]}.png"), dpi=DPI)
     plt.close(fig)
 
 
@@ -256,19 +282,31 @@ def draw_zoom(lab_list, data, items, task, kind, out, tok):
     w2 = (max(0, ai[0] - 110), min(T, ai[-1] + 3))
     fig, axs = plt.subplots(len(lab_list) * 2 + 1, 2, figsize=(12.7, 2.0 * len(lab_list) + 1.8),
                             gridspec_kw=dict(height_ratios=[1.6, 1.6] * len(lab_list) + [0.3], hspace=0.25,
-                                             width_ratios=[w1[1] - w1[0], w2[1] - w2[0]], wspace=0.06))
+                                             width_ratios=[w1[1] - w1[0], w2[1] - w2[0]],
+                                             wspace=0.06 if SCALE == "log" else 0.12))
     fig.suptitle(title_of(task, items[lab_list[0]], d0) + f"\nzoom: gold doc {gd + 1} window (left) and query + answer "
-                 "(right); top = log10 weight-gradient energy, bottom = log10 ||dL/dh||", fontsize=9, y=0.995)
+                 f"(right); top = {qname('E')}, bottom = {qname('A')}"
+                 + ("" if SCALE == "log" else "; " + ("linear, 0 .. max of each window" if SCALE == "lin" else
+                    "linear, each window capped at its own 99th pct (colorbar top = cap)")), fontsize=9, y=0.995)
     for i, lab in enumerate(lab_list):
         d = data[lab]
         for j, qty in enumerate(("E", "A")):
-            M = d[qty].astype(np.float64)
-            f = M[np.isfinite(M)]
-            vmin, vmax = np.percentile(f, 1), np.percentile(f, 99.8)
+            M0 = d[qty].astype(np.float64)
             for c, (a0, a1) in enumerate((w1, w2)):
                 ax = axs[2 * i + j, c]
-                ax.imshow(M[:, a0:a1], aspect="auto", origin="lower", cmap="magma", vmin=vmin, vmax=vmax,
-                          interpolation="nearest", extent=(a0 - 0.5, a1 - 0.5, -0.5, NB - 0.5))
+                if SCALE == "log":  # one range for the whole row, as before
+                    M, vmin, vmax, _ = scaled(M0)
+                    M = M[:, a0:a1]
+                else:  # linear: each window its own 0 .. max (or 99th pct), with its own colorbar
+                    M, vmin, vmax, _ = scaled(M0[:, a0:a1])
+                im = ax.imshow(M, aspect="auto", origin="lower", cmap="magma", vmin=vmin, vmax=vmax,
+                               interpolation="nearest", extent=(a0 - 0.5, a1 - 0.5, -0.5, NB - 0.5))
+                if SCALE != "log":
+                    cax = ax.inset_axes([1.004, 0, 0.006 * (w1[1] - w1[0] + w2[1] - w2[0]) / (a1 - a0), 1])
+                    cb = plt.colorbar(im, cax=cax)
+                    cb.ax.tick_params(labelsize=5, length=1.5, pad=0.5)
+                    cb.set_ticks([0, vmax])
+                    cb.set_ticklabels(["0", f"{vmax:.2g}"])
                 for L in CUTS:
                     ax.axhline(L - 0.5, color="#00e5ff", lw=0.7, ls="--")
                 ax.set_xticks([])
@@ -286,43 +324,67 @@ def draw_zoom(lab_list, data, items, task, kind, out, tok):
                                fontsize=5.5)
     legend(fig)
     H = 2.0 * len(lab_list) + 1.8
-    fig.subplots_adjust(left=0.07, right=0.99, top=1 - 0.6 / H, bottom=(1.5 if tok is not None else 0.8) / H)
-    fig.savefig(os.path.join(out, f"zoom_{task}_{kind}.png"), dpi=DPI)
+    fig.subplots_adjust(left=0.07, right=0.99 if SCALE == "log" else 0.955, top=1 - 0.6 / H,
+                        bottom=(1.5 if tok is not None else 0.8) / H)
+    fig.savefig(os.path.join(out, f"zoom_{task}_{kind}{SUFFIX[SCALE]}.png"), dpi=DPI)
     plt.close(fig)
 
 
 def draw_routed(d, item, task, kind, out):
     T = d["ty"].shape[0]
-    fig, axs = plt.subplots(7, 1, figsize=(12.7, 11.5), gridspec_kw=dict(height_ratios=[3, 3, 3, 3, 3, 3, 0.25 * 2],
-                                                                         hspace=0.18))
+    H = 11.5 if SCALE == "log" else 12.4
+    fig, axs = plt.subplots(7, 1, figsize=(12.7, H), gridspec_kw=dict(height_ratios=[3, 3, 3, 3, 3, 3, 0.25 * 2],
+                                                                      hspace=0.18 if SCALE == "log" else 0.34))
     fig.suptitle(title_of(task, item, d, f"\nrecipe checkpoint, same row: full forward vs ROUTED forward (router keep "
                  f"{item['keep7']:.0%} of body at block 7, {item['keep16']:.0%} at 16; dropped cells grey). Answer CE/tok "
                  f"dense {item['ce_tok']:.3f}, routed {item['ce_routed_tok']:.3f}"), fontsize=9, y=0.995)
     for j, qty in enumerate(("E", "A")):
         M, Mr = d[qty].astype(np.float64), d[f"{qty}_routed"].astype(np.float64)
-        f = np.concatenate([M[np.isfinite(M)], Mr[np.isfinite(Mr)]])
-        vmin, vmax = np.percentile(f, 1), np.percentile(f, 99.8)
+        Md, vmin, vmax, rng = scaled(M, (Mr,))
+        Mrd = scaled(Mr)[0]
         nm = "weight-grad energy" if qty == "E" else "||dL/dh||"
+        lg = "log10 " if SCALE == "log" else ""
         cm = plt.get_cmap("magma").copy()
         cm.set_bad("#d9d9d9")
-        for k, (MM, tt) in enumerate(((M, f"dense: log10 {nm}"), (Mr, f"routed: log10 {nm}"))):
-            im = panel(axs[3 * j + k], np.ma.masked_invalid(MM), tt + f"  (shared range {vmin:.1f} .. {vmax:.1f})",
+        for k, (MM, tt) in enumerate(((Md, f"dense: {lg}{nm}"), (Mrd, f"routed: {lg}{nm}"))):
+            im = panel(axs[3 * j + k], np.ma.masked_invalid(MM), tt + f"  (range shared by dense + routed: {rng})",
                        vmin, vmax, cmap=cm)
             plt.colorbar(im, ax=axs[3 * j + k], pad=0.005, fraction=0.012)
         cmr = plt.get_cmap("RdBu_r").copy()
         cmr.set_bad("#d9d9d9")
         p_ = 1 if qty == "E" else 2  # E is a sum of squares; A is a norm (compare squared shares)
         tot, totr = np.log10(np.nansum(10 ** (p_ * M))) / p_, np.log10(np.nansum(10 ** (p_ * Mr))) / p_
-        im = panel(axs[3 * j + 2], np.ma.masked_invalid((Mr - totr) - (M - tot)),
-                   f"log10 routed / dense {nm}, each map normalised to its own total (kept cells); totals: routed / dense "
-                   f"= {10 ** (p_ * (totr - tot)):.3g}" + (" (squared)" if p_ == 2 else "")
-                   + " -- sums of squared per-token terms of THIS row; not a gradient-norm ratio (see sum_routed)",
-                   -1.5, 1.5, cmap=cmr)
+        LR = (Mr - totr) - (M - tot)
+        totals = (f"totals: routed / dense = {10 ** (p_ * (totr - tot)):.3g}" + (" (squared)" if p_ == 2 else "")
+                  + " -- sums of squared per-token terms of THIS row; not a gradient-norm ratio (see sum_routed)")
+        if SCALE == "log":
+            im = panel(axs[3 * j + 2], np.ma.masked_invalid(LR),
+                       f"log10 routed / dense {nm}, each map normalised to its own total (kept cells); " + totals,
+                       -1.5, 1.5, cmap=cmr)
+        else:  # linear ratio; a plain 0 .. max map is unreadable (max >> 1), so diverging and linear on each side of 1
+            from matplotlib.colors import TwoSlopeNorm
+            R = 10.0 ** LR
+            f = R[np.isfinite(R)]
+            hi = float(f.max()) if SCALE == "lin" else float(np.percentile(f, 99))
+            hi = max(hi, 1.01)
+            T_ = M.shape[1]
+            ax = axs[3 * j + 2]
+            im = ax.imshow(np.ma.masked_invalid(R), aspect="auto", origin="lower", cmap=cmr, interpolation="nearest",
+                           norm=TwoSlopeNorm(vmin=0.0, vcenter=1.0, vmax=hi), extent=(-0.5, T_ - 0.5, -0.5, NB - 0.5))
+            for L in CUTS:
+                ax.axhline(L - 0.5, color="#00e5ff", lw=0.8, ls="--")
+            ax.set_ylabel("layer")
+            ax.set_yticks([0, 7, 16, 31])
+            ax.set_xticks([])
+            ax.set_title(f"routed / dense {nm} (linear ratio, each map normalised to its own total; kept cells). "
+                         f"DIVERGING map centred at 1, linear on each side: 0 .. 1 .. "
+                         + (f"max {hi:.3g}" if SCALE == "lin" else f"{hi:.3g} = capped at 99th pct (max {f.max():.3g})")
+                         + "\n" + totals, fontsize=8.5, loc="left")
         plt.colorbar(im, ax=axs[3 * j + 2], pad=0.005, fraction=0.012)
     segbar(axs[-1], d, T)
     legend(fig)
-    fig.subplots_adjust(left=0.07, right=0.95, top=1 - 0.75 / 11.5, bottom=0.8 / 11.5)
-    fig.savefig(os.path.join(out, f"routed_{task}_{kind}.png"), dpi=DPI)
+    fig.subplots_adjust(left=0.07, right=0.95, top=1 - 0.75 / H, bottom=0.8 / H)
+    fig.savefig(os.path.join(out, f"routed_{task}_{kind}{SUFFIX[SCALE]}.png"), dpi=DPI)
     plt.close(fig)
 
 
@@ -334,7 +396,12 @@ def main():
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--tokenizer", default="Qwen/Qwen3.5-0.8B")
     ap.add_argument("--rung", default="8k", choices=("2k", "8k"), help="which rows to draw (summaries: every row)")
+    ap.add_argument("--scale", default="log", choices=tuple(SUFFIX),
+                    help="map color scale (map_/zoom_/routed_ PNGs; suffix _lin / _linclip). Summaries are unchanged")
+    ap.add_argument("--maps-only", action="store_true", help="skip the sum_* summaries and summary_<rung>.json")
     a = ap.parse_args()
+    global SCALE
+    SCALE = a.scale
     os.makedirs(a.out_dir, exist_ok=True)
     labs = a.labels.split(",")
     rows = {lab: load_label(a.in_dir, lab) for lab in labs}
@@ -390,7 +457,8 @@ def main():
                            ce_tok={lab: items[lab]["ce_tok"] for lab in labs},
                            ce_routed_tok={lab: items[lab].get("ce_routed_tok") for lab in labs}))
         print(f"drew {t} {kind} row {i} T={P[i]['T']}", flush=True)
-    summarize(labs, rows, S, n, tasks, a.out_dir, picked, a.rung)
+    if not a.maps_only:
+        summarize(labs, rows, S, n, tasks, a.out_dir, picked, a.rung)
 
 
 def ms(x):
