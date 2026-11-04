@@ -77,7 +77,7 @@ def do_launch(a, mode):
                    "--epochs", "1", "--lr", str(a.lr), "--cluster", a.cluster,
                    "--wandb-group", WANDB_GROUP, "--priority", "urgent", "--min-runtime", "1h", "--no-follow",
                    "--no-compile", "--seq-len", str(a.seq_len), "--global-batch", "16",
-                   "--micro-batch-instances", "2", "--seed", str(a.seed), "--base-checkpoint", BASE["4b"],
+                   "--micro-batch-instances", "2", "--seed", str(a.seed), "--base-checkpoint", BASE,
                    "--experiment", "tokdrop_lr"]
             if steps:
                 cmd += ["--max-steps", steps]
