@@ -6,7 +6,7 @@
 # Runs the PUSHED commit.   NAME=mt11L64 bash research/token_routing/mt11_64k/check_beaker.sh
 set -euo pipefail
 W=/weka/oe-training-default/ai2-llm/checkpoints/prasanns
-NAME="${NAME:-mt11L64}"; DO="${DO:-shard,long}"
+NAME="${NAME:-mt11L64}"; DO="${DO:-shard,long}"; SEQ="${SEQ:-65536}"
 GANTRY="${GANTRY:-/scratch/users/prasann/conda/envs/corpus-reasoning-olmo/bin/gantry}"
 LOG=research/token_routing/mt11_64k/launch_logs/check_${NAME}_$(date +%m%d%H%M).log
 mkdir -p "$(dirname $LOG)"
@@ -15,7 +15,7 @@ mkdir -p "$(dirname $LOG)"
   --gpus 0 --cpus 16 --memory 96GiB --priority urgent --min-runtime 1h \
   --beaker-image tylerr/olmo-core-tch291cu128-2025-11-25 --no-python \
   --weka oe-training-default:/weka/oe-training-default \
-  --env W="$W" --env NAME="$NAME" --env DO="$DO" --allow-dirty --timeout 0 --yes -- bash -c '
+  --env W="$W" --env NAME="$NAME" --env DO="$DO" --env SEQ="$SEQ" --allow-dirty --timeout 0 --yes -- bash -c '
 set -uo pipefail
 PYB=/opt/conda/bin/python
 $PYB -m pip install -q -e . -e ctc/ 2>&1 | tail -2
@@ -23,7 +23,7 @@ $PYB -c "import olmo_core.config, ctc" || { echo "!!! deps missing"; exit 1; }
 mkdir -p $W/mt11_64k/reports
 export PYTHONPATH=src:recipes/eval/legacy_native
 case ",$DO," in *,shard,*)
-  $PYB research/token_routing/mt11_64k/verify_shard.py --shard $W/mt11_64k/shards/$NAME --seq-len 65536 --out $W/mt11_64k/reports/verify_$NAME.json
+  $PYB research/token_routing/mt11_64k/verify_shard.py --shard $W/mt11_64k/shards/$NAME --seq-len $SEQ --out $W/mt11_64k/reports/verify_$NAME.json
   echo "verify rc=$?" ;; esac
 case ",$DO," in *,long,*)
   DST=$W/_eval_bundle/ctc_suite_rows
