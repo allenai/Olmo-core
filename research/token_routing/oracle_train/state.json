@@ -123,5 +123,46 @@
    "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchrc-f1952-orc-lr1e-05/oracle_meta"
   }
  },
- "evals": {}
+ "evals": {
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KDT1147V1T5P2MPVVGYMJE",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KDTT8A0WRCVX4ZNS6J7SMF",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KDVMPWG161X7ZABXP4EGTF",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KDWE6Z2AM02PZGQVH0S24E",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KDXQ8VQJ0E7ZECVYP22TK5",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KDYHHEPQTY6QTBN3N506TN",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KDZA8BXC1FQCXJRMBX1NXB",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KE04E9Q4CR56X2GBGXRNC4",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "oolong"
+  }
+ }
 }
