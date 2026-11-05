@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `UnshardedModelExportCallback` and `load_unsharded_model_state()`, which write an unsharded `model.safetensors` (plus the config) into every permanent checkpoint so evaluation can read one file instead of the sharded state.
+- Added the Molmo2 stage-1 pretraining recipe: the stage-1 datasets (PixMo-Cap, PixMo-Points/Count v1 and v2, CoSyn-Point, MolmoPoint-GUISyn, OCR caption tars / OlmOCR / synthetic OCR / text-rich captions, academic QA, PixMo-Clocks, Tulu 4 text) with their mixtures, and `src/scripts/train/Molmo2-Stage1.py` (`dry_run` / `launch` / `train`; v1/v2/v3 recipes, 4B and 8B).
 - Added `olmo_core.nn.maxtext` for converting model weights between OLMo Core and MaxText checkpoints in both directions, built on `StateConverter` like the Hugging Face converter. It picks the MaxText decoder from the OLMo Core config (dense `olmo3`, and the hybrid KDA/MoE `olmoe3`), handles MaxText's scanned and unscanned layouts, and checks that converting back is bit-exact. Example CLIs are in `src/examples/maxtext/`.
 - Added Molmo2 support in `olmo_core.nn.vision`: a HuggingFace Molmo2 checkpoint loader (`molmo2_loader`) and special-token definitions, plus logit-parity and generation tests. `MultimodalLM` gains bidirectional image-token attention (`token_type_ids`), explicit RoPE `position_ids`, and sub-segment (branch-packing) attention isolation.
 - Added `MultimodalTransformerTrainModule` for training `MultimodalLM` (per-token weighted loss, optimizer param groups for the LM / vision tower / connector, FSDP/DDP over the composite model), `weighted_cross_entropy_loss`, the `PerGroupScheduler` (per-param-group LR schedules), and examples-per-second / extra-FLOPs reporting in `SpeedMonitorCallback`.
@@ -25,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Activation checkpointing now preserves the RNG state across recomputation whenever dropout is active (including `ResidualStream.masked_dropout`), so the recomputed forward replays the same dropout masks as the original forward instead of drawing new ones. Previously this was done only for EMO routing.
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
 - Preserve 16-byte parameter alignment in OLMoDDP flat model buffers so compiled kernels remain valid after small BF16 parameters are packed.
