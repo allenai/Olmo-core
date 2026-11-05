@@ -25,8 +25,8 @@ from olmo_core.config import Config
 
 from .grounding import normalize_points, pointing_answer
 from .qwen3_layout import branch_context_ids, image_prefix_ids
-from .sequence_builder import build_branched_sequence, example_rng
-from .sft_common import heldout_ids
+from .sequence_builder import build_branched_sequence
+from .sft_common import EpochSeededExamples, heldout_ids
 from .sft_formatter import SftFormatter
 
 __all__ = [
@@ -196,7 +196,7 @@ class PixMoPointsDatasetConfig(Config):
         return PixMoPointsDataset(self, tokenizer)
 
 
-class PixMoPointsDataset:
+class PixMoPointsDataset(EpochSeededExamples):
     def __init__(self, config: PixMoPointsDatasetConfig, tokenizer):
         self.config = config
         self.tokenizer = tokenizer
@@ -235,7 +235,7 @@ class PixMoPointsDataset:
 
     def __getitem__(self, i: int) -> Dict[str, np.ndarray]:
         row_idx, label_idxs = self._index[i]
-        rng = example_rng(self.config.seed, i)
+        rng = self.epoch_rng(i)
         row = self._data[row_idx]
         fmt = SftFormatter(
             seed=self.config.seed,
@@ -298,7 +298,7 @@ class PixMoCountDatasetConfig(Config):
         return PixMoCountDataset(self, tokenizer)
 
 
-class PixMoCountDataset:
+class PixMoCountDataset(EpochSeededExamples):
     def __init__(self, config: PixMoCountDatasetConfig, tokenizer):
         self.config = config
         self.tokenizer = tokenizer
@@ -325,7 +325,7 @@ class PixMoCountDataset:
         count = int(row["count"])
         pil = _open_image(row["image"])
         pts = row.get("points") or {"x": [], "y": []}
-        rng = example_rng(self.config.seed, i)
+        rng = self.epoch_rng(i)
         fmt = SftFormatter(
             seed=self.config.seed,
             prompt_templates=self.config.prompt_templates,
@@ -398,7 +398,7 @@ class CoSynPointDatasetConfig(Config):
         return CoSynPointDataset(self, tokenizer)
 
 
-class CoSynPointDataset:
+class CoSynPointDataset(EpochSeededExamples):
     def __init__(self, config: CoSynPointDatasetConfig, tokenizer):
         self.config = config
         self.tokenizer = tokenizer
@@ -441,5 +441,5 @@ class CoSynPointDataset:
             loss_token_weighting=self.config.loss_token_weighting,
             message_weight=self.config.message_weight,
             p_high_res=self.config.p_high_res,
-            shuffle_rng=example_rng(self.config.seed, i),
+            shuffle_rng=self.epoch_rng(i),
         )

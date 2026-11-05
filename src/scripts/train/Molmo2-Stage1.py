@@ -59,8 +59,8 @@ user turn and the time as the answer.
 Run without arguments for usage. Quick local smoke test on synthetic data::
 
     torchrun --nproc-per-node=1 src/scripts/train/Molmo2-Stage1.py train smoke \\
-        --dataset.dataset_path=synthetic --trainer.max_duration.value=5 \\
-        --trainer.max_duration.unit=steps
+        --dataset.dataset_path=synthetic --pointing_rate=0 --nlp_rate=0 \\
+        --trainer.max_duration.value=5 --trainer.max_duration.unit=steps
 
 .. note::
     Single-GPU, DDP, and FSDP/HSDP data parallelism are supported. TP/CP/PP/EP of the
@@ -1489,7 +1489,8 @@ The v3 recipe (50k steps; caption 0.33, pointing 0.16, OCR 0.34, academic QA 0.1
 
 Local synthetic smoke test:
 › torchrun --nproc-per-node=1 {sys.argv[0]} train smoke \\
-      --dataset.dataset_path=synthetic --trainer.max_duration.value=5
+      --dataset.dataset_path=synthetic --pointing_rate=0 --nlp_rate=0 \\
+      --trainer.max_duration.value=5
 
 Launch on Beaker:
 › python {sys.argv[0]} launch molmo2-stage1 --launch.num_nodes=1
