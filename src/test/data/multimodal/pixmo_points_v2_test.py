@@ -723,3 +723,52 @@ def test_count_v1_drops_train_images_shared_with_heldout_splits(tmp_path, monkey
     assert len(guarded) == 4  # two rows, each as point_count and pointing
     unguarded = PixMoCountDatasetConfig(heldout_paths=()).build(_FakeTok())
     assert len(unguarded) == 6 and unguarded.n_heldout_dropped == 0
+
+
+def _bare_dataset(cls, config, row):
+    """A dataset instance without its on-disk data, for tests of the per-example randomness."""
+    ds = object.__new__(cls)
+    ds.config = config
+    ds.tokenizer = None
+    ds._data = [row]
+    ds._index = [(0, list(range(len(row["label"]))))]
+    return ds
+
+
+def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
+    """With ``counting="both"`` the pointing / point_count choice is sampled; it has to be drawn
+    from an epoch-dependent stream, or every revisit repeats the same style for each annotation."""
+    from olmo_core.data.multimodal import pixmo_points
+    from olmo_core.data.multimodal.pixmo_points import (
+        PixMoPointsDataset,
+        PixMoPointsDatasetConfig,
+    )
+    from olmo_core.data.multimodal.sequence_builder import example_rng
+
+    captured: list = []
+    monkeypatch.setattr(pixmo_points, "_open_image", lambda image: image)
+
+    def capture(tokenizer, image, branches, **kwargs):
+        captured.append(branches)
+        return {}
+
+    monkeypatch.setattr(pixmo_points, "_build_example", capture)
+    n = 24
+    row = {
+        "label": [f"thing{i}" for i in range(n)],
+        "points": [[[10.0, 20.0]]] * n,
+        "image": object(),
+    }
+    config = PixMoPointsDatasetConfig(counting="both", seed=7)
+    ds = _bare_dataset(PixMoPointsDataset, config, row)
+    assert issubclass(PixMoPointsDataset, pixmo_points.EpochSeededExamples)
+
+    ds[0]
+    ds.set_epoch(1)
+    ds[0]
+    epoch0, epoch1 = captured
+    assert epoch0 != epoch1  # the same annotations get a different style mix in epoch 1
+
+    # Epoch 0 is the unchanged mm_olmo stream, so a run that never revisits a row is unaffected.
+    ds.set_epoch(0)
+    assert ds.epoch_rng(0).randint(1 << 30) == example_rng(7, 0).randint(1 << 30)
