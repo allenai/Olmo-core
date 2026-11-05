@@ -14,15 +14,22 @@ from olmo_core.nn.maxtext import (  # noqa: E402
     get_maxtext_config,
 )
 from olmo_core.nn.maxtext.checkpoint import (  # noqa: E402
+    AdamState,
+    _flatten,
+    _maxtext_adam_state,
+    _unflatten,
     initialize_maxtext_config,
+    load_maxtext_checkpoint,
     load_maxtext_params,
+    maxtext_checkpoint_items,
+    save_maxtext_checkpoint,
     save_maxtext_params,
     scan_params,
 )
 from olmo_core.nn.maxtext.convert import maxtext_shapes  # noqa: E402
 from olmo_core.nn.transformer import TransformerConfig  # noqa: E402
 
-from .convert_test import load_fixture  # noqa: E402
+from .convert_test import assert_states_equal, distinct, load_fixture  # noqa: E402
 
 FIXTURES = {
     "dense": "dense_small_config.json",
@@ -164,3 +171,147 @@ def test_dense_logits_match(tmp_path, scan_layers):
 
     np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5 * np.abs(expected).max())
     assert np.array_equal(actual.argmax(-1), expected.argmax(-1))
+
+
+# ------------------------------------------------------------------------------------------------
+# Optimizer state
+# ------------------------------------------------------------------------------------------------
+
+#: Overrides for building a MaxText training state on CPU.
+TRAIN_OVERRIDES = (
+    "max_target_length=64",
+    "megablox=False",
+    "sparse_matmul=False",
+    "opt_type=adamw",
+    "dtype=float32",
+    "weight_dtype=float32",
+)
+
+
+def path_str(path) -> str:
+    """A JAX key path as a ``/``-joined string, without NNX's ``value`` wrappers."""
+    keys = [str(getattr(k, "key", getattr(k, "name", getattr(k, "idx", k)))) for k in path]
+    return "/".join(k for k in keys if k not in (".value", "value"))
+
+
+def without_params_collection(flat: dict) -> dict:
+    """Drop the ``params`` collection that the on-disk layout wraps the moments in."""
+    out = {}
+    for k, v in flat.items():
+        parts = k.split("/")
+        for i, p in enumerate(parts[:-1]):
+            if p in ("mu", "nu") and parts[i + 1] == "params":
+                del parts[i + 1]
+                break
+        out["/".join(parts)] = v
+    return out
+
+
+def scanned_state(config, scan_layers: bool, step: int = 37):
+    """Distinct MaxText parameters and AdamW state in the given layout."""
+    shapes = maxtext_shapes(config)
+    params = distinct(shapes)
+    optim = AdamState(step, distinct(shapes, seed=10), distinct(shapes, seed=11))
+    if scan_layers:
+        scan = lambda m: scan_params(m, config.scan_layout, config.n_layers)  # noqa: E731
+        params = scan(params)
+        optim = AdamState(step, scan(optim.exp_avg), scan(optim.exp_avg_sq))
+    return params, optim
+
+
+@pytest.mark.parametrize("scan_layers", [False, True], ids=["unscanned", "scanned"])
+@pytest.mark.parametrize("name", FIXTURES)
+def test_opt_state_matches_maxtext_optimizer(name, scan_layers):
+    """The opt_state we write has the leaves MaxText's own adamw optimizer state has."""
+    import jax
+    from maxtext.optimizers import optimizers
+    from maxtext.utils import maxtext_utils
+
+    config = get_maxtext_config(load_fixture(FIXTURES[name]))
+    mt_config = initialize_maxtext_config(
+        config,
+        "run_name=opt_state",
+        "enable_checkpointing=False",
+        *TRAIN_OVERRIDES,
+        scan_layers=scan_layers,
+    )
+    abstract_params = _unflatten(
+        {
+            k: jax.ShapeDtypeStruct(s, np.float32)
+            for k, s in maxtext_param_shapes(config, scan_layers).items()
+        }
+    )
+    tx = optimizers.get_optimizer(mt_config, maxtext_utils.create_learning_rate_schedule(mt_config))
+    expected = {
+        path_str(path): tuple(x.shape)
+        for path, x in jax.tree_util.tree_flatten_with_path(
+            jax.eval_shape(tx.init, abstract_params)
+        )[0]
+    }
+
+    params, optim = scanned_state(config, scan_layers)
+    ours = without_params_collection(_flatten(maxtext_checkpoint_items(params, optim)["opt_state"]))
+    assert {k: tuple(np.shape(v)) for k, v in ours.items()} == expected
+
+
+def test_full_state_orbax_round_trip(tmp_path):
+    config = get_maxtext_config(load_fixture(FIXTURES["hybrid_moe"]))
+    params, optim = scanned_state(config, scan_layers=True)
+    save_maxtext_checkpoint(str(tmp_path), params, optim)
+    loaded_params, loaded_optim = load_maxtext_checkpoint(str(tmp_path / "0" / "items"))
+    assert_states_equal(loaded_params, params)
+    assert loaded_optim is not None
+    assert loaded_optim.step == optim.step
+    assert_states_equal(loaded_optim.exp_avg, optim.exp_avg)
+    assert_states_equal(loaded_optim.exp_avg_sq, optim.exp_avg_sq)
+
+
+@pytest.mark.parametrize("scan_layers", [False, True], ids=["unscanned", "scanned"])
+def test_maxtext_resumes_from_converted_optim_state(tmp_path, scan_layers):
+    """
+    MaxText's own training-state setup restores a converted full-state checkpoint with our moments
+    and step. MaxText keeps its fresh init for anything a restore doesn't find, so this guards
+    against a layout mismatch silently resetting the optimizer.
+    """
+    import jax
+    from flax import nnx
+    from maxtext.common import train_state_nnx
+    from maxtext.utils import maxtext_utils, model_creation_utils, train_utils
+
+    config = get_maxtext_config(load_fixture(FIXTURES["dense"]))
+    params, optim = scanned_state(config, scan_layers)
+    save_maxtext_checkpoint(str(tmp_path), params, optim)
+
+    mt_config = initialize_maxtext_config(
+        config,
+        "run_name=optim_resume",
+        "enable_checkpointing=False",
+        f"load_full_state_path={tmp_path}/0/items",
+        *TRAIN_OVERRIDES,
+        scan_layers=scan_layers,
+    )
+    mesh = jax.sharding.Mesh(maxtext_utils.create_device_mesh(mt_config), mt_config.mesh_axes)
+    create_model, model = model_creation_utils.create_nnx_abstract_model(mt_config, mesh)
+    _, tx = train_utils.create_training_optimizer(mt_config, model, mesh=mesh)
+
+    def init_state_fn():
+        m = create_model()
+        return train_state_nnx.TrainStateNNX(m, nnx.Optimizer(m, tx, wrt=nnx.Param))
+
+    state, *_, was_restored = maxtext_utils.setup_initial_state(
+        None, mt_config, mesh, None, init_state_fn
+    )
+    assert was_restored
+    restored = train_state_nnx.to_checkpoint_dict(state)
+    assert int(restored["step"]) == optim.step
+    found = _maxtext_adam_state(_flatten(restored["opt_state"]), "restored")
+    assert found.step == optim.step
+    assert_states_equal(found.exp_avg, optim.exp_avg)
+    assert_states_equal(found.exp_avg_sq, optim.exp_avg_sq)
+    assert_states_equal(
+        {
+            k: torch.from_numpy(np.asarray(v))
+            for k, v in _flatten(restored["params"]["params"]).items()
+        },
+        params,
+    )
