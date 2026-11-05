@@ -70,7 +70,7 @@ Training (same data, steps and FLOPs; keep fractions identical: 0.2056 overall, 
 | rows/task | arm | PF | CE first 50 steps | CE last 25% | CE last 20 steps | 8k FTM |
 |---|---|---|---|---|---|---|
 | 1,952 | recipe | 345.3 / 343.2 | .452 / .447 | .0956 / .0979 | .083 / .093 | 4.56x / 4.69x |
-| 1,952 | reset | 343.4 | .468 | .1005 | .092 | >=4.46x |
+| 1,952 | reset | 343.4 | .468 | .1005 | .092 | <=4.46x (below the dense f1952 point) |
 | 3,904 | recipe | 688.1 / 686.0 | .464 / .471 | .0580 / .0639 | .049 / .059 | 3.61x / 3.93x |
 | 3,904 | reset | 685.9 | .501 | .0587 | .050 | 3.13x |
 

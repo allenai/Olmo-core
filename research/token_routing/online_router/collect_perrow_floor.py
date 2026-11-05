@@ -82,11 +82,12 @@ def dense_at(pf):
 
 def ftm(score, pf):
     """FLOPs-to-match: dense PF reaching ``score`` (8k mean; log-PF interpolation of the dense curve) / ``pf``.
-    Below the first dense point (0.843): a lower bound '>=' 1531 / pf; above the last: '>=' 6128 / pf."""
+    Below the first dense point (0.843): an upper bound '<=' 1531 / pf (dense matches it with at most 1531 PF);
+    above the last: a lower bound '>=' 6128 / pf."""
     import math
 
     if score <= DENSE[0][2]:
-        return f">={DENSE[0][1] / pf:.2f}"
+        return f"<={DENSE[0][1] / pf:.2f}"
     for (r0, p0, v0), (r1, p1, v1) in zip(DENSE, DENSE[1:]):
         if v0 < score <= v1:
             t = (score - v0) / (v1 - v0)
