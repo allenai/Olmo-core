@@ -1234,10 +1234,27 @@ def _checkpoint_tokenizer_config(saved: Mapping[str, Any]) -> tuple[int, str | N
     )
 
 
-def _load_tokenizer(cache_dir: str, model_vocab_size: int) -> tuple[Any, Molmo2TokenIds]:
+def _checkpoint_tokenizer_json_split(saved: Mapping[str, Any]) -> bool:
+    """Whether the checkpoint trained on ``tokenizer.json``'s split; see
+    :attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`.
+    Configs saved before that setting existed trained on ``GPT2Tokenizer``'s split."""
+    from olmo_core.data.multimodal.alignment import saved_tokenizer_json_split
+
+    return saved_tokenizer_json_split(saved.get("dataset"))
+
+
+def _load_tokenizer(
+    cache_dir: str, model_vocab_size: int, *, tokenizer_json_split: bool = False
+) -> tuple[Any, Molmo2TokenIds]:
+    """Load the benchmark's pinned Dolma2 snapshot as the checkpoint was trained on it.
+
+    :param tokenizer_json_split: Load ``tokenizer.json`` losslessly, as runs with
+        ``dataset.tokenizer_json_split`` trained; otherwise ``GPT2Tokenizer``, as earlier runs did.
+    """
     from huggingface_hub import snapshot_download
     from transformers import GPT2Tokenizer
 
+    from olmo_core.nn.hf.tokenizer import load_tokenizer_losslessly
     from olmo_core.nn.vision import prepare_molmo2_tokenizer
 
     snapshot = Path(
@@ -1259,7 +1276,10 @@ def _load_tokenizer(cache_dir: str, model_vocab_size: int) -> tuple[Any, Molmo2T
         digest.update(f"{_file_sha256(snapshot / name)}  {name}\n".encode())
     if digest.hexdigest() != TOKENIZER_FINGERPRINT:
         raise ValueError("Academic tokenizer snapshot differs")
-    tokenizer = GPT2Tokenizer.from_pretrained(snapshot, local_files_only=True)
+    if tokenizer_json_split:
+        tokenizer, _, _ = load_tokenizer_losslessly(snapshot)
+    else:
+        tokenizer = GPT2Tokenizer.from_pretrained(snapshot, local_files_only=True)
     tokens = prepare_molmo2_tokenizer(tokenizer, model_vocab_size=model_vocab_size)
     if tokens != TOKEN_IDS:
         raise ValueError("Academic image-token layout differs")
@@ -1316,6 +1336,10 @@ def _definition(checkpoint: Path, manifest: Mapping[str, Any]) -> dict[str, Any]
             "forward_context": "eager_grad_enabled",
             "sequence_bucket_size": 128,
             "torch_version": torch.__version__,
+            # Results tokenized with tokenizer.json's split must not mix with the earlier
+            # evaluator's for the same checkpoint. Recorded only for that split, so the
+            # definitions (and saved results) of earlier checkpoints are unchanged.
+            **({"tokenizer_json_split": True} if _checkpoint_tokenizer_json_split(saved) else {}),
         },
     }
 
@@ -1571,7 +1595,9 @@ def _evaluate(
                 merge_results(output, manifest, definition)
             dist.barrier()
             return
-        tokenizer, token_ids = _load_tokenizer(cache, vocab_size)
+        tokenizer, token_ids = _load_tokenizer(
+            cache, vocab_size, tokenizer_json_split=_checkpoint_tokenizer_json_split(saved)
+        )
         loaded = load_selected_examples(manifest, tasks)
         model, config, kind = build_model_and_module_config(
             saved,

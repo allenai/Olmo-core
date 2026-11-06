@@ -5,13 +5,13 @@ from olmo_core.internal.vision_alignment_data import DEFAULT_ALIGNMENT_ARTIFACT_
 from olmo_core.train import Duration
 
 PERCEPTION_MEANS = {
-    "audited_alignment": 18.860581716464367,
-    "cosyn_point": 19.9274699697271,
-    "ocr_document": 4.121176112443209,
-    "pixmo_caption": 28.593906218127813,
-    "pixmo_points_basic": 33.50284379025106,
+    "audited_alignment": 18.696413921716157,
+    "cosyn_point": 19.90814993873937,
+    "ocr_document": 4.103901697322726,
+    "pixmo_caption": 28.26835112122353,
+    "pixmo_points_basic": 33.4985158557829,
     "pixmo_points_high_frequency": 27.439346029539593,
-    "pixmo_transcript": 29.704384807148017,
+    "pixmo_transcript": 29.593976828677114,
     "scalar_count": 3.464101552963257,
 }
 

@@ -14,13 +14,13 @@
   "alignment_artifact_root": "/weka/oe-training-default/rustin/experiments/vision-moe/vision-alignment/artifacts",
   "midtraining_artifact_root": "/weka/oe-training-default/rustin/experiments/vision-moe/vision-midtraining/artifacts",
   "mean_loss_weight": {
-    "audited_alignment": 104.0703125,
-    "cosyn_point": 100.984375,
-    "ocr_document": 4.65625,
-    "pixmo_cap": 443.8046875,
+    "audited_alignment": 101.34375,
+    "cosyn_point": 100.84375,
+    "ocr_document": 4.6015625,
+    "pixmo_cap": 437.453125,
     "pixmo_count": 37.4609375,
     "pixmo_count_scalar": 3.0,
-    "pixmo_points_basic": 342.359375,
-    "pixmo_points_high_frequency": 250.4921875
+    "pixmo_points_basic": 342.328125,
+    "pixmo_points_high_frequency": 250.4609375
   }
 }

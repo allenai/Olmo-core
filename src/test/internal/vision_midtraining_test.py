@@ -1605,8 +1605,9 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
     assert passes("cosyn_chemical_exp") == pytest.approx(STAGE1_V7_PASS_CAP)
     assert passes("synth_receipts_en") == pytest.approx(STAGE1_V7_PASS_CAP)
     assert passes("textocr") == pytest.approx(STAGE1_V7_PASS_CAPS["textocr"])
-    # olmOCR documents was under the cap; the receipts and TextOCR loss raises it toward it.
-    assert 4.5 < passes("olmocr_documents") < STAGE1_V7_PASS_CAP
+    # olmOCR documents was under the cap; the receipts and TextOCR loss raises it to the cap (with
+    # the tokenizer.json-split means; just under it with the earlier split's).
+    assert 4.5 < passes("olmocr_documents") <= STAGE1_V7_PASS_CAP + 1e-9
     ocr = set(STAGE1_V3_GROUPS["ocr"])
     untouched = set(STAGE1_V6_LOSS_TARGETS) - ocr - capped
     assert {
@@ -1654,7 +1655,7 @@ def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
     v7, v7_text = step_loss(STAGE1_V7_LOSS_TARGETS, STAGE1_V7_TEXT_LOSS_SHARE)
     assert base_text == pytest.approx(9.0)  # the base split keeps v6's text per step
     assert 1.05 * base_text < v7_text < 1.2 * base_text
-    assert stage1_run_passes("pixmo_points_v2", base["pixmo_points_v2"]) > 25
+    assert stage1_run_passes("pixmo_points_v2", base["pixmo_points_v2"]) > 24
     assert v7["pixmo_points_v2"] == pytest.approx(STAGE1_V7_POINTS_SCALE * base["pixmo_points_v2"])
     for name, cap in STAGE1_V7_RUN_PASS_CAPS.items():
         assert stage1_run_passes(name, v7[name]) == pytest.approx(cap)
