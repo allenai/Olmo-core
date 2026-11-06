@@ -73,6 +73,15 @@ class MoERouterConfigV2(Config):
     sigmoid_stability_epsilon: float = 1e-7
     global_load_balancing: bool = False
     """Compute load-balancing loss from assignment counts averaged across the DP group."""
+    step_load_balancing: bool = False
+    """
+    Widen the load-balancing loss window to the whole optimizer step, i.e. the global batch.
+    Assignment counts are accumulated over every micro-batch of a step, and the next step's
+    loss uses those previous-step counts, rescaled to each micro-batch's token count, in place
+    of the micro-batch's own counts. This composes with :data:`global_load_balancing`, which
+    widens the window across data-parallel ranks. The first step after startup (or resume)
+    falls back to micro-batch counts.
+    """
     emo: Optional[EmoRouterConfig] = None
     """Optional EMO document-pool routing policy."""
 
@@ -157,6 +166,7 @@ class MoERouterV2(nn.Module):
         topk_group: Optional[int] = None,
         sigmoid_stability_epsilon: float = 1e-7,
         global_load_balancing: bool = False,
+        step_load_balancing: bool = False,
         dtype: torch.dtype = torch.float32,
     ):
         super().__init__()
@@ -188,7 +198,17 @@ class MoERouterV2(nn.Module):
         self.topk_group = topk_group
         self.sigmoid_stability_epsilon = sigmoid_stability_epsilon
         self.global_load_balancing = global_load_balancing
+        self.step_load_balancing = step_load_balancing
         self.lb_process_group: Optional[dist.ProcessGroup] = None
+
+        if (
+            self.step_load_balancing
+            and self.lb_loss_granularity == MoELoadBalancingLossGranularity.instance
+        ):
+            raise OLMoConfigurationError(
+                "step_load_balancing does not support instance-granularity load-balancing "
+                "loss because per-instance assignments cannot be carried across steps"
+            )
 
         if (
             self.global_load_balancing
@@ -256,6 +276,8 @@ class MoERouterV2(nn.Module):
             torch.zeros(self.num_experts, device=init_device)
         )
         self._global_batch_size_per_expert: Optional[_HiddenTensor] = None
+        self._step_batch_size_per_expert: Optional[_HiddenTensor] = None
+        self._prev_step_batch_size_per_expert: Optional[_HiddenTensor] = None
         self._score_bias_batch_size_per_expert: Optional[_HiddenTensor] = None
         self._load_balancing_loss: Optional[_HiddenTensor] = None
         self._z_loss: Optional[_HiddenTensor] = None
@@ -281,6 +303,14 @@ class MoERouterV2(nn.Module):
         )
         if self.global_load_balancing:
             self._global_batch_size_per_expert = hide_from_torch(
+                torch.zeros(self.num_experts, device=self.device)
+            )
+
+        if self.step_load_balancing:
+            self._step_batch_size_per_expert = hide_from_torch(
+                torch.zeros(self.num_experts, device=self.device)
+            )
+            self._prev_step_batch_size_per_expert = hide_from_torch(
                 torch.zeros(self.num_experts, device=self.device)
             )
 
@@ -334,6 +364,36 @@ class MoERouterV2(nn.Module):
     @score_bias_batch_size_per_expert.setter
     def score_bias_batch_size_per_expert(self, value: torch.Tensor):
         self._score_bias_batch_size_per_expert = hide_from_torch(value)
+
+    def _step_counts(self, attr: str) -> Optional[torch.Tensor]:
+        if not self.step_load_balancing:
+            return None
+        value = getattr(self, attr)
+        if value is None:
+            value = hide_from_torch(torch.zeros(self.num_experts, device=self.device))
+            setattr(self, attr, value)
+        elif value.device != self.device:
+            value = value.to(self.device)
+            setattr(self, attr, value)
+        return unhide_from_torch(value)
+
+    @property
+    def step_batch_size_per_expert(self) -> Optional[torch.Tensor]:
+        """Assignment counts accumulated so far in the current optimizer step."""
+        return self._step_counts("_step_batch_size_per_expert")
+
+    @step_batch_size_per_expert.setter
+    def step_batch_size_per_expert(self, value: torch.Tensor):
+        self._step_batch_size_per_expert = hide_from_torch(value)
+
+    @property
+    def prev_step_batch_size_per_expert(self) -> Optional[torch.Tensor]:
+        """Assignment counts over the whole previous optimizer step."""
+        return self._step_counts("_prev_step_batch_size_per_expert")
+
+    @prev_step_batch_size_per_expert.setter
+    def prev_step_batch_size_per_expert(self, value: torch.Tensor):
+        self._prev_step_batch_size_per_expert = hide_from_torch(value)
 
     @property
     def batch_size_per_expert(self) -> torch.Tensor:
@@ -406,7 +466,18 @@ class MoERouterV2(nn.Module):
 
     @torch.no_grad()
     def post_batch(self, dry_run: bool = False):
-        if self.bias_gamma is None or not self.training:
+        if not self.training:
+            return
+
+        if self.step_load_balancing:
+            step_counts = self.step_batch_size_per_expert
+            prev_step_counts = self.prev_step_batch_size_per_expert
+            assert step_counts is not None and prev_step_counts is not None
+            if not dry_run:
+                prev_step_counts.copy_(step_counts)
+            step_counts.zero_()
+
+        if self.bias_gamma is None:
             return
 
         assert self.score_bias is not None
@@ -515,6 +586,15 @@ class MoERouterV2(nn.Module):
                 global_batch_size_per_expert.max()
                 / global_batch_size_per_expert.mean(dtype=torch.float),
                 # All DP ranks accumulate the same globally reduced counts.
+                ReduceType.mean,
+            )
+
+        if self.step_load_balancing:
+            prev_step_counts = self.prev_step_batch_size_per_expert
+            assert prev_step_counts is not None
+            # Zero until the first step completes, then the previous step's imbalance.
+            out["step load imbalance"] = (
+                prev_step_counts.max() / prev_step_counts.mean(dtype=torch.float).clamp_min(1.0),
                 ReduceType.mean,
             )
 
@@ -812,6 +892,21 @@ class MoERouterV2(nn.Module):
                     if global_batch_size_per_expert is not None
                     else batch_size_per_expert
                 )
+                if self.step_load_balancing:
+                    # Swap in last step's whole-batch counts, rescaled to this micro-batch's
+                    # slot count so the loss keeps the same scale. Until a step has
+                    # completed the previous counts are all zero and we keep the
+                    # micro-batch counts. Done without a host sync.
+                    prev_step_counts = self.prev_step_batch_size_per_expert
+                    assert prev_step_counts is not None
+                    micro_batch_counts = lb_batch_size_per_expert.float()
+                    prev_total = prev_step_counts.sum()
+                    scaled_prev = prev_step_counts * (
+                        micro_batch_counts.sum() / prev_total.clamp_min(1.0)
+                    )
+                    lb_batch_size_per_expert = torch.where(
+                        prev_total > 0, scaled_prev, micro_batch_counts
+                    )
 
                 lb_loss = load_balancing_loss(
                     num_experts=self.num_experts,
@@ -876,6 +971,13 @@ class MoERouterV2(nn.Module):
                 if global_batch_size_per_expert is not None:
                     assert self.global_batch_size_per_expert is not None
                     self.global_batch_size_per_expert += global_batch_size_per_expert
+                if self.step_load_balancing:
+                    assert self.step_batch_size_per_expert is not None
+                    self.step_batch_size_per_expert += (
+                        global_batch_size_per_expert
+                        if global_batch_size_per_expert is not None
+                        else batch_size_per_expert.float()
+                    )
                 if self.bias_gamma is not None:
                     assert self.score_bias_batch_size_per_expert is not None
                     self.score_bias_batch_size_per_expert += batch_size_per_expert

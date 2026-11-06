@@ -379,3 +379,105 @@ def test_router_tp_accumulates_aux_losses_cpu():
         func_args=(torch.device("cpu"),),
         start_method="spawn",
     )
+
+
+def test_step_load_balancing_rejects_instance_granularity():
+    with pytest.raises(OLMoConfigurationError, match="step_load_balancing"):
+        _build(
+            lb_loss_weight=1.0,
+            step_load_balancing=True,
+            lb_loss_granularity=MoELoadBalancingLossGranularity.instance,
+        )
+
+
+def _capture_lb_counts(monkeypatch: pytest.MonkeyPatch) -> list[torch.Tensor]:
+    captured: list[torch.Tensor] = []
+
+    def fake_load_balancing_loss(**kwargs):
+        captured.append(kwargs["batch_size_per_expert"].clone())
+        return kwargs["expert_scores"].sum() * 0
+
+    monkeypatch.setattr(router_v2, "load_balancing_loss", fake_load_balancing_loss)
+    return captured
+
+
+def _aux(router, counts: torch.Tensor):
+    scores = torch.full((1, int(counts.sum()), 2), 0.5, requires_grad=True)
+    router.compute_aux_loss(scores, scores.log(), counts, counts.unsqueeze(0), 8.0)
+
+
+def test_step_load_balancing_uses_previous_step_counts(monkeypatch: pytest.MonkeyPatch):
+    router = _build(top_k=1, num_experts=2, lb_loss_weight=1.0, step_load_balancing=True)
+    captured = _capture_lb_counts(monkeypatch)
+
+    # Step 1: no previous step yet, so each micro-batch uses its own counts.
+    _aux(router, torch.tensor([8, 0]))
+    _aux(router, torch.tensor([0, 8]))
+    torch.testing.assert_close(captured[0], torch.tensor([8.0, 0.0]))
+    torch.testing.assert_close(captured[1], torch.tensor([0.0, 8.0]))
+    assert router.step_batch_size_per_expert is not None
+    torch.testing.assert_close(router.step_batch_size_per_expert, torch.tensor([8.0, 8.0]))
+    metrics = router.compute_metrics(reset=False)
+    torch.testing.assert_close(metrics["step load imbalance"][0], torch.tensor(0.0))
+
+    # The metric reset at the end of a step must not touch the step accumulator.
+    router.reset_metrics()
+    torch.testing.assert_close(router.step_batch_size_per_expert, torch.tensor([8.0, 8.0]))
+
+    router.post_batch()
+    assert router.prev_step_batch_size_per_expert is not None
+    torch.testing.assert_close(router.prev_step_batch_size_per_expert, torch.tensor([8.0, 8.0]))
+    torch.testing.assert_close(router.step_batch_size_per_expert, torch.zeros(2))
+
+    # Step 2: a lopsided micro-batch is balanced against the whole previous step,
+    # rescaled to this micro-batch's slot count (4).
+    _aux(router, torch.tensor([4, 0]))
+    torch.testing.assert_close(captured[2], torch.tensor([2.0, 2.0]))
+    # Local per-step metrics still see the real micro-batch counts.
+    torch.testing.assert_close(router.batch_size_per_expert, torch.tensor([4.0, 0.0]))
+    torch.testing.assert_close(router.step_batch_size_per_expert, torch.tensor([4.0, 0.0]))
+    metrics = router.compute_metrics(reset=False)
+    torch.testing.assert_close(metrics["step load imbalance"][0], torch.tensor(1.0))
+
+    # A dry run clears the accumulator without promoting it to the previous step.
+    router.post_batch(dry_run=True)
+    torch.testing.assert_close(router.prev_step_batch_size_per_expert, torch.tensor([8.0, 8.0]))
+    torch.testing.assert_close(router.step_batch_size_per_expert, torch.zeros(2))
+
+    # Eval mode neither accumulates nor rotates.
+    router.eval()
+    _aux(router, torch.tensor([4, 0]))
+    router.post_batch()
+    assert len(captured) == 3
+    torch.testing.assert_close(router.prev_step_batch_size_per_expert, torch.tensor([8.0, 8.0]))
+
+
+def test_step_load_balancing_composes_with_global_load_balancing(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    router = _build(
+        top_k=1,
+        num_experts=2,
+        lb_loss_weight=1.0,
+        global_load_balancing=True,
+        step_load_balancing=True,
+    )
+    router.lb_process_group = object()  # type: ignore[assignment]
+    captured = _capture_lb_counts(monkeypatch)
+
+    def fake_all_reduce(counts, *, op, group):
+        counts.add_(torch.tensor([0.0, 8.0]))
+
+    monkeypatch.setattr(router_v2.dist, "all_reduce", fake_all_reduce)
+    monkeypatch.setattr(router_v2.dist, "get_world_size", lambda group: 2)
+
+    # Step 1 accumulates the DP-averaged counts, not the local ones.
+    _aux(router, torch.tensor([8, 0]))
+    torch.testing.assert_close(captured[0], torch.tensor([4.0, 4.0]))
+    assert router.step_batch_size_per_expert is not None
+    torch.testing.assert_close(router.step_batch_size_per_expert, torch.tensor([4.0, 4.0]))
+    router.post_batch()
+
+    # Step 2 balances against last step's DP-averaged, whole-step counts.
+    _aux(router, torch.tensor([8, 0]))
+    torch.testing.assert_close(captured[1], torch.tensor([4.0, 4.0]))
