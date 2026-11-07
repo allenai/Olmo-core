@@ -1165,7 +1165,8 @@ def test_metadata_fingerprint_ignores_gzip_mtime(tmp_path: Path):
     assert fingerprints[0] == fingerprints[1]
     assert ds.fingerprint_version == "v2.1"
 
-    # Local EOS-scan packs keep the base fingerprint version (digest format unchanged).
+    # Local EOS-scan packs share the same post-upgrade version so boundary-mode flips
+    # remain same-version fingerprint checks.
     local_ds = NumpyPackedFSLDataset(
         data_path,
         sequence_length=8,
@@ -1174,7 +1175,7 @@ def test_metadata_fingerprint_ignores_gzip_mtime(tmp_path: Path):
         vocab_size=32_000,
     )
     local_ds.work_dir = tmp_path / "work-local"
-    assert local_ds.fingerprint_version == "v2.0"
+    assert local_ds.fingerprint_version == "v2.1"
 
     # Mutation check: a real boundary change still invalidates the fingerprint.
     sidecar.write_bytes(gzip.compress(b"0,3\n3,7\n", mtime=1))

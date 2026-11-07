@@ -1215,15 +1215,14 @@ class NumpyPackedFSLDataset(NumpyFSLDatasetBase):
         """
         The version of the :data:`fingerprint`.
 
-        Metadata-backed packs use ``v2.1`` because sidecar digests are now SHA256 of the
-        decompressed CSV rather than the gzip container. That bump lets
-        ``NumpyDataLoaderBase.load_state_dict`` warn-and-resume across the upgrade instead of
-        raising on a same-version fingerprint mismatch. Local EOS-scan packs keep the base
-        version; their fingerprint contents are unchanged.
+        Packed datasets use ``v2.1`` because sidecar digests are now SHA256 of the decompressed
+        CSV rather than the gzip container. That bump lets ``NumpyDataLoaderBase.load_state_dict``
+        warn-and-resume across the upgrade instead of raising on a same-version fingerprint
+        mismatch. Both packing modes share this version so flipping ``use_array_if_local`` stays
+        a same-version fingerprint check (fatal on mismatch) rather than a version-mismatch
+        warning that skips comparison.
         """
-        if self._packed_from_metadata_boundaries(self.paths):
-            return "v2.1"
-        return super().fingerprint_version
+        return "v2.1"
 
     @property
     def fingerprint_fields(self) -> Tuple[str, ...]:

@@ -448,6 +448,59 @@ def test_metadata_fingerprint_version_allows_resume(tmp_path: Path, monkeypatch)
         make_loader(ds, "loader-mismatch").load_state_dict(same_version_state)
 
 
+def test_boundary_mode_flip_fails_fingerprint_at_same_version(tmp_path: Path):
+    # Non-EOS-terminated docs: metadata boundaries and local EOS-scan pack differently.
+    # Both modes share fingerprint_version v2.1, so flipping use_array_if_local must hit the
+    # same-version fingerprint mismatch path (fatal) rather than a version-mismatch warning.
+    data = [1, 2, 3, 4, 5, 6, 0]
+    data_path = tmp_path / "part.npy"
+    mmap = np.memmap(data_path, mode="w+", dtype=np.uint16, shape=(len(data),))
+    mmap[:] = data
+    mmap.flush()
+    sidecar = data_path.with_suffix(".csv.gz")
+    sidecar.write_bytes(gzip.compress(b"0,4\n4,7\n", mtime=0))
+
+    def make_dataset(use_array_if_local, work_name: str) -> NumpyPackedFSLDataset:
+        ds = NumpyPackedFSLDataset(
+            data_path,
+            sequence_length=4,
+            pad_token_id=-1,
+            eos_token_id=0,
+            vocab_size=32_000,
+            use_array_if_local=use_array_if_local,
+        )
+        ds.work_dir = tmp_path / work_name
+        ds.prepare()
+        return ds
+
+    def make_loader(dataset: NumpyPackedFSLDataset, work_name: str) -> NumpyFSLDataLoader:
+        return NumpyFSLDataLoader(
+            dataset,
+            global_batch_size=4,
+            collator=DataCollator(pad_token_id=-1),
+            shuffle=False,
+            num_threads=0,
+            work_dir=tmp_path / work_name,
+        )
+
+    metadata_ds = make_dataset(False, "work-metadata")
+    local_ds = make_dataset(None, "work-local")
+    assert metadata_ds.fingerprint_version == local_ds.fingerprint_version == "v2.1"
+    assert metadata_ds.fingerprint != local_ds.fingerprint
+
+    metadata_state = make_loader(metadata_ds, "loader-metadata").state_dict()
+    with pytest.raises(RuntimeError, match="Dataset fingerprint does not match"):
+        make_loader(local_ds, "loader-flip").load_state_dict(metadata_state)
+
+    # Legacy compressed digests under v2.0 still warn-and-resume on the version path.
+    legacy_state = {
+        **metadata_state,
+        "dataset_fingerprint_version": "v2.0",
+        "dataset_fingerprint": "deadbeef" * 8,
+    }
+    make_loader(metadata_ds, "loader-legacy-warn").load_state_dict(legacy_state)
+
+
 @pytest.mark.parametrize(
     "shuffle, curriculum",
     [

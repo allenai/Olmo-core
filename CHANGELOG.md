@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Hash decompressed `.csv.gz` document-boundary sidecars for metadata-backed packed dataset fingerprints and packing-cache keys, so rewriting identical boundaries no longer breaks resume when only the gzip header (mtime/name) changes (https://github.com/allenai/Olmo-core/issues/917). Metadata-backed `NumpyPackedFSLDataset.fingerprint_version` is now `v2.1` so checkpoints saved under the previous compressed-byte digests (`v2.0`) can resume with a version warning instead of a fatal same-version fingerprint mismatch.
+- Hash decompressed `.csv.gz` document-boundary sidecars for metadata-backed packed dataset fingerprints and packing-cache keys, so rewriting identical boundaries no longer breaks resume when only the gzip header (mtime/name) changes (https://github.com/allenai/Olmo-core/issues/917). `NumpyPackedFSLDataset.fingerprint_version` is now `v2.1` for both packing modes so checkpoints saved under the previous compressed-byte digests (`v2.0`) can resume with a version warning, while flipping `use_array_if_local` stays a same-version fingerprint check.
 
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
