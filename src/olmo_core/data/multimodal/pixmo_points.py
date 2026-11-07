@@ -70,10 +70,10 @@ _CONTENT_FINGERPRINT_DOMAIN = b"pixmo-perception-adapter-v1\0"
 _SCALAR_COUNT_PROMPT = "How many {label} are there?"
 _TOKEN_FIELDS = ("input_ids", "labels", "loss_masks", "position_ids", "token_type_ids")
 _PERCENT_POINT_CLAMP_TOLERANCE = 2.0
-_ANNOTATION_SAMPLINGS = ("all", "one")
+_ANNOTATION_SAMPLINGS = ("all", "one", "documents")
 _ANNOTATION_STREAM = 0x0A11  # spawn-key salt keeping the selection off the augmentation stream
 
-AnnotationSampling = Literal["all", "one"]
+AnnotationSampling = Literal["all", "one", "documents"]
 
 
 def _validate_annotation_sampling(value: str) -> None:
@@ -443,6 +443,7 @@ def _build_example(
     shuffle_rng: np.random.RandomState | None = None,
     seed: int = 0,
     branch_weights: Optional[Sequence[Optional[float]]] = None,
+    branches_as_documents: bool = False,
 ) -> Dict[str, np.ndarray]:
     """Preprocess the image and assemble a (possibly multi-branch) pointing example.
 
@@ -461,6 +462,9 @@ def _build_example(
         (``None`` entries mean 1). mm_olmo's per-message ``AssistantMessage.weight``: the
         branch's response tokens are scaled by it on top of ``loss_token_weighting`` and
         ``message_weight``, which stay example-wide. Only the list convention supports it.
+    :param branches_as_documents: Serialize each branch as its own document sharing the image's
+        crops (see :func:`~.message_sequence.encode_sft_example`), keeping documents within
+        ``max_sequence_length``. Only the callable convention supports it.
     :param rng: The example's RNG stream for the callable convention. ``shuffle_rng`` is its
         name in the list convention; ``seed`` seeds a fresh stream when neither is given.
     """
@@ -484,6 +488,8 @@ def _build_example(
             message_format=message_format,
             message_weight=message_weight,
             shuffle_rng=rng,
+            branches_as_documents=branches_as_documents,
+            document_token_budget=max_sequence_length,
         )
         return _finalize_example(
             example,
@@ -498,6 +504,8 @@ def _build_example(
 
     if message_format != "qwen3":
         raise ValueError("The branch-list convention serializes the qwen3 layout only")
+    if branches_as_documents:
+        raise ValueError("branches_as_documents needs the branch-building callable convention")
     import torch
 
     from olmo_core.nn.vision.molmo2_image_processor import preprocess_image_molmo2
@@ -632,7 +640,9 @@ class PixMoPointsDatasetConfig(Config):
     """``"all"`` packs every annotation of an image as sibling branches of one example;
     ``"one"`` keeps a single annotation per example, chosen per ``(seed, index, epoch)``.
     Language models that can only isolate whole documents (no attention masks, e.g. Kimi Delta
-    Attention) cannot train on sibling branches and need ``"one"``."""
+    Attention) cannot train on sibling branches and need ``"one"`` or ``"documents"``, which keeps
+    every annotation, each as its own document sharing the image's crops (the vision encoder runs
+    once for all of them)."""
     explicit_grounding_prompts: bool = False
     """Explicitly request point coordinates, including in count-style prompts."""
     max_points: int = 60
@@ -900,6 +910,7 @@ class PixMoPointsDataset:
             p_high_res=self.config.p_high_res,
             message_format=self.config.message_format,
             rng=rng,
+            branches_as_documents=self.config.annotation_sampling == "documents",
         )
 
 
@@ -1173,7 +1184,8 @@ class CoSynPointDatasetConfig(Config):
     annotation_sampling: AnnotationSampling = "all"
     """``"all"`` packs every question of an image as sibling branches of one example; ``"one"``
     keeps a single question per example, chosen per ``(seed, index, epoch)`` (needed by language
-    models that can only isolate whole documents, e.g. Kimi Delta Attention)."""
+    models that can only isolate whole documents, e.g. Kimi Delta Attention); ``"documents"``
+    keeps every question, each as its own document sharing the image's crops."""
 
     def build(self, tokenizer) -> CoSynPointDataset:
         return CoSynPointDataset(self, tokenizer)
@@ -1333,4 +1345,5 @@ class CoSynPointDataset:
             p_high_res=self.config.p_high_res,
             message_format=self.config.message_format,
             rng=sft_example_rng(self.config.seed, i, epoch, self.config.message_format),
+            branches_as_documents=cfg.annotation_sampling == "documents",
         )

@@ -240,7 +240,8 @@ class PixMoPointsV2DatasetConfig(Config):
     """``"all"`` trains every branch of an image (its kept annotations and sampled negatives) as
     sibling branches of one example; ``"one"`` keeps a single branch per example, chosen per
     ``(seed, index, epoch)`` (for language models that isolate packed examples only by document
-    boundaries, e.g. Kimi Delta Attention)."""
+    boundaries, e.g. Kimi Delta Attention); ``"documents"`` keeps every branch, each as its own
+    document sharing the image's crops (the vision encoder runs once for all of them)."""
     max_sequence_length: Optional[int] = None
     """Tail-truncate the built sequence to this many tokens. Applies outside the default
     ``qwen3`` / ``"all"`` path, which keeps the released stage-1 example exactly."""
@@ -319,6 +320,8 @@ def _build_selected_example(
         message_weight=message_weight,
         message_format=cfg.message_format,
         rng=rng,
+        max_sequence_length=cfg.max_sequence_length,
+        branches_as_documents=cfg.annotation_sampling == "documents",
     )
     return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)
 
@@ -549,7 +552,8 @@ class PixMoCountV2DatasetConfig(Config):
     """``"all"`` trains every branch of an image (its kept annotations and sampled negatives) as
     sibling branches of one example; ``"one"`` keeps a single branch per example, chosen per
     ``(seed, index, epoch)`` (for language models that isolate packed examples only by document
-    boundaries, e.g. Kimi Delta Attention)."""
+    boundaries, e.g. Kimi Delta Attention); ``"documents"`` keeps every branch, each as its own
+    document sharing the image's crops (the vision encoder runs once for all of them)."""
     max_sequence_length: Optional[int] = None
     """Tail-truncate the built sequence to this many tokens. Applies outside the default
     ``qwen3`` / ``"all"`` path, which keeps the released stage-1 example exactly."""

@@ -39,18 +39,28 @@ from __future__ import annotations
 import glob
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from olmo_core.config import Config
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .paths import MOLMO_DATA_DIR
-from .pixmo_points import _build_example
-from .pixmo_points_v2 import STAGE1_PROMPT_FAMILY, _rows_with_any
-from .sft_common import EpochSeededExamples
+from .pixmo_points import (
+    AnnotationSampling,
+    _build_example,
+    _validate_annotation_sampling,
+)
+from .pixmo_points_v2 import (
+    STAGE1_PROMPT_FAMILY,
+    _build_selected_example,
+    _released_layout,
+    _rows_with_any,
+)
+from .sft_common import EpochSeededExamples, SftMessageFormat
 from .sft_formatter import SftFormatter
 
 __all__ = [
@@ -128,6 +138,17 @@ class GuiSynDatasetConfig(Config):
     loss_token_weighting: str = "none"
     """``"none"`` weights every response token equally, like the other v2 pointing sources."""
     message_weight: Optional[float] = None
+    token_ids: Molmo2TokenIds = field(default_factory=Molmo2TokenIds)
+    """Image token IDs of the selected language-model tokenizer (set by the mixture)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``"qwen3"`` (the released Molmo2 chat layout) or ``"document"`` (plain pretraining
+    documents), as for the PixMo v2 sources."""
+    annotation_sampling: AnnotationSampling = "all"
+    """``"all"``, ``"one"`` or ``"documents"``, as for the PixMo v2 sources: one branch per
+    sampled element."""
+    max_sequence_length: Optional[int] = None
+    """Tail-truncate the built sequence to this many tokens (outside the default ``qwen3`` /
+    ``"all"`` path)."""
     seed: int = 0
 
     def validate(self):
@@ -142,6 +163,7 @@ class GuiSynDatasetConfig(Config):
             raise OLMoConfigurationError("max_elements must be at least 1")
         if not 0.0 <= self.p_intent <= 1.0:
             raise OLMoConfigurationError("p_intent must be in [0, 1]")
+        _validate_annotation_sampling(self.annotation_sampling)
 
     def build(self, tokenizer) -> "GuiSynDataset":
         self.validate()
@@ -224,20 +246,27 @@ class GuiSynDataset(EpochSeededExamples):
         return messages
 
     def __getitem__(self, i: int) -> Dict[str, np.ndarray]:
+        return self._build(i)
+
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         cfg = self.config
         row = self._data[int(self._index[i])]
         image = row["image"]
         # Per (row, epoch): the element sample has to rotate across epochs.
-        rng = self.epoch_rng(i)
+        rng = self.epoch_rng(i, epoch)
         messages = self.format_row(row["annotation"], image.size, rng)
         fmt = SftFormatter(seed=cfg.seed, **STAGE1_PROMPT_FAMILY)
-        branches = [fmt.format_turns(msg, index=i, rng=rng)[0] for msg in messages]
-        return _build_example(
-            self.tokenizer,
-            image,
-            branches,
-            max_crops=cfg.max_crops,
-            loss_token_weighting=cfg.loss_token_weighting,
-            message_weight=cfg.message_weight,
-            shuffle_rng=rng,
+        if _released_layout(cfg):
+            branches = [fmt.format_turns(msg, index=i, rng=rng)[0] for msg in messages]
+            return _build_example(
+                self.tokenizer,
+                image,
+                branches,
+                max_crops=cfg.max_crops,
+                loss_token_weighting=cfg.loss_token_weighting,
+                message_weight=cfg.message_weight,
+                shuffle_rng=rng,
+            )
+        return _build_selected_example(
+            self, image, fmt, messages, [None] * len(messages), i, epoch, rng
         )

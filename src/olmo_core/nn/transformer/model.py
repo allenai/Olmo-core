@@ -490,6 +490,10 @@ class Transformer(nn.Module):
         # shard input_ids/labels again, but we still shard the RoPE buffers, which are built from the
         # original (pre-shard) sequence length carried in 'cp_original_seq_len'.
         cp_already_sharded = kwargs.pop("cp_already_sharded", False)
+        # EMO routing documents, ``(B, S)`` nondecreasing ids, from a caller whose attention
+        # documents aren't EOS-delimited (packed multimodal examples, chunked text); by default
+        # they come from the EOS tokens.
+        emo_segment_ids: Optional[torch.Tensor] = kwargs.pop("emo_segment_ids", None)
         cp_original_seq_len = kwargs.pop("cp_original_seq_len", None)
         if cp_original_seq_len is not None:
             cp_original_seq_len = int(cp_original_seq_len)
@@ -668,7 +672,15 @@ class Transformer(nn.Module):
                 raise OLMoConfigurationError(
                     "All EMO routers in a model must use the same eos_token_id"
                 )
-            segment_ids = moe_ops.segment_ids_from_eos(input_ids, emo_eos_token_ids.pop())
+            if emo_segment_ids is not None:
+                if emo_segment_ids.shape != input_ids.shape[:2]:
+                    raise OLMoConfigurationError(
+                        f"emo_segment_ids shape {tuple(emo_segment_ids.shape)} must match "
+                        f"input_ids shape {tuple(input_ids.shape[:2])}"
+                    )
+                segment_ids = move_to_device(emo_segment_ids, self.device)
+            else:
+                segment_ids = moe_ops.segment_ids_from_eos(input_ids, emo_eos_token_ids.pop())
             for block_idx in emo_blocks:
                 per_block_kwargs[block_idx]["segment_ids"] = segment_ids
 
