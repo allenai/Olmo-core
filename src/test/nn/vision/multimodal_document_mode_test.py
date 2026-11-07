@@ -181,8 +181,14 @@ def test_document_mode_isolates_packed_examples_through_kda():
         alone = model(b)
         packed_logits = model(packed, example_ids=example_ids)[:, 40:]
         leaked = model(packed)[:, 40:]  # one document: state carries over from example A
-    torch.testing.assert_close(packed_logits, alone, rtol=1e-3, atol=1e-3)
-    assert not torch.allclose(leaked, alone, rtol=1e-3, atol=1e-3)
+    # The tiny model's logits are about 5e-3 in size and its state carries little over, so the
+    # bounds are relative to them: isolation is exact up to rounding, while the unisolated
+    # packing measurably leaks (about 0.5% of the logits' scale on a B300).
+    scale = float(alone.abs().max())
+    isolation_error = float((packed_logits - alone).abs().max())
+    leak = float((leaked - alone).abs().max())
+    assert isolation_error <= 1e-4 * scale, (isolation_error, scale)
+    assert leak > 1e-3 * scale and leak > 10 * isolation_error, (leak, isolation_error, scale)
 
 
 def test_document_mode_accepts_packer_subsegment_ids_without_branches():
@@ -224,3 +230,30 @@ def test_document_mode_rejects_sibling_branch_packing():
             subsegment_ids=torch.tensor([[0, 0, 1, 1, 2, 2]]),
             position_ids=torch.tensor([[0, 1, 2, 3, 2, 3]]),
         )
+
+
+def test_boundaries_off_for_a_recurrent_lm_sends_nothing_to_mask():
+    # An attention model stands in for the LM; the recurrent check is forced, as the config
+    # would do for a KDA LM with ``document_mode=False``.
+    model = _attention_model()
+    model._document_mode = False
+    model._recurrent_mixers = True
+    assert not model.uses_document_boundaries()
+    lm_forward = Mock(wraps=model.lm.forward)
+    model.lm.forward = lm_forward  # type: ignore[method-assign]
+    input_ids = torch.randint(2, _VOCAB, (1, 8))
+    example_ids = torch.tensor([[0, 0, 0, 0, 1, 1, 1, 1]])
+    with torch.no_grad():
+        model(input_ids, example_ids=example_ids, position_ids=torch.arange(8)[None])
+    kwargs = lm_forward.call_args.kwargs
+    assert kwargs["and_mask"] is None and kwargs["or_mask"] is None
+    assert kwargs["position_ids"] is None
+    assert "doc_lens" not in kwargs and "max_doc_lens" not in kwargs
+
+
+def test_config_decides_document_mode():
+    kda = KimiDeltaAttentionConfig(n_heads=2, head_dim=8, dtype=DType.float32)
+    config = _multimodal_config(kda)
+    config.document_mode = False
+    model = MultimodalOLMoDDPModel(config, init_device="meta")
+    assert model.has_recurrent_mixers() and not model.uses_document_boundaries()
