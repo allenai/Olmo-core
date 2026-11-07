@@ -147,56 +147,70 @@ def test_doc_prefix_sum_matches_per_document_cumsum(segments) -> None:
     torch.testing.assert_close(prefix[last], whole[last])
 
 
-def _causal_router(pool: int, num_experts: int = 8, top_k: int = 2) -> EmoRouterV2:
+def _emo_keep_mask(
+    monkeypatch, logits: torch.Tensor, segment_ids: torch.Tensor, *, causal: bool, seed: int = 5
+) -> torch.Tensor:
+    """The EMO pool mask a router with pools in [2, 8] of 8 experts builds for ``logits``.
+
+    Mirrors MaxText's ``EmoEvalPoolsTest._mask``: the router weight is the identity, so its
+    expert logits are ``logits``, and pool sizes are sampled with ``seed``.
+    """
     router = MoERouterConfigV2(
-        d_model=num_experts,
-        num_experts=num_experts,
-        top_k=top_k,
+        d_model=8,
+        num_experts=8,
+        top_k=2,
         emo=EmoRouterConfig(
             eos_token_id=0,
-            min_document_expert_pool=pool,
-            max_document_expert_pool=pool,
-            causal_pool=True,
+            min_document_expert_pool=2,
+            max_document_expert_pool=8,
+            causal_pool=causal,
         ),
     ).build()
     assert isinstance(router, EmoRouterV2)
     with torch.no_grad():
-        router.weight.copy_(torch.eye(num_experts).reshape(-1))
-    return router
+        router.weight.copy_(torch.eye(8).reshape(-1))
+    masks = []
+    pool_keep_mask = ops.pool_keep_mask
+
+    def capture(document_scores, pool_sizes):
+        keep = pool_keep_mask(document_scores, pool_sizes)
+        masks.append(keep)
+        return keep
+
+    monkeypatch.setattr(ops, "pool_keep_mask", capture)
+    torch.manual_seed(seed)
+    router(logits, False, segment_ids=segment_ids)
+    (keep,) = masks
+    return keep
 
 
-def test_causal_pool_ignores_later_tokens() -> None:
-    torch.manual_seed(0)
-    router = _causal_router(pool=3)
-    segment_ids = torch.tensor([[0] * 6 + [1] * 10])
-    x = torch.randn(1, 16, 8)
-    later = x.clone()
-    later[:, 9:] += 5.0 * torch.randn(1, 7, 8)
-    _, idx, _, _ = router(x, False, segment_ids=segment_ids)
-    _, idx_later, _, _ = router(later, False, segment_ids=segment_ids)
-    assert idx is not None and idx_later is not None
-    assert torch.equal(idx[:, :9], idx_later[:, :9])
-    assert not torch.equal(idx[:, 9:], idx_later[:, 9:])
+# Two documents (6 + 10 tokens) in row 0, one 16-token document in row 1, as in MaxText's tests.
+# Seed 5 draws pools of 3, 7 and 6 experts for them, so every pool restricts its document.
+_SEGMENTS = torch.tensor([[0] * 6 + [1] * 10, [0] * 16])
 
 
-def test_causal_pool_first_token_unconstrained_last_token_whole_document() -> None:
-    torch.manual_seed(0)
-    segment_ids = torch.tensor([[0] * 6 + [1] * 10])
-    x = torch.randn(1, 16, 8)
-    causal = _causal_router(pool=2)
-    whole = _causal_router(pool=2)
-    whole.emo.causal_pool = False
-    free = MoERouterConfigV2(d_model=8, num_experts=8, top_k=2).build()
-    with torch.no_grad():
-        free.weight.copy_(torch.eye(8).reshape(-1))
-    _, idx_causal, _, _ = causal(x, False, segment_ids=segment_ids)
-    _, idx_whole, _, _ = whole(x, False, segment_ids=segment_ids)
-    _, idx_free, _, _ = free(x, False)
-    assert idx_causal is not None and idx_whole is not None and idx_free is not None
-    for first, last in ((0, 5), (6, 15)):
-        # pool == top_k: the first token's pool is exactly its own top-k experts.
-        assert set(idx_causal[0, first].tolist()) == set(idx_free[0, first].tolist())
-        assert set(idx_causal[0, last].tolist()) == set(idx_whole[0, last].tolist())
+def test_causal_pool_ignores_later_tokens(monkeypatch) -> None:
+    """With ``causal_pool`` a token's pool depends only on its document's tokens up to itself."""
+    logits = torch.randn(2, 16, 8, generator=torch.Generator().manual_seed(0))
+    later = logits.clone()
+    later[:, 9:] += 5.0 * torch.randn(2, 7, 8, generator=torch.Generator().manual_seed(2))
+    keep = _emo_keep_mask(monkeypatch, logits, _SEGMENTS, causal=True)
+    keep_later = _emo_keep_mask(monkeypatch, later, _SEGMENTS, causal=True)
+    assert torch.equal(keep[:, :9], keep_later[:, :9])
+    assert not torch.equal(keep[:, 9:], keep_later[:, 9:]), "later pools should follow the changes"
+
+
+def test_causal_pool_first_token_keeps_its_own_top_experts(monkeypatch) -> None:
+    """A document's first token keeps its own top experts; its last token's pool is the whole
+    document's."""
+    logits = torch.randn(2, 16, 8, generator=torch.Generator().manual_seed(0))
+    causal = _emo_keep_mask(monkeypatch, logits, _SEGMENTS, causal=True)
+    whole = _emo_keep_mask(monkeypatch, logits, _SEGMENTS, causal=False)
+    for b, first, last in ((0, 0, 5), (0, 6, 15), (1, 0, 15)):
+        kept = causal[b, first]
+        assert 0 < int(kept.sum()) < 8, "pick a seed whose pool restricts the first token"
+        assert logits[b, first][kept].min() >= logits[b, first][~kept].max()
+        assert torch.equal(causal[b, last], whole[b, last])
 
 
 def test_multimodal_emo_segments_follow_example_ids() -> None:
