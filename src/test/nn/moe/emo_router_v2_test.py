@@ -221,3 +221,30 @@ def test_multimodal_emo_segments_follow_example_ids() -> None:
         segment_ids_from_example_ids(example_ids),
         torch.tensor([[0, 0, 1, 1, 1, 2, 3, 3], [0, 0, 0, 0, 0, 0, 0, 0]]),
     )
+
+
+def test_doc_prefix_sum_is_exact_over_long_rows() -> None:
+    """Late in a long row, the prefix sums (and the pools they pick) match exact per-document
+    sums: the whole-row running sum is accumulated in float64, not float32."""
+    gen = torch.Generator().manual_seed(0)
+    seq_len, num_experts = 262_144, 32
+    scores = torch.randn(1, seq_len, num_experts, generator=gen).softmax(dim=-1)
+    # Documents of 1-4096 tokens, so many start deep into the row.
+    lengths = torch.randint(1, 4097, (seq_len,), generator=gen)
+    boundaries = lengths.cumsum(0)
+    boundaries = boundaries[boundaries < seq_len]
+    doc_of = torch.zeros(seq_len, dtype=torch.long)
+    doc_of[boundaries] = 1
+    segment_ids = doc_of.cumsum(0).unsqueeze(0)
+
+    exact = torch.empty_like(scores, dtype=torch.float64)
+    starts = [0, *boundaries.tolist(), seq_len]
+    for a, b in zip(starts[:-1], starts[1:]):
+        exact[0, a:b] = scores[0, a:b].double().cumsum(dim=0)
+
+    prefix = ops.doc_prefix_sum(scores, segment_ids)
+    assert prefix.dtype == scores.dtype
+    torch.testing.assert_close(prefix.double(), exact, rtol=1e-6, atol=1e-6)
+    pool = torch.full_like(segment_ids, 8)
+    keep, keep_exact = ops.pool_keep_mask(prefix, pool), ops.pool_keep_mask(exact.float(), pool)
+    assert (keep != keep_exact).any(dim=-1).float().mean() < 1e-4
