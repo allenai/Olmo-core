@@ -1139,6 +1139,45 @@ def test_numpy_packed_fsl_dataset_metadata_correction_invalidates_cache(
     assert prepare().fingerprint == after.fingerprint
 
 
+def test_metadata_fingerprint_ignores_gzip_mtime(tmp_path: Path):
+    # Rewriting identical document boundaries must keep the fingerprint stable even when the
+    # gzip container header changes (mtime / original filename). Hashing compressed bytes would
+    # break resume for producers that re-tokenize with default gzip.open(..., "wt").
+    data_path = tmp_path / "part.npy"
+    np.array([1, 2, 3, 0, 4, 5, 0], dtype=np.uint16).tofile(data_path)
+    sidecar = data_path.with_suffix(".csv.gz")
+    boundaries = b"0,4\n4,7\n"
+
+    fingerprints = []
+    for mtime in (1, 2):
+        sidecar.write_bytes(gzip.compress(boundaries, mtime=mtime))
+        ds = NumpyPackedFSLDataset(
+            data_path,
+            sequence_length=8,
+            pad_token_id=-1,
+            eos_token_id=0,
+            vocab_size=32_000,
+            use_array_if_local=False,
+        )
+        ds.work_dir = tmp_path / "work"
+        fingerprints.append(ds.fingerprint)
+
+    assert fingerprints[0] == fingerprints[1]
+
+    # Mutation check: a real boundary change still invalidates the fingerprint.
+    sidecar.write_bytes(gzip.compress(b"0,3\n3,7\n", mtime=1))
+    ds = NumpyPackedFSLDataset(
+        data_path,
+        sequence_length=8,
+        pad_token_id=-1,
+        eos_token_id=0,
+        vocab_size=32_000,
+        use_array_if_local=False,
+    )
+    ds.work_dir = tmp_path / "work"
+    assert ds.fingerprint != fingerprints[0]
+
+
 @pytest.mark.parametrize("use_array_if_local", [None, True, False])
 def test_numpy_packed_fsl_dataset_metadata_cache_remote_and_mixed(
     tmp_path, monkeypatch, use_array_if_local
