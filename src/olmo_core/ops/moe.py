@@ -518,6 +518,23 @@ def doc_sum_scatter(per_token: torch.Tensor, segment_ids: torch.Tensor) -> torch
     return document_sums.gather(1, indices)
 
 
+def doc_prefix_sum(per_token: torch.Tensor, segment_ids: torch.Tensor) -> torch.Tensor:
+    """Sum values over each token's document up to and including that token.
+
+    ``segment_ids`` must be nondecreasing along the sequence, one run per document (as
+    :func:`segment_ids_from_eos` returns). The last token of a document gets the same sums as
+    :func:`doc_sum_scatter` gives every token of it.
+    """
+    seq_len = per_token.shape[1]
+    csum = per_token.cumsum(dim=1)
+    positions = torch.arange(seq_len, device=segment_ids.device).expand_as(segment_ids)
+    is_start = torch.ones_like(segment_ids, dtype=torch.bool)
+    is_start[:, 1:] = segment_ids[:, 1:] != segment_ids[:, :-1]
+    start = torch.where(is_start, positions, torch.zeros_like(positions)).cummax(dim=1).values
+    before = csum.gather(1, (start - 1).clamp_min(0).unsqueeze(-1).expand_as(csum))
+    return csum - torch.where((start == 0).unsqueeze(-1), torch.zeros_like(before), before)
+
+
 def pool_keep_mask(
     document_scores: torch.Tensor,
     pool_size_per_token: torch.Tensor,

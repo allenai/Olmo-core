@@ -406,6 +406,7 @@ class MultimodalLM(nn.Module):
         # set it directly.
         self._document_mode: Optional[bool] = cfg.document_mode
         self._recurrent_mixers: Optional[bool] = None
+        self._emo_routers: Optional[bool] = None
         self.sync_vit_crops: bool = cfg.sync_vit_crops
         # Set by the train module through `set_crop_balance_group`.
         self._crop_balance_group: Optional[dist.ProcessGroup] = None
@@ -460,6 +461,15 @@ class MultimodalLM(nn.Module):
                 isinstance(module, KimiDeltaAttention) for module in self.lm.modules()
             )
         return self._recurrent_mixers
+
+    def _has_emo_routers(self) -> bool:
+        """Whether any LM block routes with EMO document pools, which need document ids."""
+        if self._emo_routers is None:
+            self._emo_routers = any(
+                getattr(getattr(block, "routed_experts_router", None), "requires_segment_ids", False)
+                for block in self.lm.blocks.values()
+            )
+        return self._emo_routers
 
     # -- input-scale diagnostics ------------------------------------------------------------
 
@@ -1071,6 +1081,11 @@ class MultimodalLM(nn.Module):
         if position_ids is not None:
             position_ids = position_ids.to(device)
 
+        if example_ids is not None and self._has_emo_routers():
+            # EMO pools follow the attention documents (packed examples, or the text stage's
+            # EOS + chunk segments), not EOS alone: packed examples need not end in EOS.
+            kwargs["emo_segment_ids"] = segment_ids_from_example_ids(example_ids.to(device))
+
         out = self.lm(
             input_ids,
             input_embeddings=h,
@@ -1139,6 +1154,22 @@ def has_sibling_branches(
             if int((ids != ATTEND_ALL_SUBSEGMENT_ID).sum()) > 1:
                 return True
     return False
+
+
+def segment_ids_from_example_ids(example_ids: torch.Tensor) -> torch.Tensor:
+    """
+    Number each run of equal packed-example ids in a row ``0, 1, 2, ...``.
+
+    This is the document numbering :func:`document_lengths_from_example_ids` isolates, in the
+    nondecreasing form EMO routing takes; a trailing padding run (``-1``) is one more document.
+
+    :param example_ids: Integer tensor of shape ``(B, seq_len)``.
+
+    :returns: A ``long`` tensor of the same shape.
+    """
+    starts = torch.zeros_like(example_ids, dtype=torch.long)
+    starts[:, 1:] = (example_ids[:, 1:] != example_ids[:, :-1]).to(torch.long)
+    return starts.cumsum(dim=1)
 
 
 def document_lengths_from_example_ids(example_ids: torch.Tensor) -> Tuple[torch.Tensor, List[int]]:
