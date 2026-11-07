@@ -52,7 +52,9 @@ def test_swiglu_backward_offsets_cross_int32_boundary():
     rows = boundary + 64
     # Both input reads and gradient-output writes cross the boundary. Guard
     # both allocations so old int32 stores cannot overwrite unrelated tensors.
-    x_backing = torch.full((2**31 + rows * 2 * hidden,), -3.0, device="cuda", dtype=torch.bfloat16)
+    x_backing = torch.full(
+        (2**31 + rows * 2 * hidden,), -3.0, device="cuda", dtype=torch.bfloat16
+    )
     x = x_backing[2**31 :].view(rows, 2 * hidden)
     x.fill_(2.0)
     out_backing = torch.full_like(x_backing, 7.0)
