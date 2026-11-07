@@ -23,6 +23,7 @@ from olmo_core.nn.attention import AttentionConfig
 from olmo_core.nn.attention.backend import AttentionBackendName
 from olmo_core.nn.attention.kda import KimiDeltaAttentionConfig
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
+from olmo_core.nn.moe import EmoRouterConfig
 from olmo_core.nn.moe.v2.ep_config import ExpertParallelPath, ExpertParallelSchedule
 from olmo_core.nn.transformer import OLMoDDPModelConfig
 from olmo_core.nn.vision import Molmo2TokenIds, MultimodalLMConfig
@@ -549,6 +550,13 @@ def _build_model(parent: dict[str, Any], text: dict | None = None) -> Multimodal
             for name in ("share_dispatch_out", "share_combine_out"):
                 if ep is not None and name in text_ep:
                     setattr(ep, name, text_ep[name])
+            # EMO is the stage's routing choice, as in the text stage: the parent's routers carry
+            # alignment's (EMO off), the text config the one this stage trains with.
+            router = getattr(block, "routed_experts_router", None)
+            text_router = (text_block or {}).get("routed_experts_router")
+            if router is not None and isinstance(text_router, dict) and "emo" in text_router:
+                emo = text_router["emo"]
+                router.emo = None if emo is None else EmoRouterConfig.from_dict(emo)
     # The wrapper feeds embeddings, which two-batch overlap cannot take.
     model.lm.two_batch_overlap = False
     return model
