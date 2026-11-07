@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import gzip
 import hashlib
 import logging
 import math
@@ -1210,6 +1211,20 @@ class NumpyPackedFSLDataset(NumpyFSLDatasetBase):
         self._num_instances: Optional[int] = None
 
     @property
+    def fingerprint_version(self) -> str:
+        """
+        The version of the :data:`fingerprint`.
+
+        Packed datasets use ``v2.1`` because sidecar digests are now SHA256 of the decompressed
+        CSV rather than the gzip container. That bump lets ``NumpyDataLoaderBase.load_state_dict``
+        warn-and-resume across the upgrade instead of raising on a same-version fingerprint
+        mismatch. Both packing modes share this version so flipping ``use_array_if_local`` stays
+        a same-version fingerprint check (fatal on mismatch) rather than a version-mismatch
+        warning that skips comparison.
+        """
+        return "v2.1"
+
+    @property
     def fingerprint_fields(self) -> Tuple[str, ...]:
         fields: Tuple[str, ...] = (
             "vocab_size",
@@ -1448,8 +1463,10 @@ class NumpyPackedFSLDataset(NumpyFSLDatasetBase):
         metadata_path = resource_path(
             os.path.dirname(source_path), os.path.basename(source_path).replace(".npy", ".csv.gz")
         )
+        # Hash decompressed sidecar bytes so gzip header fields (mtime, original name) do not
+        # change the fingerprint when identical boundaries are rewritten.
         digest = hashlib.sha256()
-        with metadata_path.open("rb") as f:
+        with gzip.open(metadata_path, "rb") as f:
             for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 digest.update(chunk)
         return digest.hexdigest()
