@@ -1782,3 +1782,47 @@ def test_stage1_v4_samples_each_source_by_passes_times_rows(merged_stage):
     )
     v3 = merged_stage.build()
     assert v3.recipe.visual_loss_shares != STAGE1_V4_LOSS_TARGETS
+
+
+@pytest.mark.parametrize("text_emo", [None, {"causal_pool": True}])
+def test_mixed_stage_routers_take_the_text_stage_emo(text_config, text_emo):
+    """The parent's routers carry alignment's EMO choice (off); the stage's text config decides."""
+    from olmo_core.internal.vision_midtraining import _build_model
+    from olmo_core.nn.moe import EmoRouterConfig
+
+    lm = OLMoDDPModelConfig.from_dict(text_config.config["model"])
+    vision = VisionEncoderConfig()
+    parent_model = MultimodalLMConfig(
+        lm=lm,
+        vision=vision,
+        connector=VisionConnectorConfig.from_vision_encoder(vision, output_dim=lm.d_model),
+        image_patch_token_id=100280,
+    )
+    text = json.loads(json.dumps(text_config.config))
+    blocks = [text["model"]["block"], *text["model"]["block_overrides"].values()]
+    routers = [b["routed_experts_router"] for b in blocks if b.get("routed_experts_router")]
+    assert routers, "the OLMo 3.5 fixture has routed blocks"
+    for router in routers:
+        assert router.get("emo") is None
+        if text_emo is not None:
+            router["emo"] = EmoRouterConfig(
+                eos_token_id=100257,
+                min_document_expert_pool=router["top_k"],
+                max_document_expert_pool=router["num_experts"],
+                eval_document_expert_pool=router["num_experts"],
+                **text_emo,
+            ).as_config_dict()
+
+    model = _build_model({"model": parent_model.as_config_dict()}, text)
+    built = [
+        b.routed_experts_router
+        for b in [model.lm.block, *(model.lm.block_overrides or {}).values()]
+        if getattr(b, "routed_experts_router", None) is not None
+    ]
+    assert len(built) == len(routers)
+    for router in built:
+        if text_emo is None:
+            assert router.emo is None
+        else:
+            assert router.emo is not None and router.emo.causal_pool is True
+            assert router.emo.max_document_expert_pool == router.num_experts
