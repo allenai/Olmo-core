@@ -278,6 +278,14 @@ class MixedMidtrainingRecipeConfig(Config):
     (calibrated means :data:`~olmo_core.internal.vision_alignment_data.STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS`,
     65,536 tokens only); images with more annotations weigh more, as in the released Molmo2 v3
     recipe, which trains every annotation of each drawn image."""
+    annotation_layout: str = "documents"
+    """How the sources that keep every annotation of an image (stage1_v5 to stage1_v7, or
+    :attr:`annotation_documents`) lay them out. ``"documents"``: each annotation is its own
+    document with its own copy of the image's tokens. ``"sequence"``: one document per image,
+    the image's tokens once and then every annotation in shuffled order, each closed by an EOS
+    token (``annotation_sampling="sequence"``). Both give every annotation the same loss
+    weight, so the calibrated means and loss shares hold; ``"sequence"`` takes far fewer
+    positions per image, and later annotations also see the earlier ones."""
 
 
 @dataclass
@@ -378,6 +386,8 @@ def _build_recipe(
             "recipe.annotation_documents needs stage1_v3 or stage1_v4 visual data (stage1_v5, "
             "stage1_v6 and stage1_v7 always train annotations as documents)"
         )
+    if recipe.annotation_layout not in ("documents", "sequence"):
+        raise OLMoConfigurationError("recipe.annotation_layout must be documents or sequence")
     if recipe.text_loss_share is None:
         recipe.text_loss_share = (
             STAGE1_V7_TEXT_LOSS_SHARE if recipe.visual_data == "stage1_v7" else 0.9
@@ -1259,6 +1269,11 @@ def build_config(
         if nemotron:
             visual_sources.update(build_stage1_nemotron_sources(recipe.sequence_length))
             visual_sources["gui_syn"] = build_stage1_gui_syn_source(recipe.sequence_length)
+        if documents and recipe.annotation_layout == "sequence":
+            for source in visual_sources.values():
+                config = getattr(source, "dataset", source)
+                if getattr(config, "annotation_sampling", None) == "documents":
+                    setattr(config, "annotation_sampling", "sequence")
     elif _text_loss_share(recipe) < 1.0 and not replaced_sources:
         visual_sources = build_visual_sources(
             sequence_length=recipe.sequence_length,

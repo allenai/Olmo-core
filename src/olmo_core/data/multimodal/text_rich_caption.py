@@ -225,6 +225,7 @@ class TextRichCaptionDataset(EpochSeededExamples):
             message_format=cfg.message_format,
             shuffle_rng=rng,
             branches_as_documents=cfg.annotation_sampling == "documents",
+            branches_as_sequence=cfg.annotation_sampling == "sequence",
             document_token_budget=cfg.max_sequence_length,
         )
         return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)
