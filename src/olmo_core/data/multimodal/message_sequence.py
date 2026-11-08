@@ -74,6 +74,7 @@ def encode_sft_example(
     seed: int = 0,
     shuffle_rng: Optional[np.random.RandomState] = None,
     branches_as_documents: bool = False,
+    branches_as_sequence: bool = False,
     document_token_budget: Optional[int] = None,
 ) -> Dict[str, np.ndarray]:
     """Build a branched Molmo2 SFT example from (user, assistant) turn pairs.
@@ -92,9 +93,17 @@ def encode_sft_example(
         runs once for all of them. For language models that isolate packed examples only by
         document boundaries (Kimi Delta Attention). Requires ``loss_token_weighting="none"``,
         under which each document weights its tokens as the sibling-branch layout does.
-    :param document_token_budget: With ``branches_as_documents``, stop adding documents (in the
-        shuffled branch order) once the next would take the example past this many tokens. The
-        first document is always kept.
+    :param branches_as_sequence: Serialize every branch after one copy of the prefix, in the
+        shuffled branch order, as a single document: each branch's turns follow the previous
+        branch's answer and an EOS token, so the image's tokens appear once instead of once per
+        branch. Every branch keeps the per-token weights it has as its own document (answer
+        tokens plus the EOS that ends it), so the example's loss weight and the calibrated means
+        are unchanged; only later branches now also see the earlier ones. For language models
+        that isolate packed examples only by document boundaries (Kimi Delta Attention).
+        Requires ``loss_token_weighting="none"``.
+    :param document_token_budget: With ``branches_as_documents`` or ``branches_as_sequence``,
+        stop adding branches (in the shuffled branch order) once the next would take the
+        example past this many tokens. The first branch is always kept.
     """
     import torch
 
@@ -193,7 +202,19 @@ def encode_sft_example(
     # (mm_olmo DatasetWithArgs.message_weight can disable root_length /
     # root_subsegments too); with_overrides handles both.
     mw = MessageWeight.from_string(loss_token_weighting).with_overrides(message_weight)
-    if branches_as_documents and len(branches) > 1:
+    if branches_as_documents and branches_as_sequence:
+        raise ValueError("branches_as_documents and branches_as_sequence are exclusive")
+    if branches_as_sequence and len(branches) > 1:
+        n_documents = 1
+        seq = _build_sequence(
+            prefix,
+            branches,
+            mw,
+            eos_id=tokenizer.eos_token_id,
+            image_token_ids=resolved_token_ids.image_token_ids,
+            token_budget=document_token_budget,
+        )
+    elif branches_as_documents and len(branches) > 1:
         seq, n_documents = _build_documents(
             prefix,
             branches,
@@ -234,6 +255,56 @@ def encode_sft_example(
     pooled = np.concatenate(pooling_list, axis=0) if len(pooling_list) > 1 else pooling_list[0]
     # Each document's image block pools the same crops.
     seq["pooled_patches_idx"] = np.tile(pooled, (n_documents, 1)) if n_documents > 1 else pooled
+    return seq
+
+
+def _build_sequence(
+    prefix: Sequence[int],
+    branches: Sequence[Any],
+    message_weight: MessageWeight,
+    *,
+    eos_id: int,
+    image_token_ids: frozenset,
+    token_budget: Optional[int],
+) -> Dict[str, np.ndarray]:
+    """Serialize ``prefix + branch_1 + EOS + branch_2 + EOS + ... + branch_n`` as one document.
+
+    Each branch is the list of ``(context, response)`` turns that :func:`_build_documents` would
+    put after its own copy of the prefix. Here the prefix (document boundary and image tokens)
+    appears once and the branches follow it in order; an EOS token closes every branch but the
+    last, whose EOS is the document's final target as usual. The EOS after a branch carries that
+    branch's answer weight, as the final EOS target of its own document does, and the context
+    tokens after it carry none, so each branch contributes the same loss weight as in
+    :func:`_build_documents`.
+    """
+    if loss_token_weighting_for_build(message_weight) != "none":
+        raise ValueError(
+            "branches_as_sequence requires loss_token_weighting='none': branch scaling by "
+            "count has no equivalent in one sequential document"
+        )
+    turns: List[Tuple[List[int], List[int]]] = []
+    n_tokens = len(prefix)
+    for branch in branches:
+        segments = [(list(context), list(response)) for context, response in branch]
+        # +1: the EOS that closes this branch (input token here, or the final EOS target).
+        length = sum(len(c) + len(r) for c, r in segments) + 1
+        if turns and token_budget is not None and n_tokens + length > token_budget:
+            break
+        if turns:
+            context, response = turns[-1]
+            turns[-1] = (context, response + [int(eos_id)])
+        turns.extend(segments)
+        n_tokens += length
+    seq = build_branched_sequence(
+        prefix,
+        [turns],
+        eos_id=eos_id,
+        image_token_ids=image_token_ids,
+        loss_token_weighting="none",
+    )
+    seq["loss_masks"] = apply_message_weight_to_loss_masks(
+        seq["loss_masks"], None, message_weight, branch_scaling_already_applied=True
+    )
     return seq
 
 

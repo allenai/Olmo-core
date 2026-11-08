@@ -322,6 +322,7 @@ def _build_selected_example(
         rng=rng,
         max_sequence_length=cfg.max_sequence_length,
         branches_as_documents=cfg.annotation_sampling == "documents",
+        branches_as_sequence=cfg.annotation_sampling == "sequence",
     )
     return truncate_for_format(seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format)
 
