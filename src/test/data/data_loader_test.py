@@ -492,13 +492,70 @@ def test_boundary_mode_flip_fails_fingerprint_at_same_version(tmp_path: Path):
     with pytest.raises(RuntimeError, match="Dataset fingerprint does not match"):
         make_loader(local_ds, "loader-flip").load_state_dict(metadata_state)
 
-    # Legacy compressed digests under v2.0 still warn-and-resume on the version path.
-    legacy_state = {
+    # A v2.0 checkpoint whose fingerprint is neither the current digest nor a
+    # verified legacy compressed-sidecar digest must not blindly resume.
+    bogus_state = {
         **metadata_state,
         "dataset_fingerprint_version": "v2.0",
         "dataset_fingerprint": "deadbeef" * 8,
     }
-    make_loader(metadata_ds, "loader-legacy-warn").load_state_dict(legacy_state)
+    with pytest.raises(RuntimeError, match="Dataset fingerprint does not match"):
+        make_loader(metadata_ds, "loader-legacy-bogus").load_state_dict(bogus_state)
+
+    # Mode flip across the upgrade (v2.0 local -> v2.1 metadata) is also fatal.
+    local_state = {
+        **make_loader(local_ds, "loader-local").state_dict(),
+        "dataset_fingerprint_version": "v2.0",
+    }
+    with pytest.raises(RuntimeError, match="Dataset fingerprint does not match"):
+        make_loader(metadata_ds, "loader-upgrade-flip").load_state_dict(local_state)
+
+
+def test_v2_0_local_checkpoint_still_compares_fingerprint(tmp_path: Path):
+    # Local EOS-scan packing did not change its fingerprint formula in v2.1, so a
+    # pre-upgrade (v2.0) local checkpoint must still be compared rather than
+    # blindly resumed via the version-mismatch branch.
+    data_path = tmp_path / "part.npy"
+    np.array([1, 2, 3, 0, 4, 5, 6, 0], dtype=np.uint16).tofile(data_path)
+
+    def make_dataset(sequence_length: int, work_name: str) -> NumpyPackedFSLDataset:
+        ds = NumpyPackedFSLDataset(
+            data_path,
+            sequence_length=sequence_length,
+            pad_token_id=-1,
+            eos_token_id=0,
+            vocab_size=32_000,
+        )
+        ds.work_dir = tmp_path / work_name
+        ds.prepare()
+        return ds
+
+    def make_loader(dataset: NumpyPackedFSLDataset, work_name: str) -> NumpyFSLDataLoader:
+        return NumpyFSLDataLoader(
+            dataset,
+            global_batch_size=8,
+            collator=DataCollator(pad_token_id=-1),
+            shuffle=False,
+            num_threads=0,
+            work_dir=tmp_path / work_name,
+        )
+
+    local_ds = make_dataset(4, "work-local")
+    assert local_ds.fingerprint_version == "v2.1"
+    state = make_loader(local_ds, "loader-local").state_dict()
+    assert state["dataset_fingerprint"] == local_ds.fingerprint
+    state["dataset_fingerprint_version"] = "v2.0"
+
+    # Same local config: fingerprints match under the unchanged formula → resume.
+    resumed = make_loader(make_dataset(4, "work-local-resume"), "loader-resume")
+    resumed.load_state_dict(state)
+    assert resumed.batches_processed == state["batches_processed"]
+
+    # Sequence length changed during the upgrade → fatal fingerprint mismatch.
+    with pytest.raises(RuntimeError, match="Dataset fingerprint does not match"):
+        make_loader(make_dataset(8, "work-local-mismatch"), "loader-mismatch").load_state_dict(
+            state
+        )
 
 
 @pytest.mark.parametrize(

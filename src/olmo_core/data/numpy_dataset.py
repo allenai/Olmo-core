@@ -307,6 +307,18 @@ class NumpyDatasetBase(ABC):
             sha256_hash.update(f"path={os.path.basename(path)},size={size},".encode())
         return sha256_hash.hexdigest()
 
+    def accepted_legacy_fingerprints(self, saved_version: str) -> Optional[Tuple[str, ...]]:
+        """
+        Alternate fingerprint encodings that may match a checkpoint saved under ``saved_version``.
+
+        ``None`` keeps the historical ``load_state_dict`` behavior: a version mismatch
+        skips fingerprint comparison. Returning a tuple (possibly empty) means a
+        version-mismatched checkpoint must match :data:`fingerprint` or one of these
+        encodings, and is otherwise treated as a fingerprint mismatch.
+        """
+        del saved_version
+        return None
+
     @property
     def fs_local_rank(self) -> int:
         return self._fs_local_rank
@@ -1216,11 +1228,11 @@ class NumpyPackedFSLDataset(NumpyFSLDatasetBase):
         The version of the :data:`fingerprint`.
 
         Packed datasets use ``v2.1`` because sidecar digests are now SHA256 of the decompressed
-        CSV rather than the gzip container. That bump lets ``NumpyDataLoaderBase.load_state_dict``
-        warn-and-resume across the upgrade instead of raising on a same-version fingerprint
-        mismatch. Both packing modes share this version so flipping ``use_array_if_local`` stays
-        a same-version fingerprint check (fatal on mismatch) rather than a version-mismatch
-        warning that skips comparison.
+        CSV rather than the gzip container. Both packing modes share this version so flipping
+        ``use_array_if_local`` stays a same-version fingerprint check (fatal on mismatch).
+        Pre-upgrade ``v2.0`` checkpoints are still fingerprint-checked: local EOS-scan
+        fingerprints are compared directly (the formula did not change), and metadata-backed
+        runs accept only a verified legacy compressed-sidecar digest.
         """
         return "v2.1"
 
@@ -1457,16 +1469,58 @@ class NumpyPackedFSLDataset(NumpyFSLDatasetBase):
         """
         return self._use_array_if_local is False or any(is_url(path) for path in source_paths)
 
+    def accepted_legacy_fingerprints(self, saved_version: str) -> Optional[Tuple[str, ...]]:
+        # Only the v2.0 -> v2.1 sidecar-digest migration is special-cased. Unknown
+        # version pairs keep the default "skip comparison on version mismatch" behavior.
+        if saved_version != "v2.0":
+            return None
+        legacy = self._legacy_compressed_sidecar_fingerprint()
+        return (legacy,) if legacy is not None else ()
+
+    def _legacy_compressed_sidecar_fingerprint(self) -> Optional[str]:
+        """Fingerprint using the pre-v2.1 compressed-byte sidecar digests, if they apply."""
+        if "_metadata_fingerprint" not in self.fingerprint_fields:
+            return None
+        legacy_hashes = {
+            path: digest
+            for path, digest in zip(self.paths, self.map(self._legacy_compressed_metadata_hash))
+            if digest is not None
+        }
+        legacy_metadata_fingerprint = tuple(
+            (os.path.basename(path), digest) for path, digest in legacy_hashes.items()
+        )
+        sha256_hash = hashlib.sha256()
+        sha256_hash.update(f"class={self.__class__.__name__}".encode())
+        for field_name in self.fingerprint_fields:
+            field_value = (
+                legacy_metadata_fingerprint
+                if field_name == "_metadata_fingerprint"
+                else getattr(self, field_name)
+            )
+            sha256_hash.update(f"{field_name}={field_value},".encode())
+        for path, size in zip(self.paths, self.file_sizes):
+            sha256_hash.update(f"path={os.path.basename(path)},size={size},".encode())
+        return sha256_hash.hexdigest()
+
+    def _legacy_compressed_metadata_hash(self, source_path: PathOrStr, _: int) -> Optional[str]:
+        return self._hash_metadata_sidecar(source_path, decompressed=False)
+
     def _get_metadata_hash(self, source_path: PathOrStr, _: int) -> Optional[str]:
+        # Hash decompressed sidecar bytes so gzip header fields (mtime, original name) do not
+        # change the fingerprint when identical boundaries are rewritten.
+        return self._hash_metadata_sidecar(source_path, decompressed=True)
+
+    def _hash_metadata_sidecar(
+        self, source_path: PathOrStr, *, decompressed: bool
+    ) -> Optional[str]:
         if not self._packed_from_metadata_boundaries([source_path]):
             return None
         metadata_path = resource_path(
             os.path.dirname(source_path), os.path.basename(source_path).replace(".npy", ".csv.gz")
         )
-        # Hash decompressed sidecar bytes so gzip header fields (mtime, original name) do not
-        # change the fingerprint when identical boundaries are rewritten.
         digest = hashlib.sha256()
-        with gzip.open(metadata_path, "rb") as f:
+        opener = gzip.open(metadata_path, "rb") if decompressed else metadata_path.open("rb")
+        with opener as f:
             for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 digest.update(chunk)
         return digest.hexdigest()
