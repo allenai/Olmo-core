@@ -332,8 +332,9 @@ def test_stage1_refuses_the_olmocr_eval_split():
 
     mod = _load_stage1_module()
 
-    def data_config(split):
+    def data_config(split, caption_split="train"):
         return SimpleNamespace(
+            dataset=SimpleNamespace(split=caption_split),
             recipe="v1",
             pointing_data="v1",
             pointing_rate=0.3,
@@ -353,6 +354,10 @@ def test_stage1_refuses_the_olmocr_eval_split():
             mod.validate_data_config(data_config(split))
     mod.validate_data_config(data_config("train"))
     assert OlmOcrMixDatasetConfig().split == "train"
+
+    # The caption dataset is the primary source of every run, so its split is checked too.
+    with pytest.raises(OLMoConfigurationError, match="train split"):
+        mod.validate_data_config(data_config("train", caption_split="validation"))
 
 
 def test_stage1_ocr_group_is_opt_in_and_sqrt_split():

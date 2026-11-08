@@ -690,6 +690,13 @@ def validate_data_config(config) -> None:
             f"olmocr.split={config.olmocr.split!r}: a training run reads only the train split "
             "(the olmOCR-mix `eval` parquets are held-out data)"
         )
+    # The caption dataset is always the primary source, so `--dataset.split=validation` would
+    # train on held-out caption rows.
+    caption_split = getattr(getattr(config, "dataset", None), "split", "train")
+    if caption_split != "train":
+        raise OLMoConfigurationError(
+            f"dataset.split={caption_split!r}: a training run reads only the train split"
+        )
     unknown = [n for n in config.ocr_sources if n not in OCR_SOURCE_NAMES]
     if unknown:
         raise OLMoConfigurationError(
