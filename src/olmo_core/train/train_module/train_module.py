@@ -13,6 +13,7 @@ from torch.optim import Optimizer
 
 from olmo_core.config import StrEnum
 from olmo_core.data.utils import get_labels, split_batch
+from olmo_core.distributed.checkpoint import get_optimizer_state_dict
 from olmo_core.distributed.utils import get_local_tensor, get_world_size
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.functional.cross_entropy_loss import cross_entropy_loss
@@ -296,7 +297,7 @@ class BasicTrainModule(TrainModule):
             "model": dist_cp_sd.get_model_state_dict(self.model, options=sd_options),
         }
         if optim is not False:
-            state_dict["optim"] = dist_cp_sd.get_optimizer_state_dict(
+            state_dict["optim"] = get_optimizer_state_dict(
                 self.model, self.optim, options=sd_options
             )
         return state_dict

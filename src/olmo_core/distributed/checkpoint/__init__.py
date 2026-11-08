@@ -63,6 +63,7 @@ __all__ = [
     "swap_param_keys",
     "prune_state_dict",
     "merge_state_dicts",
+    "get_optimizer_state_dict",
 ]
 
 log = logging.getLogger(__name__)
@@ -699,6 +700,41 @@ def _prepare_env_for_save(
     return dir
 
 
+def get_optimizer_state_dict(
+    model: nn.Module,
+    optim: torch.optim.Optimizer,
+    options: Optional[dist_cp_sd.StateDictOptions] = None,
+) -> Dict[str, Any]:
+    """
+    Like :func:`torch.distributed.checkpoint.state_dict.get_optimizer_state_dict`, but if the
+    optimizer has no state yet, every ``"step"`` is reset to 0 afterwards, in the live optimizer
+    and in the returned state dict. Torch initializes empty state with a zero-gradient step,
+    which would otherwise count as step 1 (https://github.com/pytorch/pytorch/issues/164929).
+    """
+    was_fresh = len(optim.state) == 0
+    optim_state_dict = dist_cp_sd.get_optimizer_state_dict(model, optim, options=options)
+    if was_fresh:
+        for state in [*optim.state.values(), *optim.param_groups]:
+            _zero_step(state, "step")
+        if isinstance(optim_state_dict.get("state"), dict):
+            for state in [*optim_state_dict["state"].values(), *optim_state_dict["param_groups"]]:
+                _zero_step(state, "step")
+        else:
+            # Flattened format: keys look like "state.<fqn>.step" or "param_groups.<fqn>.step".
+            for key in list(optim_state_dict.keys()):
+                if key.startswith(("state.", "param_groups.")) and key.endswith(".step"):
+                    _zero_step(optim_state_dict, key)
+    return optim_state_dict
+
+
+def _zero_step(state: Dict[str, Any], key: str):
+    step = state.get(key)
+    if isinstance(step, torch.Tensor):
+        step.zero_()
+    elif isinstance(step, (int, float)) and not isinstance(step, bool):
+        state[key] = 0
+
+
 def _prepare_state_dict(
     model: nn.Module,
     optim: Optional[torch.optim.Optimizer] = None,
@@ -716,7 +752,7 @@ def _prepare_state_dict(
         "model": dist_cp_sd.get_model_state_dict(model, options=sd_options)
     }
     if optim is not None:
-        state_dict["optim"] = dist_cp_sd.get_optimizer_state_dict(model, optim, options=sd_options)
+        state_dict["optim"] = get_optimizer_state_dict(model, optim, options=sd_options)
 
     return state_dict
 

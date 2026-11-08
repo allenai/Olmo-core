@@ -1,7 +1,10 @@
+from copy import deepcopy
+
 import pytest
 import safetensors.torch
 import torch
 import torch.distributed as dist
+import torch.distributed.checkpoint.state_dict as dist_cp_sd
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributed.tensor import init_device_mesh
@@ -14,6 +17,7 @@ from torch.distributed.tensor.parallel import (
 from olmo_core.distributed.checkpoint import (
     UnshardStrategy,
     async_save_model_and_optim_state,
+    get_optimizer_state_dict,
     load_keys,
     load_model_and_optim_state,
     merge_state_dicts,
@@ -22,6 +26,7 @@ from olmo_core.distributed.checkpoint import (
     save_state_dict,
     unshard_checkpoint,
 )
+from olmo_core.optim import SkipStepAdamW
 from olmo_core.testing import BACKENDS, requires_multi_gpu, run_distributed_test
 from olmo_core.utils import get_default_device
 
@@ -493,3 +498,184 @@ def test_merge_state_dicts():
     }
     merge_state_dicts(state_dict, {"model": {"e": 3}})
     assert state_dict["model"]["e"] == 3
+
+
+OPTIM_FACTORIES = [
+    pytest.param(lambda params: torch.optim.AdamW(params, lr=1e-2), id="adamw"),
+    pytest.param(lambda params: SkipStepAdamW(params, lr=1e-2), id="skip-step-adamw"),
+    pytest.param(
+        lambda params: SkipStepAdamW(params, lr=1e-2, foreach=True), id="skip-step-adamw-foreach"
+    ),
+]
+
+
+def _train_steps(model: nn.Module, optim: torch.optim.Optimizer, n: int):
+    torch.manual_seed(1)
+    for _ in range(n):
+        optim.zero_grad(set_to_none=True)
+        model(torch.randn(8, 16)).pow(2).sum().backward()
+        optim.step()
+
+
+def _iter_steps(optim_state_dict):
+    if "state" in optim_state_dict:
+        for param_state in optim_state_dict["state"].values():
+            yield param_state["step"]
+    else:
+        for key, value in optim_state_dict.items():
+            if key.startswith("state.") and key.endswith(".step"):
+                yield value
+
+
+@pytest.mark.parametrize("optim_factory", OPTIM_FACTORIES)
+@pytest.mark.parametrize(
+    "flatten_optim_state",
+    [pytest.param(True, id="flat-optim"), pytest.param(False, id="nested-optim")],
+)
+def test_get_optimizer_state_dict_does_not_advance_fresh_optimizer(
+    optim_factory, flatten_optim_state
+):
+    torch.manual_seed(0)
+    model = nn.Linear(16, 16)
+    optim = optim_factory(model.parameters())
+    optim.param_groups[0]["lr"] = 3e-3
+
+    optim_state_dict = get_optimizer_state_dict(
+        model,
+        optim,
+        options=dist_cp_sd.StateDictOptions(flatten_optimizer_state_dict=flatten_optim_state),
+    )
+
+    for param_state in optim.state.values():
+        assert float(param_state["step"]) == 0
+    steps = list(_iter_steps(optim_state_dict))
+    assert len(steps) == 2
+    assert all(float(step) == 0 for step in steps)
+    if flatten_optim_state:
+        assert optim_state_dict["param_groups.weight.lr"] == 3e-3
+    else:
+        assert optim_state_dict["param_groups"][0]["lr"] == 3e-3
+
+
+@pytest.mark.parametrize("optim_factory", OPTIM_FACTORIES)
+def test_get_optimizer_state_dict_on_fresh_optimizer_keeps_trajectory(optim_factory):
+    torch.manual_seed(0)
+    model1 = nn.Linear(16, 16)
+    model2 = deepcopy(model1)
+    optim1 = optim_factory(model1.parameters())
+    optim2 = optim_factory(model2.parameters())
+
+    get_optimizer_state_dict(model1, optim1)
+    _train_steps(model1, optim1, 3)
+    _train_steps(model2, optim2, 3)
+
+    torch.testing.assert_close(model1.state_dict(), model2.state_dict(), rtol=0, atol=0)
+    for p1, p2 in zip(model1.parameters(), model2.parameters()):
+        assert float(optim1.state[p1]["step"]) == float(optim2.state[p2]["step"]) == 3
+
+
+@pytest.mark.parametrize("optim_factory", OPTIM_FACTORIES)
+def test_get_optimizer_state_dict_leaves_initialized_optimizer_alone(optim_factory):
+    torch.manual_seed(0)
+    model = nn.Linear(16, 16)
+    optim = optim_factory(model.parameters())
+    _train_steps(model, optim, 1)
+
+    optim_state_dict = get_optimizer_state_dict(model, optim)
+
+    expected = dist_cp_sd.get_optimizer_state_dict(model, optim)
+    torch.testing.assert_close(optim_state_dict["state"], expected["state"], rtol=0, atol=0)
+    assert optim_state_dict["param_groups"] == expected["param_groups"]
+    assert all(float(step) == 1 for step in _iter_steps(optim_state_dict))
+
+
+class _GroupStepSGD(torch.optim.Optimizer):
+    """
+    Keeps a step count in each param group (like Dion) and an int step per parameter.
+    """
+
+    def __init__(self, params, lr: float = 1e-2):
+        super().__init__(params, dict(lr=lr, step=0))
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        for group in self.param_groups:
+            group["step"] += 1
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                state = self.state[p]
+                state["step"] = state.get("step", 0) + 1
+                p.add_(p.grad, alpha=-group["lr"])
+
+
+@pytest.mark.parametrize(
+    "flatten_optim_state",
+    [pytest.param(True, id="flat-optim"), pytest.param(False, id="nested-optim")],
+)
+def test_get_optimizer_state_dict_resets_group_steps_and_copied_state(
+    monkeypatch, flatten_optim_state
+):
+    # Make torch return copies, as it does for sharded models, so the live optimizer and the
+    # returned state dict have to be reset separately.
+    torch_get_optimizer_state_dict = dist_cp_sd.get_optimizer_state_dict
+    monkeypatch.setattr(
+        dist_cp_sd,
+        "get_optimizer_state_dict",
+        lambda *args, **kwargs: deepcopy(torch_get_optimizer_state_dict(*args, **kwargs)),
+    )
+
+    model = nn.Linear(16, 16)
+    optim = _GroupStepSGD(model.parameters())
+    optim_state_dict = get_optimizer_state_dict(
+        model,
+        optim,
+        options=dist_cp_sd.StateDictOptions(flatten_optimizer_state_dict=flatten_optim_state),
+    )
+
+    assert [group["step"] for group in optim.param_groups] == [0]
+    assert [state["step"] for state in optim.state.values()] == [0, 0]
+    if flatten_optim_state:
+        steps = {k: v for k, v in optim_state_dict.items() if k.endswith(".step")}
+        assert steps == {
+            "state.weight.step": 0,
+            "state.bias.step": 0,
+            "param_groups.weight.step": 0,
+            "param_groups.bias.step": 0,
+        }
+    else:
+        assert [group["step"] for group in optim_state_dict["param_groups"]] == [0]
+        assert list(_iter_steps(optim_state_dict)) == [0, 0]
+
+
+def run_resume_from_step_zero_checkpoint(dir):
+    torch.manual_seed(0)
+    model1 = nn.Linear(16, 16)
+    model2 = deepcopy(model1)
+    model3 = deepcopy(model1)
+    optim1 = torch.optim.AdamW(model1.parameters(), lr=1e-2)
+    optim2 = torch.optim.AdamW(model2.parameters(), lr=1e-2)
+    optim3 = torch.optim.AdamW(model3.parameters(), lr=1e-2)
+
+    # A step-0 checkpoint, then continue training without reloading.
+    save_model_and_optim_state(dir, model1, optim1)
+    _train_steps(model1, optim1, 3)
+
+    # Resume from that checkpoint into a fresh model and optimizer.
+    load_model_and_optim_state(dir, model2, optim2)
+    _train_steps(model2, optim2, 3)
+
+    # Reference: never checkpointed.
+    _train_steps(model3, optim3, 3)
+
+    torch.testing.assert_close(model1.state_dict(), model3.state_dict(), rtol=0, atol=0)
+    torch.testing.assert_close(model2.state_dict(), model3.state_dict(), rtol=0, atol=0)
+
+
+def test_resume_from_step_zero_checkpoint(tmp_path):
+    run_distributed_test(
+        run_resume_from_step_zero_checkpoint,
+        backend="gloo",
+        start_method="spawn",
+        func_args=(tmp_path,),
+    )
