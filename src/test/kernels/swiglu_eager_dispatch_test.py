@@ -10,13 +10,13 @@ from olmo_core.nn.moe.v2.routed_experts import RoutedExpertsConfig
 from olmo_core.testing import requires_gpu, requires_triton
 
 
-def _config(fused=True):
+def _config(fused=True, dtype=DType.float32):
     return RoutedExpertsConfig(
         d_model=8,
         hidden_size=8,
         num_experts=2,
         bias=False,
-        dtype=DType.float32,
+        dtype=dtype,
         fused_no_grad_activation=fused,
     )
 
@@ -31,9 +31,10 @@ def test_eager_no_grad_option_round_trip():
 @requires_triton
 @pytest.mark.parametrize("fused", [False, True])
 @pytest.mark.parametrize("grad", [False, True])
-def test_eager_no_grad_dispatch_and_gradients(fused, grad):
-    module = _config(fused).build(init_device="meta")
-    x = torch.randn(19, 16, device="cuda", requires_grad=grad)
+@pytest.mark.parametrize("dtype", [DType.float32, DType.bfloat16])
+def test_eager_no_grad_dispatch_and_gradients(fused, grad, dtype):
+    module = _config(fused, dtype=dtype).build(init_device="meta")
+    x = torch.randn(19, 16, device="cuda", dtype=dtype.as_pt(), requires_grad=grad)
     count = torch.tensor(17, device="cuda")
     with (
         mock.patch(
