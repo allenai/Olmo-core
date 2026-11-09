@@ -17,6 +17,9 @@
   --pill-bg: #e8edf6;
   --c: #6b4fa0;
   --warn: #b23a48;
+  --lora: #0e7f86;
+  --lora2: #7a3f99;
+  --lorafh: #1d7a3a;
   --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
   --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -25,14 +28,14 @@
   :root:not([data-theme="light"]) {
     --bg: #12161d; --surface: #1a2029; --fg: #e3e8ef; --muted: #9aa5b4; --rule: #2c3440;
     --accent: #7ea6f0; --dense: #e0a050; --ok: #6cc08e; --wait: #d4b45a; --pill-bg: #232c3a;
-    --c: #b49ae6; --warn: #ef8a96;
+    --c: #b49ae6; --warn: #ef8a96; --lora: #5cc9cf; --lora2: #d39ef0; --lorafh: #6fd08f;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12161d; --surface: #1a2029; --fg: #e3e8ef; --muted: #9aa5b4; --rule: #2c3440;
   --accent: #7ea6f0; --dense: #e0a050; --ok: #6cc08e; --wait: #d4b45a; --pill-bg: #232c3a;
-    --c: #b49ae6; --warn: #ef8a96;
+    --c: #b49ae6; --warn: #ef8a96; --lora: #5cc9cf; --lora2: #d39ef0; --lorafh: #6fd08f;
   color-scheme: dark;
 }
 body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
@@ -72,15 +75,56 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 
 <div class="wrap">
   <header style="display:grid;gap:10px">
-    <div class="eyebrow">ops experiment · olmo3_cptdrop · updated 2026-10-22</div>
+    <div class="eyebrow">ops experiment · olmo3_cptdrop · updated 2026-10-25</div>
     <h1>Token-dropping continued pretraining on OLMo 3 7B: an empirical screen</h1>
     <p>Starting from a 7B base that has only ever seen 8k contexts, does dropping tokens during long-context
       continued pretraining reach dense's dev loss for less compute, at every budget, not only the smallest?</p>
   </header>
 
   <div class="status">
-    <div><span class="pill run">in progress</span> &nbsp;<strong>A LoRA early stack beats dense: at rank 64 on blocks 0–15 it has lower dev CE than dense at every budget, with 15% fewer FLOPs and 12% less peak GPU memory; on blocks 0–7 it matches dense even on long-range targets.</strong></div>
-    <p>Everything that drops tokens loses in this CPT: random-block and first+last input drops, sd20-style slots, the CTC suite's mid-stack online router and its cuts (forward-only early stack, pyramid, merged summary tokens, early-exit loss, 50%-keep periodic steps), and mixture-of-depths at 50% and 25% capacity. Dense saturates within about 12 steps, and its gain is mostly local copying (grad-composition: 56–66% of the gain beyond 4k comes from 4-grams repeated within the last 4k). Every label must go through the full depth. The arms that keep labels intact do better. Freezing the embeddings and blocks 0–15 from step 0 and training rank-16 adapters there instead (scale 32) reaches CE 1.6841 at 2.8k PF against dense's 1.6853 at 3.3k PF (paired −0.0013 ± 0.0001, 1,024 rows), and 1.6879 vs 1.6880 at 48 steps. Peak memory is 30.8 GiB per GPU for the whole run, against 35.2 GiB. The multiplier reads 1.2–1.65× because the dense curve is flat there; the CE gain itself is about 0.001 nats. On targets that repeat text seen only more than 4k tokens back (1.25M targets, the long-range part of the gain), LoRA is worse than dense at every budget: +0.0066 / +0.0067 / +0.0040 nats at 12 / 48 / 120 steps (paired SE ±0.0002–0.0004), about 0.6× on that metric. Its overall edge comes from local and novel tokens. Training every layer with a 4096 window (all-local) loses badly: context gain falls to 0.044 and keeps falling. Warmup-then-freeze ties dense only at 120 steps and keeps the 35.9 GiB pre-freeze peak. Rank 64 fixes most of that. On blocks 0–15 (0.85× dense FLOPs, peak 30.9 GiB) it beats dense on overall CE by 0.0015–0.0030 nats at 12 / 24 / 48 / 120 steps, and its long-range deficit shrinks to +0.0012–0.0015 (from rank 16's +0.004–0.007). On blocks 0–7 (0.92×, 33.1 GiB) it is level with dense on long-range targets and slightly better overall. The peak saving is the frozen parameters' gradients and optimizer state; activations are unchanged. Running now: rank 64 at 240 / 480 steps (to read FLOPs-to-match-dense at normal budgets), rank 128, a second seed, and rank 64 frozen at 75% of the steps.</p>
+    <div><span class="pill done">screen done</span> &nbsp;<strong>The CPT recipe keeps every token and trains no full-rank weights: freeze the whole model, LM head included, and train rank-64 adapters on all 32 blocks. It costs 0.685× dense FLOPs and 22.3 GiB peak (dense 35.2). At 32k it is never behind dense at the same step count up to 960 steps; its FLOPs-to-match m runs 4.8 / 4.3 / 3.2 / 2.1 / ~1.4 at 48 / 120 / 240 / 480 / 960 steps. The edge is larger at long context: −0.0057 at 64k and −0.0046 at 128k after 120 steps (full-row CE). Every method that drops tokens, depth or MLP width loses.</strong></div>
+    <div class="tbl"><table>
+      <tr><th>recipe vs dense, same steps (full-row dev CE)</th><th>48</th><th>120</th><th>240</th><th>480</th><th>960</th></tr>
+      <tr><td>32k (1,024 rows)</td><td class="num">−0.0037</td><td class="num">−0.0041</td><td class="num">−0.0032</td><td class="num">−0.0022</td><td class="num">+0.0002</td></tr>
+      <tr><td>64k (512 rows)</td><td></td><td class="num">−0.0057</td><td class="num">−0.0039</td><td class="num">−0.0026</td><td></td></tr>
+      <tr><td>128k (512 rows)</td><td class="num">−0.0038</td><td class="num">−0.0046</td><td></td><td></td><td></td></tr>
+    </table></div>
+    <p><strong>What loses.</strong> Every arm that drops tokens: random-block and first+last input drops, sd20-style slots, the CTC suite's mid-stack online router and all its cuts, and mixture-of-depths. All-local windows and warmup-then-freeze lose too. Dense saturates in about 12 steps, and its gain is mostly local copying (56–66% of the gain beyond 4k comes from 4-grams repeated within the last 4k), so a label that skips depth costs more than the FLOPs it saves.</p>
+    <p><strong>What wins: LoRA in place of full fine-tuning.</strong> The embeddings and the first K blocks are frozen from step 0 and get rank-64 adapters (scale 32); later blocks train fully. Numbers are on dev32k (1,024 rows), FLOPs from the meter, paired against dense at the same step count:</p>
+    <div class="tbl"><table>
+      <tr><th>frozen blocks K</th><th>FLOPs / step</th><th>peak GiB</th><th>CE at 48 steps</th><th>CE at 120 steps</th><th>Δ vs dense (48 / 120)</th></tr>
+      <tr><td>dense</td><td class="num">1.00×</td><td class="num">35.2</td><td class="num">1.6880</td><td class="num">1.6853</td><td class="num">—</td></tr>
+      <tr><td class="num">16</td><td class="num">0.849×</td><td class="num">30.9</td><td class="num">1.6864</td><td class="num">1.6834</td><td class="num">−0.0015 / −0.0019</td></tr>
+      <tr><td class="num">24</td><td class="num">0.774×</td><td class="num">28.7</td><td class="num">1.6856</td><td class="num">1.6827</td><td class="num">−0.0023 / −0.0026</td></tr>
+      <tr><td class="num">28</td><td class="num">0.737×</td><td class="num">—</td><td class="num">1.6854</td><td class="num">1.6824</td><td class="num">−0.0025 / −0.0029</td></tr>
+      <tr><td class="num">30</td><td class="num">0.721×</td><td class="num">—</td><td class="num">1.6852</td><td class="num">1.6823</td><td class="num">−0.0028 / −0.0031</td></tr>
+      <tr><td class="num"><strong>32 + frozen head</strong></td><td class="num"><strong>0.685×</strong></td><td class="num"><strong>22.3</strong></td><td class="num"><strong>1.6842</strong></td><td class="num"><strong>1.6812</strong></td><td class="num"><strong>−0.0037 / −0.0041</strong></td></tr>
+      <tr><td class="num"><strong>32 (all)</strong></td><td class="num"><strong>0.700×</strong></td><td class="num"><strong>25.0</strong></td><td class="num"><strong>1.6849</strong></td><td class="num"><strong>1.6819</strong></td><td class="num"><strong>−0.0031 / −0.0034</strong></td></tr>
+    </table></div>
+    <ul>
+      <li><strong>Each step deeper is cheaper and better.</strong> Paired SE on every delta is ±0.0001. Seed noise on overall CE is ±0.0001 (K16, seed 1: 1.6835 vs 1.6834).</li>
+      <li><strong>Long-range bin</strong> (targets whose 4-gram last appeared more than 4k back): seeds differ by 0.0023, so LoRA's ≤0.002 gaps there are not resolved.</li>
+      <li><strong>K32 uses long context as well as dense does:</strong> its context gain (CE with an 8k window minus CE with full 32k context, on each row's last 4k) is 0.0681 / 0.0700 / 0.0725 / 0.0739 at 12 / 24 / 48 / 120 steps, against dense's 0.0671 / 0.0700 / 0.0726 / 0.0750 (± 0.0036).</li>
+      <li><strong>K32 reproduces:</strong> seed 1 at 120 steps gives 1.6821 against seed 0's 1.6819.</li>
+      <li><strong>Rank 128 vs 64</strong> at K16 (same scale): no better. <strong>Higher adapter LR hurts K32:</strong> LR 4e-5 gives 1.6843 at 120 steps, and rank 128 at scale 64 gives 1.6874. The scale multiplies the adapter update directly, so scale 64 doubles the adapters' effective LR, and that run says nothing about rank. LR 1e-5 ties 2e-5 (1.6820 vs 1.6819 at 120 steps), with slightly less forgetting on the short guard (1.1575 vs 1.1607; 256 rows).</li>
+      <li><strong>The edge decays with budget:</strong> K24 is −0.0023 / −0.0026 / −0.0016 / −0.0009 at 48 / 120 / 240 / 480 steps, so its m falls from ~2.8 to 1.9 at 240 and to just above 1.3 at 480 (a lower bound there, past the last dense point). At large budgets most of the gain is the cheaper step, not a better CE. <strong>K32 decays more slowly:</strong> −0.0031 / −0.0034 / −0.0023 at 48 / 120 / 240 steps (1.6804 at 240 for 4,711 PF; m 3.9 / 3.45 / 2.5). K32 at 480 is running.</li>
+      <li><strong>Stacking a half-width MLP on K32 fails badly:</strong> 0.534× FLOPs/step but 1.7700 at 48 steps, +0.082 worse than dense and worse than dense after only 4 steps. Training uses a random 50% of MLP neurons each step with a 1/f rescale, and eval runs full width. With the base frozen, the adapters cannot absorb that much dropout. It gets worse with training (1.7796 at 120 steps), and the quarter-width runs were cancelled. Random 75% width scores 1.7124. Keeping the most active neurons instead (top-k, no rescale) recovers about a third of the loss: 1.7342 at 50% width and 1.6999 at 75%, still worse than dense at 8 steps (m ≈ 0.3 at best). Letting the base train does not help either. Dense partial MLP at 50% / 25% width gets worse with training: 1.7402 → 1.7647 and 1.7480 → 1.8663 from 24 to 120 steps. Partial MLP is closed for this CPT.</li>
+      <li><strong>Stopping backprop below block B loses too.</strong> These runs freeze the bottom B blocks with no adapters and put LoRA only above them. At 120 steps, B = 4 gives 1.6828 and B = 8 gives 1.6857, against K32's 1.6819. At 48 steps, B = 16 gives 1.7002. Every block taken out of training costs more quality than its backward pass saves.</li>
+      <li><strong>Token dropping still loses on top of K32:</strong> a router keeping 50% of tokens after block 7 (0.412× FLOPs/step) scores 1.7247 / 1.7120 at 48 / 120 steps. Both are worse than dense after just 4 steps (m &lt; 0.24).</li>
+      <li><strong>Smaller batches do not help K32:</strong> 8 rows/step at the same tokens (96 optimizer steps) gives 1.6846 against 1.6849 at 16 rows/step, a tie.</li>
+      <li><strong>The win is larger at long context.</strong> These are full-row numbers; an earlier version scored only the first 32k targets of each row. At 64k (512 dev rows) K32 is −0.0050 / −0.0030 / −0.0017 ± 0.0001–0.0002 against dense at 120 / 240 / 480 steps, about 1.4–1.5× the 32k gap, and the same on the 32k–64k positions. At 128k it is −0.0035 / −0.0041 at 48 / 120 steps: about the same size as at 64k, not growing further.</li>
+    </ul>
+    <div class="tbl"><table>
+      <tr><th>K32 vs dense, steps</th><th>12</th><th>24</th><th>48</th><th>120</th><th>240</th><th>480</th><th>960</th></tr>
+      <tr><td>K32 dev CE</td><td class="num">1.6926</td><td class="num">1.6880</td><td class="num">1.6849</td><td class="num">1.6819</td><td class="num">1.6804</td><td class="num">1.6788</td><td class="num">1.6774</td></tr>
+      <tr><td>dense dev CE</td><td class="num">1.6972</td><td class="num">1.6912</td><td class="num">1.6880</td><td class="num">1.6853</td><td class="num">1.6827</td><td class="num">1.6800</td><td class="num">1.6762</td></tr>
+      <tr><td>m (FLOPs-to-match)</td><td class="num">1.65</td><td class="num">2.75</td><td class="num">3.9</td><td class="num">3.45</td><td class="num">2.5</td><td class="num">≈1.8</td><td class="num">1.12</td></tr>
+      <tr><td><strong>frozen-head K32 dev CE</strong></td><td></td><td></td><td class="num">1.6842</td><td class="num">1.6812</td><td class="num">1.6795</td><td class="num">1.6779</td><td class="num">1.6764</td></tr>
+      <tr><td><strong>frozen-head m</strong></td><td></td><td></td><td class="num">4.8</td><td class="num">4.3</td><td class="num">3.2</td><td class="num">2.1</td><td class="num">~1.4 (tie)</td></tr>
+    </table></div>
+    <p style="color:var(--muted)">m is read off the measured dense curve, which now runs to 960 steps (1.6762 at 26,349 PF). The meter does not charge activation-checkpoint recompute, so K32 is ≈ 0.75× dense in real FLOPs; every m here is about 7% lower on that basis.</p>
+    <p><strong>How big is the win?</strong> m peaks at about 3.9× around 48–120 steps, decays to about 1.8× at 480 steps, and reaches 1.1× at 960 steps. There K32 is 0.0012 ± 0.0001 behind dense at the same step count, and 0.0035 behind on long-range targets: the adapters saturate while full CPT keeps learning. m is larger at 64k. That is real, but short of the 10–20× target. At large budgets most of the value is the 0.70× step and 29% less memory, not a better optimum. Every per-step cut stacked on K32 lost: partial MLP (random and top-k), a token router keeping 50%, 8 rows/step, and an adapter-less frozen bottom stack.</p>
+    <p><strong>Running now (Beaker):</strong> K32 at 240 / 480 steps, a second seed, rank 128, LR 1e-5, and 64k context; K30 at 120, K28 at 240, K24 at 480, K16 at 64k. <strong>Balrog A100s:</strong> partial-MLP widths ± LoRA.</p>
   </div>
 
   <section>
@@ -93,8 +137,12 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
         <span><i class="sw" style="border-color:var(--accent)"></i>I-rand 20%</span>
         <span><i class="sw" style="border-color:var(--warn)"></i>I-fl 25%</span>
         <span><i class="sw" style="border-color:var(--ok)"></i>mid-stack router (keep 10% at block 7)</span>
+        <span><i class="sw" style="border-color:var(--lora);border-top-style:dashed"></i>LoRA r64, blocks 0–15</span>
+        <span><i class="sw" style="border-color:var(--lora)"></i>LoRA r64, blocks 0–23</span>
+        <span><i class="sw" style="border-color:var(--lora2)"></i>LoRA r64, all 32 blocks</span>
+        <span><i class="sw" style="border-color:var(--lorafh)"></i>same + frozen LM head (recipe)</span>
       </div>
-<svg viewBox="0 0 660 300" role="img" aria-label="Dev cross-entropy versus training petaFLOPs at LR 2e-5: both dense curves sit lowest; every input-drop arm is above dense at matched compute, and first+last 10% gets worse with more training.">
+<svg viewBox="0 0 660 300" role="img" aria-label="Dev cross-entropy versus training petaFLOPs at LR 2e-5: the LoRA early-stack curves sit at or below dense at every budget; every input-drop and router arm is above dense at matched compute.">
 <g stroke="var(--rule)" stroke-width="1" fill="none">
 <line x1="62" y1="243.9" x2="640" y2="243.9"/>
 <line x1="62" y1="195.5" x2="640" y2="195.5"/>
@@ -127,6 +175,14 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 <g fill="var(--warn)"><circle cx="198.3" cy="149.8" r="3.5"/><circle cx="277.3" cy="156.8" r="3.5"/><circle cx="355.7" cy="156.1" r="3.5"/></g>
 <polyline fill="none" stroke="var(--ok)" stroke-width="2.5" points="199.7,121.0 273.9,162.1 350.4,176.4 452.5,182.2"/>
 <g fill="var(--ok)"><circle cx="199.7" cy="121.0" r="3.5"/><circle cx="273.9" cy="162.1" r="3.5"/><circle cx="350.4" cy="176.4" r="3.5"/><circle cx="452.5" cy="182.2" r="3.5"/></g>
+<polyline fill="none" stroke="var(--lora)" stroke-width="2.5" stroke-dasharray="5 3" points="189.0,209.5 263.5,220.9 340.2,228.4 443.1,235.7 521.6,239.1 600.3,245.4"/>
+<g fill="var(--lora)"><circle cx="189.0" cy="209.5" r="3.5"/><circle cx="263.5" cy="220.9" r="3.5"/><circle cx="340.2" cy="228.4" r="3.5"/><circle cx="443.1" cy="235.7" r="3.5"/><circle cx="521.6" cy="239.1" r="3.5"/><circle cx="600.3" cy="245.4" r="3.5"/></g>
+<polyline fill="none" stroke="var(--lora)" stroke-width="2.5" points="330.2,230.3 433.2,237.4"/>
+<g fill="var(--lora)"><circle cx="330.2" cy="230.3" r="3.5"/><circle cx="433.2" cy="237.4" r="3.5"/></g>
+<polyline fill="none" stroke="var(--lora2)" stroke-width="2.5" points="168.1,213.4 242.7,224.5 319.3,232.0 422.3,239.3 500.7,242.9 577.3,246.8"/>
+<g fill="var(--lora2)"><circle cx="168.1" cy="213.4" r="3.5"/><circle cx="242.7" cy="224.5" r="3.5"/><circle cx="319.3" cy="232.0" r="3.5"/><circle cx="422.3" cy="239.3" r="3.5"/><circle cx="500.7" cy="242.9" r="3.5"/><circle cx="577.3" cy="246.8" r="3.5"/></g>
+<polyline fill="none" stroke="var(--lorafh)" stroke-width="2.5" points="314.5,233.7 418.7,241.0 496.1,245.1 574.8,249.0"/>
+<g fill="var(--lorafh)"><circle cx="314.5" cy="233.7" r="3.5"/><circle cx="418.7" cy="241.0" r="3.5"/><circle cx="496.1" cy="245.1" r="3.5"/><circle cx="574.8" cy="249.0" r="3.5"/></g>
 </svg>
       <figcaption>Full-context dev CE on 1,024 rows × 32k; lower is better; x = training PF from the FLOP meter, measured on every run, dense included (dense: 27.5 PF/step plus a ~27 PF constant). C and I-fl 10% / 5% ran on Beaker and are in the table only. The start (stage 2) is at 1.848, off the top of the chart. Seed noise at 120 steps: 0.0000 (seed 1 = 1.6853, same as seed 0); paired SEs between checkpoints are ±0.0002–0.002.</figcaption>
     </figure>
@@ -182,6 +238,15 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
       <tr><td>SD20 (slots) 65 / 130 / 260 steps</td><td class="num">12 / 24 / 48</td><td class="num">1.705 / 1.701 / 1.700</td><td class="num">1.706 / 1.702 / 1.700</td><td class="num">0.061 / 0.064 / 0.066</td><td class="num">1.170 / 1.171 / 1.174</td></tr>
       <tr><td>I-rand 65 / 130 / 260 steps</td><td class="num">12 / 24 / 48</td><td class="num">1.705 / 1.702 / 1.700</td><td class="num">1.706 / 1.702 / 1.701</td><td class="num">0.062 / 0.063 / 0.065</td><td class="num">1.171 / 1.172 / 1.176</td></tr>
       <tr><td><strong>LoRA early stack r64, blocks 0–15, 12 / 24 / 48 / 120 steps</strong></td><td class="num">measured PF 305 / 587 / 1151 / 2842</td><td class="num"><strong>1.694 / 1.690 / 1.686 / 1.683</strong></td><td class="num">1.693 / 1.688 / 1.684 / 1.681</td><td class="num">0.068 / 0.070 / 0.072 / 0.074</td><td class="num">1.158 / 1.158 / 1.160 / 1.161</td></tr>
+      <tr><td><strong>LoRA r64 on all 32 blocks (whole model frozen), 48 / 120 / 240 steps</strong></td><td class="num">measured PF 958 / 2366 / 4711</td><td class="num"><strong>1.685 / 1.682 / 1.680</strong> (1.6849 / 1.6819 / 1.6804)</td><td class="num">1.683 / 1.679 / —</td><td></td><td class="num">1.159 / 1.161 / 1.165</td></tr>
+      <tr><td>same, LR 4e-5</td><td class="num">958 / 2366</td><td class="num">1.686 / 1.684</td><td class="num">1.684 / 1.682</td><td></td><td class="num">1.163 / 1.166</td></tr>
+      <tr><td>LoRA r64, blocks 0–27, 48 / 120 · blocks 0–29, 48</td><td class="num">1006 / 2485 · —</td><td class="num">1.6854 / 1.6824 · 1.6852</td><td class="num">1.683 / 1.680 · 1.683</td><td></td><td class="num">1.159 / 1.161</td></tr>
+      <tr><td>LoRA r64, blocks 0–23, 240 / 480</td><td class="num">5186 / 10350</td><td class="num">1.6811 / 1.6792</td><td class="num">1.678 / —</td><td></td><td class="num">1.165 / 1.173</td></tr>
+      <tr><td><strong>LoRA early stack r64, blocks 0–23, 48 / 120 steps</strong></td><td class="num">measured PF 1054 / 2604</td><td class="num"><strong>1.686 / 1.683</strong> (1.6856 / 1.6827)</td><td class="num">1.683 / 1.680</td><td class="num">0.073 / 0.074</td><td class="num">1.160 / 1.161</td></tr>
+      <tr><td>LoRA r64, blocks 0–15, 240 / 480 steps</td><td class="num">5660 / 11296</td><td class="num">1.682 / 1.679</td><td class="num">—</td><td class="num">0.075 / 0.077</td><td class="num">— / 1.173</td></tr>
+      <tr><td>LoRA r64, blocks 0–15, seed 1, 120 steps</td><td class="num">2842</td><td class="num">1.6835 (seed 0: 1.6834)</td><td class="num">1.681</td><td class="num">0.075</td><td class="num">1.162</td></tr>
+      <tr><td>LoRA r64, blocks 0–15, adapters frozen at 75%, 48 / 120</td><td class="num">1095 / 2703</td><td class="num">1.687 / 1.684</td><td></td><td class="num">0.072 / 0.074</td><td></td></tr>
+      <tr><td>LoRA r128, blocks 0–15, 48 / 120</td><td class="num">1171 / 2892</td><td class="num">1.687 / 1.684</td><td class="num">1.684 / 1.681</td><td class="num">0.074 / 0.074</td><td class="num">1.162 / 1.164</td></tr>
       <tr><td>LoRA early stack r64, blocks 0–7</td><td class="num">331 / 636 / 1247 / 3080</td><td class="num">1.697 / 1.691 / 1.687 / 1.684</td><td class="num">1.696 / 1.690 / 1.685 / 1.681</td><td class="num">0.067 / 0.070 / 0.073 / 0.074</td><td class="num">1.158 / 1.158 / 1.160 / 1.162</td></tr>
       <tr><td>LoRA early stack r16, blocks 0–15, 12 / 24 / 48 / 120 steps</td><td class="num">measured PF 301 / 579 / 1135 / 2804</td><td class="num"><strong>1.699 / 1.692 / 1.688 / 1.684</strong></td><td class="num">1.699 / 1.691 / 1.686 / 1.682</td><td class="num">0.064 / 0.068 / 0.071 / 0.073</td><td class="num">1.157 / 1.157 / 1.158 / 1.159</td></tr>
       <tr><td>LoRA early stack r16, blocks 0–7</td><td class="num">329 / 632 / 1239 / 3061</td><td class="num">1.701 / 1.693 / 1.688 / 1.684</td><td class="num">1.700 / 1.691 / 1.686 / 1.682</td><td class="num">0.066 / 0.070 / 0.072 / 0.074</td><td class="num">1.157 / 1.158 / 1.159 / 1.159</td></tr>
@@ -203,10 +268,43 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
       <tr><td>router, no full-context steps, 40 / 80 / 160 steps</td><td class="num">measured PF 341 / 634 / 1220</td><td class="num">1.809 / 1.801 / 1.796</td><td class="num">1.824 / 1.810 / 1.802</td><td class="num">0.023 / 0.040 / 0.052</td><td class="num">1.191 / 1.201 / 1.212</td></tr>
       <tr><td>I-fl 25%, 54 / 108 / 215 steps</td><td class="num">12 / 24 / 48</td><td class="num">1.719 / 1.716 / 1.716</td><td class="num">1.722 / 1.719 / 1.719</td><td class="num">0.057 / 0.058 / 0.059</td><td class="num">1.177 / 1.177 / 1.180</td></tr>
       <tr><td>I-fl 10%, 133 / 533 steps</td><td class="num">~12 / ~48</td><td class="num">1.753 / 1.770</td><td class="num">1.764 / 1.784</td><td></td><td class="num">1.194 / 1.214</td></tr>
-      <tr><td>dense 480</td><td class="num">480</td><td class="num">1.680</td><td class="num">1.677</td><td class="num">0.077</td><td></td></tr>
+      <tr><td>dense 480 / 960</td><td class="num">480 / 960</td><td class="num">1.680 / 1.676</td><td class="num">1.677 / 1.673</td><td class="num">0.077 / —</td><td class="num">— / 1.183</td></tr>
       <tr><td>C 120 / 240 / 480</td><td class="num">113 / 227 / 454</td><td class="num">1.686 / 1.684 / 1.681</td><td class="num">1.684 / 1.682 / 1.679</td><td></td><td class="num">1.163 / 1.169 / 1.176</td></tr>
     </table></div>
     <p style="color:var(--muted)">Short docs: 256 × 4k rows <span class="flag">⚠ eval_size=256 rows</span>, a relative forgetting guard. The OLMo recipe LR (2.07e-4) plateaued at 1.82 and forgot (short docs up to 1.49); the probe that set 2e-5 is in STATUS.md.</p>
+  </section>
+
+  <section>
+    <h2>Max trainable context per GPU</h2>
+    <p>Memory probe on 8 × H200: FSDP, one row per GPU, full activation checkpointing, fused-linear CE, three real steps on synthetic joined rows. Peak active memory:</p>
+    <figure>
+      <div class="legend" aria-hidden="true">
+        <span><i class="sw" style="border-color:var(--dense)"></i>dense</span>
+        <span><i class="sw" style="border-color:var(--lora2)"></i>K32</span>
+        <span><i class="sw" style="border-color:var(--dense);border-top-style:dashed"></i>dense + offload</span>
+        <span><i class="sw" style="border-color:var(--lora2);border-top-style:dashed"></i>K32 + offload</span>
+      </div>
+<svg viewBox="0 0 660 300" role="img" aria-label="Peak GPU memory versus context length for dense, K32 and both with activation offload; offload roughly halves the slope, LoRA mainly lowers the intercept.">
+<g stroke="var(--rule)" stroke-width="1" fill="none"><line x1="62" y1="250.0" x2="622" y2="250.0"/><line x1="62" y1="204.0" x2="622" y2="204.0"/><line x1="62" y1="158.0" x2="622" y2="158.0"/><line x1="62" y1="112.0" x2="622" y2="112.0"/><line x1="62" y1="66.0" x2="622" y2="66.0"/><line x1="62" y1="20.0" x2="622" y2="20.0"/></g>
+<g fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="end"><text x="56" y="254.0">40</text><text x="56" y="208.0">60</text><text x="56" y="162.0">80</text><text x="56" y="116.0">100</text><text x="56" y="70.0">120</text><text x="56" y="24.0">140</text></g>
+<g fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="middle"><text x="62.0" y="270">96k</text><text x="174.0" y="270">128k</text><text x="286.0" y="270">160k</text><text x="398.0" y="270">192k</text><text x="510.0" y="270">224k</text><text x="622.0" y="270">256k</text><text x="342" y="292">context length (tokens per row)</text></g>
+<text x="14" y="140" fill="var(--muted)" font-family="IBM Plex Mono, monospace" font-size="11" transform="rotate(-90 14 140)" text-anchor="middle">peak GiB per GPU</text>
+<line x1="62" y1="162.6" x2="622" y2="162.6" stroke="var(--warn)" stroke-width="1" stroke-dasharray="2 3"/><text x="620" y="158.6" fill="var(--warn)" font-family="IBM Plex Mono, monospace" font-size="10" text-anchor="end">80 GB GPU</text>
+<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" points="62.0,180.1 174.0,135.9 286.0,92.0 398.0,47.8"/><g fill="var(--dense)"><circle cx="62.0" cy="180.1" r="3.5"/><circle cx="174.0" cy="135.9" r="3.5"/><circle cx="286.0" cy="92.0" r="3.5"/><circle cx="398.0" cy="47.8" r="3.5"/></g>
+<polyline fill="none" stroke="var(--lora2)" stroke-width="2.5" points="62.0,201.9 174.0,160.5 286.0,119.1 398.0,77.7"/><g fill="var(--lora2)"><circle cx="62.0" cy="201.9" r="3.5"/><circle cx="174.0" cy="160.5" r="3.5"/><circle cx="286.0" cy="119.1" r="3.5"/><circle cx="398.0" cy="77.7" r="3.5"/></g>
+<polyline fill="none" stroke="var(--dense)" stroke-width="2.5" stroke-dasharray="5 4" points="62.0,199.2 174.0,172.3 286.0,145.3 398.0,118.4 510.0,91.5 622.0,64.8"/><g fill="var(--dense)"><circle cx="62.0" cy="199.2" r="3.5"/><circle cx="174.0" cy="172.3" r="3.5"/><circle cx="286.0" cy="145.3" r="3.5"/><circle cx="398.0" cy="118.4" r="3.5"/><circle cx="510.0" cy="91.5" r="3.5"/><circle cx="622.0" cy="64.8" r="3.5"/></g>
+<polyline fill="none" stroke="var(--lora2)" stroke-width="2.5" stroke-dasharray="5 4" points="62.0,231.1 174.0,207.7 286.0,184.2 398.0,160.5 510.0,137.1"/><g fill="var(--lora2)"><circle cx="62.0" cy="231.1" r="3.5"/><circle cx="174.0" cy="207.7" r="3.5"/><circle cx="286.0" cy="184.2" r="3.5"/><circle cx="398.0" cy="160.5" r="3.5"/><circle cx="510.0" cy="137.1" r="3.5"/></g>
+</svg>
+      <figcaption>Dense and K32 both run out of memory at 224k on H200. "Offload" is a new activation-checkpointing mode that keeps each block's input in pinned host memory. It does exactly the same recompute, so step losses are bit-identical, at ~3–4% lower throughput.</figcaption>
+    </figure>
+    <div class="tbl"><table>
+      <tr><th>arm</th><th>GiB per +32k tokens</th><th>max T, 80 GB-class</th><th>max T, H200</th></tr>
+      <tr><td>dense</td><td class="num">20.1</td><td class="num">~95k</td><td class="num">~190k</td></tr>
+      <tr><td>K32 (whole-model LoRA)</td><td class="num">20.3</td><td class="num">~111k</td><td class="num">~206k</td></tr>
+      <tr><td>dense + offload</td><td class="num">12.7</td><td class="num">~126k</td><td class="num">~277k</td></tr>
+      <tr><td><strong>K32 + offload</strong></td><td class="num">11.6</td><td class="num"><strong>~157k</strong></td><td class="num"><strong>~323k</strong></td></tr>
+    </table></div>
+    <p>LoRA removes ~12 GiB of fixed state (grads and Adam state of frozen weights) but leaves the per-token slope unchanged, so on its own it adds only 8–17% to max T. The slope is the stored block inputs, and offload takes most of it off the GPU: +46% max T for dense and +70% with K32. Offload is an implementation fix, not a method win. FLOPs and wall-clock also diverge at this length: K32 is 0.70× dense FLOPs but only ~3% faster per token at 128–192k, where attention dominates.</p>
   </section>
 
   <section>
@@ -297,6 +395,14 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
       <tr><td>Beaker: C 120 / 240 / 480, I-fl 10% / 5% (32k), I-fl 25% at 64k (600, 1200)</td><td class="mono">jupiter 8×H100</td><td><span class="pill done">done</span></td></tr>
       <tr><td>Beaker: dense 64k 120 / 240 / 480 = 1.721 / 1.717 / 1.713 on dev64k_512 (512 rows); I-fl 25% at 64k 1.751 / 1.751</td><td class="mono">01M5HSEW1E99JNJPFXAT1GXMD3</td><td><span class="pill done">done</span></td></tr>
       <tr><td>Cancelled: I-fl 25% 32k long budgets (arm already loses at every small budget); not relaunched: I-fl 10% / 5% at 64k (died on a full weka filesystem; those keep rates lose badly at 32k)</td><td class="mono">bk11</td><td>cancelled</td></tr>
+      <tr><td>LoRA early stack: r16 / r64 × blocks 0–7 / 0–15 at 12–120, r64 K16 at 240 / 480, freeze-75%, r128, K24, seed 1</td><td class="mono">sneetches 4030726 · cubbins 4063697 / 4063698 / 4079261 / 4079442</td><td><span class="pill done">done</span></td></tr>
+      <tr><td>whole-model LoRA r64 at LR 2e-5 / 4e-5 (48 / 120) + packed hybrid rows (control only: packing undercounts FLOPs)</td><td class="mono">cubbins 4106244</td><td>LoRA scored; context-gain eval <span class="pill run">running</span></td></tr>
+      <tr><td>LoRA r64 K24 at 240 / 480, K28 at 48 / 120 (32k)</td><td class="mono">Beaker bk15 · jupiter</td><td>K24-240, K28 done; K24-480 <span class="pill run">running</span></td></tr>
+      <tr><td>K30 at 48 / 120, K28 at 240</td><td class="mono">Beaker bk16</td><td>K30-48 done; rest <span class="pill run">running</span></td></tr>
+      <tr><td>K32 (all blocks) at 240 / 480, seed 1, rank 128, LR 1e-5, 64k</td><td class="mono">Beaker bk17</td><td>240, seed 1, r128 done; 480, LR 1e-5, 64k <span class="pill run">running</span></td></tr>
+      <tr><td>K32 at 12 / 24 steps; dense 960 (anchors FLOPs-to-match past 480 steps)</td><td class="mono">cubbins 4108007</td><td><span class="pill run">running</span></td></tr>
+      <tr><td>LoRA r64 K16 at 64k vs dense 64k: 1.7184 / 1.7152 / 1.7121 vs 1.7210 / 1.7170 / 1.7134 (512 rows)</td><td class="mono">Beaker bk12 · jupiter</td><td><span class="pill done">done</span></td></tr>
+      <tr><td>partial MLP (width 0.5 / 0.25) ± LoRA r64 K16</td><td class="mono">balrog 4107026</td><td><span class="pill run">training</span></td></tr>
       <tr><td>Earlier Beaker waves at the OLMo LR</td><td class="mono">bk3–bk10</td><td>cancelled (superseded) or failed on traps now fixed: EOS-first rows hung the drop arms, S3 sync skipped a rebuilt shard, checkpoint pruning</td></tr>
     </table></div>
   </section>
@@ -308,6 +414,8 @@ ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
         <li>Dropping tokens breaks OLMo 3's sliding windows unless masked by original position (step 4).</li>
         <li>Dev CE only so far; generation-graded CTC evals come with the confirm round.</li><li>64k FLOP ratios for the drop arms are estimates until their meters report.</li>
         <li>The forgetting guard comes from OLMo stage-3 training data, so it is a relative check across arms.</li>
+        <li>Long-range (far-repeat) CE varies by ~0.002 between seeds; deltas that small are not resolved.</li>
+        <li>LoRA gains are measured on dev CE only; no generation-graded long-context eval yet.</li>
         
       </ul>
     </div>

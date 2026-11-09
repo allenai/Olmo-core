@@ -553,6 +553,12 @@ def load_model(ckpt: str, fmt: str, vocab: int, ids, seed: int, stop_ids: Sequen
     t0 = time.time()
     if fmt == "hf":
         load_hf_into(model, ckpt)
+    elif fmt == "olmo_st":  # one model-only safetensors file, olmo keys (gradprobe/resave_model_only.py)
+        from safetensors.torch import load_file
+
+        f = ckpt if ckpt.endswith(".safetensors") else os.path.join(ckpt, "model.safetensors")
+        model.load_state_dict(load_file(f), strict=True)
+        log(f"loaded olmo safetensors {f}")
     else:
         ck = find_distcp(ckpt)
         load_model_and_optim_state(ck, model)
@@ -1082,7 +1088,7 @@ def main() -> None:
     ap.add_argument("--rung", default="8k", help="one rung, or a comma list scored in ONE process (model loaded once)")
     ap.add_argument("--rows", default="48", help="rows per rung: one int, or a comma list aligned with --rung")
     ap.add_argument("--ckpt", required=True)
-    ap.add_argument("--ckpt-format", default="hf", choices=["hf", "distcp"])
+    ap.add_argument("--ckpt-format", default="hf", choices=["hf", "distcp", "olmo_st"])
     ap.add_argument("--data-root", default=os.environ.get("CTC_SUITE_DATA_ROOT", ""))
     ap.add_argument("--cpt-source", default=None, help="cpt80: file/dir of jsonl|parquet|txt rows with a 'text' field (else manifest.json cpt_source)")
     ap.add_argument("--schemes", default=",".join(SCHEMES))
