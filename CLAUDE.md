@@ -52,6 +52,10 @@ Where new things go:
 - Results, run dirs and weights stay out of git (`research/**/results*/`, `runs/`, `weights/` are
   gitignored): keep them on node-local `/data` or weka and say where in the folder's README.
 - Changes to the canonical data → train → eval path go in `recipes/`, and must keep it working end to end.
+- **Every experiment also gets one claude.ai artifact** (default since 2026-10-20; global rule in
+  `~/.claude/CLAUDE.md`): a summary page kept current by republishing to the same URL, linked from
+  STATUS.md `artifacts:` and each record's `artifact:` header. The `close-out-experiment` and
+  `record-results` skills include the step.
 - New writeups go in `records/`. Every new record starts with the front-matter header documented in
   `records/README.md` (its `summary:` becomes the index row); regenerate the index with
   `ops exp records --write`, never by hand. Current experiment *state* goes in the experiment's
@@ -198,9 +202,10 @@ job (`ops register --cluster beaker --job-id <id>`) and check it with `ops statu
 
 **Job priority — ALWAYS `urgent`, never lower.** Every Beaker/gantry job (training, eval, data build) must launch at `priority="urgent"` — exactly `urgent`: never `normal`/`high`/`low`, and not `immediate` either. Lower-priority jobs pend behind capacity; `urgent` preempts to get nodes. Set `BeakerLaunchConfig.priority = "urgent"`, pass `--priority urgent` to launchers, or bump a live job with `beaker job update-priority <job-id> urgent`. If you add or edit a launcher, make `urgent` its default.
 
-**minRuntime — ALWAYS set it (default `1h`).** On jupiter, urgent jobs with `minRuntime=0` effectively
-never schedule: on 2026-10-19, ~2,250 urgent 1–7-GPU jobs had scheduled in the last 3 days (median
-wait under a minute) and none of them had `minRuntime=0`, while every pending `0s` job was days old.
+**minRuntime — ALWAYS set it (default `1h`).** Urgent jobs with `minRuntime=0` get a very long wait
+tail: over 14 days (to 2026-10-20) our 0s jobs had p90 waits of 10-12 h (amandab's 117 h), and every
+job stuck for days was a 0s job; with a minRuntime, p90 was ~1-1.5 h. Avoid 4-GPU requests on jupiter
+when 2 or 8 will do (4 was the slowest size we hit).
 `beaker_ctc_suite.py --min-runtime` and the legacy multirung eval launcher (`BEAKER_MIN_RUNTIME`) default to
 1h; for gantry pass `--min-runtime 1h`, for `BeakerLaunchConfig` set `min_runtime="1h"`. A job stuck
 pending at `0s` must be cancelled and relaunched. Memory: [[beaker-min-runtime]].

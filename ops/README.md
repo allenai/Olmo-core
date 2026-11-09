@@ -154,6 +154,7 @@ dirs for every session.
 | `launch-run` | any training/eval/data launch | existing-runs check, smoke test, urgent/unallocated, /data interpreter, `ops register` |
 | `record-results` | results arrive, before quoting a number | validation checklist, `ops result add --check`, STATUS.md numbers |
 | `close-out-experiment` | before /clear, /compact, handoff | STATUS.md + `ops exp index`, final run states, clean up watchers |
+| `megaslides` | "add slides for X to the megaslides deck" | markdown spec → one Slides batch in the deck's dash-bullet format, native bar/line charts, stacked-thumbnail check (user-level link only) |
 
 ## Layout and rules
 

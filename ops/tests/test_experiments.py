@@ -19,6 +19,8 @@ records:
   - records/ds64-handoff.md
   - records/ds64-overnight-2026-09-14.md
 results: results/ds64/summary.json
+artifacts:
+  - https://claude.ai/artifact/abc123
 wandb_group: https://wandb.ai/x/y#frag
 next_step: "launch the 64k rung"
 ---
@@ -50,6 +52,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(meta["records"], ["records/ds64-handoff.md",
                                            "records/ds64-overnight-2026-09-14.md"])
         self.assertEqual(meta["results"], ["results/ds64/summary.json"])
+        self.assertEqual(meta["artifacts"], ["https://claude.ai/artifact/abc123"])
         self.assertEqual(meta["launcher"], "")
         self.assertEqual(meta["wandb_group"], "https://wandb.ai/x/y#frag")
         self.assertEqual(meta["next_step"], "launch the 64k rung")

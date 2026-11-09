@@ -21,6 +21,11 @@ out before moving on.
    - **Open issues / traps** and **Verified vs unverified**: mark anything you didn't check against a
      primary source as `UNVERIFIED`.
    - Link any new records/ doc in `records:`.
+   - **Artifact** (default for every experiment, Prasann 2026-10-20): publish or update the
+     experiment's one summary artifact (verdict first, setup, charts from the real numbers, key tables
+     with eval_size flagged, limits, source paths; include work done in side sessions, marked
+     in progress if still running). Republish to the URL already listed in `artifacts:` rather than
+     making a new page; put a new URL in `artifacts:` and in each record's `artifact:` header line.
 2. `$OPS exp index` (regenerates `ops/experiments/INDEX.md`); `$OPS exp check` must be clean.
 3. **Runs:** `$OPS status --experiment E`, then `$OPS update RUN final_state=done|failed|cancelled`
    for each finished run (or `$OPS status --record`). Register any launch that is missing.

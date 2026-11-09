@@ -13,6 +13,8 @@ Each STATUS.md starts with a tiny front-matter block (stdlib-parsed, deliberatel
       - records/ds64-handoff.md
     results:
       - results/ds64/summary.json
+    artifacts:
+      - https://claude.ai/artifact/...   # the experiment's summary page (one per experiment)
     wandb_group: https://wandb.ai/...
     next_step: one line saying what happens next
     ---
@@ -34,7 +36,7 @@ from pathlib import Path
 from . import paths
 
 STATUSES = ("active", "paused", "done", "abandoned")
-LIST_FIELDS = ("records", "results")
+LIST_FIELDS = ("records", "results", "artifacts")
 FIELDS = (
     "experiment",
     "title",
@@ -44,6 +46,7 @@ FIELDS = (
     "launcher",
     "records",
     "results",
+    "artifacts",
     "wandb_group",
     "next_step",
 )
@@ -281,6 +284,7 @@ def template(name, today=None):
         "launcher": "",
         "records": [],
         "results": [],
+        "artifacts": [],
         "wandb_group": "",
         "next_step": "TODO",
     }
@@ -324,6 +328,7 @@ area: pipeline | token_routing | ffn_compute | kv_route | landmark
 kind: diagnosis | plan | handoff | howto | result | task-brief | audit
 status: current | superseded | load-bearing
 superseded_by: <records/x.md or ops/experiments/x/STATUS.md, or blank>
+artifact: <the experiment's claude.ai artifact URL, or blank>
 summary: <one or two sentences: the finding / what the doc is for — this is the README row>
 ---
 # <title>

@@ -2,16 +2,17 @@
 experiment: olmo3_cptdrop
 title: Token-dropping CPT screen on OLMo 3 7B — stage2 → 32k on the Dolma 3 Longmino pool; dense vs length curriculum vs input-drop (random-20% blocks, first+last 25%), full-context dev CE at 3 matched FLOP budgets
 status: active
-updated: 2026-10-22
+updated: 2026-10-25
 branch: prasann/flopdrop_clean (uncommitted: research/token_routing/olmo3_cptdrop/)
 launcher: research/token_routing/olmo3_cptdrop/
 records:
   - records/olmo3-cptdrop-screen-plan.md
+  - records/olmo3-cptdrop-results.md
 results:
 artifacts:
   - https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk
 wandb_group:
-next_step: cubbins serial queue: 4079442 eval (r128 K16, r64 K24, r64 K16 s1) -> 4106229 SHORT (S4 4k rows; S4 -> routed / dense 32k phase 2; packed LMIX) -> 4106244 HYB (packed hybrid rows, route-min-len 8192) + LORA32 (whole-model LoRA r64) -> 4106262 FFNW (partial MLP f 0.5 / 0.25, +-LoRA r64 K16). mcfuzz / sneetches held by rhys_gould.
+next_step: DONE (method screen + long-context check). CPT recipe = whole-model LoRA r64 + frozen LM head (K32fh), 0.685x FLOPs, 22.3 vs 35.2 GiB; beats dense at the same step count at 32k (to 480 steps; tie at 960), 64k (-0.0057/-0.0039/-0.0026 at 120/240/480) and 128k (-0.0038/-0.0046 at 48/120), full-row. Held for Prasann: matched SFT + CTC generation eval of K32fh vs dense CPT bases.
 ---
 
 # olmo3_cptdrop
@@ -28,6 +29,9 @@ softdetach won on an already-long-trained Qwen3.5-4B before dense overtook it ne
   routed 32k phase (candidate) or dense 32k phase (control); packed length-mix control; hybrid (short dense + routed
   long rows in one step) once the router session adds route-min-len; partial-MLP (--ffn-width-frac) once it lands.
   Dense full-context steps mixed into a method = control only, never the candidate.
+- 2026-10-25 (LR-sweep session correction): "every label through the full depth" is OUR inference from the data and
+  grad-comp, not a rule from Prasann; he wants something that "looks like token dropping to learn the long-range
+  dependencies". Token-drop arms stay allowed: probe K32 + router keep 0.5 after block 7 (de0) on Beaker bk19.
 - 2026-10-24 (Prasann, via the LR-sweep session): (1) keep 32k CPT, no 64k move; try cuts that keep every token's
   label through the full depth (freeze bottom of stack after warmup, progressive freeze, mixture-of-depths).
   (2) NO dense / full-context steps mixed in at all (--st-otr-dense-every 0; no dense-keep-frac arms). (3) Cheap arms
@@ -158,6 +162,7 @@ softdetach won on an already-long-trained Qwen3.5-4B before dense overtook it ne
 | Dlr65-120 / -240 (LR 6.5e-5) | dev32k_1024 / 32k | CE 1.7113 / 1.7102; short 1.1889 / 1.1969 | 1024 | Dlr65->Dlr20 at 120: -0.0260 ±0.0003 | no-cot | cubbins devce/ |
 | **Dlr20-120 (LR 2e-5)** | dev32k_1024 / 32k | CE 1.6853 (16-32k 1.6827); short 1.1610 | 1024 | vs stage2 -0.1623 ±0.0044; vs D-120 -0.1332 ±0.0018 | no-cot | cubbins devce/ |
 | **Dlr20-240** | dev32k_1024 / 32k | CE 1.6827 (16-32k 1.6797); short 1.1651 | 1024 | vs Dlr20-120 -0.0026 ±0.0001 | no-cot | cubbins devce/ |
+| **DLORA64k24lr20-120 (LoRA r64 on blocks 0-23, 0.77x FLOPs/step)** | dev32k_1024 / 32k | CE 1.6827 (16-32k 1.6800); short 1.1614 | 1024 (short 256 ⚠) | vs Dlr20-120 -0.0026 ±0.0001 (seed noise ±0.0001); m 2.53 | no-cot | cubbins devce_ctx/ |
 | stage3 x8 (OLMo's own long-context model) | dev32k_1024 / 32k | CE 1.8289 (16-32k 1.8014); short 1.1774 | 1024 | — | no-cot | cubbins devce/ |
 | stage3 x8 (reference) | devce_dev32k 16k-32k | CE | 256 rows ⚠<500 (4.19M tok) | Δ vs stage2-x4 −0.0455 ±0.0063 paired | no-cot | /data/prasann/olmo3_cptdrop/devce/stage3-yarn8_dev32k.json |
 | stage2 x4 (CPT start) | devce_dev32k overall / 0-4k / 4-8k / 8-16k / 16-32k | CE | 256 rows ⚠<500 | — | no-cot | 1.9307 / 1.9698 / 1.9489 / 1.9289 / 1.9173 (stage2-yarn4_dev32k.json) |
@@ -169,6 +174,241 @@ softdetach won on an already-long-trained Qwen3.5-4B before dense overtook it ne
 See `next_step` above.
 
 ## Open issues / traps
+- RESULT 2026-10-27 04:40 K32fh at 64k, 480 (Beaker relaunch 01M5XS0TCS, no NaN recurrence): full-row 1.6768 vs dense-64k-480
+  1.6794 (-0.0026 +-0.0003; 32k-64k -0.0023), vs K32 -0.0009; short 1.1662 (256 rows). Below the last dense-64k point ->
+  m > 1.46 (bound). K32fh vs dense at the same steps, full row: 32k -0.0037/-0.0041/-0.0032/-0.0022/+0.0002 (48/120/240/
+  480/960); 64k -0.0057/-0.0039/-0.0026 (120/240/480); 128k -0.0038/-0.0046 (48/120). Long-context runs DONE.
+- RESULT 2026-10-26 22:50 K32fh at 64k, 240 (Beaker bk28; 2nd clean SAVE-multiple finish on the crash fix): full-row 1.6794
+  vs dense-64k-240 1.6833 (-0.0039 +-0.0001; 32k-64k -0.0036), vs K32 -0.0009, vs dense-64k-480 -0.0001 +-0.0003 (tie at
+  2x steps) -> m ~2.9 (0.683x/step; this run's flops.json total 1,307 PF looks partial, so PF from the ratio). short 1.1634.
+  K32fh-64k-480 relaunch preempted at the 1 h minRuntime, requeued (resumes from SAVE=60).
+- RESULT 2026-10-26 22:20 K32fh at 64k, 120 (Beaker bk28): 2,571 PF (0.683x) -> full-row 1.6822 vs dense-64k-120 1.6879
+  (-0.0057 +-0.0001; 32k-64k -0.0057), vs K32-64k -0.0007. short 1.1611 (256 rows). CRASH FIX CONFIRMED ON GPU: this run
+  (SAVE=60, final step 120 a multiple) finished cleanly on router 319d7442a. K32fh-64k-480 relaunch past step 55 (no NaN).
+- RESULT 2026-10-26 21:10 K32fh at 128k (cubbins 4113301, full-row dev128k_512, 512 rows): 48/120 -> 1.7736/1.7597 vs dense
+  1.7774/1.7643 (-0.0038 +-0.0001 / -0.0046 +-0.0002; 64k-128k bin -0.0037/-0.0044), vs K32d -0.0003/-0.0005; 0.68x FLOPs
+  (3,114 PF at 120 = 60 optimizer steps of 8 x 131k). short 1.1675/1.1652 (256 rows). The frozen head helps at 128k too.
+- INCIDENT 2026-10-26 21:15 K32fh 64k-480 (01M5XNJC8X, Beaker node 01JRYCX2HZQ2QE60PMHBB7ZM8J): NaN loss at step 2. Same config /
+  data / seed as the healthy 120 / 240 runs (identical step-1 CE 1.831; the 120 run's step 2 is 1.841) -> treated as a node /
+  transient fault, not the recipe. Relaunched in a fresh dir (DIRTAG L64K32dfh480r2, 01M5XS0TCS). If it recurs, it is real.
+- LAUNCH 2026-10-26 20:40 (LR-sweep session go, overnight): K32fh at 64k 120/240/480 (Beaker bk28, SAVE=60 -> also the GPU
+  test of the end-of-run crash fix 319d7442a) and at 128k 48/120 (cubbins C128FH). Tree o3cd/composite-209f4c2d4-offload3
+  (bf944f514: router tip incl. crash fix + frozen head, offload, o3cd da156e61f incl. full-row eval bins); staged on cubbins
+  as code_r209f4c2d4_o3cdda156e61f. Compared against D64lr20 / D128lr20 full-row re-scores. Matched SFT + CTC eval: HELD for Prasann.
+- RESULT 2026-10-26 20:10 K32fh at 960 (Beaker relaunch 01M5XGRACW): 1.6764 vs dense-960 1.6762 (+0.0002 +-0.0002: TIE), vs
+  K32-960 1.6774 (-0.0010); far 0.4649 vs dense 0.4618 (+0.0031); short 1.1688 vs dense-960 1.1829 (less forgetting;
+  256 rows). PF ~18,049 (0.685x) -> m ~1.4. K32fh m 48/120/240/480/960 = 4.8/4.3/3.2/2.1/~1.4: the frozen head turns
+  K32's 960-step deficit into parity at 0.685x FLOPs and 22.3 GiB.
+- FIX 2026-10-27 end-of-run crash: router 319d7442a (src/olmo_core/train/callbacks/checkpointer.py). Cause per the code: a
+  final step on a save_interval multiple started an ASYNC interval save whose background gloo work overlapped teardown;
+  now the final-step save is synchronous and reused as the final checkpoint (CPU tests 3 new / 74 pass; no GPU run yet).
+  Until the next composite rebuild picks it up, keep SAVE non-dividing.
+- TRAP update 2026-10-26 18:50 end-of-run crash: control K32fh-960 (SAVE=60, final step a multiple) crashed as predicted.
+  Tally: final step on a SAVE multiple 8/10 crashed; non-multiple 0/1; no mid-run save 0/~20. RULE: use a SAVE that does not
+  divide the run length (e.g. 70 for 120/240/480/960). K32fh-960 relaunched to export (01M5XGRACW).
+- RESULT 2026-10-26 12:40 K32fh seed 1 at 120 (Beaker bk27, SAVE=70): 2,294 PF measured (0.685x: confirms the ratio used for
+  the relaunched K32fh runs) -> 1.6813 vs seed 0 1.6812 (+0.0001 +-0.0000): reproduces; -0.0040 +-0.0001 vs dense-120.
+  short 1.1595 (256 rows). Crash test: finished cleanly with a non-dividing SAVE (consistent with the save-collision
+  hypothesis; one run, not proof).
+- RESULT 2026-10-26 12:15 K32fh at 480 (Beaker relaunch 01M5WPXED5): 1.6779 vs dense-480 1.6800 (-0.0022 +-0.0001), vs K32-480
+  1.6788 (-0.0010), vs dense-960 +0.0017; PF ~9,034 (0.685x) -> m ~2.1 (K32 1.8). short 1.1638 (256 rows).
+  K32fh m by budget 48/120/240/480: 4.8/4.3/3.2/2.1 (K32 3.9/3.45/2.5/1.8). K32fh-960 preempted twice at ~1 h (minRuntime),
+  resuming from SAVE=60 checkpoints.
+- TRAP (hypothesis) 2026-10-26 end-of-run gloo crash: every crashed run had its final step a multiple of SAVE_INTERVAL (120 /
+  240 / 480 with SAVE=60), so the interval save and the final save land on the same step; 48-step runs never crashed. K32-480
+  and topk-120 survived the same condition, so it is a race, not a certainty. Test: next launches use a SAVE that does not
+  divide the step count (e.g. 70). Relaunch workaround still applies (K32fh-480 -> relaunched).
+- RESULT 2026-10-26 10:55 K32fh at 240 (Beaker bk26, relaunch 01M5WHACQZ after the end-of-run crash): 1.6795 vs dense-240
+  1.6827 (-0.0032 +-0.0001), vs K32-240 1.6804 (-0.0009), vs dense-480 1.6800 (-0.0005 +-0.0001); PF ~4,525 (0.685x) ->
+  m ~3.2 (K32 2.5). short 1.1612 (256 rows). The frozen head decays slower too. K32fh-480 at step ~370; K32fh-960 was
+  preempted at ~1h48m and resumed (SAVE=60).
+- RESULT 2026-10-26 08:20 FULL-ROW re-score (cubbins 4112650, devce_full/, ops task devce_dev*_512_fullrow; 512 rows):
+  64k dense 120/240/480 = 1.6879/1.6833/1.6794; K16 1.6852/1.6817/1.6783; K32 1.6829/1.6802/1.6777.
+  K32 vs dense paired: -0.0050 +-0.0001 / -0.0030 +-0.0001 / -0.0017 +-0.0002; on the 32k-64k bin -0.0050/-0.0028/-0.0014.
+  128k dense 48/120 = 1.7774/1.7643, K32d 1.7739/1.7603: -0.0035 +-0.0001 / -0.0041 +-0.0002 (64k-128k bin -0.0035/-0.0039).
+  => the 64k edge survives the fix (~1.4-1.5x the 32k edge, same on long-range positions); 128k ~ the same size as 64k
+  (no further growth). The old first-32k-only dev64k/dev128k rows (task devce_dev64k_512 / devce_dev128k_512) are superseded.
+- TRAP 2026-10-26 05:30 eval_devce BIN_EDGES stopped at 32768 and overall CE is summed from the bins, so EVERY dev64k_512 /
+  dev128k_512 number so far (dense-64k, K16/K32 at 64k, the 128k check) scored only the FIRST 32k targets of each row (the
+  model ran the full row, but positions < 32k only use <= 32k of context). Comparisons stay internally consistent (both
+  arms same metric) but say nothing about long-range positions: the 'edge ~1.5x larger at 64k' claim is UNVERIFIED.
+  Fixed (44181ae82: edges to 512k, test); re-scoring all 64k + 128k checkpoints into devce_full/ (cubbins 4112650).
+  First-32k-only 128k results (eval_size 512): dense 48/120 1.8170/1.8062, K32d 1.8134/1.8021 (-0.0036/-0.0041).
+- RESULT 2026-10-26 04:55 frozen LM head (Beaker bk25): K32 + --lora-freeze-head at 48 = 918 PF (0.685x), peak 22.3 GiB
+  (K32d 24.4) -> 1.6842: -0.0037 +-0.0001 vs dense-48, -0.0006 +-0.0000 vs K32d (1.6848); below dense-120 -> m ~4.8 (K32 3.9).
+  short 1.1583 (256 rows). Training NO full-rank weights is cheaper AND better: the trainable head was not helping.
+  K32fh at 120 (relaunch 01M5W2ER02 after the end-of-run crash): 1.6812, -0.0041 +-0.0001 vs dense-120, -0.0007 vs K32-120,
+  -0.0015 vs dense-240; PF ~2,273 (0.685x; the resumed run's flops.json reads 0) -> m ~4.3 (K32 3.45). short 1.1588 (256 rows).
+- LAUNCH 2026-10-26 02:35 cubbins 4112619 C128: dense vs K32 (dense-arm --lora-rank 64) at 128k, 48 / 120 x 524k tokens
+  (8 rows x 131,072 = 24 / 60 optimizer steps), YaRN x16, train128k_ee; eval dev128k_512 (512 rows) + short guard.
+  On H200 without offload (dense reserved ~99 GiB at 128k: too much for 80 GB Beaker GPUs even with offload, 79.4).
+- RESULT 2026-10-26 02:30 max-T probe (cubbins 4112505, skip-dry-run, 3 real steps, synthetic rows; H200):
+  peak active @96/128/160/192k: dense 70.4/89.6/108.7/127.9 (OOM 224k); K32 60.9/78.9/96.9/114.9 (OOM 224k);
+  K32d (dense-path LoRA) 59.8/77.5/95.2/112.9; Doff 62.1/73.8/85.5/97.2/108.9 (256k 120.5); K32doff 48.2/58.4/68.6/78.9/89.1.
+  Max T (reserved fit): 80 GB-class 95k / 111k / 114k / 126k / 157k; H200 190k / 206k / 206k / 277k / 323k.
+  K32doff 256k 99.3 (reserved 111.4). Offload: slope -7.5 GiB per 32k, +~10-14 GiB fixed, ~3-4% slower, step losses bit-identical (GPU/FSDP2 check passed).
+  K32d dev CE 1.6848 at 48 vs OTR-path K32 1.6849 (Beaker bk25): same model. Record section added.
+- LAUNCH 2026-10-26 Beaker bk25 (tree o3cd/composite-c9f760ffb-offload2 = d2cefd52d: router tip c9f760ffb incl.
+  --lora-rank / --lora-freeze-head / hook check + full_offload + o3cd folder): K32 via the plain dense arm (--lora-rank 64
+  --lora-scale 32) at 48 (equivalence vs OTR-path K32 1.6849), and K32 + frozen LM head (--lora-freeze-head) at 48 / 120
+  (no full-rank weights trained at all).
+- NOTE 2026-10-26 router fixes affecting CPT numbers: (a) 598495770 -- the dry-run batch leaked its FLOP adjustment into
+  step 1; for OTR-path K32 (negative frozen-base adjustment) that understates PF by ~one step's saving (~8 PF): ~3% at 12
+  steps, <1% at >=48 -- K32's m at 12 steps is ~3% flattered, the rest unchanged. (b) c2be4fba9 -- eval re-install now
+  asserts every adapter hook fired on the first forward (our eval calls blocks as plain modules: unaffected; adopt on the
+  next composite rebuild). (c) d74ad1194 -- --sparse-loss-positions charging (SFT only; CPT supervises every position).
+- RESULT 2026-10-25 23:00 K32 at 960 steps (cubbins 4111599): 18,787 PF (0.700x) -> 1.6774 vs dense-960 1.6762 (+0.0012
+  +-0.0001; 16-32k +0.0013); far 0.4653 vs 0.4618 (+0.0035, beyond seed noise); ctx gain 0.0771 vs 0.0788; short 1.1844 vs
+  1.1829 (256 rows). m 1.12 metered (~1.04 with AC recompute charged). CROSSOVER: K32's edge ends between 480 and 960 steps
+  (~0.25-0.5B tokens); the adapters saturate while full CPT keeps learning long-range structure. K32 = short-budget recipe.
+- BUILD 2026-10-25 21:21 train128k_ee (1,000 x 131,072; 2^17+ buckets; 1,743 dev doc ids excluded, leak asserted) +
+  dev128k_512 (512 x 131,072, disjoint from train128k) on cubbins /data and S3 data/{train128k_ee,dev128k_512}.
+- CODE 2026-10-25 full_offload AC mode (src/olmo_core/nn/offload_checkpoint.py, 761fb225d + test fix 35796ce9f): block
+  inputs in pinned host memory, same recompute; CPU tests pass (4). Router 13f0073d7: --lora-rank modifier (K32 on the
+  plain dense arm). Composite tree o3cd/composite-13f0073d7-offload (e2a9e5692) staged as cubbins code_r13f0073d7_o3cdfebb25305.
+- LAUNCH MAXT v2 cubbins 4112114 (after K32-960): arms D / Doff / K32 / K32d / K32doff at 96-256k, 3 steps each; D vs
+  Doff and K32 vs K32d step losses double as the FSDP2 GPU equivalence check of offload and of the dense-path LoRA.
+- CROSS-CHECK 2026-10-25 (router session, SFT mt4s1464, LoRA-all + two-stage router, eval_size 500/task): partial MLP v2
+  agrees with CPT -- topk beats random at f 0.75 (contra +0.12, outlier +0.28) but tk75 still trails LoRA-all
+  (-0.01/-0.01/-0.05/-0.13 contra/nq/oolong/outlier) and nothing beats the LoRA-all FLOPs curve. Partial MLP closed in SFT too.
+- NOTE 2026-10-25 21:30 memory levers (for max T): fused-linear CE is already forced for every run (train_ctc_suite), so
+  logits are not the slope; the ~16 GiB/32k slope = AC-stored block inputs (~8) + one block's recompute (~3-4) + slack.
+  OLMo-core AC has no block-group mode (selected_blocks = every k-th block checkpointed, others full: more memory; budget
+  needs compile). The FLOP meter charges 6N-style forward+backward and NOT AC recompute (dense true ~8N/token, K32 ~6N ->
+  0.75x real). Options sent to the LR-sweep session: CPU-offload the stored block inputs (FLOP-free, ~2x max T, both arms)
+  or two-level sqrt checkpointing (+~25% real FLOPs, ~1.5x max T); plain g-block grouping does not save memory.
+- MEMORY 2026-10-25 21:15 peak GPU active mem (full AC, micro-batch 1; Beaker run logs): dense 32k 35.2 / 64k 51.3 GiB;
+  K32 25.0 / 42.9 GiB (K16 64k 48.8). Fit: dense 19.1 + 16.1*(T/32k), K32 7.1 + 17.9*(T/32k): LoRA frees ~12 GiB of fixed
+  state, but K32's activation slope is ~10% higher (softtoken/OTR path at keep 1.0), so max T is nearly unchanged
+  (~113k vs ~123k at 76 GiB; ~230k both at H200). MAXT probe 4112105 measures it directly.
+- RESULT 2026-10-25 21:05 K32 at 64k, 480 steps (Beaker relaunch 01M5V440YB): dev64k_512 (512 rows) 1.7114 vs dense-64k-480
+  1.7134 (-0.0020 +-0.0002; 16-32k -0.0019), vs K16-64k-480 -0.0007; below the last dense-64k point -> m > 1.44 (lower bound
+  = 1/0.696). Short 1.1734 (dense 1.1743; 256 rows). 64k K32 vs dense at same steps: -0.0049/-0.0033/-0.0020 at
+  120/240/480 (32k: -0.0034/-0.0023/-0.0012): the edge is ~1.5x larger at 64k at every budget.
+- RESULT 2026-10-25 20:50 dense partial MLP (base trains; balrog A100 4107026 -> eval 4111527; dev32k_1024, 1,024 rows):
+  DFW50 (random f 0.5) 24/48/120 -> 1.7402/1.7513/1.7647; DFW25 -> 1.7480/1.7759/1.8663 (dense 1.6912/1.6880/1.6853);
+  K16 LoRA + fw50 at 48 -> 1.7628 (short 1.2129). Training under random FFN dropout DEGRADES the full-width model with
+  steps, base trainable or not. Partial MLP CLOSED in every form tested (random f 0.25-0.9, topk f 0.5/0.75; frozen and
+  trainable base). Checkpoints only on balrog /tmp (node-local; not uploaded).
+- RESULT 2026-10-25 20:05 K32 at 64k, 240 steps (Beaker relaunch 01M5TZK93P): dev64k_512 (512 rows) 1.7137 vs dense-64k-240
+  1.7170 (-0.0033 +-0.0001), vs dense-64k-480 1.7134 (+0.0002 +-0.0003: ties dense at 2x steps), vs K16-64k-240 -0.0016;
+  m ~2.7 (dense PF from K32/0.696). Short 1.1663 (dense-240 1.1678; 256 rows). 64k K32 m: 3.4 (120) / 2.7 (240).
+  Backprop-stop B=16 at 120 (relaunch): 1.6973 (worst B), logged.
+- RESULT 2026-10-25 20:00 backprop-stop at 120 + B=16 (Beaker bk24; PF from per-step ratios, metas pending):
+  B=4 120 -> 1.6828 (-0.0025 vs dense-120, +0.0009 vs K32; m ~2.9 vs K32 3.45); B=8 120 -> 1.6857 (+0.0004 vs dense-120;
+  m ~1.4); B=16 48 -> 1.7002 (~dense-8 level). B=16-120 hit the end-of-run crash; relaunched (01M5V0BMC3).
+  VERDICT: backprop-stop loses to K32 at every B and budget; m falls monotonically with B. CLOSED.
+- RESULT 2026-10-25 19:50 context gain (8k window vs full 32k on each row's last 4k; cubbins 4108007 / 4106244 CTX):
+  K32 12/24/48/120 = 0.0681/0.0700/0.0725/0.0739 vs dense 0.0671/0.0700/0.0726/0.0750 (per-run SE +-0.0036); dense 480 0.0774,
+  960 0.0788. Whole-model LoRA learns long-context use as well as full CPT at matched steps.
+- 2026-10-25 19:40 balrog 4107026 FFNW trained dense partial MLP DFW50 / DFW25 at 24 / 48 / 120 and K16+fw50 at 48;
+  cancelled before K16+fw50-120 / fw25 (frozen-base partial MLP already closed). Eval-only 4111527 (balrog A100) scores them.
+- RESULT 2026-10-25 19:25 K32 budget curve + dense-960 anchor (cubbins 4108007; Beaker bk20). Dense 960 = 26,349 PF ->
+  1.6762 (short 1.1829: forgetting grows with budget). K32 (0.700x): 12/24 = 254/489 PF -> 1.6926/1.6880 (m 1.65/2.75);
+  480 (~9,230 PF, meta pending) -> 1.6788, -0.0012 +-0.0001 vs dense-480, -0.0003 vs K24-480, -0.0006 vs K16-480;
+  m ~1.8 against the dense 480-960 segment. Short 1.1712 (dense-480 ~1.172). K32 m by budget 12/24/48/120/240/480:
+  1.65/2.75/3.9/3.45/2.5/1.8 -- peaks at 48-120 steps, decays to ~1.8 at 480 (still positive, plus 29% less memory).
+- TRAP (generalized) 2026-10-25: the end-of-run gloo 'Connection reset by peer' crash ALSO hit plain K32 at 64k-240 with
+  SAVE=60 (no freeze-early): it is intermittent after a run that did mid-run saves (K32-480 and topk-120 with SAVE=60
+  survived). Relaunch into the same dir resumes at the last step and exports (64k-240 -> 01M5TZK93P); documented in records/online-token-router.md (router commit c70d7a30d).
+- TRAP 2026-10-25 19:15 freeze-early + early-lora-start (router 51322b89c): BOTH 120-step runs (B=4, B=8; SAVE=60) crashed
+  AFTER step 120 (rank 6 trainer:1547 gloo 'Connection reset by peer' = another rank died first; console shows rank 0
+  only). The step-120 checkpoint is written (relaunch resumed at 120/120). 48-step runs (no mid-run save) and K32 SAVE=60
+  runs without freeze-early finish fine. Reported to the router session. Workaround: relaunching into the same dir resumes at 120/120 and exports cleanly (01M5TZ19ST rc=0); B=4-120 relaunched the same way (01M5TZB61B).
+- RESULT 2026-10-25 19:10 backprop-stop B=4 at 48 (Beaker bk24): 899 PF (0.659x) -> 1.6858: -0.0022 +-0.0001 vs dense-48,
+  +0.0009 vs K32-48; m ~3.1 (K32 3.9, B=8 ~1.4). short 1.1584 (256 rows). m falls monotonically with B: an adapter-less
+  frozen bottom stack costs more quality than its backward saving. B=8-120 crashed AFTER step 120 (gloo 'Connection reset by
+  peer' on rank 6 in the final save / teardown; transient): relaunched into the same dir (01M5TZ19ST, resumes from step60).
+- RESULT 2026-10-25 19:00 backprop-stop B=8 at 48 (Beaker bk24; flag works on GPU/FSDP): 841 PF (0.617x/step measured;
+  plan said ~0.56) -> 1.6887: +0.0007 +-0.0001 vs dense-48, +0.0038 vs K32-48, -0.0026 vs dense-24; m ~1.4 (K32: 3.9).
+  short 1.1581 (256 rows). Freezing [0, 8) without adapters costs more quality than the 12% FLOP saving over K32 buys.
+  B=4 / 16 and the 120-step runs pending.
+- RESULT 2026-10-25 18:50 K32 + random FFN f 0.9 at 48 (Beaker bk21): 1.6927 (+0.0078 vs K32, +0.0047 vs dense-48). Even 10%
+  random FFN dropout on a frozen base loses more than its ~4% FLOP saving: random partial MLP breaks at every f tested.
+- LAUNCH 2026-10-25 18:45 backprop-stop (Beaker bk24, tree o3cd/composite-51322b89c-0d18060ba = b9087399d, pushed):
+  router 51322b89c --st-otr-early-lora-start B with --st-otr-freeze-early (drop_layer = B, keep 1.0, de0, explore 0):
+  embeddings + blocks [0, B) frozen, no adapters, forward-only; LoRA r64 scale 32 on [B, 32). B in {4, 8, 16} x {48, 120}.
+  Run names o3cd-L32NG{B}lr20-{steps}. No GPU smoke of the flag beforehand: watch first steps. eval_devce key-rebuild path
+  now carries start (0d18060ba).
+- PLAN 2026-10-25 18:25 (LR-sweep session): backprop-stop below block B: embeddings + blocks [0, B) frozen, no adapters,
+  forward-only; LoRA r64 on [B, 32). Expected ~0.62 / 0.56 / 0.40x per step at B = 4 / 8 / 16. Needs a router flag
+  (early LoRA is [0, K) only; --st-otr-freeze-early is exclusive with it): requested --st-otr-early-lora-start B from the
+  router session. Runs: B in {4, 8, 16} at 48 / 120 (32k), best at 64k. If it loses, K32 alone is the CPT recipe.
+- RESULT 2026-10-25 18:15 K32 + partial MLP v2 topk at 48 (Beaker bk22): f 0.5 = 740 PF (0.541x) -> 1.7342 (random f 0.5:
+  1.7700); f 0.75 (~0.62x) -> 1.6999 (random f 0.75: 1.7124, 844 PF / 0.617x); K32 alone 1.6849, dense 1.6880. topk recovers
+  ~1/3 of random's loss but stays far behind: m < 0.19 (f 0.5) / ~0.3 (f 0.75). Short 1.1888 / 1.1677 (256 rows).
+  VERDICT: partial MLP is closed for CPT on a frozen base. topk at 120 and random f 0.9 finish as records only.
+- RESULT 2026-10-25 17:45 K32 + random FFN f 0.75 at 48 (Beaker bk21): 1.7124 (+0.0275 vs K32, +0.0244 vs dense-48): even 25%
+  random FFN dropout on a frozen base costs more than all of K32's gain. f 0.9 pending; topk (bk22) is the last partial-MLP test.
+- RESULT 2026-10-25 17:40 K32 + online router keep 0.5 after block 7, de0 (Beaker bk19): 0.412x/step; 48 = 564 PF -> 1.7247,
+  120 (~1,370 PF) -> 1.7120; both above dense-4 (1.7096) -> m < 0.24 / < 0.1. Short 1.1831/1.1835 (dense ~1.16; 256 rows).
+  LoRA-all does NOT change the drop picture: dropping half the tokens' upper-stack passes (no LM loss on them) still loses
+  by ~0.03-0.04 nats. Token drop remains the losing family in this CPT.
+- RESULT 2026-10-25 17:05 (Beaker bk18): K32 + random FFN f 0.5 at 120 -> 1.7796 (worse than at 48, 1.7700; short 1.2512):
+  random partial MLP on a frozen base is dead. K32 at 8 rows/step, 48 token-steps (= 96 optimizer steps, 948 PF, 0.700x) ->
+  1.6846 vs K32 at 16 rows 1.6849 (-0.0002 +-0.0000): a tie; short 1.1624 vs 1.1592 (256 rows). vs dense 8 rows/step
+  (DB8-48 1.6901) -0.0054. More steps per FLOP buys nothing for K32. g8 at 120 token-steps (240 optimizer steps) -> 1.6824 vs 16 rows 1.6819 (+0.0005): confirmed, keep 16 rows/step.
+- RESULT 2026-10-25 16:50 K32 at 64k, 120 steps (Beaker bk17 01M5T9NJES): 2644 PF (0.696x/step) -> dev64k_512 (512 rows)
+  1.7161 vs dense-64k-120 1.7210 (-0.0049 +-0.0001; 16-32k -0.0052), vs K16-64k-120 1.7184 (-0.0023), BELOW dense-64k-240
+  (1.7170, -0.0009 +-0.0001), above dense-480 (+0.0026). m ~3.4 using dense-64k PF = K32 PF / 0.696 (dense-64k meta is a
+  partial count). Short 1.1626 (dense 1.1639; 256 rows). The LoRA edge is larger at 64k than at 32k (-0.0034 at 120).
+- LAUNCH 2026-10-25 16:40 K32 + partial MLP v2 (--ffn-width-mode topk, router commit 6f274e339: top f*d_ff neurons by
+  running |act(w1x)*w3x| from full-width refresh steps every 50 (charged full width), 10% explore, no 1/f rescale):
+  f 0.5 / 0.75 at 48 / 120 (Beaker bk22). Launch tree: o3cd/composite-6f274e339-51ca47b70 (55d04a3b2, pushed).
+- RESULT 2026-10-25 16:25 K32 LR 1e-5 at 120 (Beaker bk17): 1.6820 vs LR 2e-5 1.6819 (+0.0001), -0.0033 +-0.0001 vs dense;
+  short 1.1575 (2e-5: 1.1607; 256 rows): LR flat over 1e-5..2e-5, 4e-5 too hot. TRAP: K32-480 (bk17) was preempted twice at
+  ~70 min and restarted from step 0 (no SAVE -> RESUME has nothing to load); relaunched with SAVE=60 (01M5TNN54G).
+  Partial MLP: K32 + random f 0.75 / 0.9 at 48 launched (bk21) to locate where random breaks; topk (importance) v2 spec
+  relayed to the router session.
+- RESULT 2026-10-25 16:10 K32 + partial MLP f 0.5 random (Beaker bk18, 01M5T9T4D9): 48 steps = 731 PF (0.534x/step) ->
+  1.7700, +0.0821 +-0.0005 vs dense-48 and worse than dense-4 (1.7096); short 1.2228 (dense 1.1593; 256 rows). Not an eval
+  bug: ffn_width trains a random f*d_ff subset with 1/f rescale (dropout-style) and evals full width, as designed. With the
+  base frozen the adapters cannot absorb 50% FFN dropout. Cancelled K32 fw25 48/120 (bk18); kept fw50-120 to see if steps
+  recover. Matches the SFT session's partial-MLP failure. Dense partial MLP (base trains) still on balrog 4107026.
+- RESULT 2026-10-25 15:00 K32 seed / rank (Beaker bk17): seed 1 at 120 -> 1.6821 vs seed 0 1.6819 (+0.0002 +-0.0000),
+  -0.0033 +-0.0001 vs dense: reproduces. r128 at 120 with scale 64 -> 1.6874 (+0.0055 vs r64; short 1.1710 vs 1.1607).
+  CONFOUNDED: --st-otr-early-lora-scale is a direct multiplier on the adapter delta (y = Wx + scale*B(Ax); early_lora.py),
+  NOT alpha/r, so scale 64 = 2x the adapters' effective LR. Consistent with LR 4e-5 also losing; not a rank result.
+  (r128 at scale 32 on K16 was +0.0004 vs r64.) LR 1e-5 (bk17) pending.
+- LAUNCH 2026-10-25 15:00 cubbins 4108007 (code re3b5aeb5b_o3cd8c19d77e1): K32 at 12/24, dense 960 (anchors m at
+  >=480-step budgets; K32-480 will likely sit below dense-480 = lower bound only), then EV + CTX.
+- RESULT 2026-10-25 14:15 K32 at 240 (Beaker bk17): 4711 PF (0.700x) -> 1.6804 vs dense-240 1.6827 (-0.0023 +-0.0001),
+  vs K24-240 -0.0007, vs dense-480 +0.0004 (dense-480 costs 13,188 PF); m 2.5. short 1.1652 (dense 1.1651; 256 rows).
+  K32 decays slower than K24: Δ vs dense -0.0031/-0.0034/-0.0023 at 48/120/240 (m 3.9/3.45/2.5) vs K24 m 2.8/2.5/1.9.
+  K28 at 240: 1.6810 (-0.0017; PF meta pending, ~0.737x). K32-480 running.
+- RESULT 2026-10-25 13:30 LoRA r64 K16 at 64k (Beaker bk12 01M5T1KP71, WSD branches 120@108 / 240@216 from a 480 run,
+  as dense 64k): dev64k_512 (512 rows), paired vs D64lr20 at the same steps: 120/240/480 -> 1.7184/1.7152/1.7121 vs
+  1.7210/1.7170/1.7134 = -0.0026/-0.0017/-0.0013 +-0.0001 (16-32k -0.0027/-0.0018/-0.0012); 0.847x FLOPs/step (480 meta
+  12,681 PF). Short guard 1.1632/1.1675/1.1747 vs dense 1.1639/1.1678/1.1743 (eval_size 256 only). Same picture as 32k:
+  LoRA wins, edge decays with budget. TRAP: D64lr20-480 flops.json reads 1,513 PF (partial count; do not use).
+- RESULT 2026-10-25 13:10 LoRA budget scaling + K30 (Beaker bk15/bk16, paired on cubbins):
+  K24 (0.774x): 240 = 5186 PF -> 1.6811 (dense 1.6827, -0.0016 +-0.0001, m 1.9); 480 = 10350 PF -> 1.6792 (dense 1.6800,
+  -0.0009 +-0.0001; below the last dense point so m > 1.27 lower bound); short 1.1654/1.1731 (dense 1.1651/~1.172; 256 rows).
+  K30 (0.721x): 48/120 = 985/2432 PF -> 1.6852/1.6823 (-0.0028/-0.0031 vs dense; +0.0004 vs K32 at 120).
+  => The LoRA edge DECAYS with budget: K24 -0.0023/-0.0026/-0.0016/-0.0009 at 48/120/240/480 steps; m ~2.8 -> 2.5 -> 1.9 -> >1.3.
+  At 480 steps it is mostly the 0.77x step cost, not better CE. K32 at 240/480 (bk17) decides whether full-LoRA holds up.
+- RESULT 2026-10-25 12:50 Whole-model LoRA r64 (K32; cubbins 4106244, dev32k_1024 1,024 rows, measured PF):
+  LR 2e-5: 48/120 = 958/2366 PF (0.700x/step), peak 25.0 GiB (dense 35.2) -> 1.6849/1.6819; vs dense same steps
+  -0.0031 +-0.0001 / -0.0034 +-0.0001; vs K28 -0.0006/-0.0005; m 3.91/3.45; far 0.4815/0.4750 (dense 0.4806/0.4742);
+  short guard 1.1592/1.1607 (dense 1.1593/1.1612; eval_size 256 only). LR 4e-5: 1.6864/1.6843 (worse; short 1.1632/1.1662).
+  K30 at 48 (Beaker bk16): 1.6852. Depth sweep at 48 steps: K16 1.6864, K24 1.6856, K28 1.6854, K30 1.6852, K32 1.6849:
+  monotone, the full-LoRA end is best and cheapest.
+- RESULT 2026-10-25 12:20 LoRA depth sweep on Beaker (bk15, jupiter, scored by the job; paired on cubbins vs local dense):
+  K28 r64 (0.737x/step): 48/120 = 1006/2485 PF -> 1.6854/1.6824; vs dense same steps -0.0025 +-0.0000 / -0.0029 +-0.0001;
+  vs K24 -0.0002/-0.0003; m 3.2/2.9; far 0.4831 (48); short guard 1.1594/1.1612 (eval_size 256 only).
+  K24 at 240: 1.6811 vs dense 1.6827 (-0.0016 +-0.0001), vs K16-240 1.6820 (-0.0009); short 1.1654 (dense 1.1651);
+  PF pending (meta not uploaded yet; ~5,100 at 0.774x -> m ~1.9). The edge narrows with budget (K24 -0.0023/-0.0026/-0.0016
+  at 48/120/240) but stays well above seed noise (+-0.0001).
+- RESULT 2026-10-25 10:50 LoRA depth / rank / seed (cubbins 4079442, fresh rows, dev32k_1024 1,024 rows, measured PF):
+  K24 r64 (0.774x/step, peak 28.7 GiB): 48/120 = 1054/2604 PF -> 1.6856/1.6827; vs dense same steps -0.0023 +-0.0000 /
+  -0.0026 +-0.0001 (16-32k -0.0023/-0.0024); vs K16 -0.0008/-0.0007; m 2.84/2.53. far 0.4824/0.4759 (dense 0.4806/0.4742),
+  ctx 0.0725/0.0739 (dense 0.0726/0.0750), short guard 1.1596/1.1614 (dense 1.1593/1.1612; eval_size 256 only).
+  K16 seed 1 at 120: 1.6835 vs seed 0 1.6834 (+0.0001 +-0.0001): overall CE reproduces to 1e-4, but far differs by 0.0023
+  (0.4736 vs 0.4759), so far-bin deltas of ~0.002 vs dense are inside seed noise.
+  r128 K16 (0.856x, 31.0 GiB): 48/120 -> 1.6866/1.6839, +0.0004 vs r64 at 120: rank 64 is enough.
+  Trend: freezing more blocks behind LoRA is cheaper AND better at these budgets (K8 < K16 < K24). Testing K28/K32 next.
+- TRAP 2026-10-25 balrog (A100): the corpus-reasoning-olmo env's flash-attn 2.8.2 is built for sm90/100 only ->
+  "no kernel image is available" at the first forward (4107016). Rebuilding in /tmp/prasann env with FLASH_ATTN_CUDA_ARCHS="80;90".
 - RESULT 2026-10-24 21:30 LoRA r64 K16 at normal budgets (cubbins 4079261, fresh rows): 240 = 5660 PF (dense 6606) -> 1.6820
   vs 1.6827, overall -0.0007 +-0.0001, far +0.0023, ctx 0.075; 480 = 11296 PF (dense 13188) -> 1.6794 vs 1.6800, overall
   -0.0007 +-0.0001, far +0.0008 +-0.0001, ctx 0.077 (= dense), peak 30.9 GiB; short guard 1.1726 vs 1.1717 (eval_size 256).

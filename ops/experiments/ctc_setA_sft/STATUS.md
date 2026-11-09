@@ -63,5 +63,6 @@ quote at 500 (125 at 256k).
   - `origin/prasann/ctc-setA-sft` @`0c7b3e9ab` (2026-10-12) README: run names, Beaker IDs, final steps 888/1595, the prep table (212,786 / 203,156 examples; 1,595 / 888 steps), and the eval run names;
   - the olmo-eval launch manifests: policy `r2k-r32k:300,…:100`, rows, `--doc-markers`, tokenizer 0.8B, and the r256k-yarn2-chunked manifest (7 rows, `rope_yarn 2.0`, `prefill_chunk_size 131072`, `olmo_core_ref prasann/landmark-chunked-prefill`);
   - local `prasann/ctc-setA-sft` is one commit behind origin (`774a2d8df`).
+- 2026-10-16: the full per-cell tables (both checkpoints, 12 rows × 2k–256k, plus the fitted vs YaRN 256k comparison) are in the Claude transcript `~/.claude/projects/-accounts-projects-berkeleynlp-prasann-projects-OLMo-core/1c1c30a5-db8c-4cda-973a-ceaf79899b03.jsonl` (assistant messages 2026-09-29 20:39, 10-03 03:15 / 10:23, 10-12 19:26). They are still not recorded in `ops result`, which needs the weka JSONs.
 - UNVERIFIED — confirm with Prasann: every number in the table. They come only from memory (updated 2026-10-12). The result JSONs are on the weka results root, which was not read. No in-repo or results-hub copy was found.
 - UNVERIFIED: the hpqa/rerank 256k wins and the "within noise" agreement of YaRN vs fit-window.

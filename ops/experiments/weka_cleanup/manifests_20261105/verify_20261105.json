@@ -1,0 +1,1595 @@
+{
+"apply": false,
+"generated": 1793948637.4723148,
+"results": [
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-contradiction-dense-u16M",
+"bytes": 19373582463,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-contradiction-dense-u32M",
+"bytes": 19373821967,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-contradiction-dense-u64M",
+"bytes": 19374280570,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-nq-dense-u128M",
+"bytes": 19375055488,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-nq-dense-u16M",
+"bytes": 19373559443,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-nq-dense-u32M",
+"bytes": 19373774116,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-nq-dense-u64M",
+"bytes": 19374202763,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-oolong-dense-u128M",
+"bytes": 19374337863,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-oolong-dense-u16M",
+"bytes": 19373475506,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-oolong-dense-u32M",
+"bytes": 19373597829,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-oolong-dense-u64M",
+"bytes": 19373849678,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-outlier-dense-u4M",
+"bytes": 19369731594,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/ds64-outlier-dense-u8M",
+"bytes": 19369823213,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35-contradiction-dense-s7M",
+"bytes": 19369796389,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35-nq-dense-s4M",
+"bytes": 19369730082,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35-nq-dense-s8M",
+"bytes": 19369821969,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35-oolong-dense-s10M",
+"bytes": 19369859271,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35-outlier-dense-s8M",
+"bytes": 19369816129,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35q3s4bdense-contradiction-dense-s14M",
+"bytes": 17648879023,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35q3s4bdense-oolong-dense-s20M",
+"bytes": 17651965667,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35q3s4bdense2-contradiction-dense-s14M",
+"bytes": 17651639551,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35q3s4bdense2-oolong-dense-s20M",
+"bytes": 17651761342,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35q3s4bdense2nqo-nq-dense-s48M",
+"bytes": 17652322958,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35q3s4bdense2nqo-outlier-dense-s160M",
+"bytes": 17654575901,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35s08b-contradiction-dense-s14M",
+"bytes": 4029772344,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35s27b-contradiction-dense-s14M",
+"bytes": 107614030996,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35s27b-oolong-dense-s20M",
+"bytes": 107599435457,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35s2b-contradiction-dense-s14M",
+"bytes": 9564641979,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35s2b-oolong-dense-s20M",
+"bytes": 9565275078,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35s9b-contradiction-dense-s14M",
+"bytes": 35823097196,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/fs35s9b-oolong-dense-s20M",
+"bytes": 35823241053,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_C120_lr20/runs/o3cd-C-120-p1/step60",
+"bytes": 87602154363,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_C120_lr20/runs/o3cd-C-120/step60",
+"bytes": 87602154360,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_C240_lr20/runs/o3cd-C-240-p1/step120",
+"bytes": 87602154364,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_C240_lr20/runs/o3cd-C-240/step120",
+"bytes": 87602154361,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_C480_lr20/runs/o3cd-C-480-p1/step240",
+"bytes": 87602154364,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_C480_lr20/runs/o3cd-C-480/step240",
+"bytes": 87602154361,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-D64lr20_lr20/runs/o3cd-D64lr20-120/step120",
+"bytes": 87602154375,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-D64lr20_lr20/runs/o3cd-D64lr20-240/step240",
+"bytes": 87602154375,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-D64lr20_lr20/runs/o3cd-D64lr20-480/step480",
+"bytes": 87602154375,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL05_lr20/runs/o3cd-IFL05-1040/step1040",
+"bytes": 88005114697,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL05_lr20/runs/o3cd-IFL05-260/step260",
+"bytes": 88005114695,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL05_lr20/runs/o3cd-IFL05-520/step520",
+"bytes": 88005114695,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL10_lr20/runs/o3cd-IFL10-133/step133",
+"bytes": 88005114695,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL10_lr20/runs/o3cd-IFL10-267/step267",
+"bytes": 88005114695,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL10_lr20/runs/o3cd-IFL10-533/step533",
+"bytes": 88005114695,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL25x64_lr20/runs/o3cd-IFL25x64-1200/step1200",
+"bytes": 88005114703,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-IFL25x64_lr20/runs/o3cd-IFL25x64-600/step600",
+"bytes": 88005114701,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K24lr20_L32K24/runs/o3cd-L32K24lr20-240/step240",
+"bytes": 47304234288,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K24lr20_L32K24b/runs/o3cd-L32K24lr20-480/step480",
+"bytes": 47304234289,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K28lr20_L32K28/runs/o3cd-L32K28lr20-120/step120",
+"bytes": 41068816718,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K28lr20_L32K28b/runs/o3cd-L32K28lr20-48/step48",
+"bytes": 41068816717,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K28lr20_L32K28c/runs/o3cd-L32K28lr20-240/step240",
+"bytes": 41068816719,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K30lr20_L32K30/runs/o3cd-L32K30lr20-120/step120",
+"bytes": 37951107935,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K30lr20_L32K30b/runs/o3cd-L32K30lr20-48/step48",
+"bytes": 37951107934,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32dfhlr20_L32K32dfh/runs/o3cd-L32K32dfhlr20-48/step48",
+"bytes": 31141996119,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32dfhlr20_L32K32dfh240/runs/o3cd-L32K32dfhlr20-240/step240",
+"bytes": 31141996124,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32dfhlr20_L32K32dfh480/runs/o3cd-L32K32dfhlr20-480/step480",
+"bytes": 31141996124,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32dfhlr20_L32K32dfh960/runs/o3cd-L32K32dfhlr20-960/step960",
+"bytes": 31141996124,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32dfhlr20_L32K32dfhb/runs/o3cd-L32K32dfhlr20-120/step120",
+"bytes": 31141996122,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32dfhs1lr20_L32K32dfhs1/runs/o3cd-L32K32dfhs1lr20-120/step120",
+"bytes": 31141996127,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32dlr20_L32K32d/runs/o3cd-L32K32dlr20-48/step48",
+"bytes": 34430438827,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32fw50lr20_L32K32fw50/runs/o3cd-L32K32fw50lr20-48/step48",
+"bytes": 34833399672,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32fw50lr20_L32K32fw50b/runs/o3cd-L32K32fw50lr20-120/step120",
+"bytes": 34833399675,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32fw75lr20_L32K32fw75/runs/o3cd-L32K32fw75lr20-48/step48",
+"bytes": 34833399672,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32fw90lr20_L32K32fw90/runs/o3cd-L32K32fw90lr20-48/step48",
+"bytes": 34833399672,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32g8lr20_L32K32g8/runs/o3cd-L32K32g8lr20-48/step96",
+"bytes": 34833399154,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32g8lr20_L32K32g8b/runs/o3cd-L32K32g8lr20-120/step240",
+"bytes": 34833399157,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32k50lr20_L32K32k50/runs/o3cd-L32K32k50lr20-48/step48",
+"bytes": 34833399157,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32k50lr20_L32K32k50b/runs/o3cd-L32K32k50lr20-120/step120",
+"bytes": 34833399160,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32lr1lr10_L32K32lr1/runs/o3cd-L32K32lr1lr10-120/step120",
+"bytes": 34833399159,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32lr20_L32K32/runs/o3cd-L32K32lr20-240/step240",
+"bytes": 34833399150,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32lr20_L32K32b/runs/o3cd-L32K32lr20-480/step480",
+"bytes": 34833399147,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32r128lr20_L32K32r128/runs/o3cd-L32K32r128lr20-120/step120",
+"bytes": 36752293242,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32s1lr20_L32K32s1/runs/o3cd-L32K32s1lr20-120/step120",
+"bytes": 34833399156,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32tk50lr20_L32K32tk50/runs/o3cd-L32K32tk50lr20-48/step48",
+"bytes": 34833399672,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32tk50lr20_L32K32tk50b/runs/o3cd-L32K32tk50lr20-120/step120",
+"bytes": 34833399671,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32tk75lr20_L32K32tk75/runs/o3cd-L32K32tk75lr20-48/step48",
+"bytes": 34833399672,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32K32tk75lr20_L32K32tk75b/runs/o3cd-L32K32tk75lr20-120/step120",
+"bytes": 34833399671,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32NG16lr20_L32NG16/runs/o3cd-L32NG16lr20-48/step48",
+"bytes": 33862204086,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32NG16lr20_L32NG16b/runs/o3cd-L32NG16lr20-120/step120",
+"bytes": 33862204089,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32NG4lr20_L32NG4/runs/o3cd-L32NG4lr20-48/step48",
+"bytes": 34590601574,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32NG4lr20_L32NG4b/runs/o3cd-L32NG4lr20-120/step120",
+"bytes": 34590601577,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32NG8lr20_L32NG8/runs/o3cd-L32NG8lr20-48/step48",
+"bytes": 34347804015,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L32NG8lr20_L32NG8b/runs/o3cd-L32NG8lr20-120/step120",
+"bytes": 34347804018,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K16_lr20/runs/o3cd-L64K16-120/step120",
+"bytes": 59775069913,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K16_lr20/runs/o3cd-L64K16-240/step240",
+"bytes": 59775069913,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K16_lr20/runs/o3cd-L64K16-480/step480",
+"bytes": 59775069913,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K32dfhlr20_L64K32dfh120/runs/o3cd-L64K32dfhlr20-120/step120",
+"bytes": 31141996124,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K32dfhlr20_L64K32dfh240/runs/o3cd-L64K32dfhlr20-240/step240",
+"bytes": 31141996124,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K32dfhlr20_L64K32dfh480r2/runs/o3cd-L64K32dfhlr20-480/step480",
+"bytes": 31141996126,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K32lr20_L64K32/runs/o3cd-L64K32lr20-120/step120",
+"bytes": 34833399662,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K32lr20_L64K32b/runs/o3cd-L64K32lr20-240/step240",
+"bytes": 34833399663,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "stepmo",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/olmo3_cptdrop/beaker_o3cd-L64K32lr20_L64K32c/runs/o3cd-L64K32lr20-480/step480",
+"bytes": 34833399663,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-contradiction-chk16-16M-tdp-lr5e-06",
+"bytes": 19421110162,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-contradiction-chk64-16M-tdp-lr5e-06",
+"bytes": 19421172370,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-contradiction-otr10M8-16M-tdp-lr2e-06",
+"bytes": 19421303114,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-contradiction-otr30M8-16M-tdp-lr2e-06",
+"bytes": 19421314097,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-fa247f16M7-s720-tdb-lr2e-06",
+"bytes": 19424206357,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-fa247f16M7-s720-tdb-lr5e-06",
+"bytes": 19424202632,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-fa247f16M7sd1-s720-tdb-lr2e-06",
+"bytes": 19424205089,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-lora16f16M7-s720-tdb-lr5e-06",
+"bytes": 19455427620,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-lora64f16M7-s720-tdb-lr5e-06",
+"bytes": 19547706306,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-lora64fa371f16M7-s720-tdb-lr5e-06",
+"bytes": 19547692832,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-lora64fa371r20to10f16-s720-tdb-lr5e-06",
+"bytes": 19548109156,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-lora64r20to10f16-s720-tdb-lr5e-06",
+"bytes": 19548104578,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-lora64r30to10f16-s720-tdb-lr5e-06",
+"bytes": 19548110526,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-otr10M8-s480-tdb-lr2e-06",
+"bytes": 19422844519,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-otr10M8-s720-tdb-lr2e-06",
+"bytes": 19424095896,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-otr10M8-s960-tdc-lr2e-06",
+"bytes": 19425437228,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-otr30M8-s480-tdb-lr2e-06",
+"bytes": 19422862063,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-otr30M8-s720-tdb-lr2e-06",
+"bytes": 19424121155,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-prog4712f16M7-s720-tdb-lr5e-06",
+"bytes": 19424194930,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-prog4712f16M7pt-s720-tdb-lr5e-06",
+"bytes": 19424265724,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-rnd10M7-s720-tdb-lr2e-06",
+"bytes": 19424097317,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-rnd30M8-s720-tdb-lr2e-06",
+"bytes": 19424073263,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-fa50M7-f1952-tde-lr5e-06",
+"bytes": 19424176606,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-fa50M7-f3904-tde-lr5e-06",
+"bytes": 19427948535,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-fa50M7-f7808-tde-lr5e-06",
+"bytes": 19456390398,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-fa50M7-s1952-tde-lr5e-06",
+"bytes": 19424131554,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-fa75M7-s1952-tde-lr5e-06",
+"bytes": 19424158836,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-fl30M8-s1464-tdb-lr2e-06",
+"bytes": 19423233872,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-fl30M8-s976-tdb-lr2e-06",
+"bytes": 19422258973,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-frz0M7-s488-tdb-lr2e-06",
+"bytes": 19421262749,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-gbfl10m32p8-s1464-tdc-lr2e-06",
+"bytes": 19422767263,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-gbfl10m32p8-s976-tdc-lr2e-06",
+"bytes": 19421947645,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-gbflk64p8-s1464-tdc-lr2e-06",
+"bytes": 19422841291,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-gbflk64p8-s976-tdc-lr2e-06",
+"bytes": 19421999430,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-gbflk64p8-sk8-s976-tdc-lr2e-06",
+"bytes": 19421997079,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora16M7-s1952-tde-lr5e-06",
+"bytes": 19455376458,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32cx-s1464-tdb-lr1e-05",
+"bytes": 19981810410,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32cxr20at5-s1464-tdb-lr1e-05",
+"bytes": 19981807039,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32dg-s1464-tdb-lr1e-05",
+"bytes": 19981812914,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32fh-s1464-tdb-lr1e-05",
+"bytes": 19981664224,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32ks-s1464-tdb-lr1e-05",
+"bytes": 19981883651,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32m50c50-s1464-tdb-lr1e-05",
+"bytes": 19981849083,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32m70c50-s1464-tdb-lr1e-05",
+"bytes": 19981860026,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32mlp-s1464-tdb-lr1e-05",
+"bytes": 19981959060,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32mlpr20at5-s1464-tdb-lr1e-05",
+"bytes": 19982145690,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32mlprg-s1464-tdb-lr1e-05",
+"bytes": 19981972705,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32mlpsd1-s1464-tdb-lr1e-05",
+"bytes": 19981970818,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32mlpsd2-s1464-tdb-lr1e-05",
+"bytes": 19981975246,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32r20at5-s1464-tdb-lr1e-05",
+"bytes": 19981782780,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32r20to12-s1464-tdb-lr1e-05",
+"bytes": 19981812198,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32rg-s1464-tdb-lr1e-05",
+"bytes": 19981811506,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32rgsd1-s1464-tdb-lr1e-05",
+"bytes": 19981803499,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32th-s1464-tdb-lr1e-05",
+"bytes": 19981976523,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32thmlp-s1464-tdb-lr1e-05",
+"bytes": 19982163356,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32thmlpsd1-s1464-tdb-lr1e-05",
+"bytes": 19982147431,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32thsd1-s1464-tdb-lr1e-05",
+"bytes": 19981989064,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32thsd2-s1464-tdb-lr1e-05",
+"bytes": 19981989507,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64K32to-s1464-tdb-lr1e-05",
+"bytes": 19981806104,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64M7-f1952-tde-lr5e-06",
+"bytes": 19547654249,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64M7-f3904-tde-lr5e-06",
+"bytes": 19557479269,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64M7-f7808-tde-lr5e-06",
+"bytes": 19577022083,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64M7-s1952-tde-lr5e-06",
+"bytes": 19547656827,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32rnd20to7-f3904-tde-lr1e-05",
+"bytes": 20002127761,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64all32rnd20to7-s1464-tde-lr1e-05",
+"bytes": 19981724758,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75M7-f1952-tde-lr5e-06",
+"bytes": 19547626827,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75M7-f3904-tde-lr5e-06",
+"bytes": 19557324996,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75M7-f7808-tde-lr5e-06",
+"bytes": 19578705172,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75r20to10-f1952-tde-lr5e-06",
+"bytes": 19547994724,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75r20to10-f3904-tde-lr5e-06",
+"bytes": 19558061306,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75r20to10-f7808-tde-lr5e-06",
+"bytes": 19567178292,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75r3s-f1952-tde-lr5e-06",
+"bytes": 19548298851,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75r3s-f3904-tde-lr5e-06",
+"bytes": 19552704322,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64fa75r3s-f7808-tde-lr5e-06",
+"bytes": 19569311468,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64r20to10-f1952-tde-lr5e-06",
+"bytes": 19548010130,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64r20to10-f3904-tde-lr5e-06",
+"bytes": 19552140192,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-lora64r20to10-f7808-tde-lr5e-06",
+"bytes": 19584539947,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-mass80c20M7-s1952-tde-lr5e-06",
+"bytes": 19424225869,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-mod25-s1952-tde-lr5e-06",
+"bytes": 19424377478,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-mod25t16-s1952-tde-lr5e-06",
+"bytes": 19424381430,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-mrg05M7de0-s488-tdb-lr2e-06",
+"bytes": 19421323236,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-ng0M7-s488-tdb-lr2e-06",
+"bytes": 19421278912,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M1-s976-tdb-lr2e-06",
+"bytes": 19422217927,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M4-s976-tdb-lr2e-06",
+"bytes": 19422224288,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M4de16-s1464-tdb-lr2e-06",
+"bytes": 19423149455,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M4de16-s976-tdb-lr2e-06",
+"bytes": 19422216550,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8-s1464-tdb-lr2e-06",
+"bytes": 19423210165,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8-s1952-tdb-lr2e-06",
+"bytes": 19424222245,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8-s976-tdb-lr2e-06",
+"bytes": 19422258500,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8de16-s1464-tdb-lr2e-06",
+"bytes": 19423191438,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8de16-s976-tdb-lr2e-06",
+"bytes": 19422241206,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8x00-s1464-tdb-lr2e-06",
+"bytes": 19423177786,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8x00-s976-tdb-lr2e-06",
+"bytes": 19422235719,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8x30-s1464-tdb-lr2e-06",
+"bytes": 19423203885,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8x30-s976-tdb-lr2e-06",
+"bytes": 19422259356,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8x50-s1464-tdb-lr2e-06",
+"bytes": 19423218105,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8x50-s976-tdb-lr2e-06",
+"bytes": 19422259463,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr30L4-s1464-tdb-lr2e-06",
+"bytes": 19423171625,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr30L4-s488-otr-lr2e-06",
+"bytes": 19421288373,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr30L4-s976-tdb-lr2e-06",
+"bytes": 19422230895,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr30M8-s1464-tdb-lr2e-06",
+"bytes": 19423240715,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr30M8-s976-tdb-lr2e-06",
+"bytes": 19422276167,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr30M8sd1-s1464-tdb-lr2e-06",
+"bytes": 19423240143,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr30M8sd1-s976-tdb-lr2e-06",
+"bytes": 19422277901,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-pfz37M7-s1952-tde-lr5e-06",
+"bytes": 19424123025,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-pyr3de0-s488-tdb-lr2e-06",
+"bytes": 19421459310,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-pyr3frz0-s488-tdb-lr2e-06",
+"bytes": 19421433831,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-rnd10M8-s1464-tdb-lr2e-06",
+"bytes": 19423172487,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-rnd10M8-s976-tdb-lr2e-06",
+"bytes": 19422227627,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-rnd30-s1464-tdb-lr2e-06",
+"bytes": 19423137182,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-rnd30-s976-tdb-lr2e-06",
+"bytes": 19422207301,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-rnd30M8-s1464-tdb-lr2e-06",
+"bytes": 19423205478,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-rnd30M8-s976-tdb-lr2e-06",
+"bytes": 19422254399,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier33fl-s1464-tdc-lr2e-06",
+"bytes": 19422663922,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier33fl-s976-tdc-lr2e-06",
+"bytes": 19421878380,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m32-ldl20-s976-tdc-lr2e-06",
+"bytes": 19422019826,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m32-s1464-tdc-lr2e-06",
+"bytes": 19422784103,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m32-s976-tdc-lr2e-06",
+"bytes": 19421962717,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m32-sk3-s976-tdc-lr2e-06",
+"bytes": 19422005294,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m32-sk8-s1464-tdc-lr2e-06",
+"bytes": 19422798059,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m32-sk8-s976-tdc-lr2e-06",
+"bytes": 19421970652,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m64-s1464-tdc-lr2e-06",
+"bytes": 19422850010,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67a50m64-s976-tdc-lr2e-06",
+"bytes": 19422002194,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67flm16-s1464-tdc-lr2e-06",
+"bytes": 19422722109,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67flm16-s976-tdc-lr2e-06",
+"bytes": 19421910986,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-tier67flm16-sk8-s1464-tdc-lr2e-06",
+"bytes": 19422748762,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-nq-kv33-16M-tdp-lr5e-06",
+"bytes": 19421091047,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-nq-otr10M8-16M-tdp-lr2e-06",
+"bytes": 19421277883,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-oolong-ohdr33-16M_eg-tdp-lr5e-06",
+"bytes": 19421097431,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-oolong-otr10M8-16M_eg-tdp-lr2e-06",
+"bytes": 19421267860,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-outlier-ck64ds-16M-tdp-lr5e-06",
+"bytes": 19421095956,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-outlier-flk64-16M-tdp-lr5e-06",
+"bytes": 19421108415,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-outlier-otr10M8-16M-tdp-lr2e-06",
+"bytes": 19421292432,
+"verdict": "OK",
+"why": ""
+},
+{
+"mode": "wholedir",
+"path": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-outlier-otr30M8-16M-tdp-lr2e-06",
+"bytes": 19421313485,
+"verdict": "OK",
+"why": ""
+}
+]
+}

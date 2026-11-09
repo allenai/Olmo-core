@@ -16,9 +16,8 @@ The Beaker counterpart to `local_cluster.md`. Everything here is validated from 
    (`RemoteBranchNotFoundError`, sometimes silently after "Launched") or ships stale code.
 2. **Priority is ALWAYS `urgent` — exactly `urgent`, not `immediate`, never normal/high**; lower pends for hours
    behind capacity. Bump a queued job in place: `beaker job update-priority <JOB-id> urgent`.
-   **And ALWAYS set a minRuntime (default `1h`):** on jupiter an urgent job with `minRuntime=0`
-   effectively never schedules (2026-10-19: 0 of ~2,250 urgent 1–7-GPU jobs scheduled in 3 days had
-   it; pending 0s jobs were 5+ days old). gantry `--min-runtime 1h`; `BeakerLaunchConfig.min_runtime`;
+   **And ALWAYS set a minRuntime (default `1h`):** urgent `minRuntime=0` jobs get a very long wait
+   tail (14-day p90 10–117 h vs ~1–1.5 h with a minRuntime; every job stuck for days was 0s). gantry `--min-runtime 1h`; `BeakerLaunchConfig.min_runtime`;
    `beaker_ctc_suite.py --min-runtime` (default 1h). A stuck 0s job must be cancelled and relaunched.
 3. **GPU jobs → `ai2/jupiter`** (H100s; gantry `--cluster` may need the full
    `ai2/jupiter-cirrascale-2` form). Never neptune for training — L40S, ~5x slower (MFU 4.5%).
@@ -128,7 +127,7 @@ not ported to this branch):
 | Push before launch | `RemoteBranchNotFoundError` (sometimes silent after "Launched"), or job runs stale code |
 | `python -u` + kill follower | Launch "hangs"; experiment URL never appears in captured output |
 | urgent priority, always | 1h+ pending; use `job update-priority` to rescue a queued job |
-| minRuntime 1h, always | `minRuntime=0` urgent jobs sit pending for days on jupiter; cancel + relaunch with `--min-runtime 1h` |
+| minRuntime 1h, always | `minRuntime=0` urgent jobs have a days-long wait tail; cancel + relaunch a stuck one with `--min-runtime 1h` |
 | Multi-cluster for CPU | 0-GPU job unscheduled 10+ min on jupiter (1007/1008 slots) |
 | Baked image + `--install true` / `--no-python` | ~3 min image pull + pip per job, dominating short jobs |
 | JSON status, `job cancel` | Canceled jobs look "running"; `experiment stop` no-ops; wrong-base jobs kept running |

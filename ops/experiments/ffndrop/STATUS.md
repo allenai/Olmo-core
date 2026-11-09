@@ -2,7 +2,7 @@
 experiment: ffndrop
 title: Drop-CPT — CPT with random per-token null FFNs, then routed-FFN (ffnmoe-t10) SFT, Qwen3.5-4B
 status: active
-updated: 2026-10-03
+updated: 2026-10-31
 branch: prasann/landmark
 launcher: research/ffn_compute/ffndrop/launch_ffndrop_cpt.py
 records:
@@ -27,6 +27,7 @@ SFT from that base reach the dense frontier at matched SFT FLOPs?
 
 ## Decisions
 - 2026-09-29 (Prasann): the drop-CPT checkpoint is a new BASE, so its CPT cost is amortized and not charged to per-task SFT FLOPs. Also report the break-even.
+- 2026-10-31 (agent, weka_cleanup): the drop-CPT checkpoint `ctc_suite/ckpts/fdcpt-q35-4b-drop75l12-u1B` (pipeline.py CPT_RUN, the FS35_BASE for the next step) was DELETED by mistake in the 10-30 weka cleanup (misclassified as unlabeled; see weka_cleanup STATUS). No other copy. The next step (dense SFT from the drop-CPT base) needs the CPT re-run first: launch_ffndrop_cpt.py drop75l12 from q35-4b-base-markerfix on softdetach_cpt/shards/cpt_u1B (both intact), 1 node x 8 H100, >=5 h. Existing bfdrop SFT results are unaffected.
 - 2026-09-29 (agent): arm `drop75l12`. Per row r ~ U[0, 0.75]; tokens skip each FFN of layers >= 1 with prob r; each (row, layer) drops the whole row's FFN with prob 0.125; no 1/(1-p) rescale. CPT on the 1B-token `softdetach_cpt/shards/cpt_u1B` shard, base `q35-4b-base-markerfix`, lr 3e-5, 8 x 64k rows/step.
 - 2026-09-30 (Prasann): dense-CPT control CANCELED ("you don't need the control"). The comparison uses the existing fs35 dense/t10 points from the unmodified base. Scope stays at "one or two settings": contra 28M, nq 32M.
 - 2026-10-03 (agent): verdict for this round. Drop-CPT lifts routed SFT only at 16k/32k and stays below the dense frontier. Confounded by the long-context CPT data.

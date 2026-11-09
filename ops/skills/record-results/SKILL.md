@@ -48,6 +48,8 @@ eval_size<500) before you quote the number. If the warning is real, say so next 
 - `$OPS update EVAL_RUN final_state=done` for the finished eval jobs.
 - Edit `ops/experiments/E/STATUS.md` → **Current best numbers** (arm, task/rung, metric, eval_size,
   ±SE, cot, source path), bump `updated:`, revise `next_step`, then `$OPS exp index`.
+- Update the experiment's summary artifact (the URL in STATUS.md `artifacts:`; create one if the
+  list is empty) with the new numbers: republish to the same URL, never a second page.
 - To read numbers back: `$OPS result show --experiment E [--task T] [--train-run T] [--best]` (grouped by
   training run, one line per pass; `--best` names the best pass per task/rung).
 - For native multirung sweeps, the `pull-evals` skill does the job-by-job cross-check and validation, then hands off to this skill for recording.

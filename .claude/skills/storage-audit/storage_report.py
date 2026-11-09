@@ -207,7 +207,8 @@ def launch_weka() -> str:
                           "source": {"weka": "oe-training-default"}}],
             "result": {"path": "/results"},
             "resources": {"cpuCount": 4},
-            "context": {"priority": "urgent", "preemptible": True},
+            # minRuntime 1h: urgent jobs at 0s sit pending for hours/days (memory: beaker-min-runtime).
+            "context": {"priority": "urgent", "minRuntime": "1h"},
             "constraints": {"cluster": BEAKER_CPU_CLUSTERS},
         }],
     }

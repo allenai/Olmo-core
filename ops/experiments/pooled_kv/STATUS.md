@@ -36,6 +36,7 @@ dense-trained model read pooled documents at answer-CE parity?
 - 2026-08-27 (agent): `PooledDocKVAttention` (mean-pooled post-RoPE K/V + `log(doc_len)` bias), exactly equivalent to full attention over a perturbed corpus. Flex block-sparse is no faster than cuDNN, so v1 is a transfer experiment.
 - 2026-08-29 (agent): zero-shot transfer collapsed (0.156 vs 0.985). Mechanism: CO-DRIFT, where compressed training drags the full-attention pathway (L16-L28).
 - 2026-08-30 (agent): paired consistency distillation fixed transfer (0.933 at 6k). gold_subsample made the task unsolvable (Prasann caught it) → `gold_plus_random`.
+- **2026-10-16 (Prasann): the 2026-08-31 rule below is REVERSED.** Full-context forwards in training are allowed again (`memory:no-full-attention-32k-training`).
 - **2026-08-31 (Prasann, HARD RULE): never run a full-attention forward at 32k in training.** No distill teachers and no full-row mixing, even if they help. Full baseline and full-attention eval are allowed. See `memory:no-full-attention-32k-training`. Distill arms v17-v19 were cancelled.
 - 2026-08-31 (agent): breadth of kept negatives is the protection mechanism. v25 (`--n-random-range 128,512`, softtoken B1, `--detach-soft-kv`, no distill) reaches parity.
   - Closed: oracle slot cache (v23 hurt) and role-blind FFN gate (v24/v26 dead).
@@ -68,7 +69,7 @@ Neither was run as pooled-KV. The soft-token line continued as `ds64` (2k-64k la
 first-k / cent_cmean). The FFN line continued as `ffndrop`, and earlier as nested-ffn-moe and flop_scaling.
 
 ## Open issues / traps
-- The HARD RULE above is still binding on any compressed-training work (`memory:no-full-attention-32k-training`).
+- The 2026-08-31 HARD RULE was REVERSED on 2026-10-16. Distill / full-row-mixing arms are allowed again; charge their FLOPs (`memory:no-full-attention-32k-training`).
 - The softtoken arm refuses to run on an un-baked base. Run `bake_projector_into_base.py` first (`q4b-dense-cpt-fixmark-b1`).
 - `--detach-soft-kv` with aux weight 0 freezes the projector at identity. That is the working configuration; do not "fix" it.
 - Sneetches probe rows ≠ Beaker eval-bundle rows (oolong full 0.507 vs 0.466). Never compare across sources.

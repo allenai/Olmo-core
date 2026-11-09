@@ -1,0 +1,14 @@
+{
+  "presentation_id": "1G7gWetx74tB1YCAl4tg4TrIyMWFC3cn9Mx20WIRoAes",
+  "template": {"slide": "g3f5eb7b6944_0_102", "title": "g3f5eb7b6944_0_103", "body": "g3f5eb7b6944_0_104",
+               "note": "Week #10 'Next Steps': dash-bullet body with level groups 0,1,0,1,0,1. Do not edit that slide."},
+  "title_prefix": "[Added by Claude] ",
+  "page_in": [10.0, 5.625],
+  "body": {"y": 1.26, "h": 3.94, "w_full": 9.3, "w_half": 4.76},
+  "panel": {"x": 5.2, "y": 1.3, "w": 4.45, "bottom": 5.3},
+  "table": {"row_h": 0.43, "char_w": 0.105, "pad": 0.25},
+  "chart": {"h": 3.0, "label_pt": 11, "tick_pt": 10},
+  "palette": ["#4C78A8", "#F58518", "#54A24B", "#B279A2", "#9D755D", "#E45756"],
+  "muted": "#666666",
+  "axis": "#BBBBBB"
+}
