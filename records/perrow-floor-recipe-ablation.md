@@ -1,14 +1,14 @@
 ---
 title: Per-row token budget + per-document floor on the token-drop recipe (lora64all32r20to7)
 date: 2026-11-03
-updated: 2026-11-03
+updated: 2026-11-09
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: 1,952 rows/task done (2 seeds); best arm at 3,904 rows/task in flight
+status: done (1,952 rows/task x 2 seeds; best arm at 3,904 rows/task x 1 seed)
 superseded_by: 
 artifact: https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt
-summary: Giving the row (not each document) the online router's 20%/7% token budget, with or without a 1-2 token per-document floor, does not beat the recipe's per-document budget at 8k (no floor 0.843 vs recipe 0.846, 2 seeds, within noise; floors 0.831/0.840, losing on outlier), though the router then concentrates on gold documents (absolute leak_auc 0.73-0.75 vs 0.48).
+summary: Giving the row (not each document) the online router's 20%/7% token budget, with or without a 1-2 token per-document floor, does not beat the recipe's per-document budget at 8k (1,952 rows/task, 2 seeds: no floor 0.843 vs recipe 0.846, within noise; floors 0.831/0.840, losing on outlier; 3,904 rows/task, 1 seed: no floor 0.880 vs recipe 0.882/0.889), though the router then concentrates on gold documents (absolute leak_auc 0.73-0.75 vs 0.48).
 ---
 # Per-row budget + per-document floor on the recipe
 
@@ -16,7 +16,9 @@ summary: Giving the row (not each document) the online router's 20%/7% token bud
 matched data or matched FLOPs. With no floor it ties (0.843 vs 0.846, 2 seeds each, within noise). A floor of
 1 or 2 tokens per document is slightly worse (0.831 / 0.840), and almost all of the loss is on outlier. The
 per-row arms use 2.3% fewer FLOPs, because the recipe's per-document rounding keeps 20.6% / 7.9% instead of
-20.0% / 7.0%, which is far too small to move FLOPs-to-match (4.55x vs 4.62x).
+20.0% / 7.0%, which is far too small to move FLOPs-to-match (4.55x vs 4.62x). At 3,904 rows/task the no-floor arm
+(one seed) gives 0.880 at 8k against the recipe's 0.882 / 0.889 (2 seeds), so it still ties or trails slightly
+(FLOPs-to-match 3.58x vs 3.61x for the recipe's seed 0).
 
 ## Setup
 - Recipe `lora64all32r20to7`: Qwen3.5-4B (marker-repaired base), whole-model LoRA r64 (scale 32), online
@@ -76,9 +78,24 @@ scored ones.
 | f8k-mt4-lora64all32r20to7ds0f1sd1-f1952-tde-lr1e-05 | 01M6F3XQTP4EH8NCR8DBY47PC7 |
 | f8k-mt4-lora64all32r20to7ds0f2sd1-f1952-tde-lr1e-05 | 01M6F3YGRVME6VS9PZG5R3GY1Y |
 | f8k-mt4-lora64all32r20to7sd1-f1952-tde-lr1e-05 (recipe seed 1) | 01M6F3ZAR3PENM133YFNVHDTB5 |
-| f8k-mt4-lora64all32r20to7ds0-f3904-tde-lr1e-05 (in flight) | 01M6HCRGTD1AZB2YKX2FAQ53TR |
+| f8k-mt4-lora64all32r20to7ds0-f3904-tde-lr1e-05 | 01M6HCRGTD1AZB2YKX2FAQ53TR (evals 01M6HWBW6AXCAD4JZ4NN0GBT1C, 01M6HWDBD4QEXPS4XZJ6P407CJ, 01M6HWEB4RS65714RSND0PCP6S, 01M6HWF9NA94Z1PN1KKEKQPP57) |
 
 The 28 eval job ids are in `research/token_routing/online_router/perrow_floor_state.json` (`evals`).
+
+## Results (3,904 rows/task, best arm only)
+Per-row, no floor, seed 0 only (Beaker 01M6HCRGTD1AZB2YKX2FAQ53TR, 976 steps, 672.5 PF). Recipe: seed-0 per-task
+numbers (01M5VH6FK7J23RHG272XB796M5, 688 PF); its 8k/2k means are given for both seeds.
+
+| arm | 8k mean | 2k mean | PF | FTM (8k) | contra 8k / 2k | nq 8k / 2k | outlier 8k / 2k | oolong 8k / 2k |
+|---|---|---|---|---|---|---|---|---|
+| recipe (per-document), 2 seeds | **0.886** (0.882, 0.889) | 0.947 (0.949, 0.945) | 688 | 3.61x (seed 0) | 0.977 / 0.988 (seed 0) | 0.918 / 0.976 | 0.970 / 0.972 | 0.663 / 0.858 |
+| per-row, no floor, 1 seed | 0.880 | 0.950 | 672.5 | 3.58x | 0.979 / 0.992 | 0.928 / 0.976 | 0.950 / 0.959 | 0.661 / 0.872 |
+
+eval_size 500 per task and rung. The 2.3% FLOP saving holds (672.5 vs 688 PF). The 8k gap to the recipe's 2-seed
+mean (-0.006) is under one SE of a single run's 4-task mean (~0.008). Outlier is again the per-row arm's weakest task
+(0.950 vs 0.970). For context, position reset at 3,904 rows/task scored 0.870 at 8k. Router diagnostics: keep 0.200 /
+0.070 (absolute), leak_auc 0.64 at stage 1 and 0.76 after both cuts, so the gold concentration grows slightly
+with data and still does not raise the scores.
 
 ## Where things live
 - Code is on branch `claude/otr-perrow-minfloor`; training ran commit dac2b81d5 (router code as in be4c1a1c8).
@@ -94,5 +111,6 @@ The 28 eval job ids are in `research/token_routing/online_router/perrow_floor_st
 ## Limits
 - Two seeds each. The no-floor vs recipe gap (-0.003) is well inside the noise. The floor-1 gap (-0.016) is
   about 2 SE and comes from one task (outlier).
-- This tests only 1,952 rows/task so far. The recipe's advantage over dense shrinks with data, so 3,904
-  rows/task is the more important cell (in flight).
+- 3,904 rows/task has one seed of the per-row arm only, and no floor arms.
+- The native ladder logs report no parse rate. Every score is 0.66-0.99 with no zeros, and every LoRA eval log has
+  the 'adapters re-installed' line and no MISSING lines.
