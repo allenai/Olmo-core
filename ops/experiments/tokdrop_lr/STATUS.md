@@ -2,7 +2,7 @@
 experiment: tokdrop_lr
 title: LR ablation for token-drop training — dense vs gold_fl20p8_noslot (gfl20p8ns) × LR {5e-6, 1.5e-5, 5e-5}, ONE multi-task job per (arm, LR) on contradiction+nq+outlier+oolong (fast8k mt4 shard), Qwen3.5-4B base
 status: active
-updated: 2026-11-02
+updated: 2026-11-09
 branch: prasann/flopdrop_clean (pushed; hub/log/launcher); Beaker -tde runs pinned at origin/claude/online-router-1bc01a 67a28d605
 launcher: research/token_routing/ds64_fast8k/launch_fast8k.py (env F8K_SUFFIX=-lra, OPS_EXPERIMENT=tokdrop_lr)
 records:
@@ -14,15 +14,25 @@ records:
   - records/tokdrop-large-data-decay.md (branch claude/tokdrop-decay-fix, unmerged)
   - records/grad-routing-gap.md (branch claude/grad-routing-gap, unmerged; training flags on claude/grad-routing-gap-train)
   - records/sparse-backward.md (branch claude/sparse-backward, unmerged)
+  - records/oracle-selection-training.md (branch claude/oracle-train-bd7414, unmerged)
   - records/tokdrop-model-scale-ablation.md (branch claude/recipe-scale-ablation-71d007, unmerged)
+  - records/oracle-tokens-under-routing.md (branch claude/grad-support-tokens, unmerged: 0.95 oracle token sets under true routing, frozen dense)
+  - records/posid-reset-recipe-ablation.md (branch claude/posid-reset-0abac3, unmerged: position-id reset after each cut; -0.026/-0.015 8k, outlier only)
+  - records/tail-rule-recipe-ablation.md (branch claude/posid-reset-0abac3, unmerged: fixed per-document tail instead of the router; -0.10 / -0.065 8k)
+  - records/tokdrop-handoff-2026-11-09.md (START HERE for a new main agent: goal, state locations, results, traps)
+  - records/perrow-floor-recipe-ablation.md (branch claude/otr-perrow-minfloor @ 315f37b03, unmerged: per-row budget; ties / trails at 1,952 and 3,904)
+  - records/cross-row-allocation.md (branch claude/cross-row-alloc, unmerged: step threshold ties, selective backprop loses)
+  - records/mt11-64k-length-generalization.md (branch claude/mt11-lengen-bed337, unmerged: gain persists to 128k/256k)
+  - records/lit-review-efficient-long-context-training.md (branch claude/lit-review-efficient-lc-eacf2d, unmerged)
 results:
 experiment_log: research/token_routing/ds64_fast8k/experiment_log.json (standing rule 2026-10-29: keep current, every session; renders in the hub's Experiment log)
 artifacts:
-  - https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (overview hub, v71, the summary page; all results incl. side sessions)
+  - https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (overview hub, v97 on 11-09, the summary page; all results incl. side sessions; source research/token_routing/ds64_fast8k/hub_live/hub.html)
   - https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5
   - https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ (multi-view block-7 cache, 10-30 overnight)
+  - https://claude.ai/artifact/9vAYqzh69sXf1RjVFfsnNV (oracle token-selection training, 9 arms, 11-04; record oracle-selection-training.md)
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/f8k-lra-q35-4b
-next_step: (11-02) RECIPE unchanged (whole-model LoRA, 7:0.2,16:0.07): FTM 4.1x / 3.7x / 2.2x at fresh 1,952 / 3,904 / 7,808 rows/task; the decay is dense saturating (CE flat from 3,904) + seed noise (recipe sd1 at 7,808 reads 2.8x), not the method degrading. No >=5x idea worked: sparse backward, multi-view, KV-only, layer skip, aggressive keep 10%->3/5% (ties at 3,904; blocks 0-6 dense floor ~0.2x/step), late widening (2 seeds: within noise). Scale: Qwen3.5 gain grows with size (4.8x at 9B, f1952); Qwen3 flat ~2-3x. Gradient-gap: attribution under dense forward is not a proxy; routed-trained model's router gradient is unbiased (exp cos 0.87) from step ~31. NOTHING RUNNING. PENDING PRASANN: larger-data push (15,616 rows, 11-task, 32k-64k); new approach to blocks 0-6; merge side branches. METRIC (Prasann 11-02): rank by the 8k rung (4-task mean at 8k); 2k is secondary (shorter than training rows, near ceiling, it drove most of the 8-cell decay). Recipe 8k-only FTM 4.6x / 3.6x / >=4.5x (2-seed mean at 7,808 ~3.4x).
+next_step: (11-09) Handoff: records/tokdrop-handoff-2026-11-09.md. RECIPE unchanged (whole-model LoRA, router 7:0.2,16:0.07, per-document): 8k-only FTM 4.6x / 3.6x / >=4.5x at 1,952 / 3,904 / 7,808 rows/task. Every >=5x idea so far failed (sparse backward, multi-view, KV-only, layer skip, aggressive keep, late widening; per-row / cross-row allocation, position-id reset, fixed tail rule, oracle-selection training all tie or lose). NOTHING RUNNING; all side sessions archived. PENDING PRASANN: larger-data push (15,616 rows, 11-task, 32k-64k); new approach to blocks 0-6; merge side branches; offered: per-layer router-vs-true-gradient check, two-cut orcbatchr2. METRIC (Prasann 11-02): rank by the 8k rung; 2k secondary.
 ---
 
 # tokdrop_lr
@@ -196,3 +206,173 @@ See `next_step` above.
 - Scale (claude/recipe-scale-ablation-71d007): 0.8B 1.7x, 2B 2.4x, 4B 4.1x, 9B 4.8x at f1952.
 - Gradient concentration (claude/grad-concentration-d91a37): partial, 8/11 stages; signal more concentrated later.
 - Collector fix: collect_pareto_points drops answer_ce/top1 and gradgap rows (they share train runs).
+
+## Per-row budget + per-document floor on the recipe (2026-11-02, side session; branch claude/otr-perrow-minfloor)
+- Question: does giving the ROW the token budget (`--st-otr-doc-share 0`, spread over documents by router score) with a
+  floor of K tokens per document (`--st-otr-min-per-doc K`, counted against the budget, applied at BOTH stages) beat
+  the recipe's per-document budget at the 8k rung? Arms: ds0 (no floor), ds0f1, ds0f2; 1,952 rows/task x 2 seeds +
+  recipe seed-1 control; best arm then at 3,904 rows/task.
+- Code: branch claude/otr-perrow-minfloor (cut from router tip 8ce5fd22a). Floor + per-row path verified (CPU test
+  test_pyramid_per_row_budget_with_floor_cpu: floor >= K per doc after each cut, budgets exact). New diagnostics on the
+  last stage: online_router/s1_keep_frac_abs, s1_leak_auc_abs (absolute per-document kept fraction after both cuts vs
+  gold; stage-1 leak_auc alone cannot see a stage-2 concentration on gold).
+- Smoke PASS on cubbins (slurm 4145927, 4 steps): keep 0.200 after block 7, 0.070 absolute after block 16 (the
+  recipe's per-document ceil realizes ~0.206 / ~0.079), floor adds 2% (stage 1) / 6-15% (stage 2) of tokens.
+- RESULT (1,952 rows/task, 2 seeds each, eval_size 500 per task x rung, no-cot; record
+  records/perrow-floor-recipe-ablation.md): **per-row + floor does NOT beat the per-document recipe at 8k.**
+  4-task 8k mean (2-seed): recipe 0.846 (0.845/0.847) at 344 PF, FTM 4.62x; per-row no floor 0.843 (0.838/0.848) at
+  337 PF, FTM 4.55x; floor 1 0.831 (0.837/0.824); floor 2 0.840 (0.846/0.835). 2k: 0.920 / 0.921 / 0.914 / 0.905.
+  SE of one run's 4-task mean ~0.008; seed spread up to 0.012, so no-floor = recipe within noise; floors cost 0.006-0.016,
+  almost all on outlier (8k 0.861 recipe vs 0.816 floor 1 / 0.835 floor 2). Per-row arms realize exactly 20.0% / 7.0%
+  keep (recipe 20.6% / 7.9%, so -2.3% PF) and concentrate on gold documents (leak_auc 0.60-0.64 stage 1, 0.73-0.75
+  absolute after both cuts; recipe 0.48). Runs (Beaker jupiter H100, commit dac2b81d5): ds0 01M6F3THAA49E0WV59CG38PZTW,
+  ds0f1 01M6F3VA0RJX2X94Z7ZY0QBE0F, ds0f2 01M6F3W357QSXWEN0FAQ71YEHY, ds0sd1 01M6F3WYDK7BY2P70WBA53SYS5, ds0f1sd1
+  01M6F3XQTP4EH8NCR8DBY47PC7, ds0f2sd1 01M6F3YGRVME6VS9PZG5R3GY1Y, recipe sd1 01M6F3ZAR3PENM133YFNVHDTB5.
+- 3,904 rows/task (best arm, per-row no floor, 1 seed; Beaker 01M6HCRGTD1AZB2YKX2FAQ53TR, 672.5 PF): 8k 0.880
+  (contra 0.979, nq 0.928, outlier 0.950, oolong 0.661), 2k 0.950, FTM 3.58x, vs recipe 0.882 / 0.889 (8k), 0.949 /
+  0.945 (2k), FTM 3.61x (seed 0, 688 PF). Ties or trails slightly; thread DONE, no further runs planned.
+
+## Position-id reset ablation on the recipe (2026-11-04, side session; branch claude/posid-reset-0abac3)
+- Question (Prasann: "an ablation where you don't fix position ids ... should be much worse but is just a
+  confirmation"): the recipe keeps each kept token's ORIGINAL position id after each cut. New flag
+  `--st-otr-reset-positions` renumbers the kept row 0..k-1 after each cut (stage 2 renumbers stage 1's row; packed rows
+  per document); eval stays dense with true positions. Arm `lora64all32r20to7pr` = the recipe + that flag.
+- Code: branch claude/posid-reset-0abac3 (cut from claude/otr-perrow-minfloor 635264704, same router as the recipe sd1
+  control). Change is in `OnlineTokenRouter.mid_compact` / `_mid_compact_packed`; CPU tests (positions 0..W-1 at
+  blocks after each cut vs original positions with gaps by default; default path bit-identical) + GPU packed test pass.
+  Launcher `research/token_routing/online_router/launch_posid_reset.py`, collector `collect_posid_reset.py`.
+- DONE (1 seed each; Beaker 01M6JTWWY7PDKMQ3YZ4TT7V6K6 / 01M6JTY2EEQ82843KR8DQ87FYB; eval_size 500/cell, no-cot):
+  resetting positions costs 0.026 / 0.015 on the 8k mean at 1,952 / 3,904 rows/task (0.820 vs recipe 0.845/0.847;
+  0.870 vs 0.882/0.889), almost all on outlier (8k .764 vs .862/.861, .919 vs .970/.967; 2k .737 vs .880, .795 vs
+  .972); contra ~-0.01 in all 4 cells; nq, oolong unchanged. 2k mean 0.881 / 0.896 vs 0.92 / 0.947. Training CE
+  matches the recipe (last 25%: .1005 vs .0956/.0979; .0587 vs .058/.064), so the cost is the train/eval position
+  mismatch. 8k FTM <=4.46x / 3.13x vs 4.56-4.69x / 3.61-3.93x. Record: records/posid-reset-recipe-ablation.md.
+- Smoke PASS (mooney 1x H200, 2 rows/step, 4 steps; slurm 4150009-11, 4150013-14): step 1 (dense warmup) CE 1.588 in
+  all 5 runs; step 2 (first routed) picks identical tokens in all (keep 0.2057, leak_auc 0.4896, mid_row 0.2402); CE
+  old code 1.226 / 1.236 (repeat = GPU nondeterminism), new default 1.237 / 1.239, reset 1.348.
+
+## Fixed per-document TAIL rule on the recipe (2026-11-04, side session; branch claude/posid-reset-0abac3)
+- Question (Prasann): does the model simply adapt to whatever drop shape it trains with? Content-blind rule
+  `--st-otr-score tail`: each document keeps its LAST body tokens (ceil, >=1; nested across stages); non-body tokens
+  always kept; no exploration; original position ids; router still fit (dense-warmup gate) but its FLOPs uncharged.
+  Arms: `lora64all32t10` = one cut at block 7, last 10%; `lora64all32t20to7` = recipe shape (last 20% at 7, last 7%
+  nested at 16; FLOP-matched control). 1,952 rows/task, LR 1e-5, mt4; 1 seed first, 2nd seed if within ~0.02 of recipe.
+- Code b471298dc (rule + CPU test `test_tail_rule_keeps_exactly_each_documents_tail_cpu`: kept set == exact per-doc
+  tail at 1 and 2 stages, no router FLOPs charged); launcher `research/token_routing/online_router/launch_tail_rule.py`
+  (state `tail_rule_state.json`); collector `collect_posid_reset.py --state tail_rule_state.json`. Router tests 90 pass
+  on mooney (slurm 4152635).
+- Smoke PASS (mooney 1x H200, 4 steps, slurm 4152752-3): keep 0.107/0.103 (t10); t20to7 0.2057 + abs 0.0796 at block
+  16 (= recipe budget); step-2 CE 1.49/1.48 vs recipe ~1.24 (different tokens); PF 0.5440 vs recipe 0.5452 (router
+  overhead uncharged).
+- DONE (Beaker, commit b076f2571; t10 01M6MC1WN4S0QGCFFYMV89820T, t20to7 01M6MC2T4E8HMVRZAHRM38X939; 8 evals,
+  eval_size 500 per cell, no-cot, all with the adapters-re-installed line). **Both far below the recipe: no 2nd seed.**
+  8k mean: tail10 0.747, tail20to7 0.781 vs recipe 0.845/0.847, dense 0.843, recipe-random (1,464 rows) 0.782,
+  posid-reset 0.820. 2k mean: 0.815 / 0.851 vs recipe 0.921/0.920.
+  - 8k contra/nq/outlier/oolong: t10 .919/.810/.617/.640; t20to7 .921/.856/.711/.637 (recipe .958/.917/.862/.649 avg).
+  - 2k: t10 .958/.966/.497/.839; t20to7 .952/.956/.658/.838 (recipe .976/.970/.881/.854 avg).
+  - Keep 0.1063 (t10) / 0.2056 then 0.3845 of it (t20to7, = recipe). PF 335.6 / 342.5 (recipe 345.3/343.2). Train CE
+    first 50 / last 25%: .764/.120, .660/.117 (recipe .452/.096). FTM <=4.56x / <=4.47x (below dense f1952; no
+    smaller dense point), i.e. worse than dense at equal rows.
+  - Reading: the model does NOT just adapt to the drop shape. At matched FLOPs and keep fractions the content-blind
+    tail loses 0.065 (8k) to the router (it lands at recipe-random's 0.782, but that was 1,464 rows); outlier carries most of it (-0.15 8k, -0.22
+    2k), then nq at 8k (-0.06). Record: records/tail-rule-recipe-ablation.md.
+
+## High-gradient vs supporting tokens in the true routed gradient (2026-11-03, side session; branch claude/grad-support-tokens)
+- Question: which tokens does the true routed gradient (compaction at a split, original RoPE positions) need? Does
+  keeping the top gate-gradient tokens (|dCE/dg| at g=0.5 / g=1) recover cos >= 0.95 with the dense gradient, vs the
+  own-gradient-energy oracle and random? Plus 0.95-attribution budgets, gate-mass concentration, joint sets, Jaccard.
+- Code: research/token_routing/grad_concentration/{support_probe.py, analyze_support.py, launch_support.py,
+  soft_parity.py} on claude/grad-support-tokens @ 9682de9f9 (pushed). No record yet.
+- ⚠ NOT YET CONFIRMED (one 16-row step, no error bars; run-to-run per-step cos noise up to +-0.035).
+  Quick pass, dense 1,952 rows/task ckpt, block-7 split, across-batch, H200 mooney (slurm 4145986), ⚠ eval_size 16 rows;
+  per-step cos(routed, dense) at k = 3 / 7 / 20%: own-gradient 0.115 / 0.477 / 0.328; gate g=0.5 0.001 / 0.008 / 0.125;
+  gate g=1 0.047 / 0.137 / 0.257; random 0.008 / 0.012 / 0.045. Routed answer CE at 7%: own-grad 0.372, g0.5 0.419,
+  g1 0.428, random 0.938 (dense 0.050). Reading: gate selection keeps CE near the oracle but not the gradient; nothing
+  near 0.95 at block 7 up to 20%.
+- ⚠ 4-row smoke (slurm 4145974, eval_size 4 rows): a joint set (95% gate mass + 0.95 attribution) keeps ~39% of body
+  tokens at block 7, routed cos 0.97; at block 16 / 10%, gate g=0.5 across-batch 0.984 vs own-grad 0.989. 95% gate mass
+  is diffuse (joint sets 30-89% of tokens).
+- Parity: soft-gate path at g=1 equals dense in whole-model fp32 to <=5e-4; the bf16 gap (up to ~10-16%) is attention
+  kernel noise. Gate passes now use fp32 attention.
+- HELD (Prasann 11-03: "Hold off on this for now"): full sweep NOT launched. Ready config: `launch_support.py --labels
+  f1952,recipe --preset trimmed` (splits 7/16, fewer k; ~23 H100-h per ckpt, 16 one-GPU Beaker jobs each; Beaker smoke
+  01M6F50NS04RYSMM1XV7V89JXT passed). Weka SUPPORT_DIR/smoke-recipe is smoke output: ignore before analysis.
+
+## Oracle token sets under true routing (2026-11-04, side session; branch claude/grad-support-tokens)
+- Question (Prasann): do the 0.95 gradient-concentration oracle sets hold up when the other tokens are dropped from
+  the forward? Reading confirmed ("version A"): the oracle was already token-level (each body token kept/dropped in
+  all of blocks 7-31); routed = compaction at block 7, blocks 0-6 dense. Record: records/oracle-tokens-under-routing.md.
+- RESULT (frozen dense 1,952 / 7,808 rows/task, eval_size 512 rows each = 32 steps, raw gradient, per-step cos ± SE):
+  **no**. Budgets reproduce the table (global 2.0 / 0.6%, per row 9.0 / 5.6%, per doc 19.5 / 15.9% at block 7), but
+  routed cos with the dense gradient is 0.137 / 0.187 / 0.164 (1,952) and 0.080 / 0.144 / 0.081 (7,808) over blocks
+  7-31 (whole model 0.07-0.15); norm 2-4x (1,952) and 15-25x (7,808) dense; routed answer CE 0.14-0.98 vs dense
+  0.058 / 0.026. Attribution 0.9: 0.04-0.07. Dropped from every block (split 0, whole-model ranking): 0.03-0.13 at
+  1-33% kept. Block 16 best: 1,952 whole-model 0.28-0.47; 7,808 0.05-0.12.
+- Frozen-model reference only: the oracle-train session (local_fb441871) tests whether training under the selection
+  adapts. Expected (cross-step debiased) cos, 1,952 rows/task: attribution 0.94-0.98, routed about 0 at block 7
+  (-0.27 to 0.13, noisy, no SE), norm 4-13x; block 16 0.05-0.28. 7,808: mean dense gradient NOT resolvable over 32
+  steps (debiased ||E[D]||^2 < 0 for whole model and blocks 7-31); blocks 16-31 only: attribution 0.98-0.99, routed
+  0.14-0.16. Analyzer fix c3df16e02.
+- ops: `ops result show --run-id gradsupp-q1tok512-f1952` / `-f7808` (218 rows, metrics q1tok_*). Beaker jobs in
+  research/token_routing/grad_concentration/state_gap.json (q1tok512-*); sketches weka gradgap/support/q1tok512-*.
+- Gate-gradient sweep (sections above) still on hold.
+
+
+## Gradient maps: per-token x per-layer gradient (2026-11-04, side session; branch claude/grad-support-tokens)
+- Heatmaps (weight-grad energy and ||dL/dh|| per block x token) on base / dense 1,952 / dense 7,808 / recipe, 8k rows
+  (eval_size 512) + fresh 2k rows (⚠ eval_size 128), with oracle 0.95 strips, router keep sets, routed-vs-dense
+  pairs and summaries: research/token_routing/grad_concentration/gradmaps/ (findings.md). For the hub "Gradient maps"
+  page (parent session publishes; no separate artifact).
+- Reading: answer+query tokens (2-10% of tokens) carry 60-95% of blocks 7-31 energy; gold docs 8-55x distractors per
+  token (outlier 2.4-3.8x); training moves mass to block 31 and a step at layers ~17-20 drops distractor energy 1-2
+  orders; token ranks agree within layers 0-15 and 17-31 but not across (block 7 vs 31 rho 0.33-0.39) -> supports
+  per-half (2-stage) selection, not per-layer cells; cells are 2.5-3x more concentrated than tokens in ENERGY, which
+  (per oracle-tokens-under-routing) does not translate into routed fidelity.
+- The "270x routed/dense" on one nq row = one near-solved row's sum of squared per-token terms (not a norm ratio);
+  routed pass matches the gap probe exactly; per 16-row batch energy ratio median 1.97 (~1.4x in norm).
+## Oracle-selection TRAINING runs (2026-11-04, side session; branch claude/oracle-train-bd7414)
+Record `records/oracle-selection-training.md` (on the branch). Code `src/olmo_core/nn/oracle_token_select.py` (3-pass step:
+dense backward -> exact per-token LoRA-gradient attribution bins -> smallest top-k body set with attribution cos >= 0.95 ->
+routed pass applied), `--oracle-*` flags, router `--st-otr-score oracle`; launcher / summariser / collector in
+`research/token_routing/oracle_train/` (state.json there). Recipe base (lora64all32r20to7, LR 1e-5, f1952 = 488 steps).
+- HEADLINE single cut at block 7 (Prasann via parent: token-level, blocks 0-6 dense). Cos is on the BODY tokens' part of
+  the LoRA gradient (the always-kept prompt/query/answer/marker tokens alone give cos ~0.96 of the whole gradient early on).
+- DONE (8k mean, eval_size 500/cell, no-cot): **orc1doc 0.850** (keeps 35.5% of body tokens; dense 0.843, recipe 0.845);
+  **orc1batch 0.756** (keeps 19.1%; outlier 8k 0.537 vs dense 0.817). 2k means 0.902 / 0.804 (dense 0.933). Routed-grad
+  cos ~0.5-0.6 in both, routed/dense grad norm 1.25, no loss spikes. Actual cost 2.3-2.4x dense per step (not a method).
+  Recorded with `ops result add`.
+- DONE 2026-11-04 evening: **orc1row 0.674** (per row, 29% kept; outlier 8k 0.155) and two-cut **orcdoc 0.716**
+  (outlier 8k 0.351). Only the per-document single-cut oracle keeps outlier; the other three tasks stay near dense in
+  every arm. The router recipe keeps outlier (0.862), so it is the oracle's gradient-energy ranking that fails it.
+- DONE: **orc1batchr2 0.806** (8k; 2k 0.922): 13% batch-oracle + 17% random body tokens. Random negatives lift
+  outlier 8k 0.537 -> 0.737 and routed-grad cos 0.52 -> 0.74 vs the oracle alone; at a matched ~30% keep the
+  per-row oracle alone scores 0.674.
+- DONE: **orc1batchrc 0.837** (8k; 2k 0.936 = dense): growing the set until the ROUTED gradient has cos >= 0.95 takes
+  71% of body tokens (63% -> 80% over training; the attribution set at 5% gives routed cos 0.30). The only token sets
+  that keep the dense gradient are ~70%+ of the body.
+- DONE (all 9 arms, 2026-11-04 night): two-cut **orcbatch 0.793** (outlier 0.635), literal whole-gradient rule
+  **orcbatchall 0.736**, **orc1docr2 0.867** (keeps ~94%, ~dense control). NOTHING RUNNING. Verdict: attribution-chosen
+  sets give routed cos ~0.5 and tie dense only with per-document allocation at one cut; gradient-faithful sets need
+  ~70%+ of the body; the 20/7% router works through co-adaptation, not gradient matching. Checkpoints: weka ckpts/
+  (Beaker-trained + mooney copies pushed via S3), Lambda node02 /tmp/prasann/oracle/runs/ (orc1docr2, orcbatch-lam),
+  mooney /data/prasann/oracle/runs/.
+- RUNNING (Beaker unless noted; insurance copies on mooney / Lambda because jupiter preempts after minRuntime and runs
+  have no mid-run checkpoint): orc1row, orc1batchr2 + orc1docr2 (random 2x extra), orc1batchrc (grow until ROUTED cos
+  >= 0.95), two-cut orcdoc / orcbatch / orcbatchall (all three restarted after preemption).
+- Metadata per run: `<weka>/ctc_suite/ckpts/<run>/oracle_meta/{steps.jsonl, sel/*.npz}` (mooney runs: also
+  `/data/prasann/oracle/runs/<run>/` on mooney).
+
+## 2026-11-04 → 11-09 close-out (main session)
+- Tail rule (claude/posid-reset-0abac3 @ d121b6f6e): 8k 0.781 (recipe shape) / 0.747 (last 10%) vs recipe 0.845/0.847,
+  1 seed, eval_size 500/cell; outlier carries it. The router's choice of tokens matters; the model does not just adapt
+  to any drop shape.
+- Per-row no floor at 3,904 rows/task (315f37b03): 8k 0.880 vs recipe 0.882/0.889, 2k 0.950 vs 0.949/0.945 (1 seed);
+  FTM 3.58x vs 3.61x. Evals had finished 11-03 but sat uncollected (registered under ds64_fast8k).
+- FTM sign fix: below the first dense point FTM is an upper bound; posid-reset f1952 <=4.46x, per-row floors <=4.55x.
+- Hub v97: every log entry can carry tables/charts; new tabs Selection ablations (6c) and Prior work (8b); 128k/256k
+  length-generalization and router-accuracy/gradient-norm sections. Live source saved in
+  research/token_routing/ds64_fast8k/hub_live/ (the generator make_overview_page.py has drifted; do not regenerate).
+- New log entries: gradient maps, router ranking accuracy + gradient magnitude, literature review.
+- All 7 side sessions archived; branches pushed; their ignored results copied to
+  OLMo-core-archive/worktree_files/<worktree>/.
+
