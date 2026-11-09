@@ -1,0 +1,1494 @@
+{
+ "Tail rule: keep only the LAST part": {
+  "tables": [
+   {
+    "title": "8k rung (primary), 1,952 rows/task",
+    "cols": [
+     "arm",
+     "8k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong"
+    ],
+    "rows": [
+     [
+      "dense",
+      0.843,
+      0.973,
+      0.924,
+      0.817,
+      0.656
+     ],
+     [
+      "recipe (router, s0 / sd1)",
+      ".845 / .847",
+      ".959 / .956",
+      ".912 / .922",
+      ".862 / .861",
+      ".648 / .649"
+     ],
+     [
+      "tail20to7 (last 20% @b7, last 7% @b16)",
+      0.781,
+      0.921,
+      0.856,
+      0.711,
+      0.637
+     ],
+     [
+      "tail10 (last 10% @b7, one cut)",
+      0.747,
+      0.919,
+      0.81,
+      0.617,
+      0.64
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot, f1 (oolong: score). Tail arms 1 seed each; recipe 2 seeds. Binomial SE ±0.020 at 0.71, ±0.022 at 0.62, ±0.016 at 0.86. Dense per-task from records/oracle-selection-training.md (dense f1952, LR 5e-6). Other 8k points: posid-reset 0.820; recipe-random 0.782 but at 1,464 rows/task (not matched)."
+   },
+   {
+    "title": "2k rung (secondary), 1,952 rows/task",
+    "cols": [
+     "arm",
+     "2k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong"
+    ],
+    "rows": [
+     [
+      "dense",
+      0.933,
+      0.987,
+      0.98,
+      0.911,
+      0.853
+     ],
+     [
+      "recipe (s0 / sd1)",
+      ".921 / .920",
+      ".977 / .975",
+      ".970 / .970",
+      ".880 / .881",
+      ".856 / .852"
+     ],
+     [
+      "tail20to7",
+      0.851,
+      0.952,
+      0.956,
+      0.658,
+      0.838
+     ],
+     [
+      "tail10",
+      0.815,
+      0.958,
+      0.966,
+      0.497,
+      0.839
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot. Outlier carries most of the loss (2k -0.22 / -0.38 vs recipe)."
+   },
+   {
+    "title": "Training cost and fit (same data and steps)",
+    "cols": [
+     "arm",
+     "PF",
+     "keep frac",
+     "stage-2 keep (of stage 1)",
+     "CE first 50 steps",
+     "CE last 25%",
+     "8k FTM"
+    ],
+    "rows": [
+     [
+      "recipe (s0 / sd1)",
+      "345.3 / 343.2",
+      0.2056,
+      0.3845,
+      ".452 / .447",
+      ".0956 / .0979",
+      "4.56x / 4.69x"
+     ],
+     [
+      "tail20to7",
+      342.5,
+      0.2056,
+      0.3845,
+      0.66,
+      0.1166,
+      "<=4.47x"
+     ],
+     [
+      "tail10",
+      335.6,
+      0.1063,
+      "-",
+      0.764,
+      0.1199,
+      "<=4.56x"
+     ]
+    ],
+    "note": "Train CE is on each arm's own routed forward. Tail FTMs are upper bounds: both 8k means are below dense f1952 (0.843), the smallest dense point."
+   }
+  ],
+  "chart": {
+   "title": "8k f1 by task: fixed tail rule vs router (1,952 rows/task)",
+   "unit": "f1 (oolong: score)",
+   "labels": [
+    "contra",
+    "nq",
+    "outlier",
+    "oolong"
+   ],
+   "series": [
+    {
+     "name": "dense",
+     "values": [
+      0.973,
+      0.924,
+      0.817,
+      0.656
+     ]
+    },
+    {
+     "name": "recipe (2-seed mean)",
+     "values": [
+      0.9575,
+      0.917,
+      0.8615,
+      0.6485
+     ]
+    },
+    {
+     "name": "tail20to7",
+     "values": [
+      0.921,
+      0.856,
+      0.711,
+      0.637
+     ]
+    },
+    {
+     "name": "tail10",
+     "values": [
+      0.919,
+      0.81,
+      0.617,
+      0.64
+     ]
+    }
+   ],
+   "refs": [],
+   "ymin": 0.5,
+   "ymax": 1.0
+  }
+ },
+ "Oracle-selection training": {
+  "tables": [
+   {
+    "title": "One cut at block 7: 8k rung by arm (1,952 rows/task)",
+    "cols": [
+     "arm",
+     "body kept",
+     "contra 8k",
+     "nq 8k",
+     "outlier 8k",
+     "oolong 8k",
+     "8k mean",
+     "2k mean"
+    ],
+    "rows": [
+     [
+      "dense",
+      "100%",
+      0.973,
+      0.924,
+      0.817,
+      0.656,
+      0.843,
+      0.933
+     ],
+     [
+      "recipe (router, two cuts 20%/7%)",
+      "20.6% / 7.9%",
+      0.959,
+      0.912,
+      0.862,
+      0.648,
+      0.845,
+      0.921
+     ],
+     [
+      "orc1doc (per document)",
+      "35.5%",
+      0.973,
+      0.93,
+      0.828,
+      0.669,
+      0.85,
+      0.902
+     ],
+     [
+      "orc1row (per row)",
+      "29.1%",
+      0.949,
+      0.914,
+      0.155,
+      0.68,
+      0.674,
+      0.816
+     ],
+     [
+      "orc1batch (batch-global)",
+      "19.1%",
+      0.963,
+      0.9,
+      0.537,
+      0.626,
+      0.756,
+      0.804
+     ],
+     [
+      "orc1batchr2 (batch + random 2x)",
+      "30.2% (13.0 + 17.2 rnd)",
+      0.968,
+      0.922,
+      0.737,
+      0.599,
+      0.806,
+      0.922
+     ],
+     [
+      "orc1batchrc (grow to routed cos 0.95)",
+      "71.3%",
+      0.964,
+      0.912,
+      0.843,
+      0.629,
+      0.837,
+      0.936
+     ],
+     [
+      "orc1docr2 (doc + random 2x)",
+      "94%",
+      0.973,
+      0.926,
+      0.92,
+      0.647,
+      0.867,
+      0.933
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot, query after; 1 seed per oracle arm (SE ±0.007-0.022 per cell). Recipe row = seed s0; recipe keep from records/perrow-floor-recipe-ablation.md. orc1docr2 keeps ~all tokens, so it is a near-dense control, not a test of negatives. Oracle arms cost 2.3-3.4x dense per step (upper bounds, not methods)."
+   },
+   {
+    "title": "Two cuts (7 + 16, recipe shape)",
+    "cols": [
+     "arm",
+     "body kept (stage 1 / 2)",
+     "contra 8k",
+     "nq 8k",
+     "outlier 8k",
+     "oolong 8k",
+     "8k mean",
+     "2k mean"
+    ],
+    "rows": [
+     [
+      "dense",
+      "100%",
+      0.973,
+      0.924,
+      0.817,
+      0.656,
+      0.843,
+      0.933
+     ],
+     [
+      "recipe (router)",
+      "20.6% / 7.9%",
+      0.959,
+      0.912,
+      0.862,
+      0.648,
+      0.845,
+      0.921
+     ],
+     [
+      "orcdoc (per document)",
+      "-",
+      0.968,
+      0.916,
+      0.351,
+      0.627,
+      0.716,
+      0.829
+     ],
+     [
+      "orcbatch (batch, body view)",
+      "34% / 28%",
+      0.954,
+      0.934,
+      0.635,
+      0.648,
+      0.793,
+      0.824
+     ],
+     [
+      "orcbatchall (batch, literal whole-gradient cos)",
+      "23% / 16%",
+      0.958,
+      0.894,
+      0.501,
+      0.591,
+      0.736,
+      0.846
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot, 1 seed. orcdoc's keep share is not in the record's metadata table."
+   },
+   {
+    "title": "Training-time metadata (means over 488 steps)",
+    "cols": [
+     "arm",
+     "body kept",
+     "routed-grad cos raw / Adam",
+     "routed/dense grad norm",
+     "train CE dense -> routed",
+     "3-pass cost / dense"
+    ],
+    "rows": [
+     [
+      "orc1doc",
+      "35.5%",
+      "0.58 / 0.66",
+      1.25,
+      "0.148 -> 0.151",
+      2.38
+     ],
+     [
+      "orc1row",
+      "29.1%",
+      "0.48 / 0.51",
+      0.81,
+      "0.180 -> 0.104",
+      2.34
+     ],
+     [
+      "orc1batch",
+      "19.1%",
+      "0.52 / 0.55",
+      1.24,
+      "0.166 -> 0.121",
+      2.29
+     ],
+     [
+      "orc1batchr2",
+      "30.2%",
+      "0.74 / 0.76",
+      "-",
+      "0.147 -> 0.149",
+      2.35
+     ],
+     [
+      "orc1batchrc",
+      "71.3%",
+      "0.993 / 0.990",
+      1.007,
+      "0.143 -> 0.146",
+      3.41
+     ],
+     [
+      "orc1docr2",
+      "94%",
+      "0.96 / 0.97",
+      1.02,
+      "0.136 -> 0.137",
+      2.72
+     ],
+     [
+      "orcbatch (two cuts)",
+      "34% / 28%",
+      "0.75 / 0.76",
+      1.23,
+      "0.162 -> 0.133",
+      2.35
+     ],
+     [
+      "orcbatchall (two cuts)",
+      "23% / 16%",
+      "0.59 / 0.62",
+      1.15,
+      "0.178 -> 0.129",
+      2.28
+     ]
+    ],
+    "note": "All oracle sets target attribution cos >= 0.95 (body view; orcbatchall: whole gradient) except orc1batchrc, which grows until the ROUTED gradient reaches cos 0.95. Routed CE below dense = the model fits its oracle subset."
+   }
+  ],
+  "chart": {
+   "title": "8k 4-task mean by oracle arm (1,952 rows/task)",
+   "unit": "8k mean",
+   "labels": [
+    "orc1doc",
+    "orc1row",
+    "orc1batch",
+    "orc1batchr2",
+    "orc1batchrc",
+    "orc1docr2",
+    "orcdoc (2 cuts)",
+    "orcbatch (2 cuts)",
+    "orcbatchall (2 cuts)"
+   ],
+   "series": [
+    {
+     "name": "oracle arm (1 seed)",
+     "values": [
+      0.85,
+      0.674,
+      0.756,
+      0.806,
+      0.837,
+      0.867,
+      0.716,
+      0.793,
+      0.736
+     ]
+    }
+   ],
+   "refs": [
+    {
+     "name": "dense",
+     "value": 0.843
+    },
+    {
+     "name": "recipe (s0)",
+     "value": 0.845
+    }
+   ],
+   "ymin": 0.6,
+   "ymax": 0.9
+  }
+ },
+ "Whole-token oracle": {
+  "tables": [
+   {
+    "title": "Block-7 cut, attribution 0.95 on blocks 7-31: routed gradient after true forward removal",
+    "cols": [
+     "dense ckpt",
+     "scope",
+     "body kept (oracle table)",
+     "routed cos, blocks 7-31",
+     "routed cos, whole model",
+     "norm ratio",
+     "routed CE (dense)"
+    ],
+    "rows": [
+     [
+      "1,952 rows/task",
+      "global",
+      "1.98% (1.96%)",
+      "0.137 ± 0.010",
+      "0.122 ± 0.012",
+      3.3,
+      "0.723 (0.058)"
+     ],
+     [
+      "1,952 rows/task",
+      "per row",
+      "9.0% (8.1%)",
+      "0.187 ± 0.018",
+      "0.146 ± 0.014",
+      2.2,
+      "0.140"
+     ],
+     [
+      "1,952 rows/task",
+      "per document",
+      "19.5% (16.9%)",
+      "0.164 ± 0.021",
+      "0.126 ± 0.019",
+      3.8,
+      "0.201"
+     ],
+     [
+      "7,808 rows/task",
+      "global",
+      "0.63% (0.47%)",
+      "0.080 ± 0.012",
+      "0.084 ± 0.012",
+      17.1,
+      "0.982 (0.026)"
+     ],
+     [
+      "7,808 rows/task",
+      "per row",
+      "5.6% (4.6%)",
+      "0.144 ± 0.028",
+      "0.131 ± 0.025",
+      14.7,
+      "0.249"
+     ],
+     [
+      "7,808 rows/task",
+      "per document",
+      "15.9% (13.7%)",
+      "0.081 ± 0.016",
+      "0.068 ± 0.014",
+      24.8,
+      "0.331"
+     ]
+    ],
+    "note": "Frozen dense checkpoints (LR 5e-6). 512 unseen fresh rows per checkpoint (128/task) = 32 steps of 16; ± = SE over steps; raw gradient, per step. Attribution cos is 0.95 by construction. Budgets land one grid step above the original concentration table (in brackets)."
+   },
+   {
+    "title": "Other variants: routed cos over blocks >= L (body kept)",
+    "cols": [
+     "variant",
+     "1,952: global / per row / per doc",
+     "7,808: global / per row / per doc"
+    ],
+    "rows": [
+     [
+      "block 7, threshold 0.9",
+      "0.058 / 0.067 / 0.053 (0.64 / 3.1 / 8.7%)",
+      "0.051 / 0.044 / 0.035 (0.19 / 1.6 / 7.1%)"
+     ],
+     [
+      "block 7, 0.95 whole-model scope",
+      "0.062 / 0.074 / 0.062 (0.66 / 3.4 / 9.6%)",
+      "0.060 / 0.056 / 0.059 (0.26 / 2.2 / 8.8%)"
+     ],
+     [
+      "block 0 (every block), 0.95",
+      "0.131 / 0.090 / 0.049 (3.3 / 16.7 / 33.1%)",
+      "0.065 / 0.054 / 0.028 (1.2 / 9.9 / 26.7%)"
+     ],
+     [
+      "block 0, 0.9",
+      "0.057 / 0.030 / 0.024 (1.2 / 6.7 / 19.1%)",
+      "0.050 / 0.028 / 0.024 (0.4 / 3.9 / 14.0%)"
+     ],
+     [
+      "block 16, 0.95 (blocks 16-31)",
+      "0.259 / 0.398 / 0.188 (0.15 / 0.77 / 2.3%)",
+      "0.038 / 0.094 / 0.079 (0.08 / 0.31 / 2.0%)"
+     ]
+    ],
+    "note": "Same 512-row probe. Block 16 whole-model cos: 0.378 / 0.466 / 0.283 at 1,952; 0.048 / 0.100 / 0.121 at 7,808."
+   },
+   {
+    "title": "Expected (debiased) cosine, 1,952 rows/task (global / per row / per doc)",
+    "cols": [
+     "variant",
+     "attribution (blocks >= L)",
+     "routed (blocks >= L)",
+     "routed (whole model)",
+     "norm ratio (whole)"
+    ],
+    "rows": [
+     [
+      "block 7, 0.95",
+      "0.94 / 0.94 / 0.98",
+      "0.03 / -0.27 / 0.13",
+      "0.01 / -0.25 / 0.11",
+      "12 / 4.5 / 13"
+     ],
+     [
+      "block 7, 0.9",
+      "0.84 / 0.85 / 0.96",
+      "0.03 / -0.11 / 0.07",
+      "0.01 / -0.08 / 0.06",
+      "14 / 9 / 13"
+     ],
+     [
+      "block 0, 0.95 whole-model",
+      "0.94 / 0.95 / 0.99",
+      "= whole",
+      "-0.01 / -0.20 / 0.09",
+      "8 / 8 / 15"
+     ],
+     [
+      "block 16, 0.95",
+      "0.91 / 0.91 / 0.97",
+      "0.22 / 0.28 / 0.05",
+      "0.10 / 0.17 / 0.01",
+      "7 / 4 / 11"
+     ]
+    ],
+    "note": "Cross-step terms over the 32 steps; no SE, treat |cos| < ~0.15 as zero. Not resolvable at 7,808 rows/task except blocks 16-31 (routed 0.16 / 0.15 / 0.14). Separate gate-gradient quick pass not shown (⚠ eval_size 16 rows, one step)."
+   }
+  ],
+  "chart": {
+   "title": "Routed gradient cos (blocks 7-31) of the 0.95-attribution oracle sets, block-7 cut",
+   "unit": "cosine with dense step gradient",
+   "labels": [
+    "global",
+    "per row",
+    "per document"
+   ],
+   "series": [
+    {
+     "name": "dense 1,952 rows/task",
+     "values": [
+      0.137,
+      0.187,
+      0.164
+     ]
+    },
+    {
+     "name": "dense 7,808 rows/task",
+     "values": [
+      0.08,
+      0.144,
+      0.081
+     ]
+    }
+   ],
+   "refs": [
+    {
+     "name": "attribution cos (target)",
+     "value": 0.95
+    }
+   ],
+   "ymin": 0.0,
+   "ymax": 1.0
+  }
+ },
+ "Ablation: renumber position ids": {
+  "tables": [
+   {
+    "title": "8k rung (primary)",
+    "cols": [
+     "rows/task",
+     "arm",
+     "8k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong"
+    ],
+    "rows": [
+     [
+      "1,952",
+      "dense",
+      0.843,
+      0.973,
+      0.924,
+      0.817,
+      0.656
+     ],
+     [
+      "1,952",
+      "recipe (s0 / sd1)",
+      ".845 / .847",
+      ".959 / .956",
+      ".912 / .922",
+      ".862 / .861",
+      ".648 / .649"
+     ],
+     [
+      "1,952",
+      "reset positions",
+      0.82,
+      0.947,
+      0.914,
+      0.764,
+      0.653
+     ],
+     [
+      "3,904",
+      "dense (3,063 PF curve point)",
+      0.899,
+      "-",
+      "-",
+      "-",
+      "-"
+     ],
+     [
+      "3,904",
+      "recipe (s0 / sd1)",
+      ".882 / .889",
+      ".977 / .973",
+      ".918 / .926",
+      ".970 / .967",
+      ".663 / .689"
+     ],
+     [
+      "3,904",
+      "reset positions",
+      0.87,
+      0.965,
+      0.92,
+      0.919,
+      0.677
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot; reset 1 seed per budget, recipe 2 seeds. Binomial SE: outlier ±0.019 at 0.76, ±0.012 at 0.92; contra ±0.010 at 0.95. Dense f1952 per-task from records/oracle-selection-training.md; dense 3,063 PF mean from the fresh dense curve (records/perrow-floor-recipe-ablation.md)."
+   },
+   {
+    "title": "2k rung (secondary)",
+    "cols": [
+     "rows/task",
+     "arm",
+     "2k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong"
+    ],
+    "rows": [
+     [
+      "1,952",
+      "dense",
+      0.933,
+      0.987,
+      0.98,
+      0.911,
+      0.853
+     ],
+     [
+      "1,952",
+      "recipe (s0 / sd1)",
+      ".921 / .920",
+      ".977 / .975",
+      ".970 / .970",
+      ".880 / .881",
+      ".856 / .852"
+     ],
+     [
+      "1,952",
+      "reset positions",
+      0.881,
+      0.963,
+      0.97,
+      0.737,
+      0.854
+     ],
+     [
+      "3,904",
+      "recipe (s0 / sd1)",
+      ".949 / .945",
+      ".988 / .985",
+      ".976 / .966",
+      ".972 / .973",
+      ".858 / .856"
+     ],
+     [
+      "3,904",
+      "reset positions",
+      0.896,
+      0.982,
+      0.958,
+      0.795,
+      0.849
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot. Outlier at 2k barely improves with data under reset (0.737 -> 0.795 vs recipe 0.880 -> 0.972)."
+   },
+   {
+    "title": "Training (same data, steps, keep fractions)",
+    "cols": [
+     "rows/task",
+     "arm",
+     "PF",
+     "CE first 50 steps",
+     "CE last 25%",
+     "8k FTM"
+    ],
+    "rows": [
+     [
+      "1,952",
+      "recipe (s0 / sd1)",
+      "345.3 / 343.2",
+      ".452 / .447",
+      ".0956 / .0979",
+      "4.56x / 4.69x"
+     ],
+     [
+      "1,952",
+      "reset positions",
+      343.4,
+      0.468,
+      0.1005,
+      "<=4.46x (below dense f1952)"
+     ],
+     [
+      "3,904",
+      "recipe (s0 / sd1)",
+      "688.1 / 686.0",
+      ".464 / .471",
+      ".0580 / .0639",
+      "3.61x / 3.93x"
+     ],
+     [
+      "3,904",
+      "reset positions",
+      685.9,
+      0.501,
+      0.0587,
+      "3.13x"
+     ]
+    ],
+    "note": "Keep 0.2056 overall, 0.3845 of stage 1 at stage 2 for all arms. Training CE matches the recipe, so the cost is the train/eval position mismatch (eval uses true positions)."
+   }
+  ],
+  "chart": {
+   "title": "8k f1 by task: original vs renumbered position ids",
+   "unit": "f1 (oolong: score)",
+   "labels": [
+    "contra",
+    "nq",
+    "outlier",
+    "oolong"
+   ],
+   "series": [
+    {
+     "name": "recipe f1952 (2-seed mean)",
+     "values": [
+      0.9575,
+      0.917,
+      0.8615,
+      0.6485
+     ]
+    },
+    {
+     "name": "reset f1952",
+     "values": [
+      0.947,
+      0.914,
+      0.764,
+      0.653
+     ]
+    },
+    {
+     "name": "recipe f3904 (2-seed mean)",
+     "values": [
+      0.975,
+      0.922,
+      0.9685,
+      0.676
+     ]
+    },
+    {
+     "name": "reset f3904",
+     "values": [
+      0.965,
+      0.92,
+      0.919,
+      0.677
+     ]
+    }
+   ],
+   "refs": [],
+   "ymin": 0.6,
+   "ymax": 1.0
+  }
+ },
+ "11-task 64k: length-generalization": {
+  "tables": [
+   {
+    "title": "Matched-FLOP delta vs dense past the 64k train length (6-task mean)",
+    "cols": [
+     "arm (PF)",
+     "64k",
+     "128k",
+     "256k (YaRN x2) ⚠ eval_size 125"
+    ],
+    "rows": [
+     [
+      "dense (reference)",
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      "recipe lora64r20to7f16 f4 (1,696)",
+      "+0.046 (5/6)",
+      "+0.033 (6/6)",
+      "+0.054 (5/6)"
+     ],
+     [
+      "router otr10M7 f2 (3,725)",
+      "+0.040 (4/6)",
+      "+0.042 (6/6)",
+      "+0.023 (5/6)"
+     ],
+     [
+      "router otr10M7 f1 (7,439)",
+      "+0.025 (5/6)",
+      "+0.013 (4/6)",
+      "-0.005 (3/6)"
+     ]
+    ],
+    "note": "Arm minus dense interpolated in log PF between neighbouring dense budgets; (k/6) = tasks ahead. Tasks: nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction. eval_size 500 at 64k/128k; ⚠ eval_size 125 at 256k (binomial SE ±0.03-0.045). Single seed, no-cot, olmo-eval path (agrees with the native ladder at 64k within ±0.002)."
+   },
+   {
+    "title": "Recipe f4 matched-FLOP delta by task",
+    "cols": [
+     "task",
+     "64k",
+     "128k",
+     "256k ⚠ eval_size 125"
+    ],
+    "rows": [
+     [
+      "contradiction",
+      "+0.126",
+      "+0.055",
+      "+0.116"
+     ],
+     [
+      "hotpotqa",
+      "+0.046",
+      "+0.065",
+      "+0.095"
+     ],
+     [
+      "nq",
+      "+0.023",
+      "+0.033",
+      "+0.070"
+     ],
+     [
+      "oolong",
+      "+0.036",
+      "+0.029",
+      "+0.044"
+     ],
+     [
+      "outlier",
+      "-0.007",
+      "+0.013",
+      "-0.005"
+     ],
+     [
+      "qdmatch_nq",
+      "+0.048",
+      "+0.006",
+      "+0.005"
+     ]
+    ],
+    "note": "outlier and qdmatch_nq are at the floor at 128k/256k for every checkpoint (no signal there). Single seed."
+   },
+   {
+    "title": "Training on rows <= 16k at matched FLOPs: delta vs the 64k-data model",
+    "cols": [
+     "rung",
+     "dense, rows<=16k (4,839 PF, ~f4)",
+     "recipe, rows<=16k (1,836 vs 1,696 PF)",
+     "dense, rows<=16k (9,792 PF, ~f2)"
+    ],
+    "rows": [
+     [
+      "2k",
+      "+0.001",
+      "+0.003",
+      "+0.007"
+     ],
+     [
+      "8k",
+      "+0.023",
+      "+0.018",
+      "+0.015"
+     ],
+     [
+      "16k",
+      "+0.019",
+      "+0.016",
+      "+0.039"
+     ],
+     [
+      "32k",
+      "+0.004",
+      "-0.012",
+      "+0.012"
+     ],
+     [
+      "64k (native / olmo-eval)",
+      "-0.081 / -0.079",
+      "-0.055 / -0.053",
+      "-0.064 / -0.063"
+     ],
+     [
+      "128k",
+      "-0.080",
+      "-0.064",
+      "-0.100"
+     ],
+     [
+      "256k ⚠ eval_size 125",
+      "-0.071",
+      "-0.083",
+      "-0.076"
+     ]
+    ],
+    "note": "2k-64k native docchunk ladder, 10 tasks (grouping 32k excluded); 128k/256k olmo-eval, 6 tasks. Long-rung losses are mostly contradiction and hotpotqa. 2x the 16k data (third column) does not close the gap. Single seed."
+   }
+  ],
+  "chart": {
+   "title": "Rows <= 16k at matched FLOPs: delta vs 64k-data model by eval length",
+   "unit": "mean score delta",
+   "labels": [
+    "2k",
+    "8k",
+    "16k",
+    "32k",
+    "64k",
+    "128k",
+    "256k ⚠125"
+   ],
+   "series": [
+    {
+     "name": "dense rows<=16k (4,839 PF)",
+     "values": [
+      0.001,
+      0.023,
+      0.019,
+      0.004,
+      -0.081,
+      -0.08,
+      -0.071
+     ]
+    },
+    {
+     "name": "recipe rows<=16k (1,836 PF)",
+     "values": [
+      0.003,
+      0.018,
+      0.016,
+      -0.012,
+      -0.055,
+      -0.064,
+      -0.083
+     ]
+    },
+    {
+     "name": "dense rows<=16k (9,792 PF)",
+     "values": [
+      0.007,
+      0.015,
+      0.039,
+      0.012,
+      -0.064,
+      -0.1,
+      -0.076
+     ]
+    }
+   ],
+   "refs": [
+    {
+     "name": "64k-data model (same FLOPs)",
+     "value": 0.0
+    }
+   ],
+   "ymin": -0.12,
+   "ymax": 0.05
+  }
+ },
+ "Per-row token budget": {
+  "tables": [
+   {
+    "title": "1,952 rows/task, 2-seed means (8k primary)",
+    "cols": [
+     "arm",
+     "8k mean [seeds]",
+     "contra 8k",
+     "nq 8k",
+     "outlier 8k",
+     "oolong 8k",
+     "2k mean",
+     "PF / FTM (8k)"
+    ],
+    "rows": [
+     [
+      "dense",
+      "0.843",
+      0.973,
+      0.924,
+      0.817,
+      0.656,
+      0.933,
+      "1,531 / -"
+     ],
+     [
+      "recipe (per-document)",
+      "0.846 [0.845, 0.847]",
+      0.958,
+      0.917,
+      0.861,
+      0.649,
+      0.92,
+      "344 / 4.62x"
+     ],
+     [
+      "per-row, no floor",
+      "0.843 [0.838, 0.848]",
+      0.956,
+      0.919,
+      0.858,
+      0.639,
+      0.921,
+      "337 / 4.55x"
+     ],
+     [
+      "per-row, floor 1",
+      "0.831 [0.837, 0.824]",
+      0.956,
+      0.922,
+      0.816,
+      0.629,
+      0.914,
+      "337 / >=4.55x"
+     ],
+     [
+      "per-row, floor 2",
+      "0.840 [0.846, 0.835]",
+      0.956,
+      0.929,
+      0.835,
+      0.643,
+      0.905,
+      "337 / >=4.55x"
+     ]
+    ],
+    "note": "eval_size 500 per task and rung, no-cot, f1 (oolong: score). SE of one run's 4-task mean ~0.008; seed spread up to 0.012. Dense is 1 run (LR 5e-6), per-task from records/oracle-selection-training.md. '>=' FTM marks a mean below the first dense point. 3,904 rows/task: evals pending collection (run f8k-mt4-lora64all32r20to7ds0-f3904-tde-lr1e-05)."
+   },
+   {
+    "title": "Router diagnostics (steps >= 50)",
+    "cols": [
+     "arm",
+     "keep after b7",
+     "keep after b16 (abs)",
+     "leak_auc stage 1",
+     "leak_auc after both cuts",
+     "floor tokens (s1 / s2)"
+    ],
+    "rows": [
+     [
+      "recipe",
+      0.206,
+      0.079,
+      "0.48",
+      "0.48",
+      "-"
+     ],
+     [
+      "per-row, no floor",
+      0.2,
+      0.07,
+      "0.60-0.62",
+      "0.73",
+      "-"
+     ],
+     [
+      "per-row, floor 1",
+      0.2,
+      0.07,
+      "0.62-0.63",
+      "0.75",
+      "0.5% / 4.5%"
+     ],
+     [
+      "per-row, floor 2",
+      0.2,
+      0.07,
+      "0.62-0.64",
+      "0.73-0.75",
+      "1.4% / 11%"
+     ]
+    ],
+    "note": "leak_auc = AUC of a document's kept fraction as a predictor of the gold flag (0.5 = no signal). Seeds agree to ±0.03. Per-row concentrates on gold documents without helping."
+   }
+  ],
+  "chart": {
+   "title": "8k 4-task mean, per-row budget arms (1,952 rows/task, 2-seed means)",
+   "unit": "8k mean",
+   "labels": [
+    "per-row, no floor",
+    "per-row, floor 1",
+    "per-row, floor 2"
+   ],
+   "series": [
+    {
+     "name": "2-seed mean",
+     "values": [
+      0.843,
+      0.831,
+      0.84
+     ]
+    }
+   ],
+   "refs": [
+    {
+     "name": "dense",
+     "value": 0.843
+    },
+    {
+     "name": "recipe (per-document)",
+     "value": 0.846
+    }
+   ],
+   "ymin": 0.8,
+   "ymax": 0.87
+  }
+ },
+ "Cross-row allocation": {
+  "tables": [
+   {
+    "title": "1,952 rows/task (8k primary)",
+    "cols": [
+     "arm",
+     "PF",
+     "x recipe PF",
+     "outlier 8k",
+     "8k mean",
+     "2k mean",
+     "FTM (8k)"
+    ],
+    "rows": [
+     [
+      "dense",
+      1531,
+      "-",
+      0.817,
+      0.843,
+      0.933,
+      "-"
+     ],
+     [
+      "recipe (2 seeds)",
+      345,
+      1.0,
+      0.861,
+      0.846,
+      0.917,
+      "4.6x"
+     ],
+     [
+      "step threshold (xstep) sd1",
+      333.8,
+      0.97,
+      0.821,
+      0.834,
+      0.905,
+      "4.0x"
+     ],
+     [
+      "step threshold (xstep) sd2",
+      332.9,
+      0.97,
+      0.809,
+      0.831,
+      0.924,
+      "4.0x"
+     ],
+     [
+      "sel. backprop top 30% sd1",
+      225.2,
+      0.65,
+      0.61,
+      0.666,
+      0.818,
+      "n/m"
+     ],
+     [
+      "sel. backprop top 30% sd2",
+      225.0,
+      0.65,
+      0.509,
+      0.701,
+      0.773,
+      "n/m"
+     ],
+     [
+      "sel. backprop sample 30% sd1",
+      222.8,
+      0.65,
+      0.644,
+      0.749,
+      0.9,
+      "n/m"
+     ],
+     [
+      "sel. backprop sample 30% sd2",
+      222.0,
+      0.64,
+      0.569,
+      0.728,
+      0.847,
+      "n/m"
+     ]
+    ],
+    "note": "eval_size 500 per task/rung, no-cot. xstep PF ratio stated as 0.97x in the record. Selective-backprop 8k means fall below the whole dense curve, so FTM is not meaningful; vs the recipe at matched FLOPs (1,464 rows/task recipe interpolated to ~222 PF, ~0.78) sample ~-0.04, top ~-0.10. Dense outlier/2k from records/oracle-selection-training.md."
+   },
+   {
+    "title": "3,904 rows/task (8k primary)",
+    "cols": [
+     "arm",
+     "PF",
+     "x recipe PF",
+     "outlier 8k",
+     "8k mean",
+     "2k mean",
+     "FTM (8k)"
+    ],
+    "rows": [
+     [
+      "dense (curve point)",
+      3063,
+      "-",
+      "-",
+      0.899,
+      "-",
+      "-"
+     ],
+     [
+      "recipe s0",
+      688.1,
+      1.0,
+      0.97,
+      0.882,
+      0.949,
+      "3.6x"
+     ],
+     [
+      "recipe sd1",
+      686.0,
+      1.0,
+      0.967,
+      0.889,
+      0.945,
+      "3.9x"
+     ],
+     [
+      "step threshold sd1",
+      666.3,
+      0.97,
+      0.979,
+      0.888,
+      0.948,
+      "4.0x"
+     ],
+     [
+      "step threshold sd2",
+      665.2,
+      0.97,
+      0.973,
+      0.894,
+      0.948,
+      "4.3x"
+     ],
+     [
+      "sel. backprop top 50% sd1",
+      512.1,
+      0.74,
+      0.966,
+      0.873,
+      0.946,
+      "4.35x"
+     ],
+     [
+      "sel. backprop top 50% sd2",
+      509.1,
+      0.74,
+      0.973,
+      0.879,
+      0.942,
+      "4.71x"
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot. Step threshold 2-seed 0.891 vs recipe 0.885 (+0.006, within ~±0.006 noise). Top-50% 0.876 at 510 PF vs recipe interpolated to 510 PF ~0.868 (+0.008) and vs recipe at the same rows 0.885 (-0.009)."
+   },
+   {
+    "title": "Cost of each arm",
+    "cols": [
+     "arm",
+     "realised keep (stage 1 / stage 2 of input)",
+     "rows back-propagated",
+     "actual / dense-equiv FLOPs"
+    ],
+    "rows": [
+     [
+      "recipe",
+      "0.21-0.22 / 0.39-0.40",
+      "16 of 16",
+      "~0.22"
+     ],
+     [
+      "step threshold",
+      "0.19-0.21 / 0.38-0.45",
+      "16 of 16",
+      "0.213-0.214"
+     ],
+     [
+      "sel. backprop top/sample 30%",
+      "recipe's",
+      "30.5% / 29.8-30.5%",
+      "0.143-0.145"
+     ],
+     [
+      "sel. backprop top 50%",
+      "recipe's",
+      "49.5-49.9%",
+      "0.163-0.164"
+     ]
+    ],
+    "note": "Router barely ranks rows: row-level Spearman of score vs measured log grad norm 0.10-0.13 (stage 1), 0.30 (stage 2)."
+   }
+  ],
+  "chart": {
+   "title": "8k 4-task mean (2-seed means) by budget",
+   "unit": "8k mean",
+   "labels": [
+    "1,952 rows/task",
+    "3,904 rows/task"
+   ],
+   "series": [
+    {
+     "name": "dense (1,531 / 3,063 PF)",
+     "values": [
+      0.843,
+      0.899
+     ]
+    },
+    {
+     "name": "recipe",
+     "values": [
+      0.846,
+      0.8855
+     ]
+    },
+    {
+     "name": "step threshold (0.97x PF)",
+     "values": [
+      0.8325,
+      0.891
+     ]
+    },
+    {
+     "name": "sel. backprop top (30% @0.65x / 50% @0.74x PF)",
+     "values": [
+      0.6835,
+      0.876
+     ]
+    },
+    {
+     "name": "sel. backprop sample 30% (0.65x PF)",
+     "values": [
+      0.7385,
+      null
+     ]
+    }
+   ],
+   "refs": [],
+   "ymin": 0.6,
+   "ymax": 0.92
+  }
+ }
+}

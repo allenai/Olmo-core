@@ -179,6 +179,19 @@ ol.log li:last-child { border-bottom: 0; }
 .cnow .tbl { max-height: 260px; overflow: auto; }
 .lm .cp { border-color: var(--c2); color: var(--c2); }
 .lr { color: var(--fg); font-size: .9rem; max-width: 90ch; margin: 0; }
+.lx { margin-top: 6px; } .lx > summary { cursor: pointer; color: var(--c2); font-size: .85rem; font-weight: 600; }
+.lxt { margin: 10px 0 4px; } .lxh { font-weight: 600; font-size: .85rem; margin-bottom: 4px; }
+.hb { display: grid; grid-template-columns: minmax(80px, 34%) minmax(0, 1fr); gap: 2px 8px; font-size: .78rem; align-items: center; max-width: 760px; }
+.hb .hl { color: var(--muted); text-align: right; line-height: 1.2; }
+.hb .tr { position: relative; height: 15px; background: color-mix(in srgb, var(--rule) 45%, transparent); }
+.hb .tr.last { margin-bottom: 4px; } .hb .b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 2px 2px 0; }
+.hb .rf { position: absolute; top: -2px; bottom: -2px; border-left: 2px dashed var(--dense); opacity: .7; }
+.hb .v { position: absolute; top: 0; line-height: 15px; font-family: var(--mono); font-size: .72rem; color: var(--fg); white-space: nowrap; }
+.hb .v.in { color: var(--surface); }
+.hleg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .75rem; color: var(--muted); margin-top: 4px; }
+.hleg i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
+.hleg i.rfi { width: 0; height: 12px; border-left: 2px dashed var(--dense); border-radius: 0; }
+.lxf { margin: 10px 0; } .lxf img { max-width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 4px; }
 @media (max-width: 560px) { ol.log li { grid-template-columns: 1fr; } }
 @media (max-width: 980px) {
   .layout { grid-template-columns: 1fr; gap: 0; }
@@ -186,6 +199,33 @@ ol.log li:last-child { border-bottom: 0; }
   nav.toc a { white-space: nowrap; padding: 6px 8px; }
   .part { scroll-margin-top: 56px; }
 }
+/* responsive: grid tracks may shrink below their content; only tables scroll, inside their own box */
+.layout > .wrap, .part { grid-template-columns: minmax(0, 1fr); }
+.wrap > *, .part > *, section, figure, .lead { min-width: 0; }
+.figs { grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); }
+.figs.small { grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); }
+.tbl { max-width: 100%; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.tbl table { width: 100%; }
+.tbl td:not(.n) { min-width: 9rem; }
+.tbl.scrolls td:first-child, .tbl.scrolls th:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--rule); }
+.tblhint { display: none; font: .72rem/1.2 var(--mono); color: var(--muted); margin: 0 0 4px; }
+.tbl.scrolls + .tblhint, .tblhint.on { display: block; }
+p, li { overflow-wrap: break-word; }
+th.n, td.n { white-space: normal; }
+th.n { min-width: 4.5rem; }
+@media (max-width: 760px) {
+  body { font-size: 14.5px; }
+  h1 { font-size: 1.6rem; }
+  .ptitle { font-size: 1.35rem; }
+  .tbl td, .tbl th { padding: 4px 6px; }
+  .tbl td:not(.n) { min-width: 6rem; }
+  th.n { min-width: 3.5rem; }
+  .tbl.scrolls td:first-child, .tbl.scrolls th:first-child { max-width: 9.5rem; }
+  .chart { height: 250px; }
+}
+.part[hidden], main.wrap > header[hidden] { display: none !important; }
+.pager { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line, rgba(127,127,127,.25)); padding-top: 14px; margin-top: 8px; font-size: .9rem; }
+.pager a { text-decoration: none; }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=JetBrains+Mono:wght@400;500&family=Public+Sans:wght@400;600&display=swap">
@@ -207,7 +247,7 @@ ol.log li:last-child { border-bottom: 0; }
 <header>
   <span class="eyebrow">Train-time token / layer drop · all results in one place · updated __UPDATED__</span>
   <h1>Cheaper training that matches dense at matched FLOPs</h1>
-  <p class="sub">Qwen3.5-4B SFT on CTC long-context tasks (4-task and 11-task mixes, 64k) and OLMo 3 7B long-document continued pretraining. Every plot puts training FLOPs (measured by the FLOP meter) on the x-axis; up-and-left of the dense line is better (down-and-left for CPT loss). Private page.</p>
+  <p class="sub">Qwen3.5-4B SFT on CTC long-context tasks (4-task and 11-task mixes, 64k) and OLMo 3 7B long-document continued pretraining. Every plot puts training FLOPs (measured by the FLOP meter; PF = petaFLOPs)  on the x-axis; up-and-left of the dense line is better (down-and-left for CPT loss). Private page.</p>
 </header>
 <div class="part" id="summary">
 <div class="parthead"><span class="eyebrow">1 · Summary</span><h2 class="ptitle">Where things stand</h2><p class="verdict">Routing plus LoRA trains ≈2–4× cheaper than dense on SFT at matched quality; in CPT, LoRA alone wins and every token drop loses.</p></div>
@@ -269,7 +309,7 @@ ol.log li:last-child { border-bottom: 0; }
     <figure><h3>Fresh data: outlier@8k vs training FLOPs</h3><div class="chart"><canvas id="f4out" aria-label="outlier at 8k"></canvas></div>
       <figcaption>Outlier is the least saturated task. Same runs as the left plot.</figcaption></figure>
     <figure><h3>Original pool: mean score vs training FLOPs</h3><div class="chart"><canvas id="f4orig" aria-label="4-task original pool Pareto"></canvas></div>
-      <figcaption>ds64 8k pool, 488–1,952 rows/task. Dense includes runs cut short at 31/61 steps for the low end. Seed copies averaged (labels give the seed count).</figcaption></figure>
+      <figcaption>Original 8k data pool, 488–1,952 rows/task. Dense includes runs cut short at 31/61 steps for the low end. Seed copies averaged (labels give the seed count).</figcaption></figure>
   </div>
   <h3 style="margin-top:14px">Primary metric: 8k rung only (4-task mean at 8k context)</h3>
   <div class="tbl"><table>
@@ -309,7 +349,7 @@ ol.log li:last-child { border-bottom: 0; }
     <tr><td>answer cross-entropy (oolong + outlier)</td><td class="n">&lt;4.4×</td><td class="n">2.7×</td><td class="n">1.7×</td></tr>
   </table></div>
   <div class="tbl" style="margin-top:10px"><table>
-    <tr><th>run (1 seed each)</th><th class="n">PF</th><th class="n">8-cell f1</th><th class="n">FTM (f1)</th><th class="n">answer CE</th><th class="n">FTM (CE)</th><th class="n">Δ vs recipe, same rows: f1 / CE (paired ± SE)</th></tr>
+    <tr><th>run (1 seed each)</th><th class="n">PF</th><th class="n">8-cell f1</th><th class="n">dense FLOPs to match (f1)</th><th class="n">answer CE</th><th class="n">dense FLOPs to match (CE)</th><th class="n">Δ vs recipe, same rows: f1 / CE (paired ± SE)</th></tr>
     <tr><td>recipe, 3,904 rows</td><td class="n">688</td><td class="n">0.915</td><td class="n">3.7×</td><td class="n">0.1527</td><td class="n">2.7×</td><td class="n">reference</td></tr>
     <tr><td>ReLoRA merge-restart every 25%</td><td class="n">686</td><td class="n">0.917</td><td class="n">3.8×</td><td class="n">0.1553</td><td class="n">2.5×</td><td class="n">+0.002 / +0.0026 ± 0.0020</td></tr>
     <tr><td>late widening 35% / 15% (last third)</td><td class="n">745</td><td class="n">0.916</td><td class="n">3.4×</td><td class="n">0.1458</td><td class="n">3.2×</td><td class="n">+0.000 / <b>−0.0069 ± 0.0022</b></td></tr>
@@ -323,7 +363,7 @@ ol.log li:last-child { border-bottom: 0; }
     <tr><td><b>late widening, 2-seed mean vs recipe 2-seed mean</b></td><td class="n">1,490 vs 1,372</td><td class="n">0.931 vs 0.926</td><td class="n">3.9× vs 2.2×</td><td class="n">0.1404 vs 0.1439</td><td class="n">2.0× vs 1.9×</td><td class="n">f1 +0.005 ± ≈0.003; CE −0.0035 ± ≈0.004 (within seed noise)</td></tr>
     <tr><td>uniform 25% / 9.7%, 7,808 rows (same FLOPs)</td><td class="n">1,490</td><td class="n">0.932</td><td class="n">&gt;4.1×</td><td class="n">0.1398</td><td class="n">2.0×</td><td class="n">+0.008 / +0.005; −0.0058 ± 0.0024 / −0.0023 ± 0.0023</td></tr>
   </table></div>
-  <p class="note"><b>Reading:</b> dense plateaus at 3,904 rows/task on every metric (cross-entropy f7808 − f3904 = −0.002 ± 0.004), so past that point FLOPs-to-match divides by a flat curve and a constant ≈0.01-nat gap (recipe − dense at the same rows: +0.010 / +0.014 / +0.008, no trend) turns into a falling ratio. The recipe is still improving (−0.007 ± 0.003 from 3,904 to 7,808 rows) but has not reached dense's plateau even with 2× the data. The gap sits on oolong (+0.016–0.024) and nq@8k / outlier@2k (+0.013–0.014); contradiction and outlier@8k are within ±0.003. ReLoRA does nothing at either size. Late widening is the only fix that beats the recipe, and only on cross-entropy: −0.0069 ± 0.0022 for 8% more FLOPs, and −0.0060 ± 0.0021 vs a uniform keep at identical FLOPs, so the timing matters, not the extra tokens; no arm moves f1 beyond noise (every Δ ≤ 0.004). A second recipe seed at 7,808 rows reads 2.8× on f1 (vs 2.2× for seed 0), so part of the 4.1× → 2.2× decay is seed noise. <b>Corrected after a second seed: at 7,808 rows late widening is within seed noise of the recipe</b> (2-seed means: f1 +0.005 ± ≈0.003, CE −0.0035 ± ≈0.004, for 8.6% more FLOPs) and does not reach dense on CE (0.1404 vs 0.1374). Seed 0 alone (f1 0.934, CE 0.1365, &gt;4.1×) was a lucky draw; seed 1 scored f1 0.928, CE 0.1443. The 3,904-row CE gain (−0.0069 ± 0.0022) remains the best single piece of evidence for it, on one seed. Seed spread at this scale matches every effect measured, so FLOPs-to-match claims here need ≥3 seeds per arm. Resume audit: both runs continued from saved steps (900, 1,500) with the data loader, router fit and FLOP meter intact; final PF matches an uninterrupted run. Branch <code>claude/tokdrop-decay-fix</code> (adds resumable checkpoints: <code>--ephemeral-save-interval</code>), record <code>records/tokdrop-large-data-decay.md</code>.</p>
+  <p class="note"><b>Reading:</b> dense plateaus at 3,904 rows/task on every metric (cross-entropy at 7,808 minus at 3,904 rows/task = −0.002 ± 0.004), so past that point FLOPs-to-match divides by a flat curve and a constant ≈0.01-nat gap (recipe − dense at the same rows: +0.010 / +0.014 / +0.008, no trend) turns into a falling ratio. The recipe is still improving (−0.007 ± 0.003 from 3,904 to 7,808 rows) but has not reached dense's plateau even with 2× the data. The gap sits on oolong (+0.016–0.024) and nq@8k / outlier@2k (+0.013–0.014); contradiction and outlier@8k are within ±0.003. ReLoRA does nothing at either size. Late widening is the only fix that beats the recipe, and only on cross-entropy: −0.0069 ± 0.0022 for 8% more FLOPs, and −0.0060 ± 0.0021 vs a uniform keep at identical FLOPs, so the timing matters, not the extra tokens; no arm moves f1 beyond noise (every Δ ≤ 0.004). A second recipe seed at 7,808 rows reads 2.8× on f1 (vs 2.2× for seed 0), so part of the 4.1× → 2.2× decay is seed noise. <b>Corrected after a second seed: at 7,808 rows late widening is within seed noise of the recipe</b> (2-seed means: f1 +0.005 ± ≈0.003, CE −0.0035 ± ≈0.004, for 8.6% more FLOPs) and does not reach dense on CE (0.1404 vs 0.1374). Seed 0 alone (f1 0.934, CE 0.1365, &gt;4.1×) was a lucky draw; seed 1 scored f1 0.928, CE 0.1443. The 3,904-row CE gain (−0.0069 ± 0.0022) remains the best single piece of evidence for it, on one seed. Seed spread at this scale matches every effect measured, so FLOPs-to-match claims here need ≥3 seeds per arm. Resume audit: both runs continued from saved steps (900, 1,500) with the data loader, router fit and FLOP meter intact; final PF matches an uninterrupted run. Branch <code>claude/tokdrop-decay-fix</code> (adds resumable checkpoints: <code>--ephemeral-save-interval</code>), record <code>records/tokdrop-large-data-decay.md</code>.</p>
 </section>
 __LORA2X2__
 <section>
@@ -363,7 +403,7 @@ __LORA2X2__
   <h2>SFT: 11-task mix at 64k (10× data)</h2>
   <div class="figs">
     <figure><h3>Task average (2k–64k) vs training FLOPs</h3><div class="chart"><canvas id="m64avg" aria-label="64k task average"></canvas></div>
-      <figcaption>mt11L64 data (rows up to 65,536 tokens, 662M tokens), 8× H100, 128 rows/step. Average over the 9 graded tasks and all their rungs (2k–64k; xabsence/strmatch/grouping to 32k), eval_size 500 each, no-cot. Points = 1/16, 1/8, 1/4, 1/2, 1 epoch; the router at 1/4 is 2 seeds.</figcaption></figure>
+      <figcaption>11-task 64k data (rows up to 65,536 tokens, 662M tokens), 8× H100, 128 rows/step. Average over the 9 graded tasks and all their rungs (2k–64k; xabsence/strmatch/grouping to 32k), eval_size 500 each, no-cot. Points = 1/16, 1/8, 1/4, 1/2, 1 epoch; the router at 1/4 is 2 seeds.</figcaption></figure>
     <figure><h3>64k rung only</h3><div class="chart"><canvas id="m64r64" aria-label="64k rung"></canvas></div>
       <figcaption>Mean over the 6 tasks with a 64k rung (nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction).</figcaption></figure>
   </div>
@@ -408,7 +448,7 @@ __LORA2X2__
 <section>
   <h2>Qwen3 sizes 0.6B / 1.7B / 4B / 8B: the gain does not grow with size</h2>
   <div class="figs">
-    <figure><h3>Dense FLOPs-to-match vs Qwen3 size</h3><div class="chart"><canvas id="q3sz" aria-label="Qwen3 FTM by size"></canvas></div>
+    <figure><h3>Dense FLOPs-to-match vs Qwen3 size</h3><div class="chart"><canvas id="q3sz" aria-label="Qwen3 dense FLOPs to match by size"></canvas></div>
       <figcaption>Recipe (whole-model LoRA rank 64, keep 20% then 7%; split 9/19 of 28 blocks for 0.6B/1.7B, 12/24 of 36 for 4B/8B) vs each size's own dense curve. Open markers are bounds (the recipe falls outside dense's measured range). 1 seed, eval_size 500 per cell, no-cot.</figcaption></figure>
   </div>
   <div class="tbl" style="margin-top:14px"><table>
@@ -433,7 +473,7 @@ __LORA2X2__
       <figcaption>Qwen3.5-9B (32 blocks, recipe 7/16), 4 GPUs. Dense's cheapest points are runs cut at 122 / 244 steps.</figcaption></figure>
   </div>
   <div class="tbl" style="margin-top:14px"><table>
-    <tr><th>size</th><th class="n">recipe FLOPs / step vs dense</th><th class="n">peak memory vs dense</th><th class="n">FTM, 1,952 rows</th><th class="n">FTM, 3,904 rows</th><th class="n">FTM, 7,808 rows</th><th class="n">dense ceiling (best mean)</th></tr>
+    <tr><th>size</th><th class="n">recipe FLOPs / step vs dense</th><th class="n">peak memory vs dense</th><th class="n">dense FLOPs to match, 1,952 rows</th><th class="n">dense FLOPs to match, 3,904 rows</th><th class="n">dense FLOPs to match, 7,808 rows</th><th class="n">dense ceiling (best mean)</th></tr>
     <tr><td>0.8B</td><td class="n">0.241×</td><td class="n">0.60×</td><td class="n">1.73× (3 seeds)</td><td class="n">1.88× (2)</td><td class="n">&gt;4.16× (2)</td><td class="n">0.743</td></tr>
     <tr><td>2B</td><td class="n">0.247×</td><td class="n">0.57×</td><td class="n">2.42× (2 seeds)</td><td class="n">3.22× (3)</td><td class="n">2.87×</td><td class="n">0.899 (7,808 rows)</td></tr>
     <tr><td>4B</td><td class="n">0.225×</td><td class="n">0.47×</td><td class="n">4.08×</td><td class="n">3.68×</td><td class="n">2.17×</td><td class="n">0.931</td></tr>
@@ -526,7 +566,7 @@ __LORA2X2__
     <tr><td>Gradient fidelity v1 (trained checkpoint, keep 30%): per-row cosine with the full-pass gradient, drop after block 7 / at the input</td><td class="n">0.78 / 0.45</td><td class="n">0.83 / 0.50</td><td class="n">0.10 / 0.06</td><td>where the drop happens matters far more than the predictor</td></tr>
     <tr><td>Fidelity v2 (recipe checkpoint): cosine of the 8-batch accumulated update</td><td class="n">0.45</td><td class="n">–</td><td class="n">0.08</td><td>random's error is mostly variance per row but does not average out in the probe</td></tr>
     <tr><td>Fidelity v2: perfect predictor, split after block 7 / 5 / 3 / 1 (8-batch cosine)</td><td colspan="3" class="n">0.41 / 0.08 / 0.08 / 0.03</td><td>early drops fail by bias even with perfect knowledge: no router fixes them</td></tr>
-    <tr><td>Training outcome: router vs random token choice (whole-model LoRA + two-stage)</td><td colspan="3" class="n">+0.027 at 1,464 rows; tie at 3,904</td><td>the drop structure, not the token choice, carries most of the gain</td></tr>
+    <tr><td>Training outcome: router vs random token choice (whole-model LoRA + two-stage)</td><td colspan="3" class="n">+0.027 at 1,464 rows; tie at 3,904 (8k means 0.882 each: outlier +0.026 router, oolong +0.025 random; per cell below)</td><td>the drop structure, not the token choice, carries most of the gain</td></tr>
     <tr><td>Training outcome: MLP router vs linear (online rank correlation 0.54 vs 0.37)</td><td colspan="3" class="n">same score</td><td>better prediction does not buy task quality</td></tr>
   </table></div>
   <p class="note">⚠ Probe sizes: offline accuracy 32 held-out rows/task; fidelity v1 12 rows/task; fidelity v2 64 rows/task (256 total). Single-step fidelity is off-policy (it scores random selection on router-trained checkpoints), which likely explains why it over-predicts the value of token choice. Which tokens each method keeps, on real rows: <a href="https://claude.ai/artifact/KsLw2QqRugmkkXCvXknbBg">router keep masks</a>. Full probe write-ups: <a href="https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1">online router</a> and <code>records/online-token-router.md</code> (router branch).</p>
@@ -543,13 +583,51 @@ __LORA2X2__
   <h2>Is the learning signal less concentrated later in training? No: it gets more concentrated</h2>
   <div class="figs">
     <figure><h3>Share of tokens needed for cosine 0.95 with the full update</h3><div class="chart"><canvas id="gcconc" aria-label="gradient concentration by stage"></canvas></div>
-      <figcaption>Dense checkpoints along training; 16-row steps; top-k tokens ranked by their true gradient contribution; log scale. "s-" stages are the original pool (repeats rows), "f" stages the fresh pools. ⚠ eval_size 512 rows per stage (128/task).</figcaption></figure>
+      <figcaption>Dense checkpoints along training; 16-row steps; top-k tokens ranked by their true gradient contribution; log scale. "Original data" is the first 8k pool, which these runs reused; "fresh data" is new pools where every row is seen once. ⚠ eval_size 512 rows per stage (128/task).</figcaption></figure>
   </div>
   <div class="tbl" style="margin-top:14px"><table>
-    <tr><th>stage</th><th class="n">rows seen/task</th><th class="n">all tokens, all blocks</th><th class="n">body tokens, all blocks</th><th class="n">body, after block 7</th><th class="n">body, after block 16</th><th class="n">recipe-shape cosine: oracle / random</th></tr>
-    <tr><td>base</td><td class="n">0</td><td class="n">2.4%</td><td class="n">0.6%</td><td class="n">0.06%</td><td class="n">0.00%</td><td class="n">0.999 / 0.98</td></tr><tr><td>s-st31</td><td class="n">124</td><td class="n">5.7%</td><td class="n">4.2%</td><td class="n">2.26%</td><td class="n">0.14%</td><td class="n">0.997 / 0.86</td></tr><tr><td>s488</td><td class="n">488</td><td class="n">2.7%</td><td class="n">2.0%</td><td class="n">1.16%</td><td class="n">0.06%</td><td class="n">0.999 / 0.84</td></tr><tr><td>s1464</td><td class="n">1,464</td><td class="n">5.7%</td><td class="n">4.6%</td><td class="n">2.86%</td><td class="n">0.14%</td><td class="n">0.997 / 0.86</td></tr><tr><td>f1952</td><td class="n">1,952</td><td class="n">4.1%</td><td class="n">3.4%</td><td class="n">1.96%</td><td class="n">0.16%</td><td class="n">0.999 / 0.86</td></tr><tr><td>f3904</td><td class="n">3,904</td><td class="n">1.7%</td><td class="n">1.3%</td><td class="n">0.65%</td><td class="n">0.08%</td><td class="n">1.000 / 0.88</td></tr><tr><td>f5856</td><td class="n">5,856</td><td class="n">1.3%</td><td class="n">0.9%</td><td class="n">0.47%</td><td class="n">0.06%</td><td class="n">1.000 / 0.88</td></tr><tr><td>f7808</td><td class="n">7,808</td><td class="n">1.3%</td><td class="n">0.8%</td><td class="n">0.47%</td><td class="n">0.03%</td><td class="n">1.000 / 0.90</td></tr>
+    <tr><th>dense checkpoint</th><th class="n">rows seen/task</th><th class="n">all tokens, all blocks</th><th class="n">body tokens, all blocks</th><th class="n">body, after block 7</th><th class="n">body, after block 16</th><th class="n">recipe-shape cosine: oracle / random</th></tr>
+    <tr><td>base model</td><td class="n">0</td><td class="n">2.4%</td><td class="n">0.6%</td><td class="n">0.06%</td><td class="n">0.00%</td><td class="n">0.999 / 0.98</td></tr><tr><td>original data, step 31</td><td class="n">124</td><td class="n">5.7%</td><td class="n">4.2%</td><td class="n">2.26%</td><td class="n">0.14%</td><td class="n">0.997 / 0.86</td></tr><tr><td>original data</td><td class="n">488</td><td class="n">2.7%</td><td class="n">2.0%</td><td class="n">1.16%</td><td class="n">0.06%</td><td class="n">0.999 / 0.84</td></tr><tr><td>original data</td><td class="n">1,464</td><td class="n">5.7%</td><td class="n">4.6%</td><td class="n">2.86%</td><td class="n">0.14%</td><td class="n">0.997 / 0.86</td></tr><tr><td>fresh data</td><td class="n">1,952</td><td class="n">4.1%</td><td class="n">3.4%</td><td class="n">1.96%</td><td class="n">0.16%</td><td class="n">0.999 / 0.86</td></tr><tr><td>fresh data</td><td class="n">3,904</td><td class="n">1.7%</td><td class="n">1.3%</td><td class="n">0.65%</td><td class="n">0.08%</td><td class="n">1.000 / 0.88</td></tr><tr><td>fresh data</td><td class="n">5,856</td><td class="n">1.3%</td><td class="n">0.9%</td><td class="n">0.47%</td><td class="n">0.06%</td><td class="n">1.000 / 0.88</td></tr><tr><td>fresh data</td><td class="n">7,808</td><td class="n">1.3%</td><td class="n">0.8%</td><td class="n">0.47%</td><td class="n">0.03%</td><td class="n">1.000 / 0.90</td></tr>
   </table></div>
-  <p class="note"><b>Verdict:</b> on the fresh pools the share of tokens needed for cosine 0.95 falls from 4.1% at 1,952 rows to 1.3% at 7,808 (body tokens past block 16: 0.16% → 0.035%), so the recipe's 4× → 2× decay is not the signal spreading out. An oracle selector of the recipe's shape (20% after block 7, 7% after 16) reaches whole-model cosine ≥0.996 at every stage; a random one sits at 0.84–0.98 with no trend. First-order oracle FLOP bounds at cosine 0.95 are 11–20× (optimistic: forward removal treated as free, raw rather than Adam-scaled gradient, attention cost ignored; the oracle's best split is block 0). <b>Hypothesis, untested:</b> late in training the per-step gradient is mostly noise (gradient noise scale ≈9 rows at base, ≈460 at step 31, ≈1,400 at step 122, unmeasurable with 128-row batches from 1,464 rows on), and the tokens needed grow only ≈√batch, i.e. this measures concentration of noise. Next test: score each batch's top-k update against a different batch's full gradient. 3 stages (s-st61, s976, s1952) still to add. Branch <code>claude/grad-concentration-d91a37</code>.</p>
+  <p class="note"><b>Verdict:</b> on the fresh pools the share of tokens needed for cosine 0.95 falls from 4.1% at 1,952 rows to 1.3% at 7,808 (body tokens past block 16: 0.16% → 0.035%), so the recipe's 4× → 2× decay is not the signal spreading out. An oracle selector of the recipe's shape (20% after block 7, 7% after 16) reaches whole-model cosine ≥0.996 at every stage; a random one sits at 0.84–0.98 with no trend. First-order oracle FLOP bounds at cosine 0.95 are 11–20× (optimistic: forward removal treated as free, raw rather than Adam-scaled gradient, attention cost ignored; the oracle's best split is block 0). <b>Hypothesis, untested:</b> late in training the per-step gradient is mostly noise (gradient noise scale ≈9 rows at base, ≈460 at step 31, ≈1,400 at step 122, unmeasurable with 128-row batches from 1,464 rows on), and the tokens needed grow only ≈√batch, i.e. this measures concentration of noise. Next test: score each batch's top-k update against a different batch's full gradient. 3 checkpoints (original data at step 61, at 976 and at 1,952 rows/task) still to add. Branch <code>claude/grad-concentration-d91a37</code>.</p>
+</section>
+<section>
+  <h2>Reading the concentration numbers: global, per row, per document, random</h2>
+  <p class="note">Every number in the table above answers one question. Keep the weight-gradient terms of a chosen set of document-body tokens, delete every other body token's term from the sum, and leave the forward pass untouched: what share of body tokens must a selection rule keep before that partial update reaches cosine 0.95 with the full update of one optimizer step (16 rows)? Prompt, query, answer and marker tokens are always kept. The rules below differ only in how they spread the budget. Scope here: the weights of blocks 7–31, i.e. the tokens a block-7 split would decide on. Frozen dense checkpoints, ⚠ eval_size 512 rows per stage (128/task), attribution under the dense forward.</p>
+  <div class="tbl"><table>
+    <tr><th>selection rule</th><th>what it keeps</th><th class="n">1,952 rows/task, cos 0.95</th><th class="n">7,808 rows/task, cos 0.95</th><th class="n">7,808 rows/task, cos 0.9</th><th class="n">sharpening from 1,952 to 7,808 rows/task</th></tr>
+    <tr><td><b>Global oracle</b></td><td>the top k% of body tokens by true gradient energy, ranked across all 16 rows of the step together (≈111k body tokens: rows average 7.3k tokens, 96% body). No quota: one row can take many tokens and another none.</td><td class="n">1.96%</td><td class="n"><b>0.47%</b><br>≈520 tokens / step</td><td class="n">0.13%</td><td class="n">4.2×</td></tr>
+    <tr><td><b>Per-row quota</b></td><td>every row keeps its own top k% of body tokens</td><td class="n">8.1%</td><td class="n">4.6%</td><td class="n">1.4%</td><td class="n">1.8×</td></tr>
+    <tr><td><b>Per-document quota</b></td><td>every document in every row keeps its own top k% of its body tokens, the same allocation as the online router (doc_share 1)</td><td class="n">16.9%</td><td class="n">13.7%</td><td class="n">5.8%</td><td class="n">1.2×</td></tr>
+    <tr><td><b>Random</b></td><td>k% of body tokens uniformly at random</td><td class="n">76.8%</td><td class="n">53.7%</td><td class="n">38.5%</td><td class="n">1.4×</td></tr>
+  </table></div>
+  <ul>
+    <li><b>0.47% is a batch-level number.</b> About 520 body tokens carry 95% of the step's update for blocks 7–31. That averages to ≈33 per row, but the oracle piles them into the few rows the model still gets wrong.</li>
+    <li><b>A per-row quota needs ≈10× more (4.6%)</b>, because it must spend budget on rows that are already solved. <b>A per-document quota needs ≈3× more again (13.7%)</b>, because every document, including the distractors, keeps a share. The router allocates per document, so 13.7%, not 0.47%, is the oracle figure that applies to it. The recipe keeps 20% at block 7, above that line.</li>
+    <li><b>Random needs 54%.</b> A uniform sample keeps every token's term with the same probability, so the kept update points the right way on average. But the few heavy tokens carry most of the update, and a random sample drops a proportional share of them, so the direction error stays large until about half the tokens are kept.</li>
+    <li><b>The sharpening over training is mostly between rows.</b> From 1,952 to 7,808 rows/task the global oracle's share falls 4.2×, the per-row share 1.8× and the per-document share only 1.2×. Within a document, the gradient barely gets more concentrated.</li>
+  </ul>
+  <h3 style="margin-top:6px">Why: rows get solved</h3>
+  <div class="tbl"><table>
+    <tr><th>dense checkpoint</th><th class="n">rows seen/task</th><th class="n">median row answer CE</th><th class="n">rows with CE &lt; 0.01</th><th class="n">share of total answer loss in top 10% / 20% of rows</th></tr>
+    <tr><td>base model</td><td class="n">0</td><td class="n">1.28</td><td class="n">0%</td><td class="n">0.17 / 0.31</td></tr>
+    <tr><td>original data, step 31</td><td class="n">124</td><td class="n">0.166</td><td class="n">5%</td><td class="n">0.31 / 0.50</td></tr>
+    <tr><td>original data</td><td class="n">488</td><td class="n">0.100</td><td class="n">27%</td><td class="n">0.33 / 0.53</td></tr>
+    <tr><td>original data</td><td class="n">1,464</td><td class="n">0.034</td><td class="n">43%</td><td class="n">0.40 / 0.64</td></tr>
+    <tr><td>fresh data</td><td class="n">1,952</td><td class="n">0.013</td><td class="n">47%</td><td class="n">0.49 / 0.75</td></tr>
+    <tr><td>fresh data</td><td class="n">3,904</td><td class="n">0.0020</td><td class="n">69%</td><td class="n">0.71 / 0.91</td></tr>
+    <tr><td>fresh data</td><td class="n">5,856</td><td class="n">0.0015</td><td class="n">73%</td><td class="n">0.72 / 0.92</td></tr>
+    <tr><td>fresh data</td><td class="n">7,808</td><td class="n">0.0011</td><td class="n">78%</td><td class="n">0.81 / 0.95</td></tr>
+  </table></div>
+  <p class="note">Total answer loss per row = per-token answer CE × answer tokens. Same 512 probe rows per stage. By 7,808 rows/task four rows in five are essentially solved and the top 10% of rows hold 81% of the loss, so a 16-row step's update comes from one or two rows. This is example-level sparsity. A token router with a per-document quota cannot use it; a method that chooses which rows to spend compute on could. All of this is attribution under the dense forward: the next section shows that removing tokens from the forward breaks it until the model co-adapts.</p>
+  <h3 style="margin-top:6px">Router vs random token choice, per cell</h3>
+  <div class="tbl"><table>
+    <tr><th>run</th><th class="n">contradiction@8k</th><th class="n">nq@8k</th><th class="n">outlier@8k</th><th class="n">oolong@8k</th><th class="n">8k mean</th><th class="n">outlier@2k</th></tr>
+    <tr><td>Recipe (whole-model LoRA, 20%→7%), 1,464 rows: router / random</td><td class="n">0.941 / 0.930</td><td class="n">0.910 / 0.884</td><td class="n">0.733 / 0.701</td><td class="n">0.611 / 0.613</td><td class="n">0.799 / 0.782</td><td class="n">0.876 / 0.683</td></tr>
+    <tr><td>Recipe, fresh 3,904 rows: router / random</td><td class="n">0.977 / 0.974</td><td class="n">0.918 / 0.922</td><td class="n"><b>0.970 / 0.944</b></td><td class="n"><b>0.663 / 0.688</b></td><td class="n">0.882 / 0.882</td><td class="n">0.972 / 0.956</td></tr>
+    <tr><td>Earlier (10-22): full fine-tuning, one drop at block 8 keeping 30%, 1,464 rows. Δ vs dense at matched FLOPs, router / random</td><td class="n">+0.032 / +0.016</td><td class="n">+0.008 / +0.018</td><td class="n">+0.225 / +0.148</td><td class="n">+0.038 / +0.021</td><td class="n">–</td><td class="n">excluded (LR confound)</td></tr>
+  </table></div>
+  <p class="note"><b>Reading:</b> the two results do not contradict each other. The router's advantage was always concentrated on outlier (+0.077 in the earlier one-stage run, a large 2k gap at 1,464 rows in the recipe), and it shrinks as data grows. At 3,904 rows the 8k means are identical: outlier favours the router by 0.026 and oolong favours random by 0.025, each about 1–2 SE of a difference and inside seed noise (±0.03 on outlier). The probes that rank random far below the router (8-batch gradient cosine 0.08 vs 0.45) score random selection on a router-trained checkpoint; a model trained with random selection adapts to it. One plausible reason selection is slack in the recipe: blocks 0–6 see every token, and the recipe keeps 20% at block 7, above the 13.7% a per-document oracle needs. That is a hypothesis drawn from attribution numbers, not tested. One seed per arm; eval_size 500 per cell, no-cot. Sources: <code>ops result show --experiment tokdrop_lr</code> (runs <code>f8k-mt4-lora64all32{r,rnd}20to7-{s1464,f3904}-tde-lr1e-05</code>), <code>records/online-token-router.md</code> (router branch), probe data <code>research/token_routing/grad_concentration/results/</code> on branch <code>claude/grad-concentration-d91a37</code>.</p>
 </section>
 <section>
   <h2>Why gradient sparsity does not predict routing sparsity: forward removal, fixed by routed training</h2>
@@ -567,9 +645,9 @@ __LORA2X2__
   </table></div>
   <div class="tbl" style="margin-top:10px"><table>
     <tr><th>selection</th><th>checkpoint</th><th class="n">routed cos, per step (raw)</th><th class="n">expected cos E[R]·E[D] (raw / Adam)</th><th class="n">‖E[R]‖ / ‖E[D]‖</th><th class="n">batch-to-batch cos R (dense)</th><th class="n">routed answer CE contra / nq / outlier (dense)</th></tr>
-    <tr><td>router, recipe shape</td><td>dense f1952</td><td class="n">0.054</td><td class="n">0.044 / 0.096</td><td class="n">8.3</td><td class="n">0.067 (0.012)</td><td class="n">0.56 / 0.21 / 0.16 (0.016 / 0.062 / 0.077)</td></tr>
+    <tr><td>router, recipe shape</td><td>dense, 1,952 rows/task</td><td class="n">0.054</td><td class="n">0.044 / 0.096</td><td class="n">8.3</td><td class="n">0.067 (0.012)</td><td class="n">0.56 / 0.21 / 0.16 (0.016 / 0.062 / 0.077)</td></tr>
     <tr><td><b>router, recipe shape</b></td><td><b>recipe (trained routed)</b></td><td class="n">0.395</td><td class="n"><b>0.874 / 0.831</b></td><td class="n">0.89</td><td class="n">0.014 (0.025)</td><td class="n">0.047 / 0.093 / 0.089 (0.025 / 0.081 / 0.095)</td></tr>
-    <tr><td>random, recipe shape</td><td>dense f1952</td><td class="n">0.023</td><td class="n">0.029 / 0.114</td><td class="n">11.8</td><td class="n">0.116 (0.012)</td><td class="n">0.61 / 0.25 / 0.34</td></tr>
+    <tr><td>random, recipe shape</td><td>dense, 1,952 rows/task</td><td class="n">0.023</td><td class="n">0.029 / 0.114</td><td class="n">11.8</td><td class="n">0.116 (0.012)</td><td class="n">0.61 / 0.25 / 0.34</td></tr>
     <tr><td>random, recipe shape</td><td>recipe</td><td class="n">0.112</td><td class="n">0.179 / 0.142</td><td class="n">–</td><td class="n">0.225 (0.025)</td><td class="n">0.08 / 0.25 / 0.39</td></tr>
     <tr><td>oracle, recipe shape</td><td>recipe</td><td class="n">0.525</td><td class="n">0.415 / 0.323</td><td class="n">–</td><td class="n">0.044 (0.025)</td><td class="n">0.11 / 0.18 / 0.10</td></tr>
     <tr><td>router, block 16 only, keep 7%</td><td>recipe</td><td class="n">0.855</td><td class="n"><b>0.983 / 0.944</b></td><td class="n">–</td><td class="n">0.021 (0.025)</td><td class="n">0.025 / 0.090 / 0.096</td></tr>
@@ -648,18 +726,18 @@ __LORA2X2__
   </div>
   <div class="tbl" style="margin-top:14px"><table>
     <tr><th>run (recipe forward, backward compressed)</th><th class="n">PF</th><th class="n">step/dense</th><th class="n">8-cell</th><th class="n">contra@8k</th><th class="n">outlier@8k</th></tr>
-    <tr><td>recipe, f1952 (reference)</td><td class="n">345</td><td class="n">0.221</td><td class="n">0.883</td><td class="n">0.959</td><td class="n">0.862</td></tr>
-    <tr><td>recipe + answer-only head, f1952 (seed 1)</td><td class="n">318</td><td class="n">0.204</td><td class="n">0.880</td><td class="n">0.948</td><td class="n">0.865</td></tr>
-    <tr><td>top-k 20% rows, f1952 (seed 0 / 1)</td><td class="n">177</td><td class="n">0.113</td><td class="n">0.514 / 0.630</td><td class="n">0.173 / 0.646</td><td class="n">0.203 / 0.227</td></tr>
-    <tr><td>energy 95% + adapter grads all rows, f1952 (seed 0 / 1)</td><td class="n">172</td><td class="n">0.110</td><td class="n">0.534 / 0.514</td><td class="n">0.131 / 0.165</td><td class="n">0.185 / 0.221</td></tr>
-    <tr><td>top-k 40%, f1952</td><td class="n">195</td><td class="n">0.125</td><td class="n">0.688</td><td class="n">0.821</td><td class="n">0.211</td></tr>
-    <tr><td>energy 99%, f1952</td><td class="n">181</td><td class="n">0.116</td><td class="n">0.686</td><td class="n">0.843</td><td class="n">0.205</td></tr>
-    <tr><td>top-k 20%, blocks 0–6 only, f1952</td><td class="n">229</td><td class="n">0.147</td><td class="n">0.614</td><td class="n">0.557</td><td class="n">0.159</td></tr>
-    <tr><td>top-k 20%, exact backward every 4th step, f1952</td><td class="n">212</td><td class="n">0.136</td><td class="n">0.725</td><td class="n">0.831</td><td class="n">0.232</td></tr>
-    <tr><td>top-k 20%, exact backward every 2nd step, f1952</td><td class="n">247</td><td class="n">0.158</td><td class="n">0.810</td><td class="n">0.910</td><td class="n">0.501</td></tr>
-    <tr><td>recipe, f3904 (reference)</td><td class="n">688</td><td class="n">0.221</td><td class="n">0.915</td><td class="n">0.977</td><td class="n">0.970</td></tr>
-    <tr><td>top-k 20%, f3904</td><td class="n">353</td><td class="n">0.113</td><td class="n">0.678</td><td class="n">0.798</td><td class="n">0.264</td></tr>
-    <tr><td>energy 95% + all-row adapter grads, f3904</td><td class="n">343</td><td class="n">0.110</td><td class="n">0.673</td><td class="n">0.608</td><td class="n">0.223</td></tr>
+    <tr><td>recipe, 1,952 rows/task (reference)</td><td class="n">345</td><td class="n">0.221</td><td class="n">0.883</td><td class="n">0.959</td><td class="n">0.862</td></tr>
+    <tr><td>recipe + answer-only head, 1,952 rows/task (seed 1)</td><td class="n">318</td><td class="n">0.204</td><td class="n">0.880</td><td class="n">0.948</td><td class="n">0.865</td></tr>
+    <tr><td>top-k 20% rows, 1,952 rows/task (seed 0 / 1)</td><td class="n">177</td><td class="n">0.113</td><td class="n">0.514 / 0.630</td><td class="n">0.173 / 0.646</td><td class="n">0.203 / 0.227</td></tr>
+    <tr><td>energy 95% + adapter grads all rows, 1,952 rows/task (seed 0 / 1)</td><td class="n">172</td><td class="n">0.110</td><td class="n">0.534 / 0.514</td><td class="n">0.131 / 0.165</td><td class="n">0.185 / 0.221</td></tr>
+    <tr><td>top-k 40%, 1,952 rows/task</td><td class="n">195</td><td class="n">0.125</td><td class="n">0.688</td><td class="n">0.821</td><td class="n">0.211</td></tr>
+    <tr><td>energy 99%, 1,952 rows/task</td><td class="n">181</td><td class="n">0.116</td><td class="n">0.686</td><td class="n">0.843</td><td class="n">0.205</td></tr>
+    <tr><td>top-k 20%, blocks 0–6 only, 1,952 rows/task</td><td class="n">229</td><td class="n">0.147</td><td class="n">0.614</td><td class="n">0.557</td><td class="n">0.159</td></tr>
+    <tr><td>top-k 20%, exact backward every 4th step, 1,952 rows/task</td><td class="n">212</td><td class="n">0.136</td><td class="n">0.725</td><td class="n">0.831</td><td class="n">0.232</td></tr>
+    <tr><td>top-k 20%, exact backward every 2nd step, 1,952 rows/task</td><td class="n">247</td><td class="n">0.158</td><td class="n">0.810</td><td class="n">0.910</td><td class="n">0.501</td></tr>
+    <tr><td>recipe, 3,904 rows/task (reference)</td><td class="n">688</td><td class="n">0.221</td><td class="n">0.915</td><td class="n">0.977</td><td class="n">0.970</td></tr>
+    <tr><td>top-k 20%, 3,904 rows/task</td><td class="n">353</td><td class="n">0.113</td><td class="n">0.678</td><td class="n">0.798</td><td class="n">0.264</td></tr>
+    <tr><td>energy 95% + all-row adapter grads, 3,904 rows/task</td><td class="n">343</td><td class="n">0.110</td><td class="n">0.673</td><td class="n">0.608</td><td class="n">0.223</td></tr>
   </table></div>
   <p class="note"><b>Verdict: fails (−0.20 to −0.37 vs the recipe at matched data).</b> Keeping only the rows with the largest output gradient in each frozen-linear + LoRA backward halves the step (0.11–0.13× dense vs 0.22×; the floor with no such backward is ≈0.107×) and keeps cosine 0.85–0.96 to the exact gradient (probe ⚠ eval_size 128 rows per checkpoint). But training CE stalls at ≈0.3 from step ≈40 (recipe: 0.08) and context-reading tasks collapse: outlier@8k 0.86 → 0.2. Gradient fidelity did not predict training: the 0.96-cosine arm still lost 0.20. Unbiased variants (1/p sampling, sketches) blow up over ≈300 chained VJPs. A top-k 100% control tracks the recipe exactly, so the loss is the compression, not a bug. Exact backward every 2nd step recovers most of it (0.810) but at 0.158× it is no better than the recipe's FLOP curve. Side products kept: the answer-only LM head (−0.017× per step, same score) and an exact zero-row skip (≈3%). Branch <code>claude/sparse-backward</code>, record <code>records/sparse-backward.md</code>.</p>
 </section>
@@ -700,7 +778,7 @@ __LORA2X2__
 <section>
   <h2>Caveats</h2>
   <ul>
-    <li>Most screen points are one seed; outlier@8k varies up to ±0.19 between seeds. Dense mt4 reference runs at the same rows differ by up to 0.02 mean / 0.07 outlier between Lambda and Beaker copies.</li>
+    <li>Most screen points are one seed; outlier@8k varies up to ±0.19 between seeds. Dense 4-task reference runs at the same rows differ by up to 0.02 mean / 0.07 outlier between Lambda and Beaker copies.</li>
     <li>The FLOP meter counts forward + backward, not the activation-checkpoint recompute. Every 4B SFT run and every CPT run uses full checkpointing, so all are undercounted similarly; adapter runs are undercounted relatively more (CPT whole-model LoRA ≈0.75× real vs 0.70× metered).</li>
     <li>CPT gains are small in absolute terms (0.001–0.005 nats) because dense CPT saturates within ~12 steps; the FLOPs-to-match ratios are real but sit on a flat dense curve. No task-level (generation) eval of CPT checkpoints yet: that needs a matched SFT stage.</li>
     <li>Max train length numbers are linear extrapolations from short probes, one sample each.</li>
@@ -710,7 +788,7 @@ __LORA2X2__
   <h2>Where everything lives</h2>
   <div class="tbl"><table>
     <tr><th>what</th><th>where</th></tr>
-    <tr><td>SFT data (4-task)</td><td><code>weka prasanns/ds64/fast8k/shards/mt4s{488..1952}</code> (ds64 8k pool) and fresh <code>mt4f{1952,3904,5856,7808}</code> (built by <code>build_mt4_fresh_beaker.sh</code>, new generator seed 5310, 8,200 rows/task; zero train/eval example overlap on nq and outlier, not verified for contradiction/oolong)</td></tr>
+    <tr><td>SFT data (4-task)</td><td><code>weka prasanns/ds64/fast8k/shards/mt4s{488..1952}</code> (original 8k pool) and fresh <code>mt4f{1952,3904,5856,7808}</code> (built by <code>build_mt4_fresh_beaker.sh</code>, new generator seed 5310, 8,200 rows/task; zero train/eval example overlap on nq and outlier, not verified for contradiction/oolong)</td></tr>
     <tr><td>SFT data (11-task, 64k)</td><td><code>mt11s{240..960}</code> (setA seed-42 shards); 64k: <code>mt11L64</code>, 156,587 rows, 662M tokens</td></tr>
     <tr><td>SFT eval</td><td>8k and 2k rungs × 500 rows/task, no-cot; 4-task on ds64 ladder files, 11-task on CTC-suite rows (query position both)</td></tr>
     <tr><td>All SFT scores and FLOPs</td><td><code>research/token_routing/ds64_fast8k/results/pareto_points.json</code> (from <code>collect_pareto_points.py</code>); ops results log (<code>ops result show --experiment tokdrop_lr|learned_router</code>)</td></tr>
@@ -726,7 +804,7 @@ __LORA2X2__
   <div class="tbl"><table>
     <tr><th>page</th><th>covers</th></tr>
     <tr><td><a href="https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5">Token Drop Pareto</a></td><td>cross-task tables, matched-FLOP Δ per cell, older screens</td></tr>
-    <tr><td><a href="https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n">mt11 64k Router Study</a></td><td>64k per-rung Δ tables, per-rung Pareto small multiples, seed replicate</td></tr>
+    <tr><td><a href="https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n">11-task 64k router study</a></td><td>64k per-rung Δ tables, per-rung Pareto small multiples, seed replicate</td></tr>
     <tr><td><a href="https://claude.ai/artifact/4tZKEXtpSpg5ax6B1YeoLk">OLMo 3 CPT Drop Screen</a></td><td>every CPT run, context gain, memory probe, setup</td></tr>
     <tr><td><a href="https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ">Gradient Composition Probe</a></td><td>interactive per-block, per-token gradient maps (SFT and CPT)</td></tr>
     <tr><td><a href="https://claude.ai/artifact/BRAYbDr5uLW7KdZzeh2yL1">Gradprobe Follow-ups</a></td><td>online-router design, fidelity probes, every router ablation, max-length probes</td></tr>
@@ -747,15 +825,36 @@ __LORA2X2__
 </div>
 <script>
 (() => { const links = [...document.querySelectorAll("nav.toc a")];
-  const set = id => links.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + id));
-  try { const io = new IntersectionObserver(es => { es.filter(e => e.isIntersecting).forEach(e => set(e.target.id)); },
-    { rootMargin: "-20% 0px -70% 0px" });
-    document.querySelectorAll(".part").forEach(p => io.observe(p)); } catch (e) {}
-  if (location.hash) set(location.hash.slice(1)); else set("summary"); })();
+  const parts = [...document.querySelectorAll(".part")], ids = parts.map(p => p.id);
+  const title = id => { const a = links.find(a => a.getAttribute("href") === "#" + id); return a ? a.textContent.replace(/^\S+/, "").trim() || a.textContent : id; };
+  parts.forEach((p, i) => { const f = document.createElement("nav"); f.className = "pager"; f.setAttribute("aria-label", "Pages");
+    if (i > 0) f.insertAdjacentHTML("beforeend", `<a href="#${ids[i-1]}">← ${title(ids[i-1])}</a>`); else f.insertAdjacentHTML("beforeend", "<span></span>");
+    if (i < ids.length - 1) f.insertAdjacentHTML("beforeend", `<a href="#${ids[i+1]}">${title(ids[i+1])} →</a>`);
+    p.appendChild(f); });
+  const show = (id, el) => { if (!ids.includes(id)) id = "summary";
+    parts.forEach(p => { p.hidden = p.id !== id; });
+    document.querySelectorAll("main.wrap > header").forEach(h => { h.hidden = id !== "summary"; });
+    links.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + id));
+    window.dispatchEvent(new Event("resize"));
+    if (el) el.scrollIntoView(); else window.scrollTo(0, 0); };
+  const route = () => { const h = decodeURIComponent(location.hash.slice(1));
+    if (h && !ids.includes(h)) { const el = document.getElementById(h), p = el && el.closest(".part"); if (p) return show(p.id, el); }
+    show(h || "summary"); };
+  window.addEventListener("hashchange", route); route(); })();
 </script>
 <script>const D_LOG = __LOG__; const D_COMPUTE = __COMPUTE__;</script>
 <script>
 (() => { const L = (typeof D_LOG !== "undefined") ? D_LOG : []; const list = document.getElementById("logList"); if (!list) return;
+  /* plain-language display of run shorthand (f1952 = 1,952 fresh rows/task, s1464 = original data, mt4 = 4-task); hyphenated run IDs are left alone */
+  const fmtN = n => Number(n).toLocaleString("en-US");
+  const hum = t => String(t == null ? "" : t)
+    .replace(/(?<![\w-])mt4f(?![\w-]),?\s*/g, "")
+    .replace(/(?<![\w-])f(\d{3,5})st(\d+)(?![\w-])/g, (m, a, b) => fmtN(a) + " fresh rows/task, stopped at step " + b)
+    .replace(/(?<![\w-])f(\d{3,5})(?![\w-])/g, (m, a) => fmtN(a) + " fresh rows/task")
+    .replace(/(?<![\w-])s-st(\d+)(?![\w-])/g, (m, a) => "step " + a + " (original data)")
+    .replace(/(?<![\w-])s(\d{3,5})(?![\w-])/g, (m, a) => fmtN(a) + " rows/task (original data)")
+    .replace(/(?<![\w-])mt11L64(?![\w-])/g, "11-task 64k").replace(/(?<![\w-])mt4(?![\w-])/g, "4-task").replace(/(?<![\w-])mt11(?![\w-])/g, "11-task");
+  const TRK = { sft4: "SFT 4-task", mechanism: "Mechanism" }; L.forEach(e => { e.track = TRK[e.track] || e.track; });
   const order = ["running", "proposed", "held", "partial", "done", "dropped", "failed"];
   const st = new Set(), tr = new Set(); let q = "";
   const statuses = order.filter(x => L.some(e => e.status === x)), tracks = [...new Set(L.map(e => e.track))];
@@ -777,11 +876,26 @@ __LORA2X2__
       <div class="tbl"><table><tr><th>job</th><th>log entry</th><th>where</th><th class="n">GPUs</th><th>state</th><th class="n">min</th></tr>
       ${C.jobs.map(j => `<tr><td class="mono">${esc(j.name)}</td><td>${esc(j.entry || "–")}</td><td>${esc(j.cluster)}${j.node ? " · " + esc(j.node) : ""}</td><td class="n">${gp(j)}</td><td>${j.state === "RUNNING" ? "running" : "queued"}</td><td class="n">${j.elapsed_min}</td></tr>`).join("")}
       </table></div></div>`; })();
+  const escA = t => esc(t).replace(/"/g, "&quot;");
+  const SC = ["var(--c2)", "var(--c1)", "var(--c3)", "var(--c4)", "var(--c5)", "var(--c7)", "var(--c6)"];
+  const cellN = (v, i) => `<td${i ? ' class="n"' : ""}>${esc(v == null ? "–" : v)}</td>`;
+  function xtab(t) { return `<div class="lxt"><div class="lxh">${esc(t.title || "")}</div><div class="tbl"><table><tr>${(t.cols || []).map((c, i) => `<th${i ? ' class="n"' : ""}>${esc(c)}</th>`).join("")}</tr>${(t.rows || []).map(r => `<tr>${r.map(cellN).join("")}</tr>`).join("")}</table></div>${t.note ? `<p class="note">${esc(t.note)}</p>` : ""}</div>`; }
+  function xchart(c) { const lo = c.ymin ?? 0, hi = c.ymax ?? 1, pc = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
+    const S = c.series || [], R = c.refs || [];
+    const refl = R.map(r => `<span class="rf" style="left:${pc(r.value)}%" title="${escA(r.name + " " + r.value)}"></span>`).join("");
+    let rows = ""; (c.labels || []).forEach((lab, li) => S.forEach((s, si) => { const v = s.values[li], p = v == null ? 0 : pc(v);
+      const lbl = v == null ? "" : (p > 84 ? `<span class="v in" style="right:calc(${100 - p}% + 4px)">${esc(v)}</span>` : `<span class="v" style="left:calc(${p}% + 4px)">${esc(v)}</span>`);
+      rows += `<div class="hl">${si === 0 ? esc(lab) : ""}</div><div class="tr${si === S.length - 1 ? " last" : ""}">${v == null ? "" : `<span class="b" style="width:${p}%;background:${SC[si % SC.length]}"></span>`}${refl}${lbl}</div>`; }));
+    const leg = (S.length > 1 ? S.map((s, si) => `<span><i style="background:${SC[si % SC.length]}"></i>${esc(s.name)}</span>`).join("") : "") + R.map(r => `<span><i class="rfi"></i>${esc(r.name)} ${esc(r.value)}</span>`).join("");
+    return `<div class="lxt"><div class="lxh">${esc(c.title || "")} <span class="note">(${c.unit ? esc(c.unit) + "; " : ""}axis ${lo}–${hi})</span></div><div class="hb">${rows}</div>${leg ? `<div class="hleg">${leg}</div>` : ""}</div>`; }
+  function extras(e) { const T = e.tables || [], F = e.figs || []; if (!T.length && !e.chart && !F.length) return "";
+    const what = [e.chart ? "chart" : "", T.length ? T.length + (T.length > 1 ? " tables" : " table") : "", F.length ? F.length + (F.length > 1 ? " figures" : " figure") : ""].filter(Boolean).join(", ");
+    return `<details class="lx"><summary>Show ${what}</summary>${e.chart ? xchart(e.chart) : ""}${T.map(xtab).join("")}${F.map(f => `<figure class="lxf"><a href="${escA(f.src)}" target="_blank" rel="noopener"><img src="${escA(f.src)}" loading="lazy" alt="${escA(f.cap || "")}"></a><figcaption class="note">${esc(f.cap || "")}</figcaption></figure>`).join("")}</details>`; }
   function draw() { const rows = L.filter(e => (!st.size || st.has(e.status)) && (!tr.size || tr.has(e.track)) &&
       (!q || (e.title + " " + e.result + " " + e.who + " " + e.track).toLowerCase().includes(q)));
-    list.innerHTML = rows.map(e => `<li><span class="ld">${esc(e.date)}</span><div><div class="lt">${esc(e.title)}</div>
+    list.innerHTML = rows.map(e => `<li><span class="ld">${esc(e.date)}</span><div><div class="lt">${esc(hum(e.title))}</div>
       <div class="lm"><span class="st ${esc(e.status)}">${esc(e.status)}</span><span>${esc(e.track)}</span><span>${esc(e.who)}</span>${byEntry[e.title] ? `<span class="cp">${esc(summ(byEntry[e.title]))}</span>` : ""}</div>
-      <p class="lr">${esc(e.result)}</p></div></li>`).join("") || '<li><span></span><p class="lr">No entries match.</p></li>';
+      <p class="lr">${esc(hum(e.result))}</p>${extras(e)}</div></li>`).join("") || '<li><span></span><p class="lr">No entries match.</p></li>';
     document.getElementById("logCount").textContent = rows.length + " of " + L.length + " entries"; }
   chips("logStatus", statuses, st); chips("logTrack", tracks, tr);
   document.getElementById("logQ").addEventListener("input", e => { q = e.target.value.trim().toLowerCase(); draw(); }); draw(); })();
@@ -920,10 +1034,10 @@ function draw() {
         scales: { x: { type: "logarithmic", title: { display: true, text: "training PF (log)", color: css("--muted") }, ticks: { color: css("--muted"), callback: v => [300, 500, 1000].includes(v) ? v : "" }, grid: { color: css("--rule") } },
                   y: { title: { display: true, text: "8-cell mean", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   (() => { const e = document.getElementById("gcconc"); if (!e || !window.Chart) return;
-    const G = {"labels": ["base", "s-st31", "s488", "s1464", "f1952", "f3904", "f5856", "f7808"], "s": {"all tokens, all blocks": [2.44, 5.66, 2.71, 5.67, 4.08, 1.74, 1.29, 1.27], "body tokens, all blocks": [0.62, 4.18, 1.98, 4.62, 3.4, 1.27, 0.9, 0.85], "body tokens, after block 7": [0.06, 2.26, 1.16, 2.86, 1.96, 0.65, 0.47, 0.47], "body tokens, after block 16": [0.0, 0.14, 0.06, 0.14, 0.16, 0.08, 0.06, 0.03]}}; const cols = ["--c1", "--c2", "--c3", "--c6"];
+    const G = {"labels": ["base", "step 31", "488", "1,464", "1,952", "3,904", "5,856", "7,808"], "s": {"all tokens, all blocks": [2.44, 5.66, 2.71, 5.67, 4.08, 1.74, 1.29, 1.27], "body tokens, all blocks": [0.62, 4.18, 1.98, 4.62, 3.4, 1.27, 0.9, 0.85], "body tokens, after block 7": [0.06, 2.26, 1.16, 2.86, 1.96, 0.65, 0.47, 0.47], "body tokens, after block 16": [0.0, 0.14, 0.06, 0.14, 0.16, 0.08, 0.06, 0.03]}}; const cols = ["--c1", "--c2", "--c3", "--c6"];
     new Chart(e, { type: "line", data: { labels: G.labels, datasets: Object.entries(G.s).map(([l, v], i) => ({ label: l, data: v.map(x => Math.max(x, 0.001)), borderColor: css(cols[i]), backgroundColor: css(cols[i]), pointRadius: 4, tension: 0 })) },
       options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { color: css("--fg"), boxWidth: 10, font: { size: 10 } } } },
-        scales: { x: { title: { display: true, text: "training stage (s = original pool, f = fresh pool; rows/task)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } },
+        scales: { x: { title: { display: true, text: "dense checkpoint, rows/task seen (488 and 1,464: original data; 1,952 on: fresh data)", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } },
                   y: { type: "logarithmic", title: { display: true, text: "% of tokens for cosine 0.95", color: css("--muted") }, ticks: { color: css("--muted") }, grid: { color: css("--rule") } } } } }); })();
   (() => { const e = document.getElementById("q3sz"); if (!e || !window.Chart) return;
     const sz = { "0.6": 0.6, "1.7": 1.7, "4": 4, "8": 8 };
@@ -1016,6 +1130,25 @@ try { draw(); drawGC(); multiples("pt4f", D.f4fresh, ["contradiction","nq","outl
            "LoRA − dense dev CE (nats)", { xlab: "training steps (log)", dp: 4 });
       multiples("pt11", D.f11, ["xabsence","contradiction","outlier","strmatch","grouping","hotpotqa","nq","qdmatch_nq","oolong"], "pt11"); }
 catch (e) { console.error(e); }
+</script>
+<script>
+/* mark tables that scroll sideways: sticky first column + a hint line above them */
+(function () {
+  function mark() {
+    document.querySelectorAll('.tbl').forEach(function (t) {
+      var s = t.scrollWidth > t.clientWidth + 2;
+      t.classList.toggle('scrolls', s);
+      var h = t.previousElementSibling;
+      if (s && !(h && h.classList.contains('tblhint'))) {
+        h = document.createElement('p'); h.className = 'tblhint on'; h.textContent = 'Wide table: scroll sideways →';
+        t.parentNode.insertBefore(h, t);
+      } else if (h && h.classList.contains('tblhint')) { h.classList.toggle('on', s); }
+    });
+  }
+  window.addEventListener('load', mark);
+  window.addEventListener('resize', function () { clearTimeout(mark.t); mark.t = setTimeout(mark, 150); });
+  if (document.readyState !== 'loading') mark(); else document.addEventListener('DOMContentLoaded', mark);
+})();
 </script>
 """
 

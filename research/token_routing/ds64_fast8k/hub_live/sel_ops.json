@@ -1,0 +1,226 @@
+{
+ "dense": {
+  "8k": {
+   "contradiction": 0.973,
+   "nq": 0.924,
+   "outlier": 0.817,
+   "oolong": 0.656
+  },
+  "2k": {
+   "contradiction": 0.987,
+   "nq": 0.98,
+   "outlier": 0.911,
+   "oolong": 0.853
+  }
+ },
+ "recipe s0": {
+  "8k": {
+   "contradiction": 0.959,
+   "nq": 0.912,
+   "outlier": 0.862,
+   "oolong": 0.648
+  },
+  "2k": {
+   "contradiction": 0.977,
+   "nq": 0.97,
+   "outlier": 0.88,
+   "oolong": 0.856
+  }
+ },
+ "recipe s1": {
+  "8k": {
+   "contradiction": 0.956,
+   "nq": 0.922,
+   "outlier": 0.861,
+   "oolong": 0.649
+  },
+  "2k": {
+   "contradiction": 0.975,
+   "nq": 0.97,
+   "outlier": 0.881,
+   "oolong": 0.852
+  }
+ },
+ "perrow s0": {
+  "8k": {
+   "contradiction": 0.957,
+   "nq": 0.914,
+   "outlier": 0.856,
+   "oolong": 0.626
+  },
+  "2k": {
+   "contradiction": 0.983,
+   "nq": 0.972,
+   "outlier": 0.832,
+   "oolong": 0.846
+  }
+ },
+ "perrow s1": {
+  "8k": {
+   "contradiction": 0.955,
+   "nq": 0.924,
+   "outlier": 0.86,
+   "oolong": 0.653
+  },
+  "2k": {
+   "contradiction": 0.979,
+   "nq": 0.984,
+   "outlier": 0.912,
+   "oolong": 0.863
+  }
+ },
+ "floor1 s0": {
+  "8k": {
+   "contradiction": 0.959,
+   "nq": 0.918,
+   "outlier": 0.827,
+   "oolong": 0.644
+  },
+  "2k": {
+   "contradiction": 0.983,
+   "nq": 0.974,
+   "outlier": 0.829,
+   "oolong": 0.842
+  }
+ },
+ "floor1 s1": {
+  "8k": {
+   "contradiction": 0.954,
+   "nq": 0.926,
+   "outlier": 0.804,
+   "oolong": 0.613
+  },
+  "2k": {
+   "contradiction": 0.985,
+   "nq": 0.974,
+   "outlier": 0.872,
+   "oolong": 0.856
+  }
+ },
+ "floor2 s0": {
+  "8k": {
+   "contradiction": 0.959,
+   "nq": 0.924,
+   "outlier": 0.85,
+   "oolong": 0.652
+  },
+  "2k": {
+   "contradiction": 0.976,
+   "nq": 0.974,
+   "outlier": 0.777,
+   "oolong": 0.851
+  }
+ },
+ "floor2 s1": {
+  "8k": {
+   "contradiction": 0.952,
+   "nq": 0.934,
+   "outlier": 0.82,
+   "oolong": 0.633
+  },
+  "2k": {
+   "contradiction": 0.971,
+   "nq": 0.974,
+   "outlier": 0.873,
+   "oolong": 0.844
+  }
+ },
+ "posid": {
+  "8k": {
+   "contradiction": 0.947,
+   "nq": 0.914,
+   "outlier": 0.764,
+   "oolong": 0.653
+  },
+  "2k": {
+   "contradiction": 0.963,
+   "nq": 0.97,
+   "outlier": 0.737,
+   "oolong": 0.854
+  }
+ },
+ "tail20to7": {
+  "8k": {
+   "contradiction": 0.921,
+   "nq": 0.856,
+   "outlier": 0.711,
+   "oolong": 0.637
+  },
+  "2k": {
+   "contradiction": 0.952,
+   "nq": 0.956,
+   "outlier": 0.658,
+   "oolong": 0.838
+  }
+ },
+ "tail10": {
+  "8k": {
+   "contradiction": 0.919,
+   "nq": 0.81,
+   "outlier": 0.617,
+   "oolong": 0.64
+  },
+  "2k": {
+   "contradiction": 0.958,
+   "nq": 0.966,
+   "outlier": 0.497,
+   "oolong": 0.839
+  }
+ },
+ "posid f3904": {
+  "8k": {
+   "contradiction": 0.965,
+   "nq": 0.92,
+   "outlier": 0.919,
+   "oolong": 0.677
+  },
+  "2k": {
+   "contradiction": 0.982,
+   "nq": 0.958,
+   "outlier": 0.795,
+   "oolong": 0.849
+  }
+ },
+ "recipe f3904 s0": {
+  "8k": {
+   "contradiction": 0.977,
+   "nq": 0.918,
+   "outlier": 0.97,
+   "oolong": 0.663
+  },
+  "2k": {
+   "contradiction": 0.988,
+   "nq": 0.976,
+   "outlier": 0.972,
+   "oolong": 0.858
+  }
+ },
+ "recipe f3904 s1": {
+  "8k": {
+   "contradiction": 0.973,
+   "nq": 0.926,
+   "outlier": 0.967,
+   "oolong": 0.689
+  },
+  "2k": {
+   "contradiction": 0.985,
+   "nq": 0.966,
+   "outlier": 0.973,
+   "oolong": 0.856
+  }
+ },
+ "dense f3904": {
+  "8k": {
+   "contradiction": 0.983,
+   "nq": 0.946,
+   "outlier": 0.976,
+   "oolong": 0.691
+  },
+  "2k": {
+   "contradiction": 0.992,
+   "nq": 0.978,
+   "outlier": 0.968,
+   "oolong": 0.872
+  }
+ }
+}
