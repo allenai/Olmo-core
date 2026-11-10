@@ -230,16 +230,16 @@ def test_mup_weight_decay_applied(config_cls, kwargs, scale_weight_decay: bool):
     optim.step()
 
     for name, param in model.named_parameters():
-        shrink = 1 - param.detach() / before[name]
         if name == "embeddings.weight":
             expected = 0.0
         elif scale_weight_decay:
             expected = 1e-3 * 0.1
         else:
             expected = 1e-3 * multipliers[name] * 0.1
-        # SkipStepAdamW computes the decay factor in float32.
+        # Compare the weights rather than the ratio to the old weights, which some weights make
+        # 0 / 0. SkipStepAdamW computes the decay factor in float32.
         torch.testing.assert_close(
-            shrink, torch.full_like(shrink, expected), rtol=1e-3, atol=1e-12, msg=name
+            param.detach(), before[name] * (1 - expected), rtol=1e-6, atol=0.0, msg=name
         )
 
 
