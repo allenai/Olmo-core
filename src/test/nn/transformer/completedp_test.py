@@ -666,6 +666,38 @@ def test_activation_checkpointing_keeps_base_block_matching(make_base, make_conf
         assert torch.equal(param.detach(), plain_tensors[_strip_wrappers(name)].detach()), name
 
 
+@pytest.mark.parametrize(
+    "mode, kwargs",
+    [
+        pytest.param(TransformerActivationCheckpointingMode.full, {}, id="full"),
+        pytest.param(
+            TransformerActivationCheckpointingMode.selected_blocks,
+            {"block_interval": 2},
+            id="selected-blocks",
+        ),
+        pytest.param(
+            TransformerActivationCheckpointingMode.selected_modules,
+            {"modules": ["blocks.*.feed_forward"]},
+            id="selected-modules",
+        ),
+    ],
+)
+def test_init_after_activation_checkpointing(mode, kwargs):
+    """Training applies activation checkpointing before ``init_weights``."""
+    completedp = CompletedPConfig.from_base_model(_dense_base_config())
+    plain = _dense_config(d_model=128, n_layers=4, completedp=completedp).build(init_device="cpu")
+    plain.init_weights(device=torch.device("cpu"))
+    wrapped = _dense_config(d_model=128, n_layers=4, completedp=completedp).build(init_device="cpu")
+    wrapped.apply_activation_checkpointing(mode, **kwargs)
+    wrapped.init_weights(device=torch.device("cpu"))
+
+    plain_tensors = dict(plain.named_parameters())
+    wrapped_names = [name for name, _ in wrapped.named_parameters()]
+    assert any("_checkpoint_wrapped_module" in name for name in wrapped_names)
+    for name, param in wrapped.named_parameters():
+        assert torch.equal(param.detach(), plain_tensors[_strip_wrappers(name)].detach()), name
+
+
 def _assert_normal_init_matrices_have_init_std(module: nn.Module, std: float = INIT_STD):
     shapes = named_param_shapes(module)
     stds: Dict[str, float] = {}
