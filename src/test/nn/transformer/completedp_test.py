@@ -619,6 +619,20 @@ def test_width_ratios_use_each_matrix_base_fan_in():
     assert matrices > 0
 
 
+def test_split_vocab_embeddings_are_input_embeddings():
+    """The extra token rows of a split vocab get the same role and multipliers as the base rows."""
+    completedp = CompletedPConfig.from_base_model(_dense_base_config(n_extra_vocab=8))
+    model = _dense_config(d_model=128, n_layers=4, n_extra_vocab=8, completedp=completedp).build(
+        init_device="cpu"
+    )
+    model.init_weights(device=torch.device("cpu"))
+    params = named_completedp_params(model)
+    assert params["embeddings.weight"].role == CompletedPRole.input_embedding
+    assert params["embeddings.extra_weight"] == params["embeddings.weight"]
+    multipliers = completedp_multipliers(model, CompletedPOptimConfig())
+    assert multipliers["embeddings.extra_weight"] == multipliers["embeddings.weight"]
+
+
 @pytest.mark.parametrize(
     "make_base, make_config, mode, kwargs",
     [

@@ -178,18 +178,35 @@ class InitMethod(StrEnum):
         std: float = 0.02,
         generator: Optional[torch.Generator] = None,
     ):
+        self.init_embedding_weight(
+            m.weight, d_model=d_model, embed_scale=embed_scale, std=std, generator=generator
+        )
+
+    def init_embedding_weight(
+        self,
+        weight: torch.Tensor,
+        *,
+        d_model: int,
+        embed_scale: Optional[float] = None,
+        std: float = 0.02,
+        generator: Optional[torch.Generator] = None,
+    ):
+        """
+        Initialize an embedding table's ``(num_embeddings, d_model)`` weight, e.g. the extra
+        rows of a :class:`~olmo_core.nn.embedding.SplitVocabEmbedding`.
+        """
         if self in (InitMethod.llama, InitMethod.llama_depth, InitMethod.nanochat):
-            _apply_init(nn.init.normal_, m.weight, generator=generator)
+            _apply_init(nn.init.normal_, weight, generator=generator)
         elif self == InitMethod.normalized:
-            _apply_init(nn.init.normal_, m.weight, generator=generator, std=d_model**-0.5)
+            _apply_init(nn.init.normal_, weight, generator=generator, std=d_model**-0.5)
         elif self == InitMethod.fan_in:
             # Fan-in init uses std = 1.0 for embeddings, scaled down by embed_scale if set
             emb_std = 1.0 / embed_scale if embed_scale is not None else 1.0
-            _apply_init(nn.init.normal_, m.weight, generator=generator, std=emb_std)
+            _apply_init(nn.init.normal_, weight, generator=generator, std=emb_std)
         else:
             _apply_init(
                 nn.init.trunc_normal_,
-                m.weight,
+                weight,
                 mean=0.0,
                 std=std,
                 a=-3 * std,

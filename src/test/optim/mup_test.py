@@ -31,6 +31,7 @@ def _model(
     d_model: int = D_MODEL,
     hidden: int = HIDDEN,
     n_layers: int = 2,
+    n_extra_vocab: int = 0,
 ) -> nn.Module:
     return TransformerConfig.llama_like(
         d_model=d_model,
@@ -39,6 +40,7 @@ def _model(
         n_heads=2,
         feed_forward=FeedForwardConfig(hidden_size=hidden, bias=False),
         init_method=init_method,
+        n_extra_vocab=n_extra_vocab,
     ).build(init_device="cpu")
 
 
@@ -62,6 +64,16 @@ def test_mup_lr_multipliers():
     assert multipliers["blocks.0.feed_forward.w2.weight"] == BASE_WIDTH / HIDDEN
     assert multipliers["lm_head.w_out.weight"] == BASE_WIDTH / D_MODEL
     assert multipliers["blocks.0.attention_norm.weight"] == 1.0
+
+
+def test_mup_lr_multipliers_split_vocab_embeddings():
+    model = _model(n_extra_vocab=8)
+    multipliers = mup_lr_multipliers(
+        model, MuPConfig(base_width=BASE_WIDTH, embedding_lr_multiplier=3.0)
+    )
+    assert multipliers["embeddings.weight"] == 3.0
+    assert multipliers["embeddings.extra_weight"] == 3.0
+    assert set(multipliers) == {name for name, _ in model.named_parameters()}
 
 
 def test_mup_config_rejects_nonpositive_base_width():

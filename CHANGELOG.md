@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The extra token rows of `SplitVocabEmbedding` (`TransformerConfig.n_extra_vocab > 0`) are now initialized by the model's init method like the base rows, instead of always with `init_std`, so they start at the same scale under `nanochat`, `llama`, `llama_depth`, `fan_in` and `normalized` init. The `normal` init is unchanged. muP and CompletedP now classify both rows as embeddings instead of raising.
 - Fixed int32 pointer-offset overflow in the valid-prefix SwiGLU Triton kernels (forward, dynamic-row forward, and backward). Row and column indices are widened to int64 before stride multiplication, so no-gradient MoE activation buffers with 2^31 or more elements (for example 1,048,576 rows by 2,048 BF16 columns) no longer read or write wrapped addresses.
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.

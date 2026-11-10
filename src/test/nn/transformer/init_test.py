@@ -576,5 +576,22 @@ def test_init_weights_model_part_idx_ignored_without_pp():
     )
 
 
+@pytest.mark.parametrize("init_method", list(InitMethod), ids=lambda m: m.value)
+def test_split_vocab_extra_rows_match_base_rows_init(init_method):
+    """The extra token rows of a split vocab start at the same scale as the base rows."""
+    model = TransformerConfig.llama_like(
+        d_model=256,
+        vocab_size=1024,
+        n_layers=1,
+        n_heads=4,
+        n_extra_vocab=1024,
+        init_method=init_method,
+    ).build(init_device="cpu")
+    model.init_weights(device=torch.device("cpu"))
+    base_std = model.embeddings.weight.std().item()
+    extra_std = model.embeddings.extra_weight.std().item()
+    assert extra_std == pytest.approx(base_std, rel=0.1)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

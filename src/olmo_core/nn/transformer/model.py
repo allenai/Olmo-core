@@ -369,30 +369,36 @@ class Transformer(nn.Module):
         generator = torch.Generator(device).manual_seed(seed)
 
         if self.embeddings is not None:
+            embedding_std = (
+                self.embedding_init_std if self.embedding_init_std is not None else self.init_std
+            )
             self.init_method.init_embeddings(
                 self.embeddings,
                 d_model=self.d_model,
                 embed_scale=self.embed_scale,
-                std=(
-                    self.embedding_init_std
-                    if self.embedding_init_std is not None
-                    else self.init_std
-                ),
+                std=embedding_std,
                 generator=generator,
             )
             if isinstance(self.embeddings, SplitVocabEmbedding):
-                # mm_olmo initialises the added rows from `new_embedding_init_range`, which
-                # matches our `init_std` default of 0.02.
-                _apply_init(
-                    nn.init.normal_,
-                    self.embeddings.extra_weight,
-                    generator=generator,
-                    std=(
-                        self.embedding_init_std
-                        if self.embedding_init_std is not None
-                        else self.init_std
-                    ),
-                )
+                if self.init_method == InitMethod.normal:
+                    # mm_olmo initialises the added rows from `new_embedding_init_range`, which
+                    # matches our `init_std` default of 0.02.
+                    _apply_init(
+                        nn.init.normal_,
+                        self.embeddings.extra_weight,
+                        generator=generator,
+                        std=embedding_std,
+                    )
+                else:
+                    # Other init methods scale the embedding table independently of `init_std`,
+                    # and the added rows must start at the same scale as the base rows.
+                    self.init_method.init_embedding_weight(
+                        self.embeddings.extra_weight,
+                        d_model=self.d_model,
+                        embed_scale=self.embed_scale,
+                        std=embedding_std,
+                        generator=generator,
+                    )
 
         # Re-establish weight tying since `to_empty` above allocates fresh storage.
         if self.tie_word_embeddings:

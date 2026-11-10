@@ -61,6 +61,7 @@ class ParamShape:
 
 
 def _module_param_shapes(module: nn.Module) -> Dict[str, ParamShape]:
+    from ..embedding import SplitVocabEmbedding
     from ..layer_norm import LayerNorm
     from ..moe import MoERouter
     from ..moe.mlp import MoEMLPBase
@@ -74,6 +75,19 @@ def _module_param_shapes(module: nn.Module) -> Dict[str, ParamShape]:
             "weight": ParamShape(
                 ParamKind.embedding, fan_in=module.num_embeddings, fan_out=module.embedding_dim
             )
+        }
+    if isinstance(module, SplitVocabEmbedding):
+        return {
+            "weight": ParamShape(
+                ParamKind.embedding,
+                fan_in=module.num_base_embeddings,
+                fan_out=module.embedding_dim,
+            ),
+            "extra_weight": ParamShape(
+                ParamKind.embedding,
+                fan_in=module.num_extra_embeddings,
+                fan_out=module.embedding_dim,
+            ),
         }
     if isinstance(module, nn.Linear):
         return {"weight": ParamShape(matrix, module.in_features, module.out_features)}

@@ -151,6 +151,18 @@ def test_named_param_shapes_tied_embeddings():
     assert "lm_head.w_out.weight" not in shapes
 
 
+def test_named_param_shapes_split_vocab_embeddings():
+    d_model, vocab_size, n_extra_vocab = 256, 1000, 16
+    model = _dense_model(d_model, vocab_size, n_extra_vocab=n_extra_vocab)
+    shapes = named_param_shapes(model)
+    _assert_covers_named_parameters(model, shapes)
+    assert shapes["embeddings.weight"] == ParamShape(ParamKind.embedding, vocab_size, d_model)
+    assert shapes["embeddings.extra_weight"] == ParamShape(
+        ParamKind.embedding, n_extra_vocab, d_model
+    )
+    assert shapes["lm_head.w_out.weight"] == _matrix(d_model, vocab_size)
+
+
 def test_named_param_shapes_keeps_wrapper_prefix():
     class Wrapper(nn.Module):
         def __init__(self, module: nn.Module):
