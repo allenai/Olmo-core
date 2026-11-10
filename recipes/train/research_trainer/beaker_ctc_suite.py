@@ -173,11 +173,22 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--priority", default="urgent", help="ALWAYS urgent per project directive")
     ap.add_argument(
         "--min-runtime",
-        default="1h",
-        help="Beaker minRuntime (guaranteed runtime before preemption). Default 1h: on jupiter, urgent "
-        "jobs with minRuntime=0 effectively never schedule (2026-10-19: 0 of ~2,250 urgent 1-7-GPU "
-        "jobs scheduled in 3 days had minRuntime=0; every pending 0s job was days old). Pass '0' only "
-        "to opt back into always-preemptible.",
+        default="auto",
+        help="Beaker minRuntime (guaranteed runtime before preemption). Default 'auto' = min(4h, 1.3 x "
+        "expected runtime), 1h when unknown (Prasann, 2026-11-10): Beaker preempts our jobs by "
+        "allocation balance right after minRuntime, and 1,083 GPU-h of training restarted from step 0 "
+        "in 3 weeks at minRuntime 1h (records/gpu-usage-workflow-audit-2026-11.md). Expected runtime = "
+        "--expected-minutes, else the registry's median for similar finished runs (ops/opslib/runtime.py). "
+        "An explicit duration ('2h', '90m') overrides; '0' = always-preemptible (urgent 0s jobs "
+        "effectively never schedule on jupiter).",
+    )
+    ap.add_argument(
+        "--resume-interval",
+        type=int,
+        default=None,
+        help="steps between rolling resume checkpoints (train_ctc_suite.py --resume-interval). Default: "
+        "on automatically when the run is expected to outlast the 4h minRuntime cap (~every 30 min of "
+        "expected runtime when --max-steps is known, else every 200 steps); 0 = off.",
     )
     ap.add_argument(
         "--no-follow",
@@ -290,6 +301,34 @@ def register_run(opts, *, run_name, save_folder, wandb_group, git_commit=None, g
         return None
 
 
+def plan_runtime(opts, run_name, ops):
+    """(minRuntime string, resume interval in steps or None, log lines) for this launch.
+
+    minRuntime = min(4h, 1.3 x expected runtime), 1h when unknown (ops/opslib/runtime.py); expected =
+    --expected-minutes, else the registry's history median for similar finished runs (then also
+    written back to ``opts.expected_minutes`` so the registry row carries it). Runs expected past the
+    4h cap get a rolling resume point unless --resume-interval (0 = off) or --extra-args sets one.
+    """
+    if ops is not None:
+        sug = ops.suggest_min_runtime(run_id=run_name, expected_minutes=opts.expected_minutes,
+                                      launcher="beaker_ctc_suite.py", kind="train")
+    else:
+        exp = opts.expected_minutes
+        sug = {"min_runtime": "1h", "expected_minutes": exp, "source": "fallback (ops unavailable)",
+               "resume": bool(exp and exp > 240)}
+    if opts.expected_minutes is None and sug.get("expected_minutes"):
+        opts.expected_minutes = sug["expected_minutes"]
+    min_runtime = sug["min_runtime"] if opts.min_runtime == "auto" else opts.min_runtime
+    notes = [f"minRuntime={min_runtime} (expected {sug.get('expected_minutes')} min, {sug.get('source')})"]
+    resume = opts.resume_interval
+    if resume is None and sug.get("resume") and "--resume-interval" not in (opts.extra_args or ""):
+        exp = float(sug["expected_minutes"])
+        resume = max(25, round(opts.max_steps * 30 / exp)) if opts.max_steps else 200
+        notes.append(f"expected {exp:.0f} min > 4h minRuntime cap: rolling resume point every {resume} steps"
+                     + ("" if opts.max_steps else " (no --max-steps known: default 200)"))
+    return min_runtime, (resume or None), notes
+
+
 def main() -> None:
     opts = parse_args()
 
@@ -384,6 +423,12 @@ def main() -> None:
     if opts.extra_args:
         cmd += shlex.split(opts.extra_args)
 
+    min_runtime, resume, notes = plan_runtime(opts, run_name, _ops_safe())
+    for note in notes:
+        print(f"[beaker_ctc_suite] {note}")
+    if resume and "--resume-interval" not in (opts.extra_args or ""):
+        cmd += ["--resume-interval", str(resume)]
+
     launch_config = build_launch_config(
         name=run_name,
         cmd=cmd,
@@ -396,7 +441,7 @@ def main() -> None:
         num_gpus=opts.num_gpus,
     )
     launch_config.priority = opts.priority
-    launch_config.min_runtime = None if opts.min_runtime in ("", "0", "0s") else opts.min_runtime
+    launch_config.min_runtime = None if min_runtime in ("", "0", "0s") else min_runtime
     launch_config.allow_dirty = opts.allow_dirty
     # Doc-chunked attention's FlexAttention/eager mask path needs headroom beyond what the default
     # caching allocator leaves reachable at 40960 tokens (same fragmentation fix as the proven
