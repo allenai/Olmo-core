@@ -16,9 +16,19 @@ The Beaker counterpart to `local_cluster.md`. Everything here is validated from 
    (`RemoteBranchNotFoundError`, sometimes silently after "Launched") or ships stale code.
 2. **Priority is ALWAYS `urgent` — exactly `urgent`, not `immediate`, never normal/high**; lower pends for hours
    behind capacity. Bump a queued job in place: `beaker job update-priority <JOB-id> urgent`.
-   **And ALWAYS set a minRuntime (default `1h`):** urgent `minRuntime=0` jobs get a very long wait
-   tail (14-day p90 10–117 h vs ~1–1.5 h with a minRuntime; every job stuck for days was 0s). gantry `--min-runtime 1h`; `BeakerLaunchConfig.min_runtime`;
-   `beaker_ctc_suite.py --min-runtime` (default 1h). A stuck 0s job must be cancelled and relaunched.
+   **And set minRuntime = min(4 h, 1.3 × expected runtime), `1h` when the runtime is unknown**
+   (Prasann, 2026-11-10). Beaker preempts our jobs by *allocation balance* as soon as they pass
+   minRuntime, at any priority, and a preempted run restarts from step 0 unless it has a resume
+   point: 1,083 GPU-h of training was lost that way in 3 weeks at minRuntime 1h, while 99% of our
+   training runs finish within 4 h (`records/gpu-usage-workflow-audit-2026-11.md`). Never `0`: urgent
+   0s jobs get a days-long wait tail. `beaker_ctc_suite.py` and `run_q4b_beaker_multirung_eval.py`
+   do this by default (`--min-runtime auto` / `BEAKER_MIN_RUNTIME=auto`): the estimate is
+   `--expected-minutes`, else the registry's median runtime for similar finished runs
+   (`ops/opslib/runtime.py`; `ops status --record` records `runtime_minutes`). Other launchers: call
+   `opslib.safe.suggest_min_runtime(run_id=..., expected_minutes=...)`, or pass gantry
+   `--min-runtime` / `BeakerLaunchConfig.min_runtime` by hand. **Runs expected past 4 h also get a
+   rolling resume point** (`train_ctc_suite.py --resume-interval N`, on automatically in
+   `beaker_ctc_suite.py`). `--save-interval` alone does nothing under `--no-final-checkpoint`.
 3. **GPU jobs → `ai2/jupiter`** (H100s; gantry `--cluster` may need the full
    `ai2/jupiter-cirrascale-2` form). Never neptune for training — L40S, ~5x slower (MFU 4.5%).
 4. **CPU jobs → multi-cluster, eager-first:** `--cluster ai2/neptune,ai2/ceres,ai2/saturn,ai2/jupiter`.
@@ -127,7 +137,8 @@ not ported to this branch):
 | Push before launch | `RemoteBranchNotFoundError` (sometimes silent after "Launched"), or job runs stale code |
 | `python -u` + kill follower | Launch "hangs"; experiment URL never appears in captured output |
 | urgent priority, always | 1h+ pending; use `job update-priority` to rescue a queued job |
-| minRuntime 1h, always | `minRuntime=0` urgent jobs have a days-long wait tail; cancel + relaunch a stuck one with `--min-runtime 1h` |
+| minRuntime = min(4h, 1.3 × expected), never 0 | at 1h, allocation-balance preemption right after minRuntime restarts runs from step 0 (1,083 GPU-h in 3 weeks); at 0s urgent jobs have a days-long wait tail |
+| `--resume-interval` past 4h, not `--save-interval` | under `--no-final-checkpoint` the checkpointer is disabled, so `--save-interval` writes nothing and a preempted run restarts from 0 |
 | Multi-cluster for CPU | 0-GPU job unscheduled 10+ min on jupiter (1007/1008 slots) |
 | Baked image + `--install true` / `--no-python` | ~3 min image pull + pip per job, dominating short jobs |
 | JSON status, `job cancel` | Canceled jobs look "running"; `experiment stop` no-ops; wrong-base jobs kept running |

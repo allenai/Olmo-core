@@ -35,8 +35,11 @@ were one skipped box.
   `git -C <repo>` / `cd <repo> && ...` in the same call. Launch from the repo and branch that holds
   the code (OLMo-core vs olmo-eval).
 - [ ] **Beaker/gantry:** the commit is **pushed** (gantry runs the pushed commit; `allow_dirty` ships
-  nothing). `priority=urgent` exactly (not lower, not `immediate`); **`minRuntime` set (default 1h;
-  `0` never schedules on jupiter)**; workspace `ai2/flex2`, budget
+  nothing). `priority=urgent` exactly (not lower, not `immediate`); **`minRuntime` = min(4 h,
+  1.3 × expected runtime), `1h` if unknown, never `0`** (`beaker_ctc_suite.py` and the eval launcher
+  do it from `--expected-minutes` or the registry's history: check the `minRuntime=... (source)`
+  line they print; elsewhere use `opslib.safe.suggest_min_runtime`). Runs expected past 4 h need a
+  resume point (`--resume-interval`, automatic in `beaker_ctc_suite.py`); workspace `ai2/flex2`, budget
   `ai2/oe-other` (unallocated); cluster ai2/jupiter. Final checkpoint not written twice.
 - [ ] **Local slurm:** interpreter `/data/prasann/conda/envs/<env>/bin/python` (node-local; never
   bare `torchrun`, use `$PY -m torch.distributed.run`); `--output`, logs, HOME, TMPDIR, triton and
