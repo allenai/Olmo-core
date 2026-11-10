@@ -56,6 +56,14 @@ ARMS = {
     "wtsS2a": wts("sample=1,weights=attn"),
     "wtsS2g": wts("sample=1,weights=gdn"),
     "wtsS2b": wts("sample=1,weights=both"),
+    # S3: the price rule p = clip(w_prev exp(score) / (tau sqrt(c_l)), pmin, 1), one tau per step from the FLOP controller
+    # (target = the recipe's measured routed step ratio 0.216); the stage keeps become per-row caps on expected survivors
+    "wtsS3": wts("sample=1,weights=both,price=0.216,center=none", stages="7:0.4,16:0.2"),
+    "wtsS3d": wts("sample=1,weights=both,price=0.216,center=none,alloc=doc", stages="7:0.4,16:0.2"),
+    "wtsS3r": wts("sample=1,weights=both,price=0.216,center=row", stages="7:0.4,16:0.2"),
+    # S3 at more cuts: every full-attention block from 7 on
+    "wtsS3m": wts("sample=1,weights=both,price=0.216,center=none",
+                  stages="7:0.4,11:0.3,15:0.2,19:0.2,23:0.2,27:0.2"),
 }
 
 
