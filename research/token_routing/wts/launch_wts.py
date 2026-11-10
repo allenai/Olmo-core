@@ -116,9 +116,7 @@ def do_launch(a, mode):
             if mode == "launch" and ex:
                 st["runs"][name] = {"ex": ex, "arm": arm, "budget": budget, "lr": a.lr, "seed": a.seed,
                                     "cluster": "beaker", "git": git_head(), "extra": extra}
-                save(st)
-                sh([OPS, "register", "--run-id", name, "--experiment", "tokdrop_lr", "--cluster", "beaker",
-                    "--job-id", ex, "--expected-minutes", str(exp_min), "--git", REPO])
+                save(st)  # beaker_ctc_suite.py registers the run with ops itself (--experiment tokdrop_lr)
 
 
 def do_local(a):
