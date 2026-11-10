@@ -15,7 +15,7 @@ from olmo_core.config import Config, StrEnum
 from olmo_core.exceptions import OLMoConfigurationError
 
 from .init import InitMethod
-from .mup import ParamKind, named_param_shapes
+from .mup import ParamKind, _strip_wrappers, named_param_shapes
 
 if TYPE_CHECKING:
     from .config import TransformerBlockConfig, TransformerConfig
@@ -457,7 +457,7 @@ def named_completedp_params(model: nn.Module) -> Dict[str, CompletedPParam]:
     if config is None:
         return params
 
-    base_fan_ins: Dict[str, int] = {}
+    base_fan_ins: Dict[Tuple[str, str], int] = {}
     templates = {frozenset(fan_ins): fan_ins for fan_ins in (config.base_block_fan_ins or [])}
     for block_key, fan_ins in _block_matrix_fan_ins(params, prefix).items():
         if config.base_block_fan_ins is None:
@@ -471,17 +471,28 @@ def named_completedp_params(model: nn.Module) -> Dict[str, CompletedPParam]:
                 )
             template = match
         for name in fan_ins:
-            base_fan_ins[f"{prefix}blocks.{block_key}.{name}"] = template[name]
+            base_fan_ins[(block_key, name)] = template[name]
 
     resolved: Dict[str, CompletedPParam] = {}
     for name, param in params.items():
         if param.role == CompletedPRole.output_matrix:
             # The LM head reads the residual stream.
             param = dataclasses.replace(param, base_fan_in=config.base_width)
-        elif name in base_fan_ins:
-            param = dataclasses.replace(param, base_fan_in=base_fan_ins[name])
+        elif param.role in (CompletedPRole.hidden_matrix, CompletedPRole.hidden_readout_matrix):
+            base_fan_in = base_fan_ins[_block_matrix_key(name, prefix)]
+            param = dataclasses.replace(param, base_fan_in=base_fan_in)
         resolved[name] = param
     return resolved
+
+
+def _block_matrix_key(name: str, prefix: str) -> Tuple[str, str]:
+    """
+    The block key of a weight matrix in a block, and the matrix's name inside the block without
+    activation-checkpointing or ``torch.compile`` wrapper segments, so that it matches the
+    unwrapped base model.
+    """
+    _, block_key, inner = name[len(prefix) :].split(".", 2)
+    return block_key, _strip_wrappers(inner)
 
 
 def _block_matrix_fan_ins(
@@ -489,14 +500,14 @@ def _block_matrix_fan_ins(
 ) -> Dict[str, Dict[str, int]]:
     """
     The fan-in of every weight matrix in each block, keyed by block key and then by the matrix's
-    name inside the block.
+    name inside the block (see :func:`_block_matrix_key`).
     """
     blocks: Dict[str, Dict[str, int]] = {}
     for name, param in params.items():
         if param.role not in (CompletedPRole.hidden_matrix, CompletedPRole.hidden_readout_matrix):
             continue
         assert param.fan_in is not None
-        _, block_key, inner = name[len(prefix) :].split(".", 2)
+        block_key, inner = _block_matrix_key(name, prefix)
         blocks.setdefault(block_key, {})[inner] = param.fan_in
     return blocks
 

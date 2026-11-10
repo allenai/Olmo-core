@@ -40,9 +40,14 @@ from olmo_core.nn.transformer import (
     TransformerConfig,
     TransformerType,
 )
-from olmo_core.nn.transformer.completedp import CompletedPRole, named_completedp_params
+from olmo_core.nn.transformer.completedp import (
+    CompletedPRole,
+    apply_completedp_init_,
+    named_completedp_params,
+)
+from olmo_core.nn.transformer.config import TransformerActivationCheckpointingMode
 from olmo_core.nn.transformer.init import InitMethod
-from olmo_core.nn.transformer.mup import ParamKind, named_param_shapes
+from olmo_core.nn.transformer.mup import ParamKind, _strip_wrappers, named_param_shapes
 from olmo_core.optim import CompletedPOptimConfig
 from olmo_core.optim.completedp import completedp_multipliers
 
@@ -612,6 +617,53 @@ def test_width_ratios_use_each_matrix_base_fan_in():
             expected.mul_(factor)
         assert torch.equal(model_params[name].detach(), expected), name
     assert matrices > 0
+
+
+@pytest.mark.parametrize(
+    "make_base, make_config, mode, kwargs",
+    [
+        pytest.param(
+            _dense_base_config,
+            lambda **kw: _dense_config(d_model=128, n_layers=4, **kw),
+            TransformerActivationCheckpointingMode.full,
+            {},
+            id="dense-full",
+        ),
+        pytest.param(
+            _dense_base_config,
+            lambda **kw: _dense_config(d_model=128, n_layers=4, **kw),
+            TransformerActivationCheckpointingMode.selected_modules,
+            {"modules": ["blocks.*.feed_forward"]},
+            id="dense-selected-modules",
+        ),
+        pytest.param(
+            _ddp_base_config,
+            lambda **kw: _ddp_model_config(d_model=128, n_layers=4, **kw),
+            TransformerActivationCheckpointingMode.full,
+            {},
+            id="ddp-full",
+        ),
+    ],
+)
+def test_activation_checkpointing_keeps_base_block_matching(make_base, make_config, mode, kwargs):
+    """Checkpoint wrappers in parameter names don't change how blocks match the base model."""
+    completedp = CompletedPConfig.from_base_model(make_base())
+    plain = make_config(completedp=completedp).build(init_device="cpu")
+    plain.init_weights(device=torch.device("cpu"))
+    wrapped = make_config(completedp=completedp).build(init_device="cpu")
+    wrapped.init_weights(device=torch.device("cpu"))
+    wrapped.apply_activation_checkpointing(mode, **kwargs)
+
+    plain_params = named_completedp_params(plain)
+    wrapped_params = named_completedp_params(wrapped)
+    assert any("_checkpoint_wrapped_module" in name for name in wrapped_params)
+    assert {_strip_wrappers(name): p for name, p in wrapped_params.items()} == plain_params
+
+    apply_completedp_init_(plain)
+    apply_completedp_init_(wrapped)
+    plain_tensors = dict(plain.named_parameters())
+    for name, param in wrapped.named_parameters():
+        assert torch.equal(param.detach(), plain_tensors[_strip_wrappers(name)].detach()), name
 
 
 def _assert_normal_init_matrices_have_init_std(module: nn.Module, std: float = INIT_STD):
