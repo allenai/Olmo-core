@@ -8,7 +8,7 @@ kind: result
 status: current
 superseded_by:
 artifact: https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ
-summary: After dense CPT the next-token-loss gradient has no sparse support. Ranked by energy, the smallest token set whose attribution gradient reaches cos 0.95 with the step gradient is 70% of tokens at 32k and 74% at 64k (SFT oracle 0.5-2%); (block, token) cells give the same 71-76%, and below ~65% kept the energy ranking is worse than random. The base's apparent sparsity (6-12%) is one shared direction that a random 6% also reaches. A late span's gradient reaches far back (35-59% of its pre-span energy beyond the 4k window), mostly through blocks 0-15. The attribution bound for token or cell dropping in CPT is about 1.3x per step. eval_size 8 / 8 / 3 documents (maps) and one 16 x 32k / 8 x 64k step (oracle).
+summary: After dense CPT the next-token-loss gradient has no sparse support (attribution oracle needs 70-74% of tokens / 71-76% of cells for cos 0.95; SFT 0.5-2%; energy ranking worse than random below ~65%), so the attribution bound for token dropping is ~1.3x per step. The gradient is mostly local: by an exact distance decomposition 89% comes from within ~4k tokens, 11% from further back, 2% beyond 16k (base 80 / 20 / 4%), the long-range part sitting in blocks 0-6. That long-range part is sparse: for a late chunk's loss, 20-31% of context tokens (12-18% of cells) carry 95% of its direction, and they are not the most recent ones (a local window needs 60-78%). eval_size 8 / 8 / 3 documents (maps), one 16 x 32k / 8 x 64k step (oracles, distance).
 ---
 # CPT gradient maps
 
@@ -83,6 +83,30 @@ Results page (private): https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ, secti
      removed (`records/oracle-tokens-under-routing.md`).
    - In CPT, dropping tokens behaves like a smaller batch (random keep traces a smooth subsampling curve). This fits
      every token-drop arm losing to dense in `records/olmo3-cptdrop-results.md`.
+
+## Addendum (2026-11-10, later): long-range credit only, and the gradient by distance (Prasann's follow-ups)
+
+- **Late-chunk loss** (`--span`; CE of the last 1,024 / 4,096 targets; context = everything before; one step):
+  - The global oracle needs 19.9% / 24.1% (32k) and 31.0% (64k) of context tokens for a context-only cos of 0.95
+    after CPT (base 4.8-16%). Cells need 12.0% / 14.4% / 18.3%.
+  - A recent-context (local-window) rule needs 60-78%; random needs 71-87%.
+  - Context carries 21-27% of the chunk loss's gradient after CPT.
+- **Distance decomposition** (`cpt_distance_decomp.py`; exact additive split of G over 1,024-token target chunks,
+  credited to the token's chunk gap; own label split off by a K/V-detached pass; 16 rows x 32k).
+  - Share of the step gradient, base → dense CPT:
+
+    | distance class | base | dense CPT |
+    |---|---|---|
+    | own label | 21.6% | 33.6% |
+    | rest of the same 1k chunk | 29.3% | 37.0% |
+    | ~1-4k back | 29.1% | 18.5% |
+    | ~4-16k back | 16.1% | 8.7% |
+    | > ~16k back | 3.9% | 2.1% |
+
+  - Beyond ~4k, CPT blocks 0-6 hold 17% of their gradient and blocks 24-31 hold 2.5%.
+  - Self-check: sketched vs exact gradient norm^2 per block band 0.98-1.02; chunk losses sum to the full loss.
+- Tables and figures: `gradmaps_cpt/span_oracle_table_dn.md`, `distance_decomp.md`, `sum_distance_pct.png`,
+  `sum_span_oracle_tok_dn.png`.
 
 ## Limits
 

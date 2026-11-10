@@ -80,6 +80,12 @@ later layers, gradient vs activation targets, and why strmatch / grouping resist
   - Late-span gradient: 35-59% of the pre-span energy is beyond the 4k window, mostly in blocks 0-15.
   - Context share at blocks 0 / 8 / 16 / 24 after CPT: 0.84-0.90 / 0.73-0.85 / 0.45-0.47 / 0.19-0.21.
   - ⚠ eval_size 8 / 8 / 3 documents; oracle one step. ops: 212 rows gradcomp_cptmap_* / gradcomp_cptoracle_*.
+- 2026-11-10 later (Prasann's follow-ups, same branch): (a) post-hoc only, confirmed: no re-routing anywhere;
+  (b) late-chunk loss (CE of the last 1k / 4k): after CPT the oracle needs 20-31% of context tokens (12-18% of cells)
+  for context cos 0.95, a local window 60-78% (jobs 4430995-1006, reruns 4431033-8); (c) distance decomposition of
+  the full gradient (16 x 32k, jobs 4431064-71): dense CPT 34% own label, 37% rest of the same 1k chunk, 18.5% 1-4k,
+  8.7% 4-16k, 2.1% >16k (base 22 / 29 / 29 / 16 / 4). Ran at most 2 GPUs at a time from 14:20 at the main session's
+  request (shared 8-GPU cap with ctxfid).
 
 ## Current best numbers
 <!-- One line per number: task, rung, metric=value, eval_size, ±SE, cot label, source path.

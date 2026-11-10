@@ -169,6 +169,70 @@ held 95% of the attribution kept only cos 0.08-0.19 once the other tokens were a
    - This is consistent with every token-drop arm losing to dense in the olmo3_cptdrop screen. The levers that won
      there (LoRA, frozen LM head) cut per-parameter cost, not tokens.
 
+
+## Addendum (same day): long-range credit only, and the gradient by dependency distance
+
+Both are post-hoc attribution from dense passes on frozen checkpoints; nothing is re-routed.
+
+10. **Loss on a late chunk only: which context tokens carry its gradient** (`cpt_oracle_budget.py` /
+    `cpt_oracle_cells.py --span`; `span_oracle_table_{dn,wm}.md`, `sum_span_oracle_{tok,cell}_dn.png`).
+    - Setup:
+      - The loss is the CE of the last 1,024 or 4,096 targets of each row.
+      - Context = every token before that chunk; the chunk's own tokens are always kept.
+      - One step = 16 x 32k or 8 x 64k.
+      - Shares are of the context: kept context tokens (or cells) needed for cos 0.95 between the kept context terms
+        and all context terms.
+      - Recency = keep only the most recent context, a local window.
+
+    | rule (share of context kept, blocks 7-31) | 32k, last 1k, base | 32k, last 1k, CPT | 32k, last 4k, base | 32k, last 4k, CPT | 64k, last 4k, base | 64k, last 4k, CPT |
+    |---|---|---|---|---|---|---|
+    | Global oracle, tokens | 4.8% | 19.9% | 6.0% | 24.1% | 16.0% | 31.0% |
+    | Per-row quota, tokens | 10.5% | 26.0% | 14.5% | 33.4% | 19.3% | 36.1% |
+    | Per-512-token-block quota, tokens | 22.2% | 40.3% | 19.9% | 43.8% | 31.4% | 44.1% |
+    | Most recent context (local window) | 46.2% | 60.2% | 59.0% | 66.3% | 55.5% | 77.8% |
+    | Random tokens | 53.5% | 75.5% | 43.0% | 87.4% | 46.4% | 71.3% |
+    | Global oracle, cells | 3.2% | 12.0% | 3.8% | 14.4% | 8.9% | 18.3% |
+    | Per-(row, block) token quota, cells | 8.9% | 23.3% | 11.9% | 30.3% | 16.9% | 32.9% |
+
+    - **Long-range credit is sparse, unlike the full loss**: 20-31% of context tokens after CPT (70-74% for the full
+      loss). Cells help here, at 12-18%.
+    - **It is not the recent context.** A local window needs 60-78%, 3x the oracle.
+    - **Context holds only 21-27% of the chunk loss's gradient** after CPT (0.28-0.44 in the base). For the total
+      cosine, 4-10% of context tokens (2-5% of cells) already reach 0.95.
+    - CPT spreads the long-range credit, 5-16% → 20-31%.
+    - The whole-model scope matches: CPT global oracle 20.5% / 23.4% / 32.5%.
+11. **Share of the gradient by dependency distance** (`cpt_distance_decomp.py`; `distance_decomp.md`,
+    `sum_distance_pct.png`, `sum_distance_decomp.png`).
+    - Method: G = sum over 1,024-token target chunks c of grad L_c. Each chunk loss is backpropagated on the row's
+      prefix, and every token's sketched gradient term is credited to the gap between its chunk and c. One
+      K/V-detached pass splits out the own-label term (distance 0).
+    - Shares are projections onto G, so the classes sum to exactly 1. "Through any path": multi-hop relays count at
+      the token that receives the credit.
+    - One step = 16 rows x 32k. Chunk losses sum to the full loss; sketched vs exact gradient norm^2 per block band
+      is 0.98-1.02.
+
+    | distance class | base | dense CPT | dense CPT, blocks 0-6 | dense CPT, blocks 24-31 |
+    |---|---|---|---|---|
+    | own label (0) | 21.6% | 33.6% | 9.3% | 79.6% |
+    | same 1k chunk, other tokens | 29.3% | 37.0% | 44.3% | 10.4% |
+    | ~1k-4k back | 29.1% | 18.5% | 29.2% | 7.6% |
+    | ~4k-16k back | 16.1% | 8.7% | 13.5% | 2.2% |
+    | > ~16k back | 3.9% | 2.1% | 3.7% | 0.3% |
+
+    - **After CPT, 89% of the gradient comes from within ~4k tokens, 11% from further back, and 2% from beyond
+      16k.** The base: 80% / 20% / 4%. Per-row SE is ≤ 0.02.
+    - CPT moves credit closer: more own-label and same-chunk share.
+    - Long-range credit lives in the early blocks: beyond ~4k, blocks 0-6 hold 17% of their gradient and blocks 24-31
+      hold 2.5%.
+    - Per (target chunk, token chunk) pair, credit falls about 10x from 1k to 10k back, then flattens.
+    - The base's uptick at the farthest gaps is the row's first tokens (attention-sink positions), which every later
+      target credits. CPT removes most of it.
+12. **Reading.** The CPT gradient is mostly local: 89% within 4k after CPT, and 71% within the same 1k chunk. The
+    long-range part is small (about 11%), but within it a sparse set of far context carries the direction, not the
+    most recent tokens: 20-31% of context tokens, 12-18% of cells. A training method that wants the long-range signal
+    cheaply would aim at that sparse far-context set for a minority of the gradient. Whole-sequence token dropping
+    has no sparse target (finding 3).
+
 ## Files
 
 | Files | What |
@@ -179,6 +243,8 @@ held 95% of the attribution kept only cos 0.08-0.19 once the other tokens were a
 | `sum_{conc,band,distance,corr,kinds,ctx,flops}_<len>.png` | summaries over every row of the set |
 | `summary_<len>.json` | the numbers above per checkpoint (eval_size_rows, means and SEs over rows) |
 | `oracle_table.md`, `oracle_budgets.json`, `sum_oracle_cos_{dn,wm}.png` | oracle budgets, tokens and cells |
+| `span_oracle_table_{dn,wm}.md`, `span_oracle_budgets_{dn,wm}.json`, `sum_span_oracle_{tok,cell}_{dn,wm}.png` | late-chunk loss: context budgets |
+| `distance_decomp.{md,json}`, `sum_distance_pct.png`, `sum_distance_decomp.png` | gradient share by dependency distance |
 
 ## Code, compute, raw data
 
@@ -189,7 +255,10 @@ held 95% of the attribution kept only cos 0.08-0.19 once the other tokens were a
   - smokes 4430500-1 (mooney);
   - maps 4430508-14, 4430525-29, 4430543-4;
   - plots 4430547 / 4430604 / 4430667;
-  - token oracle 4430599-602, cell oracle 4430659-62.
+  - token oracle 4430599-602, cell oracle 4430659-62;
+  - span oracle 4430995-1006 (token per-512-block reruns 4431033-8);
+  - distance decomposition 4431064-71 (a first try, 4431023-30, hit an over-strict hook check in the own pass and
+    was cancelled).
 - **Raw arrays** (cubbins, node-local):
   - `/data/prasann/grad_composition/cpt_gradmap/<label>/r<row>.npz`: float32 G, E, G_own, C, G_late, E_late, G_mid,
     E_mid, ce, ids; 30-150 MB per row.
