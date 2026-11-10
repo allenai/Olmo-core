@@ -14,7 +14,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/AxWXjBS1jDQy51MtGszd3d
 wandb_group:
-next_step: Prasann picks which recommendations to adopt (1 minRuntime ≥ run length for Beaker training, 2 jupiter+ceres default, 3 allocated vs unallocated decision); nothing changed yet. Re-run the scripts in ~3 weeks to measure the effect.
+next_step: Implemented on branch claude/gpu-workflow-audit-8833c4 (not merged): minRuntime auto + resume point, spill rule in where-to-run, `ops capacity`, allocation wording. #2 (jupiter+ceres default) PENDING Prasann ("ask me again later"). After merge, optionally seed runtime history (backfill_runtimes.py --write); re-run the audit scripts ~2026-12-01 to measure.
 ---
 
 # gpu_audit
@@ -28,7 +28,18 @@ routing or policy changes would raise throughput.
 - 2026-11-10 (agent): read-only audit. Scripts and small pulls live in `research/common/gpu_audit/` (branch
   `claude/gpu-workflow-audit-8833c4`); raw sacct/Beaker dumps are gitignored. Other cluster users are
   pseudonymized in committed data (the repo remote is public).
-- 2026-11-10 (agent): no rule, hook, launcher, skill or CLAUDE.md change made. All recommendations await Prasann.
+- 2026-11-10 (agent): the audit itself changed no rule, hook, launcher, skill or CLAUDE.md.
+- 2026-11-10 (Prasann, via the main session): #1 accurate minRuntimes: YES. #4 spill small jobs to jsteinhardt
+  "or wherever they run": YES ("always a good idea"). #6 other users' load in ops status: YES. #3 allocated:
+  "Always allocated is good, this is the updated rule" (unallocated rule retired; CLAUDE.md + memory updated in
+  the main checkout by the main session). **#2 jupiter + ceres by default: PENDING — "ask me about this again
+  later"; nothing changed.**
+- 2026-11-10 (agent, branch claude/gpu-workflow-audit-8833c4, not merged): `opslib/runtime.py` (min(4h, 1.3 x
+  expected), 1h fallback; history median of `runtime_minutes`, now written by `ops status --record`);
+  `train_ctc_suite.py --resume-interval` (rolling resume point; fixes `--save-interval` being a no-op under
+  `--no-final-checkpoint`); `beaker_ctc_suite.py --min-runtime auto` + auto resume past 4h; eval launcher
+  `BEAKER_MIN_RUNTIME=auto`; `where-to-run` spill rule + our cap use by experiment; `ops capacity` (+ `--would-preempt`);
+  allocation wording in beaker.md / skills / ops README / recipes docs.
 
 ## Current best numbers
 Infra audit (no eval metrics):
@@ -47,10 +58,12 @@ Prasann picks which recommendations to adopt (1 minRuntime ≥ run length for Be
 default, 3 allocated vs unallocated decision); nothing changed yet. Re-run the scripts in ~3 weeks to measure the effect.
 
 ## Open issues / traps
-- The CLAUDE.md "Allocation — ALWAYS unallocated" rule is stale: since about 10-19, 98% of our Beaker GPU-h is
-  allocated, because `ai2/flex2` belongs to the `ai2/oe-scaling` workspace group. Needs Prasann's decision.
-- `train_ctc_suite.py` defaults to no mid-run checkpoint, so any preemption restarts from step 0.
-- `ops status` shows only our jobs, so Lambda looks idle while other users hold ~85% of it.
+- RESOLVED (branch, pending merge): allocated is now the rule; `--resume-interval` gives a resume point; `ops capacity`
+  shows other users' load.
+- The runtime history is empty until `ops status --record` accumulates `runtime_minutes` or someone runs
+  `research/common/gpu_audit/backfill_runtimes.py --write` (6,111 runs; writes the LIVE registry). Leave-one-out,
+  1.3 x the history median covers the actual runtime of 70% of Beaker training runs (flat 1h: 67%; p75 would give
+  76%). Passing `--expected-minutes` is the stronger fix.
 - In-job GPU utilization is unmeasured (no stored samples).
 
 ## Verified vs unverified
