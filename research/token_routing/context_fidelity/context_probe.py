@@ -25,6 +25,8 @@ Variants for the dropped tokens above the cut (DeltaNet blocks always see the ke
   lin7r      the same with inputs [h7; h16_drop; 1]
   frozen_all diagnostic: frozen context in EVERY block >= 7, DeltaNet included (the dropped tokens' stale block-7
              state is fed to each mixer as constant input; their outputs are discarded)
+  staleNN    frozen_all with only a random NN% of each document's dropped tokens as stale context (stale20, stale50;
+             per-row seed, so the selections are unchanged); the rest are dropped
   fwdonly    diagnostic bound for any no-gradient context: the exact dense forward (hidden states and CE = dense), the
              dropped tokens detached at every block input >= 7 and excluded from the gradient
 Gradients keep only the kept tokens' weight terms (dropped rows binned out; they are zero except in fwdonly /
@@ -67,7 +69,8 @@ REFRESH = 15
 CORR_AT = 15
 SPAN = 64
 SELECTORS = ("rtr", "rnd", "od")
-VARIANTS = ("drop", "frozen", "refresh15", "kvfresh", "mean1", "span64", "lin7", "lin7r", "frozen_all", "fwdonly")
+VARIANTS = ("drop", "frozen", "refresh15", "kvfresh", "mean1", "span64", "lin7", "lin7r", "frozen_all", "fwdonly",
+            "stale20", "stale50")
 LAMBDAS = (1e-3, 1e-2, 1e-1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0)
 
 
@@ -106,14 +109,29 @@ def dense_row(model, tap, r, use_ckpt=True):
     return F.cross_entropy(logits.float(), tgt, reduction="sum"), caps
 
 
+def union_ctx(ctx, kidx, cidx):
+    """kept + context rows in original-position order (the union the context blocks run on)."""
+    upos = torch.sort(torch.cat([kidx, cidx])).values
+    ukeep = torch.zeros(upos.numel(), dtype=torch.bool, device=upos.device)
+    kin = torch.searchsorted(upos, kidx)
+    ukeep[kin] = True
+    return dict(ctx, cidx=cidx, upos=upos, kin=kin, cin=torch.searchsorted(upos, cidx), ukeep=ukeep)
+
+
 def make_ctx(var, hcut, r, keep, kidx, didx):
     """context for the full-attention blocks >= CUT. hcut: (T, d) detached block-7 input."""
-    if var in ("frozen", "refresh15", "frozen_all"):
-        return dict(kind="full", state=hcut[didx], all=var == "frozen_all")
+    if var in ("frozen", "refresh15", "frozen_all") or var.startswith("stale"):
+        cidx = didx
+        if var.startswith("stale"):  # staleNN: a random NN% of each document's dropped tokens stay as stale context
+            g = torch.Generator(device="cpu").manual_seed(int(r["x"].sum()) * 7919 + r["T"])
+            sc = torch.rand(r["T"], generator=g).to(hcut.device)
+            cidx = torch.nonzero(RP.doc_topk(sc, ~keep, r["cid"], int(var[5:]) / 100.0), as_tuple=True)[0]
+        return union_ctx(dict(kind="full", state=hcut[cidx], all=var == "frozen_all" or var.startswith("stale")),
+                         kidx, cidx)
     if var == "fwdonly":
         return dict(kind="fwdonly")
     if var == "kvfresh":
-        return dict(kind="full", state=None, all=False)
+        return union_ctx(dict(kind="full", state=None, all=False), kidx, didx)
     if var == "mean1" or var.startswith("span"):
         dev = hcut.device
         cid = r["cid"]
@@ -184,16 +202,18 @@ def variant_row(model, tap, r, keep, var, dcap=None, corr=None, use_ckpt=True, w
                 tap.cur[b] = kidx
                 h = ck(block, h, {**kw, "position_ids": kidx[None]}, use_ckpt)
             elif ctx["kind"] == "full":
-                C = ctx["state"] if ctx["state"] is not None else dcap[f"in{b}"][didx]
-                U = h.new_zeros(T, h.shape[-1]).index_copy(0, kidx, h[0]).index_copy(0, didx, C.to(h.dtype))[None]
-                tap.cur[b] = allpos
-                kwu = {**kw, "position_ids": allpos[None]}
+                C = ctx["state"] if ctx["state"] is not None else dcap[f"in{b}"][ctx["cidx"]]
+                upos = ctx["upos"]
+                U = h.new_zeros(upos.numel(), h.shape[-1]).index_copy(0, ctx["kin"], h[0]) \
+                    .index_copy(0, ctx["cin"], C.to(h.dtype))[None]
+                tap.cur[b] = upos
+                kwu = {**kw, "position_ids": upos[None]}
                 if b in ATTN:
-                    kwu["kv_grad_mask"] = keep[None]
+                    kwu["kv_grad_mask"] = ctx["ukeep"][None]
                 out = ck(block, U, kwu, use_ckpt)
-                h = out[:, kidx]
+                h = out[:, ctx["kin"]]
                 if var == "refresh15" and b == REFRESH:
-                    ctx["state"] = out[0, didx].detach()
+                    ctx["state"] = out[0, ctx["cin"]].detach()
             else:  # stand-ins appended after the kept tokens; position-causal masked SDPA with log-count bias
                 U = torch.cat([h, ctx["state"][None].to(h.dtype)], dim=1)
                 tap.cur[b] = ctx["pos"]
@@ -239,14 +259,17 @@ class Flops:
         pre = sum(self.P[:CUT]) * T + sum(1 for b in ATTN if b < CUT) * self.pair * T * (T + 1) / 2
         post = Tk * (sum(self.P[CUT:]) + self.lm) + len(ATTN_UP) * self.pair * Tk * (Tk + 1) / 2
         extra = 0.0
-        if nd and var in ("frozen", "refresh15", "kvfresh", "frozen_all", "fwdonly"):
-            # kept queries x dropped keys (charged fwd+bwd), plus the K/V projections of the dropped tokens (fwd only)
+        if nd and (var in ("frozen", "refresh15", "kvfresh", "frozen_all", "fwdonly") or var.startswith("stale")):
+            if ctx is not None and "cidx" in ctx:  # context rows (all dropped tokens, or a subset for staleNN)
+                didx = ctx["cidx"]
+                nd = didx.numel()
+            # kept queries x context keys (charged fwd+bwd), plus the K/V projections of the context tokens (fwd only)
             pairs = float(torch.searchsorted(didx, kidx).sum())
             extra += len(ATTN_UP) * (self.pair * pairs) + nd * sum(self.kv[b] for b in ATTN_UP)
             dq_pairs = float((didx + 1).sum())  # dropped queries over every earlier key
             if var == "refresh15":
                 extra += nd * self.P[REFRESH] / 3 + self.pair_f * dq_pairs
-            if var == "frozen_all":  # the dropped tokens' stale state through every DeltaNet mixer (forward only)
+            if var == "frozen_all" or var.startswith("stale"):  # stale context through every DeltaNet mixer (fwd only)
                 extra += nd * sum(self.Pmix[b] for b in range(CUT, NB) if b not in ATTN) / 3
             if var in ("kvfresh", "fwdonly"):  # forward-only dense pass of the dropped tokens through blocks CUT .. 31
                 extra += nd * sum(self.P[CUT:]) / 3 + len(ATTN_UP) * self.pair_f * dq_pairs
@@ -567,7 +590,8 @@ def main():
                                                  flops=fl.row(r["T"], kidx, didx, v, ctx),
                                                  n_kept=int(kidx.numel()), n_drop=int(didx.numel()),
                                                  keep_body=float((kp & r["body"]).sum() / max(1, nb)),
-                                                 n_standin=int(ctx["S"]) if ctx is not None and "S" in ctx else 0)
+                                                 n_standin=int(ctx["S"]) if ctx is not None and "S" in ctx else 0,
+                                                 n_ctx=int(ctx["cidx"].numel()) if ctx is not None and "cidx" in ctx else 0)
                     del outs
             del dcap
             out_rows.append(orow)

@@ -122,7 +122,7 @@ def analyze(d, lab, dev):
         fl[c] = dict(frac=sum(r["v"][c]["flops"] for r in rr) / sum(r["flops_dense"] for r in rr))
         fl[c]["speedup"] = 1.0 / fl[c]["frac"]
         misc[c] = dict(keep_body=ms([r["v"][c]["keep_body"] for r in rr]), kept_tokens=ms([r["v"][c]["n_kept"] for r in rr]),
-                       n_standin=ms([r["v"][c]["n_standin"] for r in rr]), T=ms([r["T"] for r in rr]))
+                       n_standin=ms([r["v"][c]["n_standin"] for r in rr]), n_ctx=ms([r["v"][c].get("n_ctx", 0) for r in rr]), T=ms([r["T"] for r in rr]))
     out.update(ce=ce, err=err, flops=fl, misc=misc,
                router_spearman=ms([r["router_spearman"] for r in rows]))
     # gap closed vs plain drop, same selector
