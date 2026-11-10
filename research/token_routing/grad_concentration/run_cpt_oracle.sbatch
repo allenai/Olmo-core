@@ -19,7 +19,7 @@ OUT=${OUT:-$WORK/cpt_oracle}
 CODE=$WORK/code_or_${SLURM_JOB_ID}
 mkdir -p "$CODE" "$WORK/tmp" "$OUT"
 (cd "$SRC" && tar -c --exclude='__pycache__' src research/token_routing/olmo3_cptdrop research/token_routing/grad_composition/cpt_probe.py \
-   research/token_routing/grad_concentration/cpt_gradmap.py research/token_routing/grad_concentration/cpt_oracle_budget.py research/token_routing/grad_concentration/cpt_oracle_cells.py) | tar -x -C "$CODE"
+   research/token_routing/grad_concentration/cpt_*.py) | tar -x -C "$CODE"
 export TMPDIR=$WORK/tmp TRITON_CACHE_DIR=$WORK/tmp/triton HF_HOME=$ROOT/hf_cache PYTHONPATH="$CODE/src"
 cd "$CODE"
 OPS_RUN_ID="cptor-${LABEL}-${SLURM_JOB_ID}" OPS_EXPERIMENT=grad_composition OPS_KIND=eval OPS_PARENT_RUN="$(basename "$CK")" \
