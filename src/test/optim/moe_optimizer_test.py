@@ -113,6 +113,7 @@ def test_build_groups_applies_mup_with_wrapper_prefix():
         group_overrides=[OptimGroupOverride(params=["*bias*"], opts={"weight_decay": 0.0})],
     )
     groups = config.build_groups([model])
+    assert isinstance(groups, list)
 
     by_name = {name: g for g in groups for name in g["named_params"]}
     assert set(by_name) == {name for name, _ in model.named_parameters()}

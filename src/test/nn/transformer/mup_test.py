@@ -284,6 +284,7 @@ def _hybrid_model(d_model: int, n_layers: int) -> nn.Module:
         feed_forward=FeedForwardConfig(hidden_size=d_model * 4, bias=False),
     )
     linear = deepcopy(config.block)
+    assert isinstance(linear, TransformerBlockConfig)
     linear.sequence_mixer = GatedDeltaNetConfig(n_heads=d_model // 64)
     config.block_overrides = {idx: deepcopy(linear) for idx in range(1, n_layers, 2)}
     return config.build(init_device="meta")
@@ -343,6 +344,7 @@ def test_matrix_fan_ins_by_role_rejects_ambiguous_roles():
         feed_forward=FeedForwardConfig(hidden_size=1024, bias=False),
     )
     wider_feed_forward = deepcopy(config.block)
+    assert isinstance(wider_feed_forward, TransformerBlockConfig)
     assert wider_feed_forward.feed_forward is not None
     wider_feed_forward.feed_forward.hidden_size = 2048
     config.block_overrides = {1: wider_feed_forward}

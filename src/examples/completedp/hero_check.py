@@ -86,6 +86,7 @@ from olmo_core.data.composable import (  # noqa: E402
 from olmo_core.data.utils import get_labels  # noqa: E402
 from olmo_core.distributed.parallel import DataParallelType  # noqa: E402
 from olmo_core.distributed.utils import get_rank  # noqa: E402
+from olmo_core.nn.ddp import OLMoDDPTransformerBlockConfig  # noqa: E402
 from olmo_core.nn.moe.v2.ep_config import ExpertParallelPath  # noqa: E402
 from olmo_core.nn.transformer import CompletedPConfig, OLMoDDPModelConfig  # noqa: E402
 from olmo_core.optim import (  # noqa: E402
@@ -160,13 +161,15 @@ def build_hero_config(size: str, *, completedp: bool) -> OLMoDDPModelConfig:
     Build the production small or medium hero, with CompletedP or with standard parameterization.
     """
     config = hero.build_model_config(size, eos_token_id=TOKENIZER.eos_token_id)
+    assert config.block_overrides is not None
     for block in [config.block, *config.block_overrides.values()]:
+        assert isinstance(block, OLMoDDPTransformerBlockConfig)
         mixer = block.sequence_mixer
         if hasattr(mixer, "use_experimental_kernels"):
             mixer.use_experimental_kernels = False
         if hasattr(mixer, "qk_norm_per_head_gains"):
             mixer.qk_norm_per_head_gains = True
-        if size == "medium" and getattr(block, "ep", None) is not None:
+        if size == "medium" and block.ep is not None:
             block.ep.path = ExpertParallelPath.sync_1d
     if completedp:
         config.completedp = CompletedPConfig(
@@ -195,16 +198,21 @@ def build_model_config(spec: str, *, completedp: bool) -> OLMoDDPModelConfig:
         expected_total_params=0,
     )
     norm = hero._norm()
+    assert isinstance(config.block, OLMoDDPTransformerBlockConfig)
+    assert config.block.routed_experts_router is not None
     emo = deepcopy(config.block.routed_experts_router.emo)
+    assert emo is not None
     emo.max_document_expert_pool = NUM_EXPERTS
     emo.eval_document_expert_pool = NUM_EXPERTS
     emo.validate_for_router(num_experts=NUM_EXPERTS, top_k=TOP_K)
     kda_block = hero._moe_block(g, norm, hero._kda(g), emo)
     attention_block = hero._moe_block(g, norm, hero._attention(g, norm), emo)
-    for block in (kda_block, attention_block):
-        block.routed_experts.num_experts = NUM_EXPERTS
-        block.routed_experts_router.num_experts = NUM_EXPERTS
-        block.routed_experts_router.top_k = TOP_K
+    for moe_block in (kda_block, attention_block):
+        assert moe_block.routed_experts is not None
+        assert moe_block.routed_experts_router is not None
+        moe_block.routed_experts.num_experts = NUM_EXPERTS
+        moe_block.routed_experts_router.num_experts = NUM_EXPERTS
+        moe_block.routed_experts_router.top_k = TOP_K
     config.d_model = d_model
     config.n_layers = n_layers
     config.embed_scale = math.sqrt(d_model)
@@ -214,6 +222,7 @@ def build_model_config(spec: str, *, completedp: bool) -> OLMoDDPModelConfig:
         **{i: deepcopy(attention_block) for i in g.full_attention_layers},
     }
     for block in [config.block, *config.block_overrides.values()]:
+        assert isinstance(block, OLMoDDPTransformerBlockConfig)
         mixer = block.sequence_mixer
         if hasattr(mixer, "use_experimental_kernels"):
             mixer.use_experimental_kernels = False
