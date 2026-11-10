@@ -150,6 +150,62 @@
    "seed": 0,
    "slurm": "4150169",
    "cluster": "jsteinhardt mooney"
+  },
+  "f8k-mt4-dense-f488-tde-lr5e-06": {
+   "ex": "01M73N9XKT9BJEJ5N9MVB3PGE1",
+   "arm": "dense",
+   "budget": "f488",
+   "lr": 5e-06,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f488-tde-lr5e-06/oracle_meta"
+  },
+  "f8k-mt4-dense-f976-tde-lr5e-06": {
+   "ex": "01M73NAQNXSRC1CPY88Y9QD222",
+   "arm": "dense",
+   "budget": "f976",
+   "lr": 5e-06,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-f976-tde-lr5e-06/oracle_meta"
+  },
+  "f8k-mt4-orc1doc90-f1952-orc-lr1e-05": {
+   "ex": "01M73NE549W2GXEZK97ZCGMNHV",
+   "arm": "orc1doc90",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc90-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1doc85-f1952-orc-lr1e-05": {
+   "ex": "01M73NF65DE1MNAEJ2E2AJCW0E",
+   "arm": "orc1doc85",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc85-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1doc80-f1952-orc-lr1e-05": {
+   "ex": "01M73NGEB5XWQ0HJ8HWN12J6J3",
+   "arm": "orc1doc80",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc80-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1doc70-f1952-orc-lr1e-05": {
+   "ex": "01M73NHFPRH087KDJZGEQVGCYG",
+   "arm": "orc1doc70",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc70-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1doc60-f1952-orc-lr1e-05": {
+   "ex": "01M73NJKQEHZ4B5W01CV7XTDEN",
+   "arm": "orc1doc60",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc60-f1952-orc-lr1e-05/oracle_meta"
   }
  },
  "evals": {
