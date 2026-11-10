@@ -89,7 +89,10 @@ def history_minutes(run_id: str, runs: dict, launcher: str | None = None, kind: 
         if launcher and lch and lch != launcher:
             continue
         pool.append((name_tokens(rid), rt))
-    for n in range(len(want), 1, -1):  # never match on the first token alone (e.g. just "f8k")
+    # Never match on the first token alone (e.g. just "f8k"). Leave-one-out on the 2026-10-20..11-10
+    # Beaker training runs: 1.3 x this median covers the actual runtime for 70% of runs (1h flat: 67%;
+    # p75: 76%, p90: 78% at a ~1.7 h mean minRuntime). An explicit --expected-minutes is better.
+    for n in range(len(want), 1, -1):
         hits = [rt for toks, rt in pool if toks[:n] == want[:n]]
         if len(hits) >= min_samples:
             return statistics.median(hits), len(hits), "-".join(want[:n])
