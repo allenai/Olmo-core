@@ -189,8 +189,9 @@ def main():
         axs[0].scatter([xs[0]], [100 * ws[0]], color=c, marker="*", s=80, zorder=3)
         m = np.array(e["row_gap_share_mean"])
         se = np.array(e["row_gap_share_se"])
-        axs[1].plot(xs[2:], 100 * m[2:], color=c, marker="o", ms=3, label=lab)
-        axs[1].fill_between(xs[2:], 100 * (m[2:] - se[2:]), 100 * (m[2:] + se[2:]), color=c, alpha=0.2)
+        npair = np.array([nch - g for g in range(1, nch)], dtype=float)  # (target chunk, token chunk) pairs at gap g
+        axs[1].plot(xs[2:], 100 * m[2:] / npair, color=c, marker="o", ms=3, label=lab)
+        axs[1].fill_between(xs[2:], 100 * (m[2:] - se[2:]) / npair, 100 * (m[2:] + se[2:]) / npair, color=c, alpha=0.2)
         for bi, bn in enumerate(BAND_NAMES):
             sb = e["gap_share_band"][bi]
             ls = "-" if lab.split("_")[1] == "cpt" else ":"
@@ -206,8 +207,10 @@ def main():
     axs[0].set_ylabel("% of the step gradient (projection share)")
     axs[0].set_title("Whole model: % of the gradient at each distance\n(star = own label, distance 0; first dot = rest of the "
                      "same 1k chunk)", fontsize=8.5)
-    axs[1].set_ylabel("% (per-row mean ± SE)")
-    axs[1].set_title("Gaps >= 1 chunk, per-row mean ± SE over rows", fontsize=8.5)
+    axs[1].set_ylabel("% per (target chunk, token chunk) pair")
+    axs[1].set_yscale("log")
+    axs[1].set_title("Per dependency: share / number of chunk pairs at that gap\n(per-row mean ± SE; removes the fewer-far-pairs "
+                     "effect)", fontsize=8.5)
     axs[2].set_ylabel("% of that band's gradient")
     axs[2].set_title("By block band, gaps >= 1 chunk (solid: dense CPT, dotted: base)", fontsize=8.5)
     axs[0].legend(fontsize=7)
