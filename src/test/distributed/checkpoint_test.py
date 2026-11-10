@@ -553,6 +553,14 @@ def test_get_optimizer_state_dict_does_not_advance_fresh_optimizer(
     assert all(float(step) == 0 for step in steps)
     if flatten_optim_state:
         assert optim_state_dict["param_groups.weight.lr"] == 3e-3
+        # Same keys as torch's own flattened form.
+        model2 = deepcopy(model)
+        expected = dist_cp_sd.get_optimizer_state_dict(
+            model2,
+            optim_factory(model2.parameters()),
+            options=dist_cp_sd.StateDictOptions(flatten_optimizer_state_dict=True),
+        )
+        assert optim_state_dict.keys() == expected.keys()
     else:
         assert optim_state_dict["param_groups"][0]["lr"] == 3e-3
 
@@ -609,12 +617,13 @@ class _GroupStepSGD(torch.optim.Optimizer):
                 p.add_(p.grad, alpha=-group["lr"])
 
 
+@pytest.mark.parametrize("group_step", [0, 5])
 @pytest.mark.parametrize(
     "flatten_optim_state",
     [pytest.param(True, id="flat-optim"), pytest.param(False, id="nested-optim")],
 )
-def test_get_optimizer_state_dict_resets_group_steps_and_copied_state(
-    monkeypatch, flatten_optim_state
+def test_get_optimizer_state_dict_restores_group_steps_and_copied_state(
+    monkeypatch, flatten_optim_state, group_step
 ):
     # Make torch return copies, as it does for sharded models, so the live optimizer and the
     # returned state dict have to be reset separately.
@@ -627,24 +636,26 @@ def test_get_optimizer_state_dict_resets_group_steps_and_copied_state(
 
     model = nn.Linear(16, 16)
     optim = _GroupStepSGD(model.parameters())
+    # A group step can already be set before there is any per-parameter state.
+    optim.param_groups[0]["step"] = group_step
     optim_state_dict = get_optimizer_state_dict(
         model,
         optim,
         options=dist_cp_sd.StateDictOptions(flatten_optimizer_state_dict=flatten_optim_state),
     )
 
-    assert [group["step"] for group in optim.param_groups] == [0]
+    assert [group["step"] for group in optim.param_groups] == [group_step]
     assert [state["step"] for state in optim.state.values()] == [0, 0]
     if flatten_optim_state:
         steps = {k: v for k, v in optim_state_dict.items() if k.endswith(".step")}
         assert steps == {
             "state.weight.step": 0,
             "state.bias.step": 0,
-            "param_groups.weight.step": 0,
-            "param_groups.bias.step": 0,
+            "param_groups.weight.step": group_step,
+            "param_groups.bias.step": group_step,
         }
     else:
-        assert [group["step"] for group in optim_state_dict["param_groups"]] == [0]
+        assert [group["step"] for group in optim_state_dict["param_groups"]] == [group_step]
         assert list(_iter_steps(optim_state_dict)) == [0, 0]
 
 

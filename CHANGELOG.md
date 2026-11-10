@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Saving a checkpoint before the first optimizer step (the default step-0 checkpoint) no longer advances the optimizer's step count. Torch's `get_optimizer_state_dict` initializes empty optimizer state by running a zero-gradient step, so the first real update got the bias correction of step 2. The new `olmo_core.distributed.checkpoint.get_optimizer_state_dict` resets the step counts to 0 (https://github.com/allenai/Olmo-core/issues/908).
+- Saving a checkpoint before the first optimizer step (the default step-0 checkpoint) no longer advances the optimizer's step count. Torch's `get_optimizer_state_dict` initializes empty optimizer state by running a zero-gradient step, so the first real update got the bias correction of step 2. The new `olmo_core.distributed.checkpoint.get_optimizer_state_dict` puts the step counts back (https://github.com/allenai/Olmo-core/issues/908).
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
 - Preserve 16-byte parameter alignment in OLMoDDP flat model buffers so compiled kernels remain valid after small BF16 parameters are packed.
