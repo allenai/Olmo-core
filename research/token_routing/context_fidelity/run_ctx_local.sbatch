@@ -1,0 +1,43 @@
+#!/bin/bash
+# context_probe.py on jsteinhardt (1 GPU). Copies the code from SRC (a checkout on NFS, read once) to node /data, pulls
+# the model-only checkpoint + probe shards from S3 if the node lacks them (staged by grad_concentration/stage_s3_beaker.sh).
+#   sbatch -w <node> --qos=preemptive_high -J ctxfid-<label>-s<i> --export=ALL,SRC=<checkout>,LABEL=<label>,\
+#     CKNAME=<ckpt name>,ADAM_FROM=<factor file>,ARGS="--num-shards 4 --shard 0" run_ctx_local.sbatch
+#SBATCH --partition=jsteinhardt
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=128G
+#SBATCH --time=06:00:00
+#SBATCH --output=/data/prasann/%x-%j.out
+set -eo pipefail
+REPO=/accounts/projects/berkeleynlp/prasann/projects/OLMo-core
+ROOT=/data/prasann/gradconc
+OUTROOT=/data/prasann/ctxfid
+SRC=${SRC:?set SRC}; LABEL=${LABEL:?set LABEL}; CKNAME=${CKNAME:?set CKNAME}
+PY=/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python
+CODE=$OUTROOT/code_${SLURM_JOB_ID}
+mkdir -p "$CODE" "$ROOT/ckpts" "$OUTROOT/tmp" "$OUTROOT/results" "$OUTROOT/sketches"
+(cd "$SRC" && tar -c --exclude=.git --exclude='results*' src research/token_routing/grad_concentration \
+  research/token_routing/context_fidelity research/token_routing/olmo3_cptdrop/s3_sync.py) | tar -x -C "$CODE"
+export TMPDIR=$OUTROOT/tmp TRITON_CACHE_DIR=$OUTROOT/tmp/triton HF_HOME=$OUTROOT/hf_cache PYTHONPATH="$CODE/src"
+cd "$CODE"
+s3down() {
+  "$PY" -u -c "import sys; sys.path.insert(0, 'research/token_routing/olmo3_cptdrop'); import s3_sync as s
+s.ROOT = 'checkpoints/prasanns/_transfer/gradconc'; sys.argv = ['s3_sync', 'down', '$1', '$2']; s.main()" | tail -1
+}
+(
+  flock 9
+  for S in contradiction_fresh nq_fresh outlier_fresh oolong_fresh mt4f7808 mt4s1952; do
+    [ -f "$ROOT/shards/$S/metadata.json" ] || s3down "$ROOT/shards/$S" "shards/$S"; done
+  [ -f "$ROOT/ckpts/$CKNAME/model_and_optim/.metadata" ] || s3down "$ROOT/ckpts/$CKNAME" "$CKNAME"
+) 9>"$ROOT/stage.lock"
+EXTRA=""
+if [ -n "${ADAM_FROM:-}" ]; then cp "$ADAM_FROM" "$OUTROOT/adam_${SLURM_JOB_ID}.pt"; EXTRA="--adam-factors $OUTROOT/adam_${SLURM_JOB_ID}.pt"; fi
+nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader
+OPS_RUN_ID="ctxfid-${LABEL}-${SLURM_JOB_ID}" OPS_EXPERIMENT=tokdrop_lr OPS_KIND=eval OPS_PARENT_RUN="$CKNAME" \
+  OPS_EXPECTED_MINUTES=${MINUTES:-120} OPS_FIRST_OUTPUT=1200 OPS_STALL=1800 OPS_TASK=mt4 OPS_EVAL_VARIANT=ctxfid \
+  OPS_NOTES="context-fidelity probe (no training): stand-ins for dropped tokens" \
+  bash "$REPO/recipes/env/ops_job.sh" "$PY" -u research/token_routing/context_fidelity/context_probe.py \
+    --ckpt "$ROOT/ckpts/$CKNAME/model_and_optim" --shards "$ROOT/shards" --label "$LABEL" \
+    --save-dir "$OUTROOT/sketches" --out "$OUTROOT/results/${LABEL}_${SLURM_JOB_ID}.json" $EXTRA ${ARGS:-}
+echo "PROBE_DONE $LABEL"
