@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and optionally reset auxiliary metrics before training and on exit.
 - Added an opt-in FP32-output LM head with low-precision GEMMs and mixed-precision backward.
 - Added optional eager-rounding parity and dynamic-row specialization for no-gradient SwiGLU.
+- Added `RoutedExpertsConfig.fused_no_grad_activation` (default `True`). Setting it to `False` makes no-gradient routed-expert forwards use the same eager SiLU-then-multiply activation as the gradient-enabled training path instead of the fused valid-prefix kernel, so policy scoring can share the training forward's arithmetic exactly. Explicit FP8 and wave-kernel callers are unchanged.
 
 ### Fixed
 
