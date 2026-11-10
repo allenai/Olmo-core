@@ -18,7 +18,8 @@ Variants for the dropped tokens above the cut (DeltaNet blocks always see the ke
              block (forward-only dense pass for them; no gradient)
   mean1      one stand-in per document = mean of its dropped tokens' block-7 states, logit bias log(count), placed at
              the document's last dropped position (visible to strictly later queries)
-  span64     one stand-in per 64-token span of each document, same construction
+  span64     one stand-in per 64-token span of each document, same construction (spanN: N-token spans; span1 is a
+             correctness check: each dropped token its own stand-in, count 1, must reproduce frozen)
   lin7       plain drop + a fixed linear correction added to the kept tokens after block 15:
              delta_hat = W [h7; 1], W ridge-fitted on held-out rows to delta = h16_dense - h16_drop
   lin7r      the same with inputs [h7; h16_drop; 1]
@@ -113,7 +114,7 @@ def make_ctx(var, hcut, r, keep, kidx, didx):
         return dict(kind="fwdonly")
     if var == "kvfresh":
         return dict(kind="full", state=None, all=False)
-    if var in ("mean1", "span64"):
+    if var == "mean1" or var.startswith("span"):
         dev = hcut.device
         cid = r["cid"]
         T = hcut.shape[0]
@@ -128,7 +129,7 @@ def make_ctx(var, hcut, r, keep, kidx, didx):
             first = torch.full((int(cid.max()) + 1,), T, dtype=torch.long, device=dev)
             bpos = torch.nonzero(r["body"], as_tuple=True)[0]
             first.scatter_reduce_(0, cid[bpos], bpos, reduce="amin")
-            key = dc * 100000 + (didx - first[dc]) // SPAN
+            key = dc * 100000 + (didx - first[dc]) // int(var[4:])
         uk, inv = torch.unique(key, return_inverse=True)
         S = uk.numel()
         cnt = torch.bincount(inv, minlength=S).float()
@@ -249,7 +250,7 @@ class Flops:
                 extra += nd * sum(self.Pmix[b] for b in range(CUT, NB) if b not in ATTN) / 3
             if var in ("kvfresh", "fwdonly"):  # forward-only dense pass of the dropped tokens through blocks CUT .. 31
                 extra += nd * sum(self.P[CUT:]) / 3 + len(ATTN_UP) * self.pair_f * dq_pairs
-        if nd and var in ("mean1", "span64") and ctx is not None:
+        if nd and (var == "mean1" or var.startswith("span")) and ctx is not None:
             S = ctx["S"]
             spos = ctx["pos"][Tk:]
             pairs = float(torch.searchsorted(spos, kidx).sum())
