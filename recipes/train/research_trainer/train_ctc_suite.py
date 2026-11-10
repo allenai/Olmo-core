@@ -1994,6 +1994,11 @@ def parse_args() -> argparse.Namespace:
                     "more, easy ones less, same total), per-row cap --st-otr-row-cap x budget, floor counted; the fit "
                     "centres over the batch")
     ap.add_argument("--st-otr-row-cap", type=float, default=2.0, help="keep-mode threshold: per-row cap (x budget)")
+    ap.add_argument("--st-otr-wts", default="",
+                    help="online router, weighted token sampling (records/weighted-token-sampling.md): 'k=v,...' "
+                    "options of olmo_core.nn.online_token_router.WTS_DEFAULTS -- sampled keep with exact inclusion "
+                    "probabilities, token weights w = 1/p in attention / DeltaNet (weights=attn|gdn|both), the price "
+                    "rule (price=<FLOP target>). Empty = off (the top-k recipe)")
     ap.add_argument("--st-otr-keep-sched", default="",
                     help="online router: 'a:b' multiplies the first stage's keep linearly from a to b over training "
                     "(later stages keep their absolute budgets)")

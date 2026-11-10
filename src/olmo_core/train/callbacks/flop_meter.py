@@ -355,6 +355,10 @@ class FlopMeterCallback(Callback):
             self._overhead += float(ov.item())
             self.trainer.record_metric("flop_meter/overhead_pflops", self._overhead / 1e15)
 
+        if dense_flops > 0:
+            # this step's actual / dense ratio, overhead included (the weighted-token-sampling price controller reads it)
+            m._flop_step_ratio = float(actual) / float(dense_flops)
+            self.trainer.record_metric("flop_meter/step_ratio_total", float(actual) / float(dense_flops))
         self._actual += actual
         self._dense += dense_flops
         self._tokens += tokens

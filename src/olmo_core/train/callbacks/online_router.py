@@ -28,7 +28,8 @@ class OnlineRouterCallback(Callback):
 
     #: the fit carried across a preemption resume (2026-10-30): without it a resumed run restarts the router with no
     #: weights, i.e. one full-context warmup step mid-run and a fresh ridge accumulation
-    _STATE_KEYS = ("w", "XtX", "Xty", "n_seen", "step", "task_w", "task_XtX", "task_Xty", "task_seen", "frozen_blocks")
+    _STATE_KEYS = ("w", "XtX", "Xty", "n_seen", "step", "task_w", "task_XtX", "task_Xty", "task_seen", "frozen_blocks",
+                   "_logtau")
 
     def state_dict(self) -> Dict[str, Any]:
         import torch
@@ -177,6 +178,9 @@ class OnlineRouterCallback(Callback):
         if torch.cuda.is_available():
             # this step's peak allocated memory on this rank (reset in pre_step)
             m["online_router/peak_mem_gib"] = torch.cuda.max_memory_allocated() / 2**30
+            # the run's peak so far (the per-step value resets every step; warmup / first steps can set the peak)
+            self._peak_run = max(float(getattr(self, "_peak_run", 0.0)), m["online_router/peak_mem_gib"])
+            m["online_router/peak_mem_run_gib"] = self._peak_run
         if getattr(self, "_diag_batch", None) is not None:
             dg = self._diag(router, self._diag_batch)
             self._diag_batch = None

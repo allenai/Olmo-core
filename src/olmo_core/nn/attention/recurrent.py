@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 import torch
 from torch import nn
@@ -30,6 +30,40 @@ from olmo_core.nn.feed_forward import ActivationFunction
 
 if TYPE_CHECKING:
     from olmo_core.nn.transformer.init import InitMethod
+
+
+def gdn_token_weight(
+    g: torch.Tensor, beta: torch.Tensor, v: torch.Tensor, w: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """The gated-delta-rule step of ONE token that equals ``w`` consecutive identical copies of it.
+
+    With unit-norm ``k`` (the kernel L2-normalises it) the step is ``S' = a S (I - b k k^T) + b v k^T``,
+    ``a = exp(g)``. On the part of ``S`` orthogonal to ``k`` it only decays, so ``w`` steps decay it by
+    ``a^w``; along ``k`` the read ``S k`` maps to ``r S k + b v`` with ``r = a (1 - b)``, so ``w`` steps give
+    ``r^w S k + b (1 - r^w) / (1 - r) v``. One step with ``a' = a^w``, ``b' = 1 - (1 - b)^w`` and
+    ``v' = c v``, ``c = b (1 - r^w) / ((1 - r) b')``, reproduces both exactly (``a' (1 - b') = r^w``).
+
+    ``g``: (B, T, H) log decay, ``beta``: (B, T, H), ``v``: (B, T, H, Dv) the post-conv values, ``w``: (B, T).
+    Returns ``(g', beta', v')``; positions with ``w == 1`` are returned unchanged (bit for bit).
+    """
+    wf = w.to(torch.float32).unsqueeze(-1)  # (B, T, 1)
+    one = wf == 1.0
+    gf = g.to(torch.float32)
+    bf = beta.to(torch.float32).clamp(1e-12, 1.0 - 1e-7)
+    lb = torch.log1p(-bf)  # log(1 - b)
+    g_w = gf * wf
+    b_w = -torch.expm1(wf * lb)  # 1 - (1 - b)^w
+    logr = gf + lb  # log r <= 0
+    den = -torch.expm1(logr)  # 1 - r
+    tiny = den < 1e-6
+    # (1 - r^w) / (1 - r) -> w as r -> 1; b' / b -> w as b -> 0
+    geo = torch.where(tiny, wf.expand_as(den), -torch.expm1(wf * logr) / den.clamp(min=1e-6))
+    ratio = torch.where(bf < 1e-6, wf.expand_as(bf), b_w / bf.clamp(min=1e-6))
+    c = geo / ratio
+    g_out = torch.where(one, g, g_w.to(g.dtype))
+    beta_out = torch.where(one, beta, b_w.to(beta.dtype))
+    v_out = torch.where(one.unsqueeze(-1), v, (v.to(torch.float32) * c.unsqueeze(-1)).to(v.dtype))
+    return g_out, beta_out, v_out
 
 
 class GatedDeltaNetStateCache(nn.Module):
@@ -256,6 +290,7 @@ class GatedDeltaNet(SequenceMixer):
         block_keep: Optional[torch.Tensor] = None,
         kv_grad_mask: Optional[torch.Tensor] = None,
         soft_keep: Optional[torch.Tensor] = None,
+        token_weight: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -300,6 +335,11 @@ class GatedDeltaNet(SequenceMixer):
             windows hold the previous KEPT tokens -- so for ``p in {0, 1}`` the mixer computes
             exactly what it computes on the compacted row. ``p = 1`` everywhere matches the plain
             path up to kernel numerics. Plain forwards only (no packing / cache / CP).
+        :param token_weight: Optional ``(batch_size, seq_len)`` float ``w >= 1``: token ``t`` stands for ``w_t``
+            consecutive IDENTICAL tokens (weighted token sampling, :func:`gdn_token_weight`). Its recurrence step is
+            replaced by the exact ``w``-fold one: decay ``g -> w g``, write strength ``beta -> 1 - (1 - beta)^w``,
+            and the value rescaled so the written mass matches. Exact for the delta-rule recurrence; the short
+            causal conv still sees one copy. Positions with ``w == 1`` keep their inputs bit for bit.
 
         :returns: The output with shape ``(batch_size, seq_len, d_model)``.
         """
@@ -505,6 +545,13 @@ class GatedDeltaNet(SequenceMixer):
             repeat_factor = self.n_v_heads // self.n_heads
             q = q.repeat_interleave(repeat_factor, dim=-2)
             k = k.repeat_interleave(repeat_factor, dim=-2)
+
+        if token_weight is not None and not use_precomputed and getattr(self, "_token_weight_on", True):
+            if self.allow_neg_eigval:
+                raise NotImplementedError("token_weight needs beta in (0, 1) (allow_neg_eigval=False)")
+            if self.cp_enabled and self.uly is not None:
+                raise NotImplementedError("token_weight is not supported with context parallelism")
+            g, beta, v = gdn_token_weight(g, beta, v, token_weight.to(device=x.device))
 
         if pad_mask is not None:
             # Zeroing the conv inputs above leaves q/k all-zero at the pad positions, and the kernel

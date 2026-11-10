@@ -72,6 +72,96 @@ N_TASK = 31
 #: and dh ranks. The gradient norm is recorded under every target (fidelity metrics stay comparable).
 TARGETS = ("gnorm", "gxh", "dh", "mix")
 
+#: Weighted token sampling (``wts`` spec, records/weighted-token-sampling.md). Keys and defaults:
+#:   sample   1     sampled keep: token t survives a cut with probability p_t (systematic sampling, exact marginals)
+#:   weights  none  none | attn | gdn | both: survivors carry w <- w / p into the layers where tokens mix
+#:   mix      0.1   fixed-budget mode: share of each document's budget spread uniformly (the recipe's exploration
+#:                  share), so p >= mix * keep; the rest is water-filled proportional to exp(score / temp)
+#:   temp     1.0   score temperature (large = uniform)
+#:   sampler  sys   sys (systematic, one uniform per row, counts within +-1) | bern (independent Bernoulli)
+#:   ipw      1     ridge fit weighted by 1/p (undoes the selection bias of sampled survivors)
+#:   tcorr    1     with weights: target = log||dL/dh|| - log w (the gradient of a weighted token scales with w)
+#:   clip     0     clip log w at this value in the forward (0 = off; a fallback)
+#:   price    0     > 0: the price rule p = clip(v / (tau sqrt(c_l)), pmin, 1) with tau set by a controller so the
+#:                  measured step FLOPs hit this fraction of a dense step; each stage's keep becomes a hard cap on
+#:                  expected survivors (fraction of the row's original body tokens)
+#:   pmin     0.02  price mode survival floor
+#:   alloc    row   price mode: row (one tau over the row's body tokens) | doc (scores normalised per document)
+#:   multw    1     price mode: a survivor's value is w_prev * exp(score) (it stands for w_prev tokens)
+#:   gain     0.5   controller gain on log tau per step (log of measured / target step FLOP ratio)
+#:   tau0     5.0   initial tau
+WTS_DEFAULTS: Dict[str, Any] = {"sample": 1, "weights": "none", "mix": 0.1, "temp": 1.0, "sampler": "sys", "ipw": 1,
+                                "tcorr": 1, "clip": 0.0, "price": 0.0, "pmin": 0.02, "alloc": "row", "multw": 1,
+                                "gain": 0.5, "tau0": 5.0}
+
+
+def parse_wts(spec: str) -> Optional[Dict[str, Any]]:
+    """``"k=v,k=v"`` -> the weighted-token-sampling options (``WTS_DEFAULTS`` filled in), or None for ``""``."""
+    if not spec:
+        return None
+    out = dict(WTS_DEFAULTS)
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        k, _, v = part.partition("=")
+        k = k.strip()
+        if k not in WTS_DEFAULTS:
+            raise ValueError(f"online router wts: unknown key {k!r} (known: {', '.join(WTS_DEFAULTS)})")
+        d = WTS_DEFAULTS[k]
+        out[k] = type(d)(float(v)) if isinstance(d, int) else (float(v) if isinstance(d, float) else v.strip())
+    if out["weights"] not in ("none", "attn", "gdn", "both"):
+        raise ValueError(f"online router wts weights must be none / attn / gdn / both, got {out['weights']!r}")
+    if out["sampler"] not in ("sys", "bern"):
+        raise ValueError(f"online router wts sampler must be sys / bern, got {out['sampler']!r}")
+    if out["alloc"] not in ("row", "doc"):
+        raise ValueError(f"online router wts alloc must be row / doc, got {out['alloc']!r}")
+    if not out["sample"]:
+        raise ValueError("online router wts needs sample=1 (top-k keeps carry no inclusion probabilities)")
+    if not 0.0 <= out["mix"] <= 1.0 or out["temp"] <= 0 or not 0.0 < out["pmin"] <= 1.0 or out["price"] < 0:
+        raise ValueError("online router wts: mix in [0, 1], temp > 0, pmin in (0, 1], price >= 0")
+    return out
+
+
+def waterfill(v: torch.Tensor, gid: torch.Tensor, n_groups: int, target: torch.Tensor, lo: float = 0.0,
+              iters: int = 48) -> torch.Tensor:
+    """Per group g, ``p = clip(lam_g * v, lo, 1)`` with ``lam_g`` such that ``sum_g p = target_g`` (bisection on
+    ``log lam``). ``v`` (N,) > 0, ``gid`` (N,) in ``[0, n_groups)``, ``target`` (n_groups,) clamped to
+    ``[lo * n_g, n_g]``. Returns ``p`` (N,)."""
+    v = v.to(torch.float64).clamp(min=1e-30)
+    lv = torch.log(v)
+    n = torch.zeros(n_groups, dtype=torch.float64, device=v.device).index_add_(0, gid, torch.ones_like(v))
+    tgt = torch.minimum(torch.maximum(target.to(torch.float64), lo * n), n)
+    big = torch.full((n_groups,), -1e30, dtype=torch.float64, device=v.device)
+    small = torch.full((n_groups,), 1e30, dtype=torch.float64, device=v.device)
+    vmax = big.scatter_reduce(0, gid, lv, reduce="amax")
+    vmin = small.scatter_reduce(0, gid, lv, reduce="amin")
+    a = torch.log(tgt.clamp(min=1e-30)) - torch.log(
+        torch.zeros(n_groups, dtype=torch.float64, device=v.device).index_add_(0, gid, v).clamp(min=1e-30)) - 1.0
+    a = torch.minimum(a, -vmax + math.log(max(lo, 1e-12)) - 1.0)  # every p at the floor
+    b = -vmin + 1.0  # every p at 1
+    for _ in range(iters):
+        m = 0.5 * (a + b)
+        p = torch.clamp(torch.exp(m[gid] + lv), lo, 1.0)
+        tot = torch.zeros(n_groups, dtype=torch.float64, device=v.device).index_add_(0, gid, p)
+        hi = tot > tgt
+        b = torch.where(hi, m, b)
+        a = torch.where(hi, a, m)
+    return torch.clamp(torch.exp(0.5 * (a + b)[gid] + lv), lo, 1.0).to(torch.float32)
+
+
+def sample_keep(p: torch.Tensor, mask: torch.Tensor, gen: torch.Generator, sampler: str = "sys") -> torch.Tensor:
+    """(B, T) keep draw with inclusion probability exactly ``p`` on ``mask`` (False elsewhere). ``sys``: systematic
+    sampling along each row (one uniform offset per row; a row keeps sum(p) +- 1 tokens, any run of tokens its
+    expected count +- 1); ``bern``: independent draws."""
+    pm = torch.where(mask, p.to(torch.float64), torch.zeros_like(p, dtype=torch.float64))
+    if sampler == "bern":
+        u = torch.rand(p.shape, generator=gen, device=p.device, dtype=torch.float64)
+        return mask & (u < pm)
+    u = torch.rand((p.shape[0], 1), generator=gen, device=p.device, dtype=torch.float64)
+    C = torch.cumsum(pm, dim=1) + u
+    return mask & (torch.floor(C) - torch.floor(C - pm) >= 1.0)
+
 
 @dataclass
 class OnlineRouterConfig:
@@ -249,6 +339,10 @@ class OnlineRouterConfig:
     its full-row loss). ``drop_layer`` is set to the first listed block. Targets are the gradient norms at that block
     over EVERY token -- skipped tokens still get a gradient through the residual, so nothing is censored. Charged:
     each listed block at the kept length. Empty = off."""
+    wts: str = ""
+    """Weighted token sampling (mid-stack drop): ``"k=v,..."`` options, see :data:`WTS_DEFAULTS` (sampled keep with
+    exact inclusion probabilities, token weights w = 1/p carried into attention / DeltaNet, the price rule and its
+    FLOP controller). Empty = off (the top-k recipe)."""
     per_task_key_tokens: int = 0
     """A separate router PER TASK in a mixed-task batch: a row's task key is its first N tokens (the prompt template;
     on the CTC mixes N = 11 identifies every task file, except the two retrieval files that share one template), and
@@ -370,6 +464,12 @@ class OnlineRouterConfig:
                 raise ValueError(f"online router keep_sched must be 'a:b' with a, b > 0, got {self.keep_sched!r}")
         if self.per_task_key_tokens < 0:
             raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
+        if self.wts:
+            parse_wts(self.wts)
+            if self.drop_layer <= 0 or self.mod_layers or self.merge_dropped or self.mass_target > 0 \
+                    or self.keep_mode != "topk" or self.exit_loss_weight > 0 or self.later_mass_target > 0:
+                raise ValueError("online router wts needs the mid-stack drop (drop_layer > 0 or stages) and is exclusive "
+                                 "with mod_layers / merge_dropped / mass_target / keep_mode threshold / exit loss")
 
 
 def _log_bucket(j: torch.Tensor) -> torch.Tensor:
@@ -631,12 +731,22 @@ class OnlineTokenRouter:
                                         d_model=d_model, gold_table=None, rank=rank)
                 nxt.stage_idx = i
                 nxt._root_drop_layer = l0
+                nxt._abs_keep = float(k)
                 prev._next, prev, prev_k = nxt, nxt, k
         if cfg.use_gold and gold_table is None:
             raise ValueError("online router use_gold needs the gold-fingerprint table")
         self.cfg = cfg
+        self.wts = parse_wts(cfg.wts)
+        self._root: "OnlineTokenRouter" = self
+        for r in self.chain():
+            r._root = self
+        self._logtau = math.log(float(self.wts["tau0"])) if self.wts else 0.0
+        self._last_p: Optional[torch.Tensor] = None
+        self._wts_marked = False
         if not hasattr(self, "_root_drop_layer"):
             self._root_drop_layer = cfg.drop_layer
+        if not hasattr(self, "_abs_keep"):
+            self._abs_keep = float(cfg.keep_frac)
         self.doc_start_id, self.doc_end_id, self.eos_id = int(doc_start_id), int(doc_end_id), int(eos_id)
         self.d_model = int(d_model)
         self.rank = int(rank)
@@ -983,8 +1093,12 @@ class OnlineTokenRouter:
             score = self.score(fp)
             self._flop(model, 2.0 * self.n_features * (1 + self.cfg.mlp_hidden * int(getattr(self, "_mlp", None)
                                                                                    is not None)) * float(body.sum()))
+        self._last_p = None
         if dense:
             keep = body.clone()
+        elif self.wts is not None:
+            keep = self._wts_keep(model, fp, ids, cid, score, kf, gen,
+                                  uniform=warm_rand or c.score == "random" or c.explore_frac >= 1.0)
         else:
             assert score is not None or warm_rand
             if warm_rand or c.score == "random" or c.explore_frac >= 1.0:
@@ -1097,6 +1211,8 @@ class OnlineTokenRouter:
             "target": None,
             "dense": dense,
             "task": (self._row_task[rows] if self._row_task is not None else None),
+            # weighted token sampling: importance weight 1 / p of each target sample (its inclusion probability)
+            "ipw": ((1.0 / self._last_p[rows, cols].clamp(min=1e-12)) if self._last_p is not None else None),
         }
         # diagnostics: realised keep, gold leak (does per-document kept density name gold?)
         self._stat("keep_frac", float(keep.sum()) / max(1.0, float(body.sum())))
@@ -1105,6 +1221,108 @@ class OnlineTokenRouter:
             gflag = fp["_gold"][..., 0] if "_gold" in fp else self._row_gold(ids, cid)
             self._stat("leak_auc", self._leak_auc(keep, body, cid, gflag))
         return keep, entry
+
+    def _wts_cost_frac(self, model, L: int) -> float:
+        """Price rule: the per-token cost of keeping a token from this stage's block onward (its blocks at this
+        forward's factors, adapters, the LM head), as a share of a dense token's whole-stack cost at length ``L``."""
+        key = (int(L), self.cfg.drop_layer, self._nograd_until)
+        cache = self.__dict__.setdefault("_cost_cache", {})
+        if key not in cache:
+            blocks = list(model.blocks.values())
+            fac = self._block_factors(len(blocks))
+            ab = self._block_extra(model, fac)
+            fb = [float(b.num_flops_per_token(int(L))) for b in blocks]
+            head = float(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0.0
+            L0 = self.cfg.drop_layer
+            tail = sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + sum(ab[L0:]) + head
+            cache[key] = tail / max(1.0, sum(fb) + head)
+        return cache[key]
+
+    def _mark_weighted_layers(self, model) -> None:
+        """Which sequence mixers read ``token_weight`` (wts ``weights``: attn / gdn / both)."""
+        from .attention import Attention
+        from .attention.recurrent import GatedDeltaNet
+
+        wsel = self.wts["weights"] if self.wts else "none"
+        n_a = n_g = 0
+        for m in model.modules():
+            if isinstance(m, GatedDeltaNet):
+                m._token_weight_on = wsel in ("gdn", "both")
+                n_g += int(m._token_weight_on)
+            elif isinstance(m, Attention):
+                m._token_weight_on = wsel in ("attn", "both")
+                n_a += int(m._token_weight_on)
+        for r in self._root.chain():
+            r._wts_marked = True
+        if self.rank == 0:
+            log.info("[online-router] wts weights=%s: %d attention + %d DeltaNet layers read token weights", wsel, n_a, n_g)
+
+    def _wts_keep(self, model, fp, ids, cid, score, kf: float, gen, uniform: bool) -> torch.Tensor:
+        """Weighted token sampling: the survival probability ``p`` of every body token at this cut (stored in
+        ``self._last_p``, 1 elsewhere) and the sampled keep mask. Fixed-budget mode: per document, ``p = mix * kf +
+        (1 - mix) * q`` with ``q = min(1, lam_d exp(score / temp))`` water-filled to the document's ``kf`` share (the
+        recipe's budget and coverage, sampled instead of top-k). Price mode: ``p = clip(v / (tau sqrt(c)), pmin, 1)``,
+        ``v = w_prev exp(score)``, one ``tau`` for every row (the root's controller), capped per row at this stage's
+        keep x the row's ORIGINAL body count in expectation."""
+        o = self.wts
+        assert o is not None
+        body = fp["body"]
+        B, T = body.shape
+        dev = body.device
+        cidl = fp["_cid"] if "_cid" in fp else cid.to(torch.long)
+        nd = int(cidl.max().item()) + 1 if bool((cidl >= 0).any()) else 1
+        gid_full = torch.arange(B, device=dev)[:, None] * nd + cidl.clamp(min=0)
+        gid = gid_full[body]
+        G = B * nd
+        if score is None or uniform:
+            sv = torch.zeros(int(body.sum()), device=dev)
+        else:
+            sv = score[body].to(torch.float32) / float(o["temp"])
+        nb = torch.zeros(G, device=dev).index_add_(0, gid, torch.ones_like(sv))
+        if o["price"] <= 0:
+            gmax = torch.full((G,), -1e30, device=dev).scatter_reduce(0, gid, sv, reduce="amax")
+            v = torch.exp(sv - gmax[gid])
+            q = waterfill(v, gid, G, kf * nb, lo=0.0)
+            pb = float(o["mix"]) * kf + (1.0 - float(o["mix"])) * q
+        else:
+            root = self._root
+            root._wts_routed = True
+            lv = sv
+            if o["alloc"] == "doc":  # each document's scores normalised to mean 0 (its share follows its length)
+                gm = torch.zeros(G, device=dev).index_add_(0, gid, sv) / nb.clamp(min=1)
+                lv = sv - gm[gid]
+            if o["multw"] and "_w" in fp:
+                lv = lv + torch.log(fp["_w"][body].to(torch.float32).clamp(min=1.0))
+            Lin = int(round(float((cid != -2).sum(dim=1).to(torch.float32).mean())))
+            cfrac = self._wts_cost_frac(model, max(1, Lin))
+            pmin = float(o["pmin"])
+            denom = math.exp(root._logtau) * math.sqrt(max(cfrac, 1e-9))
+            pb = torch.clamp(torch.exp(lv.clamp(max=60.0)) / denom, pmin, 1.0)
+            # per-row hard cap on expected survivors (peak memory): this stage's keep x the row's original body count
+            rows_b = torch.arange(B, device=dev)[:, None].expand(B, T)[body]
+            nb0 = fp["_nb0"][body] if "_nb0" in fp else None
+            n_row = torch.zeros(B, device=dev).index_add_(0, rows_b, torch.ones_like(pb))
+            nb0_row = (torch.zeros(B, device=dev).scatter_reduce(0, rows_b, nb0, reduce="amax")
+                       if nb0 is not None else n_row)
+            cap = self._abs_keep * nb0_row
+            tot = torch.zeros(B, device=dev).index_add_(0, rows_b, pb)
+            over = tot > cap
+            if bool(over.any()):
+                pc = waterfill(torch.exp(lv.clamp(max=60.0)), rows_b, B, cap, lo=pmin)
+                pb = torch.where(over[rows_b], pc, pb)
+            self._stat("wts_capped_rows", float(over.float().mean()))
+            self._stat("wts_cost_frac", cfrac)
+            self._stat("wts_at_floor", float((pb <= pmin * 1.0001).float().mean()))
+        p = torch.ones(B, T, device=dev)
+        p[body] = pb.to(torch.float32)
+        keep = sample_keep(p, body, gen, sampler=str(o["sampler"]))
+        self._last_p = p
+        kd = torch.zeros(G, device=dev).index_add_(0, gid, keep[body].to(torch.float32))
+        present = nb > 0
+        self._stat("wts_empty_doc_frac", float(((kd == 0) & present).float().sum() / present.float().sum().clamp(min=1)))
+        self._stat("wts_p_mean", float(pb.mean()) if pb.numel() else float("nan"))
+        self._stat("wts_exp_keep_frac", float(pb.sum() / max(1.0, float(pb.numel()))))
+        return keep
 
     def mid_compact(self, model, h: torch.Tensor, block_kwargs: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Mid-stack drop at block ``drop_layer``: score the forward's own hidden state, gather the kept
@@ -1138,6 +1356,21 @@ class OnlineTokenRouter:
         keep_body, entry = self._choose(model, fp, ids, cid)
         body = fp["body"]
         real = cid != -2
+        w_new = None
+        if self.wts is not None:
+            # token weights: a survivor of this cut stands for w / p tokens from here on (non-body tokens p = 1)
+            if not self._wts_marked:
+                self._mark_weighted_layers(model)
+            if self.stage_idx == 0:
+                fp["_nb0"] = body.sum(dim=1, keepdim=True).to(torch.float32).expand(B, Tr).contiguous()
+            w_prev = fp.get("_w")
+            if w_prev is None:
+                w_prev = torch.ones(B, Tr, device=h.device)
+            p = self._last_p
+            w_new = w_prev if p is None else torch.where(body & keep_body, w_prev / p.clamp(min=1e-12), w_prev)
+            fp["_w"] = w_new
+            if self.wts["weights"] != "none" and self.wts["tcorr"] and self.cfg.target == "gnorm":
+                entry["logw"] = torch.log(w_new[entry["rows"], entry["pos"]].clamp(min=1.0))
         keep_all = torch.zeros(B, Tw, dtype=torch.bool, device=h.device)
         keep_all[:, :Tr] = real & (~body | keep_body)
         counts = keep_all.sum(dim=1)
@@ -1184,6 +1417,20 @@ class OnlineTokenRouter:
         h_new = torch.gather(src, 1, order[..., None].expand(B, W, D)) * valid[..., None].to(h.dtype)
         pnew = torch.gather(pid_src, 1, order)
         kw["position_ids"] = torch.where(valid, pnew, pid.max(dim=1, keepdim=True).values.expand_as(pnew))
+        kw.pop("token_weight", None)
+        if w_new is not None:
+            wpad = torch.ones(B, Tw, device=h.device)
+            wpad[:, :Tr] = w_new
+            tw = torch.where(valid, torch.gather(wpad, 1, order), torch.ones(B, W, device=h.device))
+            lw = torch.log(tw[valid].clamp(min=1.0))
+            if lw.numel():
+                self._stat("wts_logw_mean", float(lw.mean()))
+                self._stat("wts_logw_max", float(lw.max()))
+                self._stat("wts_w_gt10_frac", float((lw > math.log(10.0)).float().mean()))
+            if self.wts["clip"] > 0:
+                tw = tw.clamp(max=math.exp(float(self.wts["clip"])))
+            if self.wts["weights"] != "none" and bool((tw != 1.0).any()):
+                kw["token_weight"] = tw
         if self.mod_layers:
             return self._mod_begin(model, h, block_kwargs, entry, real, counts, order, valid, kw["position_ids"])
         self._mid_gather = (order, valid, n_extra)
@@ -1600,7 +1847,8 @@ class OnlineTokenRouter:
             entry["gn"] = gn
             tgt = self.cfg.target
             if tgt == "gnorm":
-                entry["target"] = gn
+                # weighted token sampling: a token of weight w carries ~w tokens' gradient; the router predicts one's
+                entry["target"] = gn - entry["logw"] if entry.get("logw") is not None else gn
             elif tgt == "gxh":
                 entry["target"] = torch.log((gs * entry["hsel"]).sum(-1).abs() + 1e-12)
             elif tgt == "dh":
@@ -1621,9 +1869,21 @@ class OnlineTokenRouter:
         import torch.distributed as dist
 
         F = self.n_features
+        if self.wts is not None and self.stage_idx == 0 and float(self.wts["price"]) > 0:
+            # price-rule controller: one dial tau for every cut, moved so the measured step FLOPs (the FLOP meter's
+            # actual / dense ratio of the previous step, identical on every rank) track the target
+            ratio = getattr(model, "_flop_step_ratio", None) if model is not None else None
+            if ratio is not None and getattr(self, "_wts_routed", False) and ratio > 0:
+                err = math.log(float(ratio) / float(self.wts["price"]))
+                self._logtau += max(-0.5, min(0.5, float(self.wts["gain"]) * err))
+                self._stat("wts_step_ratio", float(ratio))
+            if model is not None:
+                model._flop_step_ratio = None
+            self._wts_routed = False
+            self._stat("wts_tau", math.exp(self._logtau))
         if self.step == 0:
             self._pending = []  # forwards before the first step = the trainer's dry-run batch
-        X, y, rows_all, expl, preds, dense_e, gns, tks = [], [], [], [], [], [], [], []
+        X, y, rows_all, expl, preds, dense_e, gns, tks, iws = [], [], [], [], [], [], [], [], []
         for e in self._pending:
             if e["target"] is None:
                 continue
@@ -1637,11 +1897,22 @@ class OnlineTokenRouter:
             # per-row centring (only the within-row ranking is fit); keep_mode threshold centres over the batch so the
             # scores also carry the across-row difficulty
             nb = int(r.max()) + 1
-            s = torch.zeros(nb, device=t.device).index_add_(0, r, t)
             n = torch.zeros(nb, device=t.device).index_add_(0, r, torch.ones_like(t))
-            t = t - t.mean() if self.cfg.keep_mode == "threshold" else t - (s / n.clamp(min=1))[r]
+            if e.get("ipw") is not None and self.wts is not None and self.wts["ipw"]:
+                # weighted token sampling: survivors are an unequal-probability sample; weight each by 1 / p (normalised
+                # to mean 1 per row, capped at 50x the row mean) so the fit targets the whole population
+                iw = e["ipw"][ok].to(t.dtype)
+                iw = iw / (torch.zeros(nb, device=t.device).index_add_(0, r, iw) / n.clamp(min=1))[r]
+                iw = iw.clamp(max=50.0)
+                iw = iw / (torch.zeros(nb, device=t.device).index_add_(0, r, iw) / n.clamp(min=1))[r]
+            else:
+                iw = torch.ones_like(t)
+            s = torch.zeros(nb, device=t.device).index_add_(0, r, iw * t)
+            sw = torch.zeros(nb, device=t.device).index_add_(0, r, iw)
+            t = t - t.mean() if self.cfg.keep_mode == "threshold" else t - (s / sw.clamp(min=1e-12))[r]
             X.append(e["feats"][ok])
             y.append(t)
+            iws.append(iw)
             if e.get("task") is not None:
                 tks.append(e["task"][ok])
             rows_all.append(r + 10_000 * len(rows_all))
@@ -1662,9 +1933,11 @@ class OnlineTokenRouter:
         if X:
             Xc = torch.cat(X).to(dev, torch.float64)
             yc = torch.cat(y).to(dev, torch.float64)
+            wc = torch.cat(iws).to(dev, torch.float64)
         else:
             Xc = torch.zeros(0, F, dtype=torch.float64, device=dev)
             yc = torch.zeros(0, dtype=torch.float64, device=dev)
+            wc = torch.zeros(0, dtype=torch.float64, device=dev)
         # online held-out quality of the CURRENT weights (before refitting on these targets)
         if preds and len(preds) == len(X):
             pc = torch.cat(preds).to(dev, torch.float64)
@@ -1707,8 +1980,13 @@ class OnlineTokenRouter:
                     self._stat("fid_mass_router", sum(fr) / len(fr))
                     self._stat("fid_mass_oracle", sum(fo) / len(fo))
                     self._stat("fid_mass_random", self.cfg.keep_frac)
-        G = Xc.T @ Xc
-        b = Xc.T @ yc
+        if self.wts is not None and bool((wc != 1.0).any()):
+            G = Xc.T @ (Xc * wc[:, None])
+            b = Xc.T @ (yc * wc)
+            self._stat("wts_ipw_max", float(wc.max()))
+        else:
+            G = Xc.T @ Xc
+            b = Xc.T @ yc
         cnt = torch.tensor([float(Xc.shape[0])], dtype=torch.float64, device=dev)
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(G)
