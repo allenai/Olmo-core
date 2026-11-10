@@ -410,6 +410,12 @@ class RoutedExpertsConfig(Config):
     row_specialization: Literal["static", "dynamic"] = "static"
     match_eager_rounding: bool = False
     """Round SiLU before multiplication in no-gradient SwiGLU to match eager training."""
+    fused_no_grad_activation: bool = True
+    """Use fused valid-prefix SwiGLU without gradients; disable for the eager training arithmetic.
+
+    This selects only the regular SwiGLU activation dispatch, not explicit FP8 or
+    wave-kernel callers. The eager path computes all capacity rows.
+    """
 
     def build(
         self,
@@ -482,12 +488,14 @@ class RoutedExperts(nn.Module):
         init_device: str = "cpu",
         row_specialization: Literal["static", "dynamic"] = "static",
         match_eager_rounding: bool = False,
+        fused_no_grad_activation: bool = True,
     ):
         super().__init__()
         if row_specialization not in ("static", "dynamic"):
             raise ValueError("row_specialization must be static or dynamic")
         self.row_specialization = row_specialization
         self.match_eager_rounding = match_eager_rounding
+        self.fused_no_grad_activation = fused_no_grad_activation
         self.d_model = d_model
         self.hidden_size = hidden_size
         self.num_experts = num_experts
@@ -1130,7 +1138,8 @@ class RoutedExperts(nn.Module):
 
                 return pairwise_swiglu(up_gate)
             if (
-                num_elements is not None
+                self.fused_no_grad_activation
+                and num_elements is not None
                 and up_gate.is_cuda
                 and num_elements.device == up_gate.device
                 and not torch.is_grad_enabled()
