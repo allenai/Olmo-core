@@ -16,7 +16,8 @@ import numpy as np
 
 RULES = ("global", "row", "blk512", "random")
 RULE_NAMES = {"global": "Global oracle", "row": "Per-row quota (= per document window)",
-              "blk512": "Per-512-token-block quota", "random": "Random"}
+              "blk512": "Per-512-token-block quota", "random": "Random", "blockrow": "Per-(row, block) token quota"}
+CELL_RULES = ("global", "row", "blockrow", "random")
 
 
 def crossing(kept, cos, thr):
@@ -47,7 +48,7 @@ def main():
              "sketch_check_hi": [c["hi_ratio"] for c in r["sketch_check"]],
              "sketch_check_lo": [c["lo_ratio"] for c in r["sketch_check"]], "budget": {}}
         for scope in ("dn", "wm"):
-            for rule in RULES:
+            for rule in [k.split("_", 1)[1] for k in r["curves"] if k.startswith(scope + "_")]:
                 c = r["curves"][f"{scope}_{rule}"]
                 for thr in (0.9, 0.95, 0.99):
                     e["budget"][f"{scope}_{rule}_{thr}"] = crossing(c["kept"], c["cos"], thr)
@@ -58,15 +59,18 @@ def main():
     lines = []
     for scope, sname in (("dn", "blocks 7-31 (split at block 7; SFT table convention)"), ("wm", "whole model (split 0)")):
         lines.append(f"\n### Scope: {sname}\n")
-        lens = sorted({lab.split("_")[1] for lab in labs}, key=lambda s: int(s[:-1]))
+        lens = sorted({lab.split("_")[-1] for lab in labs}, key=lambda s: int(s[:-1]))
         hdr = "| selection rule | " + " | ".join(f"{L} base, cos 0.95 | {L} dense CPT, cos 0.95 | {L} dense CPT, cos 0.9 | {L} base -> CPT" for L in lens) + " |"
         lines.append(hdr)
         lines.append("|" + "---|" * (1 + 4 * len(lens)))
-        for rule in RULES:
-            cells = [RULE_NAMES[rule]]
+        for unit, pre, rules in (("tokens", "", RULES), ("cells", "cells_", CELL_RULES)):
+          if not any(lab.startswith(pre) and (pre or not lab.startswith("cells_")) for lab in labs):
+              continue
+          for rule in rules:
+            cells = [f"{RULE_NAMES[rule]} ({unit})"]
             for L in lens:
-                b = out.get(f"base_{L}", {}).get("budget", {})
-                c = out.get(f"cpt_{L}", {}).get("budget", {})
+                b = out.get(f"{pre}base_{L}", {}).get("budget", {})
+                c = out.get(f"{pre}cpt_{L}", {}).get("budget", {})
                 vb, vc, vc9 = b.get(f"{scope}_{rule}_0.95"), c.get(f"{scope}_{rule}_0.95"), c.get(f"{scope}_{rule}_0.9")
                 f = lambda v: "n/a" if v is None else f"{v * 100:.1f}%"  # noqa: E731
                 cells += [f(vb), f(vc), f(vc9), "n/a" if not (vb and vc) else f"{vc / vb:.1f}x more"]
@@ -84,12 +88,15 @@ def main():
         import matplotlib.pyplot as plt
     except ImportError:
         return
-    col = {"global": "#c44e52", "row": "#4c72b0", "blk512": "#55a868", "random": "#8c8c8c"}
+    col = {"global": "#c44e52", "row": "#4c72b0", "blk512": "#55a868", "random": "#8c8c8c", "blockrow": "#8172b2"}
     for scope in ("dn", "wm"):
-        fig, axs = plt.subplots(1, len(labs), figsize=(4.2 * len(labs), 3.6), sharey=True)
-        for ax, lab in zip(np.atleast_1d(axs), labs):
+        nc = (len(labs) + 1) // 2 if len(labs) > 4 else len(labs)
+        nr = 2 if len(labs) > 4 else 1
+        fig, axs = plt.subplots(nr, nc, figsize=(4.2 * nc, 3.6 * nr), sharey=True)
+        axs = np.atleast_1d(axs).reshape(-1)
+        for ax, lab in zip(axs, labs):
             r = R[lab]
-            for rule in RULES:
+            for rule in [kk.split("_", 1)[1] for kk in r["curves"] if kk.startswith(scope + "_")]:
                 c = r["curves"][f"{scope}_{rule}"]
                 k = np.asarray(c["kept"])
                 o = np.argsort(k)
@@ -98,7 +105,7 @@ def main():
                 ax.axhline(t, color="k", lw=0.5, ls=":")
             ax.set_xlim(0, 1)
             ax.set_ylim(0, 1.01)
-            ax.set_xlabel("share of tokens kept")
+            ax.set_xlabel("share of cells kept" if lab.startswith("cells_") else "share of tokens kept")
             ax.set_title(f"{lab}: one step = {r['step_rows']} rows x {r['T'] // 1024}k", fontsize=8.5)
         np.atleast_1d(axs)[0].set_ylabel("attribution cos(kept, full step gradient)")
         np.atleast_1d(axs)[0].legend(fontsize=7)
