@@ -25,7 +25,7 @@ replace ``dense`` in the run name (``q35-4b-ffnmoe-ctc-setA-32k-<stamp>``).
 Every job is pinned to a full pushed commit SHA (default: this checkout's HEAD, which must be on the
 remote). The data are the setA shards as built by ``recipes/data/ctc_sft/build_ctc_sft.py`` (see
 _qwen35_setA_common.py).
-All jobs: workspace ai2/flex2, budget ai2/oe-other (unallocated),
+All jobs: workspace ai2/flex2, budget ai2/oe-other (allocated via oe-scaling),
 priority urgent, jupiter H100s. ``--dry-run`` prints the gantry command without submitting.
 """
 

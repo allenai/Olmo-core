@@ -128,7 +128,7 @@ Note: downstream evals require full logits and are incompatible with CP or TP.
 
 Always launch at `--launch.priority=urgent` — exactly `urgent`: never lower, never
 `immediate`, and do not ask the user. Workspace `ai2/flex2`, budget `ai2/oe-other`
-(unallocated; never an oe-scaling workspace), cluster `ai2/jupiter`. Gantry runs the
+(allocated via the ai2/oe-scaling group, which is correct (Prasann, 2026-11-10)), cluster `ai2/jupiter`. Gantry runs the
 **pushed** commit (`allow_dirty` ships nothing) — confirm it is pushed; ask before pushing.
 
 ```bash

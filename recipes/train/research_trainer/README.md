@@ -24,7 +24,7 @@ chunked arm.
 | `train_ctc_suite.py` | Task-agnostic local SFT trainer (torchrun; generalizes `attn_explore/Qwen3.5-0.8B-docchunk-mask-mix-contradiction-SFT-local.py` + the 0.6B script's curriculum hard-fail) |
 | `run_ctc_local.sbatch` | Single-node 8-GPU slurm launcher (self-submits; serves berkeleynlp AND jsteinhardt nodes) |
 | `run_ctc_lambda.sbatch` | Single-node 8×A100 slurm launcher for the Berkeley `lambda` partition (no weka/Beaker, no internet — see below) |
-| `beaker_ctc_suite.py` | Beaker launcher (4B/9B on jupiter, urgent, unallocated) wrapping the same CLI |
+| `beaker_ctc_suite.py` | Beaker launcher (4B/9B on jupiter, urgent, minRuntime auto) wrapping the same CLI |
 | `convert_qwen35_base.py` / `convert_qwen35_bases.sbatch` | Local HF Qwen3.5 base → olmo-core model-only distcp (+ marker audit) |
 
 Data shards come from `recipes/data/convert_unified_to_document_landmark.py` with

@@ -9,6 +9,12 @@ The Beaker counterpart to `local_cluster.md`. Everything here is validated from 
 `tylerr/olmo-core-tch291cu128-2025-11-25` (== `OLMoCoreBeakerImage.stable`), secrets prefixed
 `PRASANNS_` (wandb, AWS, beaker token, claude oauth).
 
+**Allocation:** our jobs from `ai2/flex2` count as *allocated*: flex2 is in the `ai2/oe-scaling`
+workspace group (98% of our GPU-h since about 2026-10-19). **That is correct** (Prasann, 2026-11-10;
+the old "always unallocated" rule is retired). The side effect is that allocation balance preempts
+our jobs once they pass minRuntime whenever `oe-scaling` is over target, hence rule 2's minRuntime.
+Check with `beaker report gpu-usage --organizations ai2 --users prasanns --since 7d -g allocated,cluster`.
+
 ## The four golden rules
 
 1. **Commit AND push before launching.** Both the internal `launch` command and gantry clone the

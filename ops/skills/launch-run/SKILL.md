@@ -45,7 +45,7 @@ were one skipped box.
   do it from `--expected-minutes` or the registry's history: check the `minRuntime=... (source)`
   line they print; elsewhere use `opslib.safe.suggest_min_runtime`). Runs expected past 4 h need a
   resume point (`--resume-interval`, automatic in `beaker_ctc_suite.py`); workspace `ai2/flex2`, budget
-  `ai2/oe-other` (unallocated); cluster ai2/jupiter. Final checkpoint not written twice.
+  `ai2/oe-other` (allocated via the `ai2/oe-scaling` group, which is correct (Prasann, 2026-11-10)); cluster ai2/jupiter. Final checkpoint not written twice.
 - [ ] **Local slurm:** interpreter `/data/prasann/conda/envs/<env>/bin/python` (node-local; never
   bare `torchrun`, use `$PY -m torch.distributed.run`); `--output`, logs, HOME, TMPDIR, triton and
   flashinfer caches and checkpoints on `/data`; stage code with `git archive | srun ... tar -x` from
