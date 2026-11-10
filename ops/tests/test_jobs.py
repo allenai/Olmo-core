@@ -297,6 +297,15 @@ class TestJoinAndFlags(unittest.TestCase):
         up.assert_called_once()
         self.assertEqual(up.call_args.args[0], "flopdrop-gputests")
         self.assertEqual(up.call_args.kwargs["final_state"], "failed")
+        self.assertIsNone(up.call_args.kwargs["runtime_minutes"])  # only successful runs feed history
+
+    def test_record_finals_writes_runtime_for_done_runs(self):
+        rows = [{"run_id": "ok", "state": "COMPLETED", "cluster": "beaker", "job_id": "B1", "live": False,
+                 "elapsed_s": 5430}]
+        with mock.patch.object(jobs, "registry_update") as up, redirect_stderr(io.StringIO()):
+            jobs.record_finals(rows)
+        self.assertEqual(up.call_args.kwargs["final_state"], "done")
+        self.assertEqual(up.call_args.kwargs["runtime_minutes"], 90.5)
 
 
 class FakeRunner:

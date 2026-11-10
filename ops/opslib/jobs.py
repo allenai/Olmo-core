@@ -741,8 +741,10 @@ def record_finals(rows):
         fs = FINAL_MAP.get(r.get("state"))
         if not fs or (r.get("cluster") == "lambda" and fs == "failed"):
             continue
+        el = r.get("elapsed_s")
+        runtime = round(el / 60, 1) if fs == "done" and isinstance(el, (int, float)) and el > 0 else None
         try:
-            registry_update(r["run_id"], final_state=fs,
+            registry_update(r["run_id"], final_state=fs, runtime_minutes=runtime,
                             state_source=f"ops status:{r.get('cluster')}:{r.get('state')}:{r.get('job_id')}")
             n += 1
         except Exception as e:  # noqa: BLE001

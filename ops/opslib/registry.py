@@ -25,9 +25,11 @@ FIELDS = (
     "event", "run_id", "experiment", "kind", "parent_run", "arm", "task", "cluster", "job_id",
     "node", "ckpt_path", "log_path", "wandb_url", "git_commit", "git_branch", "dirty", "command",
     "expected_minutes", "final_state", "state_source", "launched_at", "ts", "launched_by",
-    "source", "notes",
+    "source", "notes", "runtime_minutes",
 )
-NUMERIC_FIELDS = {"expected_minutes"}
+# runtime_minutes: actual run time of the finished job (written by `ops status --record`); its
+# history median is the default expected runtime, hence minRuntime (opslib/runtime.py).
+NUMERIC_FIELDS = {"expected_minutes", "runtime_minutes"}
 BOOL_FIELDS = {"dirty"}
 LOCAL_TZ = "America/Los_Angeles"  # naive ledger timestamps were written on the Berkeley login node
 
@@ -174,8 +176,9 @@ def _validate(row: dict, launch: bool) -> None:
     for key, allowed in (("kind", KINDS), ("cluster", CLUSTERS), ("final_state", FINAL_STATES)):
         if row.get(key) is not None and row[key] not in allowed:
             raise ValueError(f"{key}={row[key]!r} not in {allowed}")
-    if row.get("expected_minutes") is not None and not isinstance(row["expected_minutes"], (int, float)):
-        raise ValueError("expected_minutes must be a number")
+    for key in sorted(NUMERIC_FIELDS):
+        if row.get(key) is not None and not isinstance(row[key], (int, float)):
+            raise ValueError(f"{key} must be a number")
 
 
 def default_launched_by() -> str:
