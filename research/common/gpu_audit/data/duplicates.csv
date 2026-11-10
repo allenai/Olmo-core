@@ -1,0 +1,7 @@
+run,experiment,pools,states,gpuh_a,gpuh_b,smaller_copy_gpuh
+f8k-mt4-dense-f3904-tds9b-lr5e-06,tokdrop_lr,beaker+jsteinhardt,PREEMPTED/COMPLETED,4.0,8.5,4.0
+f8k-mt4-orc1row-f1952-orc-lr1e-05,tokdrop_lr,beaker+jsteinhardt,PREEMPTED/COMPLETED,3.2,6.8,3.2
+f8k-mt4-orc1batchrc-f1952-orc-lr1e-05,tokdrop_lr,beaker+jsteinhardt,PREEMPTED/COMPLETED,4.4,11.5,4.4
+f8k-mt4-orcbatchall-f1952-orc-lr1e-05,tokdrop_lr,beaker+jsteinhardt,PREEMPTED/COMPLETED,2.5,6.9,2.5
+f8k-mt4-orcdoc-f1952-orc-lr1e-05,tokdrop_lr,beaker+lambda,COMPLETED/CANCELLED,7.8,3.3,3.3
+f8k-mt4-orcbatch-f1952-orc-lr1e-05,tokdrop_lr,beaker+lambda,PREEMPTED/COMPLETED,5.4,15.4,5.4

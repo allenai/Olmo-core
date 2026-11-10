@@ -1,0 +1,605 @@
+{
+ "window": [
+  "2026-10-20T07:00:00+00:00",
+  "2026-11-10T22:45:00+00:00"
+ ],
+ "gpuh_by_pool": {
+  "beaker:jupiter": 2971,
+  "beaker:multi:jupiter+ceres": 1864,
+  "jsteinhardt:preemptive_high": 945,
+  "lambda:preemptive": 391,
+  "jsteinhardt:preemptive": 245,
+  "lambda:preemptive_high": 166,
+  "beaker:titan": 119,
+  "lambda:normal": 3,
+  "berkeleynlp": 1,
+  "beaker:ceres": 0,
+  "beaker:multi:saturn+neptune+jupiter+ceres": 0
+ },
+ "gpuh_total": 6705,
+ "gpuh_by_experiment": {
+  "tokdrop_lr": 2035,
+  "olmo3_cptdrop": 1585,
+  "mt11_64k": 1079,
+  "learned_router": 616,
+  "pail_ar": 318,
+  "pail_benchmax": 302,
+  "pail_benchmax_wd": 163,
+  "pail_cpt": 134,
+  "ds64_fast8k": 125,
+  "pail_modelscale": 116,
+  "pail_benchmax_nr": 49,
+  "pail_ensemble": 47,
+  "UNREGISTERED": 36,
+  "pail_benchmax_scale": 32,
+  "grad_composition": 16,
+  "unassigned": 15,
+  "pail_benchmax_lm": 13,
+  "pail_ccdev": 7,
+  "setA_pareto": 5,
+  "pail_scale50k": 4,
+  "pail_webgen": 3,
+  "pail_benchmax_snap": 2,
+  "pail_weird": 2,
+  "sparsity_scale": 1,
+  "pail_autoresearch": 1
+ },
+ "gpuh_by_kind": {
+  "train": 4847,
+  "eval": 1657,
+  "smoke": 77,
+  "probe/bench": 52,
+  "data": 37,
+  "unregistered": 35
+ },
+ "beaker_report_gpuh": {
+  "allocated": 4871,
+  "unallocated": 119
+ },
+ "n_attempts_gpu": 7619,
+ "n_attempts_by_pool": {
+  "jsteinhardt": 337,
+  "berkeleynlp": 19,
+  "lambda": 1268,
+  "beaker": 5995
+ },
+ "cap_use": {
+  "jst_ph_mean_gpus": 1.82,
+  "jst_ph_share_of_cap_hours": 0.227,
+  "jst_hours_at_cap": 92,
+  "jst_hours_zero": 375,
+  "lam_mean_gpus": 1.08,
+  "lam_share_of_16cap_hours": 0.067,
+  "lam_hours_zero": 419,
+  "lam_others_mean_gpus": 20.5,
+  "lam_free_mean_gpus": 2.42,
+  "hours": 520,
+  "bk_pending_mean_gpus": 16.0,
+  "bk_running_mean_gpus": 9.5,
+  "bk_running_peak": 99
+ },
+ "idle_while_beaker_waited": {
+  "hours_bk_pending_ge4": 168,
+  "jst_headroom_gpuh": 691,
+  "lam_free_gpuh": 467,
+  "lam_headroom_nopreempt_gpuh": 467
+ },
+ "headroom_total_gpuh": {
+  "jst": 3215,
+  "lam_nopreempt": 1260
+ },
+ "lambda_other_users_gpuh": {
+  "user1": 8195,
+  "user2": 2466
+ },
+ "jst_other_users_gpuh_top": {
+  "user1": 14877,
+  "user3": 3374,
+  "user4": 2355,
+  "user5": 1322,
+  "user6": 1087,
+  "user7": 1061,
+  "user8": 881,
+  "user9": 825
+ },
+ "wait_hist": {
+  "labels": [
+   "<1m",
+   "1-5m",
+   "5-15m",
+   "15-30m",
+   "30-60m",
+   "1-2h",
+   "2-4h",
+   "4-8h",
+   "8-24h",
+   ">24h"
+  ],
+  "beaker": [
+   1293,
+   730,
+   745,
+   839,
+   844,
+   629,
+   336,
+   147,
+   0,
+   0
+  ],
+  "jsteinhardt": [
+   266,
+   25,
+   22,
+   4,
+   5,
+   0,
+   13,
+   2,
+   0,
+   0
+  ],
+  "lambda": [
+   432,
+   159,
+   266,
+   184,
+   141,
+   52,
+   34,
+   0,
+   0,
+   0
+  ]
+ },
+ "worst_waits": [
+  {
+   "pool": "berkeleynlp",
+   "name": "o3cd-tokexit-gputest",
+   "experiment": "olmo3_cptdrop",
+   "gpus": 1,
+   "wait_h": 35.3,
+   "submit": "10-22 08:36Z",
+   "min_runtime_s": ""
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "f8k-mt11-fa247f16M7sd1-s720-tdb-lr2e-06-95753a8e",
+   "experiment": "learned_router",
+   "gpus": 2,
+   "wait_h": 7.2,
+   "submit": "10-23 21:16Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "o3cd-L32K32dfhlr20-10260758-a88c",
+   "experiment": "olmo3_cptdrop",
+   "gpus": 8,
+   "wait_h": 6.1,
+   "submit": "10-26 18:50Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "jsteinhardt",
+   "name": "o3cd-modrest",
+   "experiment": "olmo3_cptdrop",
+   "gpus": 8,
+   "wait_h": 5.1,
+   "submit": "10-24 10:16Z",
+   "min_runtime_s": ""
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "f8k-mt11-fa247f16M7-s720-tdb-lr5e-06-2ca76f4f",
+   "experiment": "learned_router",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-23 23:31Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-outlier-f8k-mt4-dense-sk3-s976-tdc-lr5e-06-evoutlier-48e6",
+   "experiment": "tokdrop_lr",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:05Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-nq-f8k-mt4-dense-sk3-s488-tdc-lr5e-06-evnq-0aa29a37",
+   "experiment": "tokdrop_lr",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:02Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-outlier-f8k-outlier-otr30M8-16M-tdp-lr2e-06-evoutlier-244",
+   "experiment": "learned_router",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:04Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-outlier-f8k-mt4-tier67a50m32-s1464-tdc-lr2e-06-evoutlier-",
+   "experiment": "tokdrop_lr",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:01Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-contra-f8k-contradiction-otr30M8-16M-tdp-lr2e-06-evcontra",
+   "experiment": "learned_router",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:02Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-oolong-f8k-mt4-tier67a50m32-s1464-tdc-lr2e-06-evoolong-0f",
+   "experiment": "tokdrop_lr",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:02Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-oolong-f8k-mt4-dense-sk3-s976-tdc-lr5e-06-evoolong-b7dc75",
+   "experiment": "tokdrop_lr",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:05Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-contra-f8k-mt4-dense-sk3-s488-tdc-lr5e-06-evcontradiction",
+   "experiment": "tokdrop_lr",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:02Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-contra-f8k-contradiction-otr10M8-16M-tdp-lr2e-06-evcontra",
+   "experiment": "learned_router",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:02Z",
+   "min_runtime_s": 3600.0
+  },
+  {
+   "pool": "beaker:jupiter",
+   "name": "ev-nq-f8k-nq-otr10M8-16M-tdp-lr2e-06-evnq-dcf17a3d",
+   "experiment": "learned_router",
+   "gpus": 2,
+   "wait_h": 4.9,
+   "submit": "10-22 21:03Z",
+   "min_runtime_s": 3600.0
+  }
+ ],
+ "wait_share_of_turnaround": {
+  "jsteinhardt": 0.169,
+  "berkeleynlp": 0.986,
+  "lambda": 0.573,
+  "beaker": 0.6
+ },
+ "wait_total_job_hours": {
+  "jsteinhardt": 52,
+  "berkeleynlp": 36,
+  "lambda": 378,
+  "beaker": 4216
+ },
+ "ended_badly_gpuh": {
+  "PREEMPTED|train": 1130.1,
+  "FAILED|train": 203.7,
+  "CANCELLED|train": 185.6,
+  "PREEMPTED|eval": 79.1,
+  "CANCELLED|eval": 23.9,
+  "PREEMPTED|smoke": 20.5,
+  "FAILED|eval": 17.0,
+  "CANCELLED|smoke": 12.8,
+  "CANCELLED|unregistered": 11.0,
+  "FAILED|smoke": 10.0,
+  "FAILED|data": 1.1,
+  "FAILED|unregistered": 0.8,
+  "CANCELLED|probe/bench": 0.4,
+  "FAILED|probe/bench": 0.2,
+  "PREEMPTED|probe/bench": 0.1,
+  "PREEMPTED|unregistered": 0.0,
+  "NODE_FAIL|train": 0.0,
+  "NODE_FAIL|eval": 0.0
+ },
+ "ended_badly_n": {
+  "PREEMPTED|train": 330,
+  "FAILED|eval": 209,
+  "FAILED|train": 171,
+  "PREEMPTED|eval": 105,
+  "FAILED|smoke": 46,
+  "NODE_FAIL|train": 22,
+  "CANCELLED|unregistered": 17,
+  "FAILED|unregistered": 16,
+  "CANCELLED|train": 15,
+  "FAILED|data": 9,
+  "CANCELLED|eval": 8,
+  "FAILED|probe/bench": 6,
+  "CANCELLED|smoke": 5,
+  "PREEMPTED|smoke": 4,
+  "CANCELLED|probe/bench": 3,
+  "NODE_FAIL|eval": 2,
+  "PREEMPTED|probe/bench": 1,
+  "PREEMPTED|unregistered": 1
+ },
+ "beaker_preemptions": {
+  "n": 405,
+  "gpuh": 1159,
+  "train_n": 309,
+  "train_gpuh": 1083,
+  "after_min_runtime": 339,
+  "minrt0": 66
+ },
+ "beaker_preempt_gpuh_by_day": {
+  "2026-10-20": 0,
+  "2026-10-21": 0,
+  "2026-10-22": 154,
+  "2026-10-23": 67,
+  "2026-10-24": 87,
+  "2026-10-25": 77,
+  "2026-10-26": 103,
+  "2026-10-27": 20,
+  "2026-10-28": 21,
+  "2026-10-29": 50,
+  "2026-10-30": 311,
+  "2026-10-31": 45,
+  "2026-11-01": 60,
+  "2026-11-02": 26,
+  "2026-11-03": 5,
+  "2026-11-04": 99,
+  "2026-11-05": 0,
+  "2026-11-06": 35,
+  "2026-11-07": 0,
+  "2026-11-08": 0,
+  "2026-11-09": 0
+ },
+ "beaker_minruntime_share": {
+  "first_attempts": 5564,
+  "with_minrt": 5448,
+  "gpus": {
+   "4": 81,
+   "8": 166,
+   "1": 2468,
+   "2": 2849
+  },
+  "clusters": {
+   "jupiter": 3842,
+   "multi:jupiter+ceres": 1580,
+   "titan": 116,
+   "ceres": 25,
+   "multi:saturn+neptune+jupiter+ceres": 1
+  }
+ },
+ "duplicates": {
+  "n_runs": 6,
+  "smaller_copy_gpuh": 23,
+  "by_experiment": {
+   "tokdrop_lr": 6
+  }
+ },
+ "expected_vs_actual": {
+  "n": 4179,
+  "p10": 0.06,
+  "p50": 0.21,
+  "p90": 0.95,
+  "n_over_2x": 30,
+  "n_under_quarter": 2247,
+  "over_2x_gpuh": 528
+ },
+ "smokes": {
+  "n": 154,
+  "gpuh": 77,
+  "failed_or_cancelled": 71,
+  "names_repeated_3plus": 10
+ },
+ "end_to_result_h": {
+  "n": 3140,
+  "p50": 0.3,
+  "p90": 5.6,
+  "max": 141.8,
+  "share_gt_24h": 0.006
+ },
+ "evals_without_results": {
+  "completed_eval_jobs": 4305,
+  "no_result_row": 597,
+  "gpuh": 173,
+  "by_experiment": {
+   "pail_benchmax": 224,
+   "tokdrop_lr": 198,
+   "learned_router": 64,
+   "pail_ensemble": 41,
+   "pail_benchmax_wd": 24,
+   "pail_ccdev": 13,
+   "ds64_fast8k": 12,
+   "pail_benchmax_lm": 5
+  }
+ },
+ "train_without_eval_or_result": {
+  "completed_train_runs": 1557,
+  "orphans": 827,
+  "gpuh": 1155,
+  "by_experiment": {
+   "pail_ar": 442,
+   "pail_benchmax": 105,
+   "learned_router": 92,
+   "olmo3_cptdrop": 50,
+   "tokdrop_lr": 49,
+   "pail_modelscale": 29,
+   "pail_benchmax_wd": 18,
+   "grad_composition": 9
+  }
+ },
+ "train_end_to_eval_launch_h": {
+  "n": 319,
+  "p50": 0.11,
+  "p90": 3.0,
+  "share_chained_lt_10min": 0.621,
+  "share_gt_12h": 0.082
+ },
+ "gpuh_experiment_without_status_page": {
+  "total": 1175,
+  "by_name": {
+   "pail_ar": 318,
+   "pail_benchmax": 302,
+   "pail_benchmax_wd": 163,
+   "ds64_fast8k": 125,
+   "pail_modelscale": 116,
+   "pail_benchmax_nr": 49,
+   "UNREGISTERED": 36,
+   "pail_benchmax_scale": 32,
+   "unassigned": 15,
+   "pail_benchmax_lm": 13,
+   "pail_scale50k": 4,
+   "pail_benchmax_snap": 2
+  }
+ },
+ "same_run_on_two_pools_any_time": {
+  "n_runs": 33,
+  "smaller_copy_gpuh": 53,
+  "examples": [
+   "f8k-mt4-dense-f1952st122-tds9b-lr5e-06",
+   "f8k-mt4-dense-f1952st244-tds9b-lr5e-06",
+   "f8k-mt4-dense-f3904-tds9b-lr5e-06",
+   "f8k-mt4-lora64all32xstepsd1-f1952-tdxsmk-lr1e-05",
+   "f8k-mt4-lora64all32sbptop30sd1-f1952-tdxsmk-lr1e-05",
+   "f8k-mt4-lora64all32sbpsmp30sd1-f1952-tdxsmk-lr1e-05",
+   "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "f8k-mt4-orc1batch-f1952-orc-lr1e-05"
+  ]
+ },
+ "unregistered": {
+  "n": 94,
+  "gpuh": 36,
+  "by_pool": {
+   "berkeleynlp": 16,
+   "jsteinhardt": 40,
+   "lambda": 30,
+   "beaker": 8
+  },
+  "gpuh_by_pool": {
+   "berkeleynlp": 0,
+   "beaker": 2,
+   "lambda": 32,
+   "jsteinhardt": 1
+  },
+  "top_names": [
+   [
+    "bash",
+    17
+   ],
+   [
+    "swapos-test",
+    4
+   ],
+   [
+    "gradsel-tests",
+    4
+   ],
+   [
+    "gradsupp-q1tok64-f1952-s",
+    4
+   ],
+   [
+    "gradsupp-q1tok64-f7808-s",
+    4
+   ],
+   [
+    "f8k-mt4-orcbatch-f1952-orc-lr1e-05-lam-e",
+    4
+   ],
+   [
+    "gc-f",
+    3
+   ],
+   [
+    "posid-gputest",
+    2
+   ],
+   [
+    "cptdist-cpt_32k_",
+    2
+   ],
+   [
+    "f8k-mt4s1464-otr10M7ng-lro-lr2e-06-lam",
+    2
+   ],
+   [
+    "f8k-mt4-orc1batchr2-f1952-orc-lr1e-",
+    2
+   ],
+   [
+    "f8k-mt4-orc1docr2-f1952-orc-lr1e-",
+    2
+   ]
+  ]
+ },
+ "registered_no_final_state": {
+  "n": 4836,
+  "of": 6916
+ },
+ "jst_concurrent_experiments_hours": {
+  "0": 387,
+  "1": 132,
+  "3": 1
+ },
+ "jst_ph_jobs_waited_gt15m": 7,
+ "lambda_other_users_preempted": {
+  "n": 58,
+  "gpuh_lost": 1634,
+  "by_user": {
+   "user2": 48,
+   "user1": 10
+  },
+  "by_preemptor": {
+   "prasann": 29,
+   "user1": 27,
+   "?": 1,
+   "prasann,user1": 1
+  },
+  "gpuh_by_preemptor": {
+   "prasann,user1": 324,
+   "user1": 632,
+   "prasann": 609,
+   "?": 69
+  },
+  "by_day_prasann": {
+   "2026-10-21": 5,
+   "2026-10-22": 1,
+   "2026-10-23": 8,
+   "2026-10-24": 7,
+   "2026-10-25": 5,
+   "2026-10-26": 1,
+   "2026-11-04": 2,
+   "2026-11-10": 1
+  }
+ },
+ "jst_other_users_preempted_jobs": {
+  "user5": 37,
+  "user9": 31,
+  "user10": 29,
+  "user11": 13,
+  "user12": 11,
+  "user1": 8,
+  "user13": 6,
+  "user14": 3
+ }
+}

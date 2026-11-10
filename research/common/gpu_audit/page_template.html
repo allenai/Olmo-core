@@ -1,0 +1,407 @@
+<title>Three-Week GPU Audit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: one reading column (~74ch) for prose, charts and tables break out to ~1080px; ops-console feel, cool neutrals */
+:root {
+  --bg: #f7f8fa; --surface: #ffffff; --ink: #14171c; --ink-2: #4a515c; --ink-3: #6f7782; --rule: #dde1e7; --tint: #eef1f5;
+  --accent: #2a78d6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #9aa1ab;
+  --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121418; --surface: #1a1d22; --ink: #eceef2; --ink-2: #b9bfc9; --ink-3: #8c94a0; --rule: #2d3239; --tint: #22262d;
+  --accent: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #6c737d;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121418; --surface: #1a1d22; --ink: #eceef2; --ink-2: #b9bfc9; --ink-3: #8c94a0; --rule: #2d3239; --tint: #22262d;
+  --accent: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #6c737d;
+  color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55; margin: 0 }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px }
+.prose { max-width: 74ch }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: .005em }
+h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.1 }
+h2 { font-size: 24px; line-height: 1.2 }
+h3 { font-size: 17px; line-height: 1.3 }
+p { margin: 0 }
+section { display: grid; gap: 16px; min-width: 0 }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3) }
+.lede { font-size: 18px; color: var(--ink-2); max-width: 70ch }
+.note { color: var(--ink-3); font-size: 13px }
+.mono, code { font-family: var(--f-mono); font-size: .9em }
+code { background: var(--tint); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere }
+a { color: var(--accent) }
+.pill { display: inline-block; font-family: var(--f-mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-2); white-space: nowrap }
+.pill.tool { border-color: var(--s1); color: var(--s1) }
+.pill.route { border-color: var(--s3); color: var(--s3) }
+.pill.decide { border-color: var(--s2); color: var(--s2) }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px }
+.tile { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; align-content: start }
+.tile .v { font-family: var(--f-display); font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums }
+.tile .k { font-size: 13px; color: var(--ink-2) }
+.verdict { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; max-width: 80ch }
+.verdict li { padding-left: 18px; position: relative }
+.verdict li::before { content: ""; position: absolute; left: 0; top: .62em; width: 8px; height: 8px; border-radius: 2px; background: var(--accent) }
+.recs { display: grid; gap: 12px; counter-reset: rec }
+.rec { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px; display: grid; gap: 8px; grid-template-columns: 34px 1fr; column-gap: 12px; min-width: 0 }
+.rec .n { font-family: var(--f-display); font-size: 26px; line-height: 1; color: var(--ink-3); grid-row: span 4 }
+.rec h3 { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline }
+.rec .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 18px; font-size: 13.5px }
+.rec .meta b { font-weight: 600; color: var(--ink-2); font-size: 11.5px; font-family: var(--f-mono); text-transform: uppercase; letter-spacing: .05em; display: block }
+.rec p { color: var(--ink-2); min-width: 0 }
+.chart-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 10px; min-width: 0 }
+.chart-card .cap { font-size: 13px; color: var(--ink-3) }
+.cbox { position: relative; height: 280px; min-width: 0 }
+.cbox.short { height: 190px }
+.cbox.tall { height: 340px }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2) }
+.legend span { display: inline-flex; align-items: center; gap: 6px }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block }
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface) }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top }
+th { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--tint) }
+tr:last-child td { border-bottom: 0 }
+td.r, th.r { text-align: right }
+.flag { color: var(--crit); font-weight: 600 }
+details { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px }
+summary { cursor: pointer; font-weight: 500 }
+summary:focus-visible, a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden }
+.seg button { font: inherit; font-size: 13px; padding: 5px 10px; background: var(--surface); color: var(--ink-2); border: 0; cursor: pointer }
+.seg button[aria-pressed="true"] { background: var(--tint); color: var(--ink); font-weight: 600 }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 80ch }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important } }
+</style>
+
+<div class="wrap">
+<header style="display:grid;gap:12px">
+  <div class="eyebrow">Research ops audit · 2026-10-20 → 2026-11-10 (21.6 days) · private page</div>
+  <h1>Three-Week GPU Audit</h1>
+  <p class="lede">Where the 6,705 GPU-hours went across Beaker, Berkeley slurm and Lambda, how long jobs waited, what was lost, and the changes that would get more experiments through per week.</p>
+</header>
+
+<section>
+  <h2>Verdict</h2>
+  <ul class="verdict">
+    <li><b>The biggest loss is preempted Beaker training that restarts from step 0: 1,083 GPU-h (16% of all GPU time).</b> Beaker preempts our jobs as soon as they pass their 1 h minRuntime because our workspace group <code>ai2/oe-scaling</code> is about 55% over its allocation target. Even <code>low</code>-priority jobs from other groups win. The research trainer saves no mid-run checkpoints by default, and 99% of our training runs finish within 4 h, so a minRuntime that covers the run would avoid most of this.</li>
+    <li><b>Waiting dominates turnaround on Beaker: 60% of job lifetime was spent pending.</b> Jobs pinned to jupiter waited far longer than jobs that could also land on ceres. For 2-GPU jobs the median wait was 0.40 h vs 0.10 h, and the p90 was 3.0 h vs 0.8 h.</li>
+    <li><b>We left Berkeley headroom unused.</b> Our <code>preemptive_high</code> use on jsteinhardt averaged 1.8 of the 8-GPU cap. In 72% of hours we had nothing running there, including 168 hours when ≥4 of our GPUs sat pending on Beaker.</li>
+    <li><b>Lambda is not idle.</b> Other users held 20.5 of its 24 working GPUs on average, and our starts preempted 30 of their jobs. Without preempting anyone, Lambda had about 2.4 GPUs free on average, at every hour of the day.</li>
+    <li><b>Since about 10-19, 98% of our Beaker GPU-hours were <em>allocated</em></b>, because <code>ai2/flex2</code> now sits in the <code>oe-scaling</code> group. The "always unallocated" rule and its check no longer describe reality. Only Prasann can decide what to do about this.</li>
+    <li>Several feared problems turned out small. Unregistered jobs used 0.5% of GPU-h, insurance copies under 1%, and smokes plus probes 2%. Contention for the jsteinhardt cap happened in one hour (today).</li>
+  </ul>
+  <div class="tiles" id="tiles"></div>
+</section>
+
+<section>
+  <h2>Recommendations, ranked</h2>
+  <p class="note prose">Savings are per week, scaled from the 3.1-week window. "Job-hours of waiting" add up waits across jobs that often ran in parallel, so the wall-clock gain on a wave is smaller; the p50/p90 shifts give the per-job picture. Tags: <span class="pill tool">tooling</span> <span class="pill route">routing rule</span> <span class="pill decide">Prasann decides</span></p>
+  <div class="recs" id="recs"></div>
+</section>
+
+<section>
+  <div class="row"><h2>Usage over time</h2>
+    <div class="seg" role="group" aria-label="Group daily GPU-hours by">
+      <button id="by-pool" aria-pressed="true">By pool</button><button id="by-exp" aria-pressed="false">By experiment</button><button id="by-kind" aria-pressed="false">By job kind</button>
+    </div></div>
+  <div class="chart-card">
+    <div class="legend" id="lg-daily"></div>
+    <div class="cbox tall"><canvas id="c-daily" aria-label="Daily GPU-hours"></canvas></div>
+    <div class="cap">GPU-hours per day (Pacific days), from slurm accounting and per-attempt Beaker timing. Our Beaker total (4,954 GPU-h) matches Beaker's own <code>report gpu-usage</code> (4,990) to within 1%.</div>
+  </div>
+  <div class="tbl"><table id="t-pool"></table></div>
+</section>
+
+<section>
+  <h2>Cap headroom, hour by hour</h2>
+  <p class="prose note">jsteinhardt: our <code>preemptive_high</code> GPUs against the 8-GPU cap. Lambda: ours against everyone else's, on the 24 GPUs of the three nodes that ran jobs (hyperplane03 down, 04 drained). Beaker: our running GPUs against GPUs pending in the queue.</p>
+  <div class="grid2">
+    <div class="chart-card"><h3>jsteinhardt</h3><div class="legend" id="lg-jst"></div><div class="cbox short"><canvas id="c-jst"></canvas></div></div>
+    <div class="chart-card"><h3>Lambda</h3><div class="legend" id="lg-lam"></div><div class="cbox short"><canvas id="c-lam"></canvas></div></div>
+  </div>
+  <div class="chart-card"><h3>Beaker</h3><div class="legend" id="lg-bk"></div><div class="cbox"><canvas id="c-bk"></canvas></div>
+    <div class="cap">Peak running: 99 GPUs. Mean: 9.5 running and 16.0 pending. Pending peaks 14:00–18:00 PT, when Beaker's pending mean is 22–37 GPUs.</div></div>
+</section>
+
+<section>
+  <h2>Queue wait</h2>
+  <div class="grid2">
+    <div class="chart-card"><h3>Wait before start, share of jobs</h3><div class="legend" id="lg-wh"></div><div class="cbox"><canvas id="c-wh"></canvas></div>
+      <div class="cap">One row per attempt that started in the window. Beaker: 5,563 attempts. jsteinhardt: 337. Lambda: 1,268.</div></div>
+    <div class="chart-card"><h3>Beaker wait by job shape</h3><div class="legend" id="lg-shape"></div><div class="cbox"><canvas id="c-shape"></canvas></div>
+      <div class="cap">Median and p90 wait in hours. "jupiter+ceres" = the job's constraint lists both clusters. The mix differs: multi-cluster jobs are more often 1-GPU evals.</div></div>
+  </div>
+  <div class="tbl"><table id="t-worst"></table></div>
+  <p class="note prose">No Beaker job in the window waited more than 7.2 h. The days-long tail of minRuntime-0 jobs from before 10-20 is gone, since 98% of first attempts now set a minRuntime. Today's 7 urgent jobs pending more than an hour are typical, not rare: 27% of jupiter-only attempts waited over an hour.</p>
+</section>
+
+<section>
+  <h2>Waste</h2>
+  <div class="grid2">
+    <div class="chart-card"><h3>GPU-hours lost or unused, by cause</h3><div class="cbox tall"><canvas id="c-waste"></canvas></div>
+      <div class="cap">Counted on GPUs we held, except the last two bars, which are capacity we could have used and didn't. "Cancelled while running" includes deliberate kills, so treat it as an upper bound.</div></div>
+    <div class="chart-card"><h3>Preempted Beaker GPU-hours per day</h3><div class="cbox tall"><canvas id="c-pre"></canvas></div>
+      <div class="cap">405 preempted attempts (309 training). 339 had already passed their minRuntime, and 304 of the 309 training attempts ran at minRuntime 1 h. The median attempt ran 1.26 h before it was preempted, 77% were preempted before 2 h, and 91% before 3 h.</div></div>
+  </div>
+  <div class="tbl"><table id="t-waste"></table></div>
+</section>
+
+<section>
+  <h2>Latency that is not GPU time</h2>
+  <div class="tiles" id="lat-tiles"></div>
+  <div class="chart-card"><h3>How 40 agent sessions spent their open time</h3><div class="legend" id="lg-sess"></div><div class="cbox short"><canvas id="c-sess"></canvas></div>
+    <div class="cap">From transcripts of 34 OLMo-core and 6 PAIL sessions active in the window. Any gap of ≥10 min between entries counts as idle time, labeled by what ended it. "Waiting on Prasann" is an upper bound: it includes nights when nothing was blocked.</div></div>
+  <div class="tbl"><table id="t-inc"></table></div>
+  <p class="note">Hand-dated incidents from STATUS pages and records (77 rows in <code>data/workflow_incidents.csv</code>). These are the ones with a stated cost.</p>
+</section>
+
+<section>
+  <h2>Process gaps</h2>
+  <div class="tbl"><table id="t-proc"></table></div>
+</section>
+
+<section>
+  <h2>What the starting examples turned out to be</h2>
+  <div class="tbl"><table id="t-claims"></table></div>
+</section>
+
+<section class="prose">
+  <h2>Limits of the data</h2>
+  <ul class="plain">
+    <li><b>In-job GPU utilization is not measured.</b> Nothing stores per-job SM utilization: <code>ops stall</code> samples are not kept, and wandb system metrics were not pulled. "Allocated but idle" is therefore unmeasured. The incident log names a few cases: a hung final save at 0% GPU, and empty-epoch livelocks of about 35 min × 3 jobs.</li>
+    <li><b>Beaker per-job timing</b> covers experiments that are in the run registry or in the <code>ops status</code> cache (6,425 experiments, 7,553 attempts). Beaker's own report agrees with our total to within 1%, so little is missing. Listing every finalized jupiter job by author timed out.</li>
+    <li><b>Restart-from-scratch is inferred</b> from the trainer default (no mid-run checkpoints unless <code>--save-interval</code> is passed; 47 of about 430 logged Beaker training commands passed it) and from the incident log. A preempted attempt's GPU-hours are counted as lost.</li>
+    <li><b>Duplicate detection</b> matches run names across pools after stripping cluster tags and hashes. It misses copies that were renamed.</li>
+    <li><b>"Evals with no result row"</b> matches on eval job id, run id or the parent run. Some experiments (PAIL sweeps, tokdrop in-training metrics) keep their numbers in their own logs, so the "training runs with no linked eval" count is mostly a registry-linking gap, not lost work.</li>
+    <li><b>Lambda capacity</b> assumes 24 GPUs (the three nodes that ran jobs). jsteinhardt headroom assumes 50 non-RTX GPUs and counts only other users' <code>preemptive_high</code> jobs as blocking.</li>
+    <li>sacct retention covers the whole window on both clusters (records back to 2026-07-21). The Beaker report was readable with the org filter.</li>
+    <li>Session transcripts cover sessions on this machine's <code>~/.claude*/projects</code>. Sessions run from other machines are missing.</li>
+  </ul>
+</section>
+
+<section class="prose">
+  <h2>Where things live</h2>
+  <ul class="plain">
+    <li>Record: <code>records/gpu-usage-workflow-audit-2026-11.md</code> · ops page: <code>ops exp show gpu_audit</code></li>
+    <li>Scripts: <code>research/common/gpu_audit/</code>. <code>fetch_beaker.py</code> pulls per-attempt Beaker timing, <code>analyze.py</code> computes every number here, <code>sessions.py</code> times the transcripts, and <code>build_page.py</code> builds this page. The README lists the pull commands.</li>
+    <li>Small pulls (committed): <code>research/common/gpu_audit/data/</code>, including jobs.csv (one row per GPU attempt), summary.json, hourly_occupancy.csv, waits.csv, workflow_incidents.csv and Beaker report CSVs. Other users appear only as pseudonyms there.</li>
+    <li>Raw dumps (gitignored): <code>research/common/gpu_audit/raw/</code> holds sacct for us and for all users on both clusters, and beaker_jobs.jsonl.</li>
+  </ul>
+</section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const DATA = __DATA__;
+const S = DATA.S;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (x, d = 0) => Number(x).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const WEEKS = 21.65 / 7;
+
+// ---------- tiles
+const lostPre = Math.round(S.beaker_preemptions.train_gpuh);
+const tiles = [
+  [fmt(S.gpuh_total), "GPU-hours used (Beaker 74%, jsteinhardt 18%, Lambda 8%)"],
+  [fmt(lostPre), "GPU-h of Beaker training preempted and restarted (16%)"],
+  [Math.round(S.wait_share_of_turnaround.beaker * 100) + "%", "of Beaker job lifetime spent pending"],
+  [Math.round(S.cap_use.jst_ph_share_of_cap_hours * 100) + "%", "of the 8-GPU jsteinhardt cap used"],
+  [fmt(S.cap_use.lam_others_mean_gpus, 1) + " / 24", "Lambda GPUs held by other users, on average"],
+  ["98%", "of Beaker GPU-h counted as allocated (oe-scaling)"],
+];
+document.getElementById("tiles").innerHTML = tiles.map(([v, k]) => `<div class="tile"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+
+// ---------- recommendations
+const R = [
+  { t: "Give every Beaker training job a minRuntime that covers the run, and add an overwrite-in-place checkpoint for anything longer", tag: ["tool", "launcher default"],
+    ev: "309 training attempts preempted (1,083 GPU-h); 304 had minRuntime 1 h and 91% were preempted before 3 h. 92% of completed training runs take ≤2 h and 99% ≤4 h. The trainer writes no mid-run checkpoints unless --save-interval is passed (47 of about 430 logged training commands did). Preemptions come from allocation balance: other workspace groups' jobs, at any priority, displace ours once minRuntime has passed.",
+    save: "~300 GPU-h/week (91% of ~350 preempted), plus one extra queue wait and rerun (median 1.26 h) per avoided preemption",
+    cost: "Small. Set minRuntime = min(4 h, 1.3 × expected) in launch_fast8k, the olmo3_cptdrop and mt11 launchers and the PAIL trainers. Pass --save-interval with an overwriting checkpoint (max_checkpoints=1) above 4 h. Watch for a week whether longer minRuntimes queue longer: in this window, jobs at minRuntime 2–3 h did not (median wait 0.15–0.28 h vs 0.28 h at 1 h)." },
+  { t: "Let jobs land on jupiter or ceres by default", tag: ["tool", "launcher default"],
+    ev: "Of 5,563 Beaker attempts, 3,759 were pinned to jupiter. Jupiter-only vs jupiter+ceres, median / p90 wait in hours: 1-GPU 0.33/1.04 vs 0.05/0.56; 2-GPU 0.40/2.97 vs 0.10/0.81; 5–8 GPU 0.72/3.03 vs 0.81/1.56.",
+    save: "~650 job-hours of waiting/week if pinned jobs waited like multi-cluster ones; the p90 for a 2-GPU wave drops about 3 h → 0.8 h",
+    cost: "Small, if the image, weka mounts and GPU memory work on ceres; check once with a 2-GPU smoke. The gain shrinks as more of our load shifts to ceres (its slice of the oe-other budget is 88 slots)." },
+  { t: "Decide whether our Beaker work should stay allocated (oe-scaling) or move back to unallocated", tag: ["decide"],
+    ev: "Beaker report: 4,871 of 4,991 GPU-h allocated (98%); before 10-19, 97% unallocated. ai2/flex2's workspace group is ai2/oe-scaling, which Beaker reports as 55% over target. flex2 itself shows as 60% over its workspace target. The CLAUDE.md rule and the gpu-usage check still say unallocated.",
+    save: "Unknown either way. Allocated jobs are what allocation balance preempts; unallocated jobs were preempted by allocated ones before 10-19.",
+    cost: "A decision, plus a CLAUDE.md / memory edit to match it. Moving back means asking AI2 infra about the workspace group." },
+  { t: "Spill short jobs to jsteinhardt whenever the Beaker queue backs up", tag: ["route", "where-to-run"],
+    ev: "Our preemptive_high use averaged 1.8 of 8 GPUs; 375 of 520 hours had none of our jobs there. Only 7 jsteinhardt jobs waited more than 15 min at that QOS. In the 168 hours when ≥4 of our GPUs were pending on Beaker, 691 GPU-h of jsteinhardt cap headroom went unused (3,215 GPU-h over the whole window).",
+    save: "~220 GPU-h/week of throughput during Beaker backlogs (up to ~1,000/week of total headroom), plus that queue time",
+    cost: "Medium. Routing rule: ≤2 GPUs, ≤2 h jobs go to jsteinhardt when Beaker pending > 30 min and headroom ≥ job size. This needs launchers that can run the same eval or probe on slurm, which exist for local evals. It preempts other users' lower-QOS jobs (allowed; Rhys only up to 8 GPUs)." },
+  { t: "Pack each checkpoint's eval tasks into one job", tag: ["tool", "launch_fast8k eval"],
+    ev: "3,375 completed Beaker eval jobs: median run 6.6 min, 2,582 under 15 min. 2,665 per-task ev-* jobs covered 862 checkpoints (~3 per checkpoint), and each paid its own queue wait (median 0.28 h) and its own 4B model load.",
+    save: "~580 fewer queue entries/week; GPU-h saved ≈ load overhead, which is unmeasured (≈60 GPU-h/week at 3 min × 2 GPUs per job)",
+    cost: "Small to medium: one job loops over tasks and writes per-task JSONs; the registry keeps one row per task." },
+  { t: "Show other users' load in ops status, and warn before a launch would preempt someone", tag: ["tool", "ops status / launch-run"],
+    ev: "Lambda: other users averaged 20.5 of 24 GPUs (Rhys 8.2k GPU-h, another user 2.5k). 29 of their jobs ended within 3 min of one of our preemptive starts on the same node, after running ~610 GPU-h. On jsteinhardt, Rhys alone held ~14.9k GPU-h. ops status shows only our jobs.",
+    save: "Mostly other people's GPU-hours; for us it prevents the 'Lambda looks idle' mistake. Real free Lambda capacity is ~400 GPU-h/week, 2–3.5 GPUs at any hour, with no off-peak window.",
+    cost: "Small: one extra squeue -a per cluster in the snapshot, and a per-node 'others' column." },
+  { t: "Flag finished work that nobody collected, and reject unknown experiment names at registration", tag: ["tool", "ops command + hook"],
+    ev: "597 completed eval jobs (173 GPU-h) have no result row after 24 h. Evals sat uncollected for 6 days because they were registered under ds64_fast8k. 1,175 GPU-h (17.5%) is registered under 12 names with no STATUS page (pail_ar 318, pail_benchmax 302, ds64_fast8k 125, unassigned 15, …). 4,836 of 6,916 registered runs never got a final state. Chaining is otherwise good: training end → eval launch has a median of 7 min (62% within 10 min), and job end → result recorded has a median of 0.3 h (p90 5.6 h).",
+    save: "~55 GPU-h/week of evals that ran but were never read, and the multi-day latency incidents",
+    cost: "Small: an `ops orphans` command run by the job-status and close-out skills, and `ops register` refusing an --experiment with no STATUS page unless given --new." },
+  { t: "Calibrate expected_minutes from history", tag: ["tool", "ops register"],
+    ev: "Actual/expected runtime over 4,179 completed attempts: median 0.21, p90 0.95. The estimates run about 5× long, so OVERRUN flags rarely fire and minRuntime can't be read off them.",
+    save: "Indirect: makes rec 1 automatic and catches stuck jobs sooner", cost: "Small: default expected_minutes to the median of past runs with the same launcher and arm prefix." },
+  { t: "Skip the cross-session GPU lock; keep insurance copies for runs that gate a decision", tag: ["route"],
+    ev: "Contention on the jsteinhardt cap happened in 1 of 520 hours (today, three side sessions). The same training run on two pools: 33 runs, 53 GPU-h in the smaller copy (<1%); the incident log shows the copies were used when jupiter preempted the original. Smokes and probes total 129 GPU-h (2%), so packing probes per GPU isn't worth building.",
+    save: "—", cost: "None. If contention grows, a one-line `ops cap` per experiment is enough." },
+];
+const tagCls = { tool: "tool", route: "route", decide: "decide" }, tagTxt = { tool: "tooling", route: "routing rule", decide: "Prasann decides" };
+document.getElementById("recs").innerHTML = R.map((r, i) => `<div class="rec"><div class="n">${i + 1}</div>
+  <h3>${r.t} <span class="pill ${tagCls[r.tag[0]]}">${tagTxt[r.tag[0]]}${r.tag[1] ? " · " + r.tag[1] : ""}</span></h3>
+  <p>${r.ev}</p>
+  <div class="meta"><div><b>Saves</b>${r.save}</div><div><b>Costs</b>${r.cost}</div></div></div>`).join("");
+
+// ---------- tables
+function table(id, head, rows, right = []) {
+  document.getElementById(id).innerHTML = "<thead><tr>" + head.map((h, i) => `<th class="${right.includes(i) ? "r" : ""}">${h}</th>`).join("") + "</tr></thead><tbody>" +
+    rows.map(r => "<tr>" + r.map((c, i) => `<td class="${right.includes(i) ? "r" : ""}">${c}</td>`).join("") + "</tr>").join("") + "</tbody>";
+}
+const W = {}; DATA.waits.forEach(w => W[w.pool + "|" + w.gpus] = w);
+const P = S.gpuh_by_pool;
+const bk = P["beaker:jupiter"] + P["beaker:multi:jupiter+ceres"] + P["beaker:titan"];
+table("t-pool", ["pool", "GPU-h", "share", "cap / capacity", "used of cap", "wait p50", "wait p90", "pending share of lifetime"], [
+  ["Beaker (jupiter, ceres, titan)", fmt(bk), Math.round(bk / S.gpuh_total * 100) + "%", "allocation-balanced; peak 99 GPUs", "mean 9.5 running", W["beaker:jupiter|all"].p50_h + " h (jupiter)", W["beaker:jupiter|all"].p90_h + " h", Math.round(S.wait_share_of_turnaround.beaker * 100) + "%"],
+  ["jsteinhardt preemptive_high", fmt(P["jsteinhardt:preemptive_high"]), Math.round(P["jsteinhardt:preemptive_high"] / S.gpuh_total * 100) + "%", "8 GPUs", Math.round(S.cap_use.jst_ph_share_of_cap_hours * 100) + "% (at cap " + S.cap_use.jst_hours_at_cap + " h)", W["jsteinhardt|all"].p50_h + " h", W["jsteinhardt|all"].p90_h + " h", Math.round(S.wait_share_of_turnaround.jsteinhardt * 100) + "%"],
+  ["jsteinhardt preemptive", fmt(P["jsteinhardt:preemptive"]), Math.round(P["jsteinhardt:preemptive"] / S.gpuh_total * 100) + "%", "uncapped, preemptible", "—", "", "", ""],
+  ["Lambda (preemptive_high + preemptive)", fmt(P["lambda:preemptive_high"] + P["lambda:preemptive"] + P["lambda:normal"]), Math.round((P["lambda:preemptive_high"] + P["lambda:preemptive"]) / S.gpuh_total * 100) + "%", "8 + 8 GPUs; 24 working", Math.round(S.cap_use.lam_share_of_16cap_hours * 100) + "% of 16", W["lambda|all"].p50_h + " h", W["lambda|all"].p90_h + " h", Math.round(S.wait_share_of_turnaround.lambda * 100) + "%"],
+  ["berkeleynlp (debug, normal)", fmt(P["berkeleynlp"]), "0%", "debug only", "—", "", "", ""],
+], [1, 2, 5, 6, 7]);
+table("t-worst", ["longest waits", "pool", "GPUs", "waited", "submitted (UTC)", "experiment"],
+  S.worst_waits.slice(0, 8).map(w => [`<span class="mono">${w.name}</span>`, w.pool, w.gpus, w.wait_h + " h", w.submit, w.experiment]), [2, 3]);
+const E = S.ended_badly_gpuh, g = k => E[k] || 0;
+const waste = [
+  ["Beaker training preempted, restarted from step 0", S.beaker_preemptions.train_gpuh, "309 attempts; no mid-run checkpoint by default"],
+  ["Preempted eval / smoke / probe attempts", g("PREEMPTED|eval") + g("PREEMPTED|smoke") + g("PREEMPTED|probe/bench") + (S.beaker_preemptions.gpuh - S.beaker_preemptions.train_gpuh - g("PREEMPTED|eval") - g("PREEMPTED|smoke") > 0 ? 0 : 0), "110 attempts, rerun from the start"],
+  ["slurm / Lambda training preempted", g("PREEMPTED|train") - S.beaker_preemptions.train_gpuh, "jsteinhardt preemptive QOS, Lambda"],
+  ["Failed jobs (exit ≠ 0, OOM)", g("FAILED|train") + g("FAILED|eval") + g("FAILED|smoke") + g("FAILED|data") + g("FAILED|unregistered") + g("FAILED|probe/bench"), "457 attempts; 171 training"],
+  ["Cancelled while running", g("CANCELLED|train") + g("CANCELLED|eval") + g("CANCELLED|smoke") + g("CANCELLED|unregistered") + g("CANCELLED|probe/bench"), "includes deliberate kills"],
+  ["Completed evals with no result row", S.evals_without_results.gpuh, "597 jobs"],
+  ["Same run on two pools (smaller copy)", S.same_run_on_two_pools_any_time.smaller_copy_gpuh, "33 runs"],
+  ["Unregistered jobs", S.unregistered.gpuh, "94 attempts"],
+  ["Unused jsteinhardt cap during Beaker backlog", S.idle_while_beaker_waited.jst_headroom_gpuh, "capacity, not held GPUs"],
+  ["Free Lambda GPUs during Beaker backlog", S.idle_while_beaker_waited.lam_free_gpuh, "capacity, not held GPUs"],
+];
+table("t-waste", ["cause", "GPU-h", "per week", "share of 6,705", "note"], waste.map(w => [w[0], fmt(w[1]), fmt(w[1] / WEEKS), (w[1] / S.gpuh_total * 100).toFixed(1) + "%", w[2]]), [1, 2, 3]);
+const inc = (DATA.incidents || []).map(r => ({ ...r, cost: (+r.gpu_hours_lost || 0) + (+r.delay_hours || 0) })).filter(r => r.cost > 0).sort((a, b) => b.cost - a.cost).slice(0, 10);
+table("t-inc", ["date", "experiment", "what happened", "GPU-h lost", "delay h"], inc.map(r => [r.date.slice(5), r.experiment, r.description, r.gpu_hours_lost || "", r.delay_hours || ""]), [3, 4]);
+table("t-proc", ["gap", "measured", "comment"], [
+  ["Unregistered jobs", `${S.unregistered.n} attempts, ${S.unregistered.gpuh} GPU-h (0.5%)`, "mostly interactive bash and short GPU tests on slurm, plus 32 GPU-h on Lambda; rare"],
+  ["Experiment names with no STATUS page", `${fmt(S.gpuh_experiment_without_status_page.total)} GPU-h (17.5%)`, "pail_ar, pail_benchmax(_wd/_nr/_scale/_lm), pail_modelscale, ds64_fast8k, unassigned. This is how the 6-day uncollected-eval incident happened."],
+  ["Registered runs with no final state", `${fmt(S.registered_no_final_state.n)} of ${fmt(S.registered_no_final_state.of)}`, "ops status still resolves live state from the clusters, but the registry can't answer 'what finished and wasn't collected'"],
+  ["Completed evals with no result row (>24 h)", `${S.evals_without_results.no_result_row} of ${fmt(S.evals_without_results.completed_eval_jobs)}`, "by count: pail_benchmax 224, tokdrop_lr 198, learned_router 64"],
+  ["Sessions sharing the jsteinhardt cap", "1 hour with 3 experiments; 7 jobs waited >15 min", "rare so far; today's three side sessions are the only case"],
+  ["Other users' load hidden from ops status", "Lambda others 20.5 / 24 GPUs; 29 of their jobs preempted at our starts", "the gap behind 'Lambda looked idle'"],
+  ["Expected minutes", `median actual/expected ${S.expected_vs_actual.p50}`, "estimates run about 5× long; OVERRUN rarely fires"],
+]);
+table("t-claims", ["example from the brief", "finding"], [
+  ["7 urgent Beaker jobs pending >1 h behind older urgent jobs", "<b>Common.</b> 27% of jupiter-only attempts waited >1 h (p90 2.35 h). Some of the jobs ahead are our own PAIL work: PAIL used ~1,190 GPU-h in the same workspace."],
+  ["Three side sessions contending for the 8-GPU jsteinhardt cap", "<b>Rare.</b> It happened in 1 of 520 hours (today). Usually the cap sat mostly empty."],
+  ["Lambda read as idle; our start preempted another user", "<b>Real and recurring</b>, though no record mentions it: 29 other-user jobs ended within 3 min of our preemptive starts on the same node (10-21 → 11-10)."],
+  ["Training wave preempted on jupiter after minRuntime, restarted from step 0", "<b>The largest single waste</b>: 1,083 GPU-h. Confirmed in mt11_64k (10-23), tokdrop decay (10-30), cross-row (11-02), oracle (11-04) and olmo3_cptdrop."],
+  ["Evals uncollected 6 days under the wrong experiment name", "<b>Confirmed once</b> (tokdrop per-row evals, ds64_fast8k); the structural cause is the 17.5% of GPU-h under names with no STATUS page."],
+  ["Duplicate insurance copies on two clusters", "<b>Small</b>: 33 runs, 53 GPU-h in the smaller copy. They paid off when jupiter preempted the original."],
+  ["UNREGISTERED jobs in ops status", "<b>Small</b>: 0.5% of GPU-h."],
+]);
+const sumS = k => DATA.sessions.reduce((a, r) => a + (+r[k] || 0), 0);
+document.getElementById("lat-tiles").innerHTML = [
+  [Math.round(S.train_end_to_eval_launch_h.p50 * 60), "min, median from training end to eval launch (62% within 10 min)"],
+  [S.end_to_result_h.p50 + " h", `median from eval end to result recorded (p90 ${S.end_to_result_h.p90} h)`],
+  ["144 h", "worst collection delay (evals under the wrong experiment name)"],
+  [sumS("n_waits_gt1h_human"), "session waits over 1 h that ended with a message from Prasann"],
+].map(([v, k]) => `<div class="tile"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+
+// ---------- charts
+const charts = [];
+function legend(id, items) { document.getElementById(id).innerHTML = items.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join(""); }
+function base(extra = {}) {
+  const ink2 = css("--ink-2"), rule = css("--rule");
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: css("--surface"), titleColor: css("--ink"), bodyColor: ink2, borderColor: rule, borderWidth: 1, padding: 10, bodyFont: { family: css("--f-mono") }, titleFont: { family: css("--f-body") } } },
+    scales: { x: { grid: { display: false }, ticks: { color: ink2, maxRotation: 0, autoSkipPadding: 12, font: { family: css("--f-mono"), size: 11 } }, border: { color: rule } },
+              y: { grid: { color: rule }, ticks: { color: ink2, font: { family: css("--f-mono"), size: 11 } }, border: { display: false } } },
+    ...extra,
+  };
+}
+const SER = () => [1, 2, 3, 4, 5, 6, 7, 8].map(i => css("--s" + i));
+let dailyMode = "pool";
+function dailyCfg() {
+  const s = SER(); let rows, keys, names;
+  if (dailyMode === "pool") { rows = DATA.daily_pool; keys = ["beaker", "jsteinhardt", "lambda"]; names = ["Beaker", "jsteinhardt", "Lambda"]; }
+  else if (dailyMode === "kind") { rows = DATA.daily_kind; keys = ["train", "eval", "smoke", "probe/bench", "data"]; names = keys; }
+  else { rows = DATA.daily_exp; const all = Object.keys(rows[0]).filter(k => k !== "day"); keys = all.slice(0, 7); names = keys.slice(); keys.push("__other"); names.push("other"); rows = rows.map(r => ({ ...r, __other: all.slice(7).reduce((a, k) => a + +r[k], 0) })); }
+  const cols = keys.map((k, i) => (dailyMode === "exp" && i === 7) ? s[7] : s[i]);
+  legend("lg-daily", names.map((n, i) => [n, cols[i]]));
+  return { type: "bar", data: { labels: rows.map(r => r.day.slice(5)), datasets: keys.map((k, i) => ({ label: names[i], data: rows.map(r => +r[k]), backgroundColor: cols[i], borderColor: css("--surface"), borderWidth: { top: 2 }, borderSkipped: "bottom", borderRadius: 0, stack: "a" })) },
+    options: base({ scales: { ...base().scales, x: { ...base().scales.x, stacked: true }, y: { ...base().scales.y, stacked: true, title: { display: true, text: "GPU-hours / day", color: css("--ink-3") } } },
+      plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.raw)} GPU-h` } } } }) };
+}
+const H = DATA.hourly, HL = H.hour_utc.map(h => { const d = new Date(h + ":00:00Z"); return d.toLocaleString("en-US", { month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false, timeZone: "America/Los_Angeles" }); });
+function line(label, data, color, extra = {}) { return { label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0, ...extra }; }
+function hourly(datasets, ytitle, ymax) {
+  const o = base(); o.scales.y.title = { display: true, text: ytitle, color: css("--ink-3") }; if (ymax) o.scales.y.max = ymax; o.scales.y.min = 0;
+  o.scales.x.ticks.maxTicksLimit = 8; o.scales.x.ticks.callback = function (v) { return this.getLabelForValue(v).slice(0, 5); };
+  o.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${fmt(c.raw, 1)}` };
+  return { type: "line", data: { labels: HL, datasets }, options: o };
+}
+function build() {
+  charts.forEach(c => c.destroy()); charts.length = 0;
+  const s = SER(), ink3 = css("--ink-3");
+  charts.push(new Chart(document.getElementById("c-daily"), dailyCfg()));
+  const jstOurs = H.jst_ours_ph;
+  legend("lg-jst", [["ours, preemptive_high", s[1]], ["ours, preemptive", s[3]], ["8-GPU cap", ink3]]);
+  charts.push(new Chart(document.getElementById("c-jst"), hourly([line("ours ph", jstOurs, s[1], { fill: { target: "origin" }, backgroundColor: s[1] + "33" }), line("ours preemptive", H.jst_ours_other_qos, s[3]), line("cap", H.hour_utc.map(() => 8), ink3, { borderDash: [5, 4], borderWidth: 1.5 })], "GPUs", 26)));
+  const lamOurs = H.lam_ours_ph.map((v, i) => v + H.lam_ours_p[i]);
+  legend("lg-lam", [["ours", s[2]], ["other users", s[7]], ["24 working GPUs", ink3]]);
+  charts.push(new Chart(document.getElementById("c-lam"), hourly([line("ours", lamOurs, s[2], { fill: { target: "origin" }, backgroundColor: s[2] + "33" }), line("other users", H.lam_others_any, s[7]), line("capacity", H.hour_utc.map(() => 24), ink3, { borderDash: [5, 4], borderWidth: 1.5 })], "GPUs", 26)));
+  legend("lg-bk", [["running GPUs", s[0]], ["pending GPUs", s[1]]]);
+  charts.push(new Chart(document.getElementById("c-bk"), hourly([line("running", H.bk_running, s[0], { fill: { target: "origin" }, backgroundColor: s[0] + "33" }), line("pending", H.bk_pending, s[1])], "GPUs")));
+  // wait histogram
+  const wh = S.wait_hist, pools = [["beaker", "Beaker", s[0]], ["jsteinhardt", "jsteinhardt", s[1]], ["lambda", "Lambda", s[2]]];
+  legend("lg-wh", pools.map(p => [p[1], p[2]]));
+  const ow = base(); ow.scales.y.ticks.callback = v => v + "%"; ow.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${c.raw.toFixed(1)}% of jobs` };
+  charts.push(new Chart(document.getElementById("c-wh"), { type: "bar", data: { labels: wh.labels, datasets: pools.map(([k, n, c]) => { const t = wh[k].reduce((a, b) => a + b, 0); return { label: n, data: wh[k].map(x => x / t * 100), backgroundColor: c, borderColor: css("--surface"), borderWidth: { left: 1, right: 1 }, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: "bottom" }; }) }, options: ow }));
+  // shape
+  const shp = [["1", "1 GPU"], ["2", "2 GPUs"], ["3-4", "3–4"], ["5-8", "5–8"]];
+  const lab = [], p50 = [], p90 = [];
+  shp.forEach(([g, n]) => { [["beaker:jupiter", "jupiter"], ["beaker:multi:jupiter+ceres", "jup+ceres"]].forEach(([pl, pn]) => { const w = W[pl + "|" + g]; if (w) { lab.push(`${n} · ${pn}`); p50.push(+w.p50_h); p90.push(+w.p90_h); } }); });
+  legend("lg-shape", [["median", s[0]], ["p90", s[6]]]);
+  const os = base({ indexAxis: "y" }); os.scales.x.title = { display: true, text: "hours", color: ink3 }; os.scales.x.grid = { color: css("--rule") }; os.scales.y.grid = { display: false };
+  os.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${c.raw} h` };
+  charts.push(new Chart(document.getElementById("c-shape"), { type: "bar", data: { labels: lab, datasets: [{ label: "median", data: p50, backgroundColor: s[0], borderRadius: { topRight: 4, bottomRight: 4 }, borderSkipped: "left" }, { label: "p90", data: p90, backgroundColor: s[6], borderRadius: { topRight: 4, bottomRight: 4 }, borderSkipped: "left" }] }, options: os }));
+  // waste
+  const ow2 = base({ indexAxis: "y" }); ow2.scales.x.grid = { color: css("--rule") }; ow2.scales.y.grid = { display: false }; ow2.scales.x.title = { display: true, text: "GPU-hours over the window", color: ink3 };
+  ow2.plugins.tooltip.callbacks = { label: c => ` ${fmt(c.raw)} GPU-h (${fmt(c.raw / WEEKS)}/week)` };
+  charts.push(new Chart(document.getElementById("c-waste"), { type: "bar", data: { labels: waste.map(w => w[0].replace("Beaker training preempted, restarted from step 0", "Beaker training preempted").replace(" (exit ≠ 0, OOM)", "")), datasets: [{ data: waste.map(w => w[1]), backgroundColor: waste.map((w, i) => i >= 8 ? css("--s8") : (i === 0 ? css("--crit") : s[0])), borderRadius: { topRight: 4, bottomRight: 4 }, borderSkipped: "left" }] }, options: ow2 }));
+  // preempt by day
+  const pd = S.beaker_preempt_gpuh_by_day; const op = base(); op.scales.y.title = { display: true, text: "GPU-h", color: ink3 }; op.plugins.tooltip.callbacks = { label: c => ` ${c.raw} GPU-h preempted` };
+  charts.push(new Chart(document.getElementById("c-pre"), { type: "bar", data: { labels: Object.keys(pd).map(d => d.slice(5)), datasets: [{ data: Object.values(pd), backgroundColor: css("--crit"), borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: "bottom" }] }, options: op }));
+  // sessions
+  const segs = [["active", sumS("active_h"), s[0]], ["waiting on jobs / subagents", sumS("wait_job/bg_h"), s[2]], ["waiting on other sessions", sumS("wait_session_h") + sumS("wait_other_h"), s[6]], ["waiting on Prasann", sumS("wait_human_h"), s[1]], ["other idle", sumS("wait_assistant_h") + sumS("wait_tool_h"), s[7]]];
+  legend("lg-sess", segs.map(x => [`${x[0]} ${fmt(x[1])} h`, x[2]]));
+  const oss = base({ indexAxis: "y" }); oss.scales.x.stacked = true; oss.scales.y.stacked = true; oss.scales.y.display = false; oss.scales.x.grid = { color: css("--rule") }; oss.scales.x.title = { display: true, text: "session-hours (3,110 open in total)", color: ink3 };
+  oss.interaction = { mode: "nearest", intersect: true }; oss.plugins.tooltip.callbacks = { label: c => ` ${c.dataset.label}: ${fmt(c.raw)} h` };
+  charts.push(new Chart(document.getElementById("c-sess"), { type: "bar", data: { labels: ["sessions"], datasets: segs.map(([n, v, c]) => ({ label: n, data: [v], backgroundColor: c, borderColor: css("--surface"), borderWidth: { right: 2 }, borderSkipped: false, barThickness: 44 })) }, options: oss }));
+}
+["pool", "exp", "kind"].forEach(m => document.getElementById("by-" + m).addEventListener("click", () => {
+  dailyMode = m; ["pool", "exp", "kind"].forEach(x => document.getElementById("by-" + x).setAttribute("aria-pressed", x === m)); build();
+}));
+function start() { if (window.Chart) { Chart.defaults.font.family = css("--f-body"); build(); } }
+start();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", start);
+new MutationObserver(start).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
