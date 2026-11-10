@@ -72,7 +72,14 @@ Writers hold an `flock`, so concurrent sessions can register safely.
 - `ops status [--experiment E] [--all] [--json] [--no-beaker] [--no-lambda] [--fresh] [--record]` —
   queries Beaker, `squeue`/`sacct` and Lambda (over `ssh lambda`) for registered runs, each with a
   timeout and an "unavailable" fallback. Flags runs that are OVERRUN (more than 2x
-  `expected_minutes`), stalled, or silent. `--record` writes final states back as update events.
+  `expected_minutes`), stalled, or silent. `--record` writes final states back as update events,
+  with `runtime_minutes` for finished runs (the history the launchers' minRuntime default uses).
+- `ops capacity [--cluster all|berkeley|lambda] [--json]` — everyone's GPUs per node on
+  jsteinhardt / berkeleynlp and Lambda (`ops status` shows only ours), GPU type, free GPUs, and our
+  use of the per-user caps (8 at `preemptive_high` on jsteinhardt; 8 + 8 on Lambda) split by
+  experiment. `--would-preempt --gpus N --qos Q [--partition P] [--node X]` says whether a new
+  single-node job fits in free GPUs or whose jobs it would preempt (exit 3 = another user's).
+  Placement skips GPUs below A100 unless `--any-gpu`. About 3 s.
 - `ops stall JOB_OR_RUN_ID` — one job in depth: log freshness and tail, last progress line,
   process state (`D` + `nfs_wait_bit_killable` at ~0% CPU is the NFS-interpreter/log trap, not a
   hang), GPU utilisation.

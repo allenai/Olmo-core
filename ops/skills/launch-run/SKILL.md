@@ -21,6 +21,11 @@ were one skipped box.
 - [ ] **Where:** run the `where-to-run` skill (`python3 ~/.claude/skills/where-to-run/compute_avail.py`).
   No A100 without asking Prasann. Local jsteinhardt: preemptive_high, 8-GPU/user cap, never evict
   `rhys_gould`. Lambda: ≤8 GPUs preemptive_high + ≤8 preemptive, the rest at `normal`; use /tmp, not /data.
+- [ ] **Preemption check (slurm / Lambda):** `$OPS capacity --cluster lambda|berkeley --would-preempt
+  --gpus N --qos Q [--partition jsteinhardt] [--node X]`. `ops status` shows only our jobs, so a node
+  that looks idle may be full. Exit 3 = this start would preempt another user's job; the output names
+  them. On Lambda prefer free GPUs or wait; preempt only within the fair-share caps, and say so to the
+  user. Rhys's jobs only up to 8 GPUs without asking. It also flags a start that would exceed our cap.
 - [ ] **Training forward lengths:** no full-attention forward at 32k in training (hard ban).
 
 ## Smoke test first

@@ -728,6 +728,8 @@ def cmd_status(args):
         print("(no live jobs)")
     if hidden and not args.recent and not args.experiment:
         print(f"+ {hidden} other jobs ended in the last 24h (unregistered, not failed) -- `--recent` to list")
+    if not args.json:
+        print("other users' GPUs per node + our cap use (jsteinhardt, Lambda): `ops capacity`")
     return 0
 
 
