@@ -325,6 +325,9 @@ def test_gdn_hybrid_wts_ones_bit_exact_and_weighted_gpu():
     from .online_token_router_test import _gpu_hybrid
 
     model = _gpu_hybrid().train()
+    for m in model.modules():  # Qwen3.5's DeltaNet layers: beta in (0, 1)
+        if hasattr(m, "allow_neg_eigval"):
+            m.allow_neg_eigval = False
     ids, _, labels = _row(B=2)
     ids = ids.cuda()
     with torch.no_grad():

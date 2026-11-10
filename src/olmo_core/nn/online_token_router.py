@@ -466,7 +466,7 @@ class OnlineRouterConfig:
             raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
         if self.wts:
             parse_wts(self.wts)
-            if self.drop_layer <= 0 or self.mod_layers or self.merge_dropped or self.mass_target > 0 \
+            if (self.drop_layer <= 0 and not self.stages) or self.mod_layers or self.merge_dropped or self.mass_target > 0 \
                     or self.keep_mode != "topk" or self.exit_loss_weight > 0 or self.later_mass_target > 0:
                 raise ValueError("online router wts needs the mid-stack drop (drop_layer > 0 or stages) and is exclusive "
                                  "with mod_layers / merge_dropped / mass_target / keep_mode threshold / exit loss")
