@@ -22,9 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and optionally reset auxiliary metrics before training and on exit.
 - Added an opt-in FP32-output LM head with low-precision GEMMs and mixed-precision backward.
 - Added optional eager-rounding parity and dynamic-row specialization for no-gradient SwiGLU.
+- Added `RoutedExpertsConfig.fused_no_grad_activation` (default `True`). Setting it to `False` makes no-gradient routed-expert forwards use the same eager SiLU-then-multiply activation as the gradient-enabled training path instead of the fused valid-prefix kernel, so policy scoring can share the training forward's arithmetic exactly. Explicit FP8 and wave-kernel callers are unchanged.
 
 ### Fixed
 
+- Fixed int32 pointer-offset overflow in the valid-prefix SwiGLU Triton kernels (forward, dynamic-row forward, and backward). Row and column indices are widened to int64 before stride multiplication, so no-gradient MoE activation buffers with 2^31 or more elements (for example 1,048,576 rows by 2,048 BF16 columns) no longer read or write wrapped addresses.
 - Fixed a `ZeroDivisionError` in `InvSqrtWithWarmup.get_lr()` at step 0 when `warmup=0`.
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
