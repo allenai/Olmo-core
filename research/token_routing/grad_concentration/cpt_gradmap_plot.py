@@ -32,7 +32,7 @@ FRACS = (0.7, 0.9, 0.95)
 DIST = (1024, 4096, 16384)
 CUTS = (2, 4, 8, 12, 16, 20, 24, 28)
 FULL_ATTN = (3, 7, 11, 15, 19, 23, 27, 31)
-COL = {"base": "#4c72b0", "cpt": "#dd8452"}
+COL = {"base": "#4c72b0", "cpt": "#dd8452", "stage3": "#55a868"}
 SCALES = ("log", "lin", "linclip")
 SUFFIX = {"log": "", "lin": "_lin", "linclip": "_linclip"}
 
@@ -427,9 +427,10 @@ def summary_figs(setn, labs, names, S, KS, out, n_rows, T):
             vb = np.stack([v[:, b0:b1].sum(1) for b0, b1 in BANDS], 1)
             e = np.array([s[f"E_block_share{key}"] for s in S[lab]])
             eb = np.stack([e[:, b0:b1].sum(1) for b0, b1 in BANDS], 1)
-            axs[ai].bar(x + (j - 0.5) * 0.38, vb.mean(0), 0.36, yerr=vb.std(0, ddof=1) / np.sqrt(len(v)) if len(v) > 1 else None,
+            w = 0.8 / len(labs)
+            axs[ai].bar(x + (j - (len(labs) - 1) / 2) * w, vb.mean(0), w * 0.95, yerr=vb.std(0, ddof=1) / np.sqrt(len(v)) if len(v) > 1 else None,
                         color=COL[lab.split("_")[0]], label=f"{names[lab]} exact ||grad W||^2")
-            axs[ai].plot(x + (j - 0.5) * 0.38, eb.mean(0), "k_", ms=14, mew=2, label="attribution sum E" if j == 0 else None)
+            axs[ai].plot(x + (j - (len(labs) - 1) / 2) * w, eb.mean(0), "k_", ms=14, mew=2, label="attribution sum E" if j == 0 else None)
         axs[ai].set_xticks(x)
         axs[ai].set_xticklabels([f"blocks {b}" for b in BAND_NAMES], fontsize=7.5)
         axs[ai].set_title(ttl, fontsize=8.5)
@@ -485,7 +486,8 @@ def summary_figs(setn, labs, names, S, KS, out, n_rows, T):
         ax = axs[bi]
         for j, lab in enumerate(labs):
             enr = np.array([[ks[k]["E_share_band"][bi] / ks[k]["tok_share"] for k in kn] for ks in KS[lab]])
-            ax.barh(y + (j - 0.5) * 0.38, enr.mean(0), 0.36, color=COL[lab.split("_")[0]], label=names[lab])
+            w = 0.8 / len(labs)
+            ax.barh(y + (j - (len(labs) - 1) / 2) * w, enr.mean(0), w * 0.95, color=COL[lab.split("_")[0]], label=names[lab])
         ax.axvline(1, color="k", lw=0.6)
         ax.set_xscale("log")
         ax.set_title(f"blocks {BAND_NAMES[bi]}" if bi < len(BANDS) else "all blocks", fontsize=8.5)

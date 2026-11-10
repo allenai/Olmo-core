@@ -185,6 +185,14 @@ def main():
     out = os.path.join(a.out_dir, a.label)
     os.makedirs(out, exist_ok=True)
     meta = []
+    rj = os.path.join(out, "rows.json")
+    if os.path.exists(rj):  # resume: keep finished rows of the same checkpoint, skip them
+        prev = json.load(open(rj))
+        if prev.get("ckpt") == a.ckpt and prev.get("span") == a.span:
+            meta = [r for r in prev["rows"] if os.path.exists(os.path.join(out, f"r{r['row']:04d}.npz"))]
+            done = {r["row"] for r in meta}
+            log(f"resuming: {sorted(done)} already done")
+            rows_idx = [r for r in rows_idx if r not in done]
     t0 = time.time()
     for k, ri in enumerate(rows_idx):
         tr = time.time()
