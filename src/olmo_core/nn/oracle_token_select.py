@@ -686,6 +686,7 @@ class _Oracle:
         cnt_names = ["real", "body", "nonbody"] + [f"keep_s{g}" for g in range(len(self.cuts))] + \
             [f"orc_s{g}" for g in range(len(self.cuts))] + [f"rnd_s{g}" for g in range(len(self.cuts))] + \
             ["gold_body"] + [f"gold_keep_s{g}" for g in range(len(self.cuts))] + \
+            [f"gold_orc_s{g}" for g in range(len(self.cuts))] + \
             [f"E_s{g}" for g in range(len(self.cuts))] + [f"E_keep_s{g}" for g in range(len(self.cuts))] + \
             [f"E_gold_s{g}" for g in range(len(self.cuts))]
         c = torch.zeros(len(cnt_names), device=dev, dtype=torch.float64)
@@ -698,7 +699,8 @@ class _Oracle:
             stage = [sel["orc"][mi][g] | sel["rnd"][mi][g] for g in range(len(self.cuts))]
             vals = [real.sum(), body.sum(), (real & ~body).sum()] + [s.sum() for s in stage] + \
                 [o.sum() for o in sel["orc"][mi]] + [r.sum() for r in sel["rnd"][mi]] + [gb.sum()] + \
-                [(s & gb).sum() for s in stage] + [info["E"][mi][g][body].sum() for g in range(len(self.cuts))] + \
+                [(s & gb).sum() for s in stage] + [(o & gb).sum() for o in sel["orc"][mi]] + \
+                [info["E"][mi][g][body].sum() for g in range(len(self.cuts))] + \
                 [info["E"][mi][g][stage[g]].sum() for g in range(len(self.cuts))] + \
                 [info["E"][mi][g][gb].sum() for g in range(len(self.cuts))]
             c += torch.stack([v.double() for v in vals])
@@ -707,7 +709,9 @@ class _Oracle:
             ND = int(cid.max().item()) + 2
             key = (torch.arange(body.shape[0], device=dev)[:, None] * ND + cid.clamp(min=0).long())[body]
             uk, inv = torch.unique(key, return_inverse=True)
-            cols = [torch.ones_like(key, dtype=torch.float32), gb[body].float()] + [s[body].float() for s in stage]
+            # per document: length, has-gold, kept per stage (oracle + random), oracle-only kept per stage
+            cols = [torch.ones_like(key, dtype=torch.float32), gb[body].float()] + [s[body].float() for s in stage] + \
+                [o[body].float() for o in sel["orc"][mi]]
             sums = torch.stack([torch.zeros(len(uk), device=dev).index_add_(0, inv, v) for v in cols], 1)
             sums[:, 1] = (sums[:, 1] > 0).float()
             per_doc += sums.tolist()
@@ -722,7 +726,7 @@ class _Oracle:
         pr = torch.tensor(per_row, device=dev).flatten()
         pr_all = torch.cat(_gather_cat(pr)).view(-1, 1 + len(self.cuts)).tolist() if pr.numel() else []
         pd = torch.tensor(per_doc, device=dev).flatten()
-        pd_all = torch.cat(_gather_cat(pd)).view(-1, 2 + len(self.cuts)) if pd.numel() else None
+        pd_all = torch.cat(_gather_cat(pd)).view(-1, 2 + 2 * len(self.cuts)) if pd.numel() else None
         ceA_t, ceC_t = ceA.clone(), ceC.clone()
         if _ws() > 1:
             dist.all_reduce(ceA_t)
@@ -764,6 +768,10 @@ class _Oracle:
             "gold_keep_frac": [C[f"gold_keep_s{g}"] / max(1.0, C["gold_body"]) for g in range(n_cut)],
             "distractor_keep_frac": [(C[f"keep_s{g}"] - C[f"gold_keep_s{g}"]) / max(1.0, C["body"] - C["gold_body"])
                                      for g in range(n_cut)],
+            # the ORACLE part alone (differs from the above only with --oracle-random-mult)
+            "gold_orc_keep_frac": [C[f"gold_orc_s{g}"] / max(1.0, C["gold_body"]) for g in range(n_cut)],
+            "distractor_orc_keep_frac": [(C[f"orc_s{g}"] - C[f"gold_orc_s{g}"]) / max(1.0, C["body"] - C["gold_body"])
+                                         for g in range(n_cut)],
             "energy_keep_share": [C[f"E_keep_s{g}"] / max(1e-300, C[f"E_s{g}"]) for g in range(n_cut)],
             "energy_gold_share": [C[f"E_gold_s{g}"] / max(1e-300, C[f"E_s{g}"]) for g in range(n_cut)],
             "gold_body_frac": C["gold_body"] / max(1.0, C["body"]),
@@ -785,6 +793,7 @@ class _Oracle:
                 rec.setdefault("doc_keep_frac", {})[f"s{g}"] = {
                     "mean": float(fr.mean()), "std": float(fr.std()) if fr.numel() > 1 else 0.0,
                     "zero_docs": float((pd_all[:, 2 + g] == 0).float().mean()),
+                    "zero_docs_orc": float((pd_all[:, 2 + n_cut + g] == 0).float().mean()),
                     "gold_mean": float(fr[dg].mean()) if bool(dg.any()) else None,
                     "distractor_mean": float(fr[~dg].mean()) if bool((~dg).any()) else None}
             rec["n_docs"] = int(pd_all.shape[0])

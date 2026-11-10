@@ -72,6 +72,11 @@ ARMS = {
 for _t in (90, 85, 80, 70, 60):
     ARMS[f"orc1doc{_t}"] = f"{RECIPE1} --oracle-scope doc --oracle-target {_t / 100:.2f} {_ALL}"
 
+#: PER-ROW oracle + random (main session / Prasann 2026-11-10): per-row threshold 0.90 keeps ~14% on the orc1row
+#: trajectory (orc1row steps.jsonl, curves.row cos_body), + uniformly random body tokens 1.15x that per row -> ~30% total,
+#: budget-matched to orc1row (29%, 0.674) and orc1batchr2 (13% + 17%, 0.806)
+ARMS["orc1row90r115"] = f"{RECIPE1} --oracle-scope row --oracle-target 0.90 --oracle-random-mult 1.15 {_ALL}"
+
 #: matched RANDOM controls: per-document uniform selection, single cut at block 7, a fixed keep fraction of each
 #: document's body tokens (rnd1doc<pct>, e.g. rnd1doc19 = 19%). One routed pass per step (no dense passes).
 RANDOM1 = RECIPE1.replace("--st-otr-score oracle", "--st-otr-score random")

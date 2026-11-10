@@ -30,9 +30,14 @@ def row(r):
                 "ce_dense": r["ce_dense"], "ce_routed": r["ce_routed"],
                 "routed_over_dense": r["flops"]["routed_over_dense"],
                 "actual_over_dense": r["flops"]["actual_3pass"] / max(1.0, r["flops"]["dense_pass"])})
-    for k in ("gold_keep_frac", "distractor_keep_frac"):  # stage 0 (zero when the shard has no gold sidecar)
+    for k in ("gold_keep_frac", "distractor_keep_frac", "gold_orc_keep_frac", "distractor_orc_keep_frac",
+              "orc_frac_body"):  # stage 0 (gold fields are zero when the shard has no gold sidecar)
         if r.get(k):
             out[k] = r[k][0]
+    d0 = (r.get("doc_keep_frac") or {}).get("s0") or {}
+    for k in ("zero_docs", "zero_docs_orc", "gold_mean", "distractor_mean"):
+        if d0.get(k) is not None:
+            out[f"doc_{k}"] = d0[k]
     return out
 
 
