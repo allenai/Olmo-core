@@ -226,11 +226,14 @@ def main():
             rr = torch.empty_like(ob)
             rr.scatter_(1, ob, torch.arange(BLK, device=dev).expand(nb, BLK))
             rk[:nb * BLK] = rr.reshape(-1)
-            if T_c > nb * BLK:
-                rk[nb * BLK:] = BLK - 1
+            if T_c > nb * BLK:  # partial last block (the tokens just before the span): rank within it, scaled to BLK
+                tail = score[nb * BLK:]
+                rt = torch.empty_like(tail, dtype=torch.long)
+                rt[tail.argsort(descending=True)] = torch.arange(tail.numel(), device=dev)
+                rk[nb * BLK:] = (rt * BLK) // tail.numel()
             key = rk.double() * 1e6 - torch.log(score.double().clamp(min=1e-300)) / 1e3
             ordb = key.argsort()
-            kb = np.minimum(T_c, np.ceil(FRACS * BLK).astype(int) * max(nb, 1))
+            kb = np.array([int((rk < np.ceil(f * BLK)).sum()) for f in FRACS])
             A.P["blk512"] += prefix_sums(parts, ordb, kb)
             A.cnt["blk512"] += kb
             perm = torch.randperm(T_c, generator=gen).to(dev)
