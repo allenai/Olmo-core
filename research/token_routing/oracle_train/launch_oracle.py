@@ -10,6 +10,10 @@ rows, no-cot, query after (the legacy native multirung eval the tdb/tde runs use
 
     python research/token_routing/oracle_train/launch_oracle.py --arms orcbatch --budgets f1952 launch
     python research/token_routing/oracle_train/launch_oracle.py --runs <run> eval
+    # threshold sweep (records/oracle-threshold-sweep.md): oracle targets, random controls, dense below f1952
+    python research/token_routing/oracle_train/launch_oracle.py --arms orc1doc90,orc1doc80 launch
+    python research/token_routing/oracle_train/launch_oracle.py --arms rnd1doc19,rnd1doc7 launch
+    python research/token_routing/oracle_train/launch_oracle.py --arms dense --budgets f488,f976 launch
 """
 from __future__ import annotations
 
@@ -63,9 +67,29 @@ ARMS = {
     "orcbatchrc": f"{RECIPE} --oracle-scope batch --oracle-routed-target 0.95 {_ALL}",
 }
 
+#: THRESHOLD SWEEP (Prasann via parent, 2026-11-10; record oracle-threshold-sweep.md): orc1doc (the 0.95 point) with the
+#: per-document attribution-cos target lowered -> a Pareto curve of quality vs routed step cost
+for _t in (90, 85, 80, 70, 60):
+    ARMS[f"orc1doc{_t}"] = f"{RECIPE1} --oracle-scope doc --oracle-target {_t / 100:.2f} {_ALL}"
 
-def run_name(arm, budget, lr, seed=0):
-    return f"f8k-mt4-{arm}{f'sd{seed}' if seed else ''}-{budget.replace('@', 'st')}{SUFFIX}-lr{lr:g}"
+#: matched RANDOM controls: per-document uniform selection, single cut at block 7, a fixed keep fraction of each
+#: document's body tokens (rnd1doc<pct>, e.g. rnd1doc19 = 19%). One routed pass per step (no dense passes).
+RANDOM1 = RECIPE1.replace("--st-otr-score oracle", "--st-otr-score random")
+
+
+def arm_extra(arm):
+    if arm in ARMS:
+        return ARMS[arm]
+    if arm.startswith("rnd1doc"):
+        pct = float(arm[len("rnd1doc"):].replace("p", "."))
+        return RANDOM1.replace("--st-otr-keep-frac 0.2 ", f"--st-otr-keep-frac {pct / 100:g} ")
+    raise SystemExit(f"unknown arm {arm}")
+
+
+def run_name(arm, budget, lr, seed=0, tag=""):
+    if arm == "dense":  # the dense curve's own naming (f8k-mt4-dense-f1952-tde-lr5e-06 ...)
+        return f"f8k-mt4-dense{f'sd{seed}' if seed else ''}-{budget.replace('@', 'st')}-tde-lr{lr:g}{tag}"
+    return f"f8k-mt4-{arm}{f'sd{seed}' if seed else ''}-{budget.replace('@', 'st')}{SUFFIX}-lr{lr:g}{tag}"
 
 
 def load():
@@ -81,28 +105,34 @@ def do_launch(a, mode):
     st = load()
     for arm in a.arms.split(","):
         for budget in a.budgets.split(","):
-            name = run_name(arm, budget, a.lr, a.seed)
+            dense = arm == "dense"
+            lr = a.lr if (a.lr_set or not dense) else 5e-6  # dense curve LR 5e-6 unless --lr is given
+            name = run_name(arm, budget, lr, a.seed, a.name_tag)
             if name in st["runs"] and mode == "launch" and not a.force:
                 print(f"[skip] {name} ({st['runs'][name]['ex']})")
                 continue
             rows, _, steps = budget[1:].partition("@")
             data = f"{SHARDS}/mt4{budget[0]}{rows}"
-            cmd = [sys.executable, "-u", LAUNCHER, "--task", "mt4", "--variant", "softtoken",
+            cmd = [sys.executable, "-u", LAUNCHER, "--task", "mt4", "--variant", "full" if dense else "softtoken",
                    "--model-family", "qwen3_5", "--model-scale", "4b", "--data-root", data,
                    "--run-name", name, "--exact-run-name", "--num-nodes", "1", "--num-gpus", "2",
-                   "--epochs", "1", "--lr", str(a.lr), "--cluster", a.cluster,
+                   "--epochs", "1", "--lr", str(lr), "--cluster", a.cluster,
                    "--wandb-group", WANDB_GROUP, "--priority", "urgent", "--min-runtime", "1h", "--no-follow",
                    "--no-compile", "--seq-len", str(a.seq_len), "--global-batch", "16",
                    "--micro-batch-instances", "2", "--seed", str(a.seed), "--base-checkpoint", BASE,
                    "--experiment", "tokdrop_lr"]
             if steps:
                 cmd += ["--max-steps", steps]
-            cmd += ["--extra-args", ARMS[arm]]
+            extra = "" if dense else arm_extra(arm)
+            if a.resume_every:  # ephemeral resume points: a preempted Beaker job resumes instead of restarting at 0
+                extra = f"{extra} --ephemeral-save-interval {a.resume_every}".strip()
+            if extra:
+                cmd += ["--extra-args", extra]
             rc, out = sh(cmd + [mode])
             ex = parse_id(out)
             print(f"{name} -> rc={rc} {ex or out[-600:]}")
             if mode == "launch" and ex:
-                st["runs"][name] = {"ex": ex, "arm": arm, "budget": budget, "lr": a.lr, "seed": a.seed,
+                st["runs"][name] = {"ex": ex, "arm": arm, "budget": budget, "lr": lr, "seed": a.seed,
                                     "meta": f"{CKPTS}/{name}/oracle_meta"}
                 save(st)
 
@@ -133,7 +163,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arms", default="orcbatch")
     ap.add_argument("--budgets", default="f1952", help="f<rows/task>[@<max steps>] (fresh pool shard mt4f<rows>)")
-    ap.add_argument("--lr", type=float, default=1e-5, help="the recipe's LR")
+    ap.add_argument("--lr", type=float, default=None, help="the recipe's LR 1e-5 (dense arm: 5e-6, the dense curve's)")
+    ap.add_argument("--resume-every", type=int, default=100,
+                    help="--ephemeral-save-interval (steps) so a preempted job resumes; 0 = off")
+    ap.add_argument("--name-tag", default="", help="appended to the run name")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--seq-len", type=int, default=12288)
     ap.add_argument("--cluster", default="ai2/jupiter-cirrascale-2")
@@ -141,6 +174,8 @@ def main():
     ap.add_argument("--force", action="store_true")
     ap.add_argument("mode", choices=["launch", "dry_run", "eval"])
     a = ap.parse_args()
+    a.lr_set = a.lr is not None
+    a.lr = 1e-5 if a.lr is None else a.lr
     do_eval(a) if a.mode == "eval" else do_launch(a, a.mode)
 
 
