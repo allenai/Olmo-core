@@ -67,6 +67,12 @@ FREE_TO_PREEMPT_QOS = {"normal"}
 # first" whenever they are the pick.
 ASK_GPUS = {"A100"}
 ASK_GPU_NOTE = "A100: check with Prasann before using"
+# Spill rule (Prasann, 2026-11-10): small, short jobs go wherever they start soonest. A job of
+# <= SPILL_MAX_GPUS GPUs and <= SPILL_MAX_HOURS goes to jsteinhardt (preemptive_high, under our 8-GPU
+# cap) whenever Beaker's expected wait is over SPILL_BEAKER_WAIT_S. In the 3-week gpu_audit,
+# jsteinhardt sat at 23% of the cap while Beaker jobs spent 60% of their lifetime pending.
+SPILL_MAX_GPUS, SPILL_MAX_HOURS, SPILL_BEAKER_WAIT_S = 2, 2.0, 1800
+JST_CAP_QOS, JST_CAP = "preemptive_high", 8
 PRIO = {"JOB_PRIORITY_LOW": 0, "JOB_PRIORITY_NORMAL": 1, "JOB_PRIORITY_HIGH": 2,
         "JOB_PRIORITY_URGENT": 3, "JOB_PRIORITY_IMMEDIATE": 4}
 URGENT = PRIO["JOB_PRIORITY_URGENT"]
@@ -74,6 +80,48 @@ NOW = time.time()
 
 
 # ----------------------------------------------------------------------------- helpers
+
+def experiments_by_job() -> dict:
+    """{job_id: experiment} from the ops run registry (repo ops/ next to this skill); {} if unavailable."""
+    try:
+        repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
+        sys.path.insert(0, os.path.join(repo, "ops"))
+        from opslib import registry  # noqa: WPS433
+
+        return {str(r["job_id"]): r.get("experiment") or "?" for r in registry.load_runs().values() if r.get("job_id")}
+    except Exception:  # noqa: BLE001 - never break the availability view
+        return {}
+
+
+def our_cap_use(res: dict) -> dict:
+    """Our GPUs under the per-user caps, split by experiment: {"jst": {...}, "lambda": {qos: {...}}}."""
+    exps = experiments_by_job()
+    out: dict = {}
+    sl = res.get("slurm")
+    if isinstance(sl, dict) and "running" in sl:
+        by: dict = {}
+        for j in sl["running"]:
+            if j.get("user") == ME and j.get("qos") == JST_CAP_QOS and j.get("partition") == "jsteinhardt":
+                e = exps.get(str(j.get("id")), "unregistered")
+                by[e] = by.get(e, 0) + (j.get("gpus") or 0)
+        out["jst"] = dict(gpus=sum(by.values()), cap=JST_CAP, by_experiment=by)
+    lm = res.get("lambda")
+    if isinstance(lm, dict) and "mine_jobs" in lm:
+        out["lambda"] = {}
+        for q, cap in LAMBDA_CAPS.items():
+            by = {}
+            for jid, qos, g in lm["mine_jobs"]:
+                if qos == q:
+                    e = exps.get(str(jid), "unregistered")
+                    by[e] = by.get(e, 0) + g
+            out["lambda"][q] = dict(gpus=sum(by.values()), cap=cap, by_experiment=by)
+    return out
+
+
+def fmt_cap(v: dict) -> str:
+    parts = ", ".join(f"{e} {n}" for e, n in sorted(v["by_experiment"].items(), key=lambda x: -x[1]))
+    return f"{v['gpus']}/{v['cap']}" + (f" [{parts}]" if parts else "")
+
 
 def run(cmd: list[str], timeout: float = 25) -> str:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True).stdout
@@ -535,6 +583,7 @@ def lambda_snapshot() -> dict:
                                         total=int(tot.group(1)) if tot else 0,
                                         alloc=gpus(d.get("AllocTRES", "")), holders={})
     mine: dict[str, int] = {}
+    mine_jobs: list = []
     pending: dict[str, int] = {}
     for line in jobs_txt.strip().splitlines():
         d = kv(line)
@@ -548,11 +597,12 @@ def lambda_snapshot() -> dict:
         g = gpus(d.get("AllocTRES", ""))
         if user == LAMBDA_ME:
             mine[qos] = mine.get(qos, 0) + g
+            mine_jobs.append((d.get("JobId"), qos, g))
         for n in expand_nodes(d.get("NodeList", "")):
             if n in nodes and g:
                 h = nodes[n]["holders"]
                 h[f"{user}({qos})"] = h.get(f"{user}({qos})", 0) + g
-    return dict(nodes=list(nodes.values()), mine=mine, pending=pending)
+    return dict(nodes=list(nodes.values()), mine=mine, mine_jobs=mine_jobs, pending=pending)
 
 
 def render_text(res: dict) -> str:
@@ -582,6 +632,10 @@ def render_text(res: dict) -> str:
     elif sl:
         L.append("")
         L.append(c("LOCAL SLURM  (single node, A100+, QOS ≥ preemptive; ETA ≤ = scheduled end of blocking jobs)", "h"))
+        cu = (res.get("cap_use") or {}).get("jst")
+        if cu:
+            L.append(c(f"  our jsteinhardt {JST_CAP_QOS} GPUs (all sessions): {fmt_cap(cu)}"
+                       f"  · spill rule: <= {SPILL_MAX_GPUS} GPU, <= {SPILL_MAX_HOURS:g}h jobs come here when Beaker waits > 30 min", "dim"))
         hdr = f"  {'partition / qos':<38}" + "".join(f"{str(g) + ' GPU':<11}" for g in REQ_SIZES)
         L.append(hdr + "  preempt-risk to you")
         for part in PARTITIONS:
@@ -663,7 +717,9 @@ def render_text(res: dict) -> str:
     elif lm:
         L.append("")
         L.append(c("LAMBDA  (ssh lambda; A100-80GB x8/node; info only -- A100: check with Prasann before using)", "h"))
-        caps = " · ".join(f"{q} {lm['mine'].get(q, 0)}/{cap}" for q, cap in LAMBDA_CAPS.items())
+        lcu = (res.get("cap_use") or {}).get("lambda") or {}
+        caps = " · ".join(f"{q} {fmt_cap(lcu[q])}" if q in lcu else f"{q} {lm['mine'].get(q, 0)}/{cap}"
+                          for q, cap in LAMBDA_CAPS.items())
         L.append(c(f"  your GPUs vs fair-share caps: {caps} · normal {lm['mine'].get('normal', 0)} (uncapped, "
                    f"preemptible)   pending jobs by user: {lm['pending'] or 'none'}", "dim"))
         for n in lm["nodes"]:
@@ -729,9 +785,38 @@ def recommend(res: dict) -> list[dict]:
             if x[5] not in seen and len(runners) < 2:
                 seen.add(x[5])
                 runners.append(f"{x[5]} (start {dur(x[4])}, done {dur(x[0])})")
-        out.append(dict(gpus=G, status=st, eta_s=eta, done_s=done, where=where, why=why,
-                        runners_up=runners))
+        rec = dict(gpus=G, status=st, eta_s=eta, done_s=done, where=where, why=why, runners_up=runners)
+        out.append(spill(rec, res) or rec)
     return out
+
+
+def spill(rec: dict, res: dict) -> dict | None:
+    """The spill rule: a small, short job headed for a Beaker queue over 30 min goes to jsteinhardt
+    instead when our preemptive_high cap has room (``None`` = keep the original pick)."""
+    G = rec["gpus"]
+    if G > SPILL_MAX_GPUS or RUN_HOURS > SPILL_MAX_HOURS or not rec["where"].startswith("beaker"):
+        return None
+    if (rec.get("eta_s") or 0) <= SPILL_BEAKER_WAIT_S:
+        return None
+    sl = res.get("slurm")
+    if not isinstance(sl, dict) or "options" not in sl:
+        return None
+    used = (res.get("cap_use") or {}).get("jst", {}).get("gpus", 0)
+    if used + G > JST_CAP:
+        return None
+    opts = [o for o in sl["options"] if o["partition"] == "jsteinhardt" and o["qos"] == JST_CAP_QOS
+            and o["gpus"] == G and o["status"] in ("free", "preempt")
+            and (o.get("gpu_type") or "").upper() not in ASK_GPUS]
+    if not opts:
+        return None
+    o = min(opts, key=lambda o: o["eta_s"] or 0)
+    sp = SPEED.get((o.get("gpu_type") or "H200").upper(), 1.0)
+    return dict(gpus=G, status=o["status"], eta_s=o["eta_s"] or 0,
+                done_s=(o["eta_s"] or 0) + sp * RUN_HOURS * 3600,
+                where=f"jsteinhardt --qos={JST_CAP_QOS} -w {o['node']}",
+                why=f"SPILL RULE: Beaker wait ~{dur(rec['eta_s'])} > 30 min for a {G}-GPU <= {SPILL_MAX_HOURS:g}h job; "
+                    f"our jsteinhardt {JST_CAP_QOS} use {used}/{JST_CAP}. {o['how']}",
+                runners_up=[f"{rec['where']} (start {dur(rec['eta_s'])}, done {dur(rec['done_s'])})"] + rec["runners_up"][:1])
 
 
 def render_html(res: dict, text: str) -> str:
@@ -827,6 +912,7 @@ def main() -> None:
                 res["lambda"] = f_lm.result()
             except Exception as e:  # noqa: BLE001
                 res["lambda"] = dict(error=str(e)[:300])
+    res["cap_use"] = our_cap_use(res)
     res["recommend"] = recommend(res)
     res["policy_notes"] = [DEBUG_ONLY_NOTE]
     res["elapsed_s"] = round(time.time() - NOW, 2)
