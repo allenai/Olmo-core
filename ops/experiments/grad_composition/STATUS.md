@@ -2,17 +2,19 @@
 experiment: grad_composition
 title: Per-token x per-block gradient / activation composition of the answer loss over CTC fine-tuning (Qwen3.5-4B), to guide train-time token / layer router design
 status: done
-updated: 2026-10-24
+updated: 2026-11-10
 branch: claude/grad-composition-6f09c7
 launcher: research/token_routing/grad_composition/launch.py (Beaker, SFT), run_probe_lambda.sbatch (Lambda), run_cpt_probe.sbatch (cubbins 8xH200, CPT)
 records:
   - records/grad-composition.md
+  - records/cpt-gradient-maps.md
 results:
+  - research/token_routing/grad_concentration/gradmaps_cpt/ (CPT maps, summaries, oracle tables; raw arrays cubbins /data/prasann/grad_composition/cpt_gradmap*, cpt_oracle/)
   - research/token_routing/grad_composition/results/ (gitignored; <label>/probe.json + probe_stats.npz; Lambda copy /accounts/projects/sewonm/prasann/ctc_suite/gradcomp_out/)
 artifacts:
   - https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ
 wandb_group:
-next_step: SFT v2 + CPT addendum COMPLETE (2026-10-24; record, artifact v3, ops gradcomp_* / gradcomp_cpt_*). Proposed follow-ups: grad_fidelity.py on strmatch / grouping with the trained router; short-document token floor; CPT late-block KV-only dropping arm (context share <= 0.27 from block 20).
+next_step: CPT gradient maps DONE 2026-11-10 (branch claude/cpt-gradmaps-34a768; record cpt-gradient-maps.md; artifact section 'CPT gradient maps'; ops gradcomp_cptmap_* / gradcomp_cptoracle_*). Open: projection-ranked CPT oracle (fairer upper bound than energy); Qwen3.5-4B CPT contrast needs its cpt_u1B checkpoints staged from weka.
 ---
 
 # grad_composition
@@ -55,6 +57,30 @@ later layers, gradient vs activation targets, and why strmatch / grouping resist
 - 2026-10-23 (agent): key numbers recorded with `ops result add --check` (913 rows, metrics gradcomp_*; a duplicate add
   was removed under the results lock).
 
+## 2026-11-10: CPT gradient maps (OLMo 3 7B, 32k / 64k / 128k)
+
+- Brief (parent session): CPT counterpart of the SFT gradient maps. Prasann during the session: the CPT version of the
+  SFT oracle-budget table, the same for (block, token) cells, linear color scales rather than log.
+- Agent choices:
+  - Models: stage2 base vs the dense CPT run trained at each length (o3cd-Dlr20-480 32k x4, o3cd-D64lr20-480 64k x8,
+    o3cd-D128lr20-120 128k x16), plus stage 3 at 32k. These are the only CPT checkpoints on disk (cubbins) with dev
+    sets.
+  - Qwen3.5-4B skipped: its CPT checkpoints are on weka only, and the K/V-detach split needs a GDN hook.
+  - Documents: dev32k_1024 / dev64k_512 rows 1, 7, 10, 11, 14, 15, 17, 19 (8 docs); dev128k_512 rows 1, 11, 19 (3).
+  - Oracle step = 16 x 32k (dev32k rows 1-4, 6-15, 17, 19) or 8 x 64k.
+- Jobs (cubbins, 1 H200 each, preemptive_high; preempted Rhys's 8-GPU preemptive job 4430345, allowed up to 8 GPUs):
+  - maps 4430508-14 (only 1 row each: `sbatch --export` split the comma row list) → 4430525-29 and 4430543-4 (resumed);
+  - plots 4430547 / 4430604 / 4430667;
+  - token oracle 4430599-602, cell oracle 4430659-62;
+  - smokes on mooney 4430500-1 (128k fits: 171 s/row, 108 GiB).
+- RESULT (attribution, not routing):
+  - After dense CPT the oracle needs 69.9% (32k) / 74.4% (64k) of tokens and 71.0% / 75.8% of cells for cos 0.95
+    (SFT: 0.47-1.96%). Energy ranking is worse than random below ~65% kept. Bound about 1.3x per step.
+  - The base's 5.9-12% is one shared direction: random 5.9% matches at 32k; coherence ratio 5-33 vs 1.5-4 after CPT.
+  - Late-span gradient: 35-59% of the pre-span energy is beyond the 4k window, mostly in blocks 0-15.
+  - Context share at blocks 0 / 8 / 16 / 24 after CPT: 0.84-0.90 / 0.73-0.85 / 0.45-0.47 / 0.19-0.21.
+  - ⚠ eval_size 8 / 8 / 3 documents; oracle one step. ops: 212 rows gradcomp_cptmap_* / gradcomp_cptoracle_*.
+
 ## Current best numbers
 <!-- One line per number: task, rung, metric=value, eval_size, ±SE, cot label, source path.
      Flag eval_size<500 inline. Prefer `ops result show --experiment grad_composition --best`. -->
@@ -69,6 +95,8 @@ later layers, gradient vs activation targets, and why strmatch / grouping resist
 | CPT base -> dense 12 / 480 | OLMo 3 7B, Longmino dev 32k | blocks 0-6 param-grad share 0.42 -> 0.20 / 0.16; top 10% of tokens hold G24^2 0.87 -> 0.63 / 0.62; top-10%@7 keep holds G24^2 0.79 -> 0.39 / 0.37 (random 0.11) | 48 rows ⚠ | ±0.01-0.02 | no-cot (TF grad) | ops gradcomp_cpt_*; record addendum |
 | CPT dense 480 | OLMo 3 7B, dev 32k | context share of hidden-state gradient @ block 0 / 8 / 16 / 24: 0.95 / 0.80 / 0.42 / 0.21 (median over rows) | 48 rows ⚠ | row IQR ~±0.05 | no-cot | record addendum |
 | CPT dense 480 vs base | OLMo 3 7B, dev 32k | CE gain 0-4k +0.169, 16-32k +0.167; of the >=4k gain 0.56 from near (<=4k) 4-gram repeats, 0.07 from far-only repeats | 48 rows ⚠ | ±0.01 | no-cot (TF CE) | ops gradcomp_cpt_ce_gain_vs_base_* |
+| CPT base -> dense (32k / 64k) | OLMo 3 7B, Longmino dev | attribution oracle for cos 0.95 (blocks 7-31): global tokens 5.9% -> 69.9% / 12.0% -> 74.4%; global cells 5.7% -> 71.0% / 11.9% -> 75.8%; random 5.9% -> 83.0% / 36.2% -> 79.3% | one step (16 x 32k / 8 x 64k) ⚠ | n/a (one step) | no-cot (TF grad) | ops gradcomp_cptoracle_*; records/cpt-gradient-maps.md |
+| CPT base -> dense (32k / 64k / 128k) | OLMo 3 7B, Longmino dev | share of tokens holding 95% of weight-grad energy 35% -> 54% / 27% -> 59% / 2.7% -> 49%; late 1k span: pre-span energy within 4k 0.65 / 0.57 / 0.48 (dense) | 8 / 8 / 3 docs ⚠ | ±0.05-0.17 | no-cot (TF grad) | ops gradcomp_cptmap_* |
 
 ## Next step
 v2 is complete. Follow-ups (each its own run, not started): grad_fidelity.py on strmatch / grouping rows with the
