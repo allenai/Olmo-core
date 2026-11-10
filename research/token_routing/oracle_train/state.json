@@ -206,6 +206,14 @@
    "lr": 1e-05,
    "seed": 0,
    "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1doc60-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1row90r115-f1952-orc-lr1e-05": {
+   "ex": "01M73S1RP2307V3AAAZQAHW011",
+   "arm": "orc1row90r115",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1row90r115-f1952-orc-lr1e-05/oracle_meta"
   }
  },
  "evals": {

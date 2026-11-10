@@ -1,7 +1,8 @@
 #!/bin/bash
 # Oracle-selection training on the Lambda A100-80GB cluster (no shared FS / no internet: code, base and shard are
 # rsync'd / streamed in first, see the README). Base + shard are copied to node /tmp; checkpoints stay on node /tmp.
-#   ssh lambda "cd $L/oracle/code && sbatch -w <node> -J <run> --export=ALL,RUN=<run>,ARM_ARGS='...' \
+#   ssh lambda "cd $L/oracle/code && ARM_ARGS='...' sbatch -w <node> -J <run> --export=ALL,RUN=<run> \
+#   (ARM_ARGS through the environment, NOT --export: sbatch splits --export on commas, e.g. doc,row,batch)
 #       research/token_routing/oracle_train/run_oracle_lambda.sbatch"
 #SBATCH --partition=lambda
 #SBATCH --qos=preemptive_high
@@ -27,12 +28,16 @@ mkdir -p $T/bases $T/shards $T/runs $T/triton
     [ -f /tmp/prasann/tdlr/base/q35-4b-base-markerfix/model_and_optim/.metadata ] || \
     cp -r $L/oracle/stage/ctc_suite/bases/q35-4b-base-markerfix $T/bases/
   [ -f $T/shards/mt4f1952/metadata.json ] || cp -r $L/oracle/stage/oracle/shards/mt4f1952 $T/shards/
+  # gold sidecar (2026-11-10: staged from the weka shard; a node copy made before then lacks it)
+  [ -f $T/shards/mt4f1952/gold_fingerprints.json ] || cp $L/oracle/stage/oracle/shards/mt4f1952/gold_fingerprints.json $T/shards/mt4f1952/
 ) 9>$T/stage.lock
 BASE=$T/bases/q35-4b-base-markerfix/model_and_optim
 # the tdlr campaign's node-local copy of the same base (identical .metadata md5) when present
 [ -f /tmp/prasann/tdlr/base/q35-4b-base-markerfix/model_and_optim/.metadata ] && \
   BASE=/tmp/prasann/tdlr/base/q35-4b-base-markerfix/model_and_optim
 [ -f "$BASE/.metadata" ] || { echo "FATAL: base missing .metadata"; exit 3; }
+[ -f $T/shards/mt4f1952/gold_fingerprints.json ] || { echo "FATAL: shard has no gold sidecar"; exit 3; }
+MAXARG=${MAXARG:-}; [ "${MAX_STEPS:-0}" -gt 0 ] && MAXARG="--max-steps $MAX_STEPS"
 export PYTHONPATH="$CODE/src" TOKENIZERS_PARALLELISM=false HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export HF_HOME=/accounts/projects/sewonm/prasann/.cache/huggingface
 export WANDB_MODE=offline WANDB_API_KEY=offline_dummy_air_gapped WANDB_DIR=$T/runs/$RUN
