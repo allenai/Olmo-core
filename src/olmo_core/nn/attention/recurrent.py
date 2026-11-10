@@ -46,10 +46,11 @@ def gdn_token_weight(
     ``g``: (B, T, H) log decay, ``beta``: (B, T, H), ``v``: (B, T, H, Dv) the post-conv values, ``w``: (B, T).
     Returns ``(g', beta', v')``; positions with ``w == 1`` are returned unchanged (bit for bit).
     """
-    wf = w.to(torch.float32).unsqueeze(-1)  # (B, T, 1)
+    ct = torch.float64 if g.dtype == torch.float64 else torch.float32
+    wf = w.to(ct).unsqueeze(-1)  # (B, T, 1)
     one = wf == 1.0
-    gf = g.to(torch.float32)
-    bf = beta.to(torch.float32).clamp(1e-12, 1.0 - 1e-7)
+    gf = g.to(ct)
+    bf = beta.to(ct).clamp(1e-12, 1.0 - 1e-7)
     lb = torch.log1p(-bf)  # log(1 - b)
     g_w = gf * wf
     b_w = -torch.expm1(wf * lb)  # 1 - (1 - b)^w
@@ -62,7 +63,7 @@ def gdn_token_weight(
     c = geo / ratio
     g_out = torch.where(one, g, g_w.to(g.dtype))
     beta_out = torch.where(one, beta, b_w.to(beta.dtype))
-    v_out = torch.where(one.unsqueeze(-1), v, (v.to(torch.float32) * c.unsqueeze(-1)).to(v.dtype))
+    v_out = torch.where(one.unsqueeze(-1), v, (v.to(ct) * c.unsqueeze(-1)).to(v.dtype))
     return g_out, beta_out, v_out
 
 
