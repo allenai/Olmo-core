@@ -30,16 +30,19 @@ def row(r):
                 "ce_dense": r["ce_dense"], "ce_routed": r["ce_routed"],
                 "routed_over_dense": r["flops"]["routed_over_dense"],
                 "actual_over_dense": r["flops"]["actual_3pass"] / max(1.0, r["flops"]["dense_pass"])})
+    for k in ("gold_keep_frac", "distractor_keep_frac"):  # stage 0 (zero when the shard has no gold sidecar)
+        if r.get(k):
+            out[k] = r[k][0]
     return out
 
 
 def dedupe(rows):
-    """a preempted-and-restarted run appends a second pass from step 1: keep the LAST segment"""
-    cut = 0
-    for i in range(1, len(rows)):
-        if rows[i]["step"] <= rows[i - 1]["step"]:
-            cut = i
-    return rows[cut:]
+    """a preempted run appends a second pass: from step 1 (restart) or from its resume checkpoint (resume). Keep the
+    LAST record of every step, in step order (a restart from 0 overwrites every step; a resume only the replayed ones)"""
+    last = {}
+    for r in rows:
+        last[r["step"]] = r
+    return [last[s] for s in sorted(last)]
 
 
 def main():
@@ -47,6 +50,7 @@ def main():
     ap.add_argument("path")
     ap.add_argument("--every", type=int, default=25)
     ap.add_argument("--json", default="")
+    ap.add_argument("--oneline", default="", help="print the windows as ONE line 'METAJSON <tag> {json}' (Beaker log dump)")
     a = ap.parse_args()
     rs = [row(r) for r in dedupe(load(a.path))]
     if not rs:
@@ -66,6 +70,9 @@ def main():
         summ[f"steps{sub[0]['step']}-{sub[-1]['step']}"] = m
         print(f"mean steps {sub[0]['step']}-{sub[-1]['step']}: " +
               " ".join(f"{k}={v:.4f}" for k, v in m.items()))
+    if a.oneline:
+        print(f"METAJSON {a.oneline} " + json.dumps({"steps": len(rs), "first_step": rs[0]["step"],
+                                                     "last_step": rs[-1]["step"], "windows": summ}))
     if a.json:
         json.dump({"rows": rs, "windows": summ}, open(a.json, "w"), indent=1)
 
