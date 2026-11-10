@@ -32,6 +32,36 @@
    "git": "05200ed44ba349070b499d60d7c38a98034885a0",
    "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both --st-otr-diag-every 50",
    "steps": 0
+  },
+  "f8k-mt4-wtsS2a-f1952-wts-lr1e-05": {
+   "ex": "01M73XJEXT6Z4VTVV1G3RK0END",
+   "arm": "wtsS2a",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "beaker",
+   "git": "7eea6d4fea9bfee1901f0cdecb61f9c372c7d694",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn --ephemeral-save-interval 100"
+  },
+  "f8k-mt4-wtsS2g-f1952-wts-lr1e-05": {
+   "ex": "01M73XKDJXYDMKC6TXRGS4EQ8X",
+   "arm": "wtsS2g",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "beaker",
+   "git": "7eea6d4fea9bfee1901f0cdecb61f9c372c7d694",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=gdn --ephemeral-save-interval 100"
+  },
+  "f8k-mt4-wtsS0wr-f1952-wts-lr1e-05": {
+   "ex": "01M73XMA7A1SMZFHSFM47HBZMP",
+   "arm": "wtsS0wr",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "beaker",
+   "git": "7eea6d4fea9bfee1901f0cdecb61f9c372c7d694",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100"
   }
  },
  "evals": {}

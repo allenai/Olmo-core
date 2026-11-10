@@ -29,7 +29,7 @@ class OnlineRouterCallback(Callback):
     #: the fit carried across a preemption resume (2026-10-30): without it a resumed run restarts the router with no
     #: weights, i.e. one full-context warmup step mid-run and a fresh ridge accumulation
     _STATE_KEYS = ("w", "XtX", "Xty", "n_seen", "step", "task_w", "task_XtX", "task_Xty", "task_seen", "frozen_blocks",
-                   "_logtau")
+                   "_logtau", "_tau_src")
 
     def state_dict(self) -> Dict[str, Any]:
         import torch

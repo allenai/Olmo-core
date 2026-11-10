@@ -89,10 +89,14 @@ TARGETS = ("gnorm", "gxh", "dh", "mix")
 #:   alloc    row   price mode: row (one tau over the row's body tokens) | doc (scores normalised per document)
 #:   multw    1     price mode: a survivor's value is w_prev * exp(score) (it stands for w_prev tokens)
 #:   gain     0.5   controller gain on log tau per step (log of measured / target step FLOP ratio)
-#:   tau0     5.0   initial tau
+#:   tau0     5.0   initial tau (overridden by the calibration below)
+#:   init     0.2   price mode: whenever the score source changes (uniform warmup -> fitted router), tau is re-set so
+#:                  the first cut keeps this share of body tokens in expectation; the controller takes over after
+#:   center   row   router targets centred per row (row: only within-row ratios are fit), over the batch (batch), or
+#:                  not at all (none: the absolute gradient scale, so one price compares cuts and rows)
 WTS_DEFAULTS: Dict[str, Any] = {"sample": 1, "weights": "none", "mix": 0.1, "temp": 1.0, "sampler": "sys", "ipw": 1,
                                 "tcorr": 1, "clip": 0.0, "price": 0.0, "pmin": 0.02, "alloc": "row", "multw": 1,
-                                "gain": 0.5, "tau0": 5.0}
+                                "gain": 0.5, "tau0": 5.0, "init": 0.2, "center": "row"}
 
 
 def parse_wts(spec: str) -> Optional[Dict[str, Any]]:
@@ -114,6 +118,8 @@ def parse_wts(spec: str) -> Optional[Dict[str, Any]]:
         raise ValueError(f"online router wts weights must be none / attn / gdn / both, got {out['weights']!r}")
     if out["sampler"] not in ("sys", "bern"):
         raise ValueError(f"online router wts sampler must be sys / bern, got {out['sampler']!r}")
+    if out["center"] not in ("row", "batch", "none"):
+        raise ValueError(f"online router wts center must be row / batch / none, got {out['center']!r}")
     if out["alloc"] not in ("row", "doc"):
         raise ValueError(f"online router wts alloc must be row / doc, got {out['alloc']!r}")
     if not out["sample"]:
@@ -1296,6 +1302,25 @@ class OnlineTokenRouter:
             Lin = int(round(float((cid != -2).sum(dim=1).to(torch.float32).mean())))
             cfrac = self._wts_cost_frac(model, max(1, Lin))
             pmin = float(o["pmin"])
+            src = "uniform" if (score is None or uniform) else "fit"
+            if self.stage_idx == 0 and getattr(root, "_tau_src", None) != src:
+                # calibrate tau when the score source changes: the first cut keeps `init` of the body in expectation
+                one = torch.zeros_like(sv, dtype=torch.long)
+                ev = torch.exp((lv - lv.max()).clamp(min=-60.0))
+                pc = waterfill(ev, one, 1, torch.tensor([float(o["init"]) * ev.numel()], device=dev), lo=pmin)
+                # lam = p / v on an unclipped token; tau = 1 / (lam sqrt(c)) in the units of exp(lv)
+                inner = (pc > pmin * 1.001) & (pc < 0.999)
+                ref = inner if bool(inner.any()) else torch.ones_like(inner)
+                loglam = float((torch.log(pc[ref]) - (lv[ref] - lv.max())).mean()) - float(lv.max())
+                import torch.distributed as dist
+
+                if dist.is_available() and dist.is_initialized():
+                    t_ = torch.tensor([loglam], dtype=torch.float64, device=dev)
+                    dist.all_reduce(t_)
+                    loglam = float(t_) / dist.get_world_size()
+                root._logtau = -loglam - 0.5 * math.log(max(cfrac, 1e-9))
+                root._tau_src = src
+                self._stat("wts_tau_calibrated", 1.0)
             denom = math.exp(root._logtau) * math.sqrt(max(cfrac, 1e-9))
             pb = torch.clamp(torch.exp(lv.clamp(max=60.0)) / denom, pmin, 1.0)
             # per-row hard cap on expected survivors (peak memory): this stage's keep x the row's original body count
@@ -1909,7 +1934,11 @@ class OnlineTokenRouter:
                 iw = torch.ones_like(t)
             s = torch.zeros(nb, device=t.device).index_add_(0, r, iw * t)
             sw = torch.zeros(nb, device=t.device).index_add_(0, r, iw)
-            t = t - t.mean() if self.cfg.keep_mode == "threshold" else t - (s / sw.clamp(min=1e-12))[r]
+            cen = self.wts["center"] if self.wts is not None else ("batch" if self.cfg.keep_mode == "threshold" else "row")
+            if cen == "batch":
+                t = t - (iw * t).sum() / iw.sum().clamp(min=1e-12)
+            elif cen == "row":
+                t = t - (s / sw.clamp(min=1e-12))[r]
             X.append(e["feats"][ok])
             y.append(t)
             iws.append(iw)

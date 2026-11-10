@@ -263,7 +263,7 @@ def test_wts_all_ones_is_bit_exact_cpu():
 def test_wts_price_controller_moves_tau():
     """price mode: the controller raises tau (keeps less) when the measured step ratio is above target, and the
     per-row cap bounds expected survivors."""
-    model, router = _wts_model(4, stages="1:0.5,2:0.25", wts="weights=attn,price=0.3,tau0=0.5")
+    model, router = _wts_model(4, stages="1:0.5,2:0.25", wts="weights=attn,price=0.3,tau0=0.5,center=none")
     ids, cid, labels = _row(B=2)
     taus = []
     for step in (1, 2, 3, 4):
@@ -274,7 +274,9 @@ def test_wts_price_controller_moves_tau():
         out = model(ids, labels=labels)
         out.loss.backward()
         model._flop_step_ratio = 0.6  # measured: twice the target
-    assert taus[-1] > taus[1] > taus[0] - 1e-12
+    # steps 3 -> 4: no recalibration (the score source stayed "fit"), the measured ratio is 2x the target -> tau up
+    assert taus[3] - taus[2] == pytest.approx(0.5 * math.log(2.0))
+    assert router._tau_src == "fit"
     p = router._last_p
     body_p = p[p < 1.0] if p is not None else torch.tensor([])
     assert p is not None
