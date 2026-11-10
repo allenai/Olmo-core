@@ -43,6 +43,8 @@ a { color: var(--accent) }
 .pill.tool { border-color: var(--s1); color: var(--s1) }
 .pill.route { border-color: var(--s3); color: var(--s3) }
 .pill.decide { border-color: var(--s2); color: var(--s2) }
+.pill.st-done { background: var(--tint); color: var(--good); border-color: var(--good) }
+.pill.st-pend { background: var(--tint); color: var(--ink-2); border-color: var(--ink-3) }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px }
 .tile { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; align-content: start }
 .tile .v { font-family: var(--f-display); font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums }
@@ -98,7 +100,7 @@ ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 80
     <li><b>Waiting dominates turnaround on Beaker: 60% of job lifetime was spent pending.</b> Jobs pinned to jupiter waited far longer than jobs that could also land on ceres. For 2-GPU jobs the median wait was 0.40 h vs 0.10 h, and the p90 was 3.0 h vs 0.8 h.</li>
     <li><b>We left Berkeley headroom unused.</b> Our <code>preemptive_high</code> use on jsteinhardt averaged 1.8 of the 8-GPU cap. In 72% of hours we had nothing running there, including 168 hours when ≥4 of our GPUs sat pending on Beaker.</li>
     <li><b>Lambda is not idle.</b> Other users held 20.5 of its 24 working GPUs on average, and our starts preempted 30 of their jobs. Without preempting anyone, Lambda had about 2.4 GPUs free on average, at every hour of the day.</li>
-    <li><b>Since about 10-19, 98% of our Beaker GPU-hours were <em>allocated</em></b>, because <code>ai2/flex2</code> now sits in the <code>oe-scaling</code> group. The "always unallocated" rule and its check no longer describe reality. Only Prasann can decide what to do about this.</li>
+    <li><b>Since about 10-19, 98% of our Beaker GPU-hours were <em>allocated</em></b>, because <code>ai2/flex2</code> now sits in the <code>oe-scaling</code> group. <b>Decided 2026-11-10: allocated is correct</b>, and the "always unallocated" rule is retired.</li>
     <li>Several feared problems turned out small. Unregistered jobs used 0.5% of GPU-h, insurance copies under 1%, and smokes plus probes 2%. Contention for the jsteinhardt cap happened in one hour (today).</li>
   </ul>
   <div class="tiles" id="tiles"></div>
@@ -107,6 +109,7 @@ ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 80
 <section>
   <h2>Recommendations, ranked</h2>
   <p class="note prose">Savings are per week, scaled from the 3.1-week window. "Job-hours of waiting" add up waits across jobs that often ran in parallel, so the wall-clock gain on a wave is smaller; the p50/p90 shifts give the per-job picture. Tags: <span class="pill tool">tooling</span> <span class="pill route">routing rule</span> <span class="pill decide">Prasann decides</span></p>
+  <p class="prose"><b>Decisions (Prasann, 2026-11-10):</b> #1, #4 and #6 adopted and implemented on branch <code>claude/gpu-workflow-audit-8833c4</code>, not merged yet. #3: stay allocated. #2: pending, "ask me about this again later". #8 is implemented as the history median. The rest are not decided.</p>
   <div class="recs" id="recs"></div>
 </section>
 
@@ -225,19 +228,19 @@ document.getElementById("tiles").innerHTML = tiles.map(([v, k]) => `<div class="
 const R = [
   { t: "Give every Beaker training job a minRuntime that covers the run, and add an overwrite-in-place checkpoint for anything longer", tag: ["tool", "launcher default"],
     ev: "309 training attempts preempted (1,083 GPU-h); 304 had minRuntime 1 h and 91% were preempted before 3 h. 92% of completed training runs take ≤2 h and 99% ≤4 h. The trainer writes no mid-run checkpoints unless --save-interval is passed (47 of about 430 logged training commands did). Preemptions come from allocation balance: other workspace groups' jobs, at any priority, displace ours once minRuntime has passed.",
-    save: "~300 GPU-h/week (91% of ~350 preempted), plus one extra queue wait and rerun (median 1.26 h) per avoided preemption",
+    st: ["done", "adopted · on branch"], save: "~300 GPU-h/week (91% of ~350 preempted), plus one extra queue wait and rerun (median 1.26 h) per avoided preemption",
     cost: "Small. Set minRuntime = min(4 h, 1.3 × expected) in launch_fast8k, the olmo3_cptdrop and mt11 launchers and the PAIL trainers. Pass --save-interval with an overwriting checkpoint (max_checkpoints=1) above 4 h. Watch for a week whether longer minRuntimes queue longer: in this window, jobs at minRuntime 2–3 h did not (median wait 0.15–0.28 h vs 0.28 h at 1 h)." },
   { t: "Let jobs land on jupiter or ceres by default", tag: ["tool", "launcher default"],
     ev: "Of 5,563 Beaker attempts, 3,759 were pinned to jupiter. Jupiter-only vs jupiter+ceres, median / p90 wait in hours: 1-GPU 0.33/1.04 vs 0.05/0.56; 2-GPU 0.40/2.97 vs 0.10/0.81; 5–8 GPU 0.72/3.03 vs 0.81/1.56.",
-    save: "~650 job-hours of waiting/week if pinned jobs waited like multi-cluster ones; the p90 for a 2-GPU wave drops about 3 h → 0.8 h",
+    st: ["pend", "pending Prasann"], save: "~650 job-hours of waiting/week if pinned jobs waited like multi-cluster ones; the p90 for a 2-GPU wave drops about 3 h → 0.8 h",
     cost: "Small, if the image, weka mounts and GPU memory work on ceres; check once with a 2-GPU smoke. The gain shrinks as more of our load shifts to ceres (its slice of the oe-other budget is 88 slots)." },
   { t: "Decide whether our Beaker work should stay allocated (oe-scaling) or move back to unallocated", tag: ["decide"],
     ev: "Beaker report: 4,871 of 4,991 GPU-h allocated (98%); before 10-19, 97% unallocated. ai2/flex2's workspace group is ai2/oe-scaling, which Beaker reports as 55% over target. flex2 itself shows as 60% over its workspace target. The CLAUDE.md rule and the gpu-usage check still say unallocated.",
-    save: "Unknown either way. Allocated jobs are what allocation balance preempts; unallocated jobs were preempted by allocated ones before 10-19.",
+    st: ["done", "decided: stay allocated"], save: "Unknown either way. Allocated jobs are what allocation balance preempts; unallocated jobs were preempted by allocated ones before 10-19.",
     cost: "A decision, plus a CLAUDE.md / memory edit to match it. Moving back means asking AI2 infra about the workspace group." },
   { t: "Spill short jobs to jsteinhardt whenever the Beaker queue backs up", tag: ["route", "where-to-run"],
     ev: "Our preemptive_high use averaged 1.8 of 8 GPUs; 375 of 520 hours had none of our jobs there. Only 7 jsteinhardt jobs waited more than 15 min at that QOS. In the 168 hours when ≥4 of our GPUs were pending on Beaker, 691 GPU-h of jsteinhardt cap headroom went unused (3,215 GPU-h over the whole window).",
-    save: "~220 GPU-h/week of throughput during Beaker backlogs (up to ~1,000/week of total headroom), plus that queue time",
+    st: ["done", "adopted · on branch"], save: "~220 GPU-h/week of throughput during Beaker backlogs (up to ~1,000/week of total headroom), plus that queue time",
     cost: "Medium. Routing rule: ≤2 GPUs, ≤2 h jobs go to jsteinhardt when Beaker pending > 30 min and headroom ≥ job size. This needs launchers that can run the same eval or probe on slurm, which exist for local evals. It preempts other users' lower-QOS jobs (allowed; Rhys only up to 8 GPUs)." },
   { t: "Pack each checkpoint's eval tasks into one job", tag: ["tool", "launch_fast8k eval"],
     ev: "3,375 completed Beaker eval jobs: median run 6.6 min, 2,582 under 15 min. 2,665 per-task ev-* jobs covered 862 checkpoints (~3 per checkpoint), and each paid its own queue wait (median 0.28 h) and its own 4B model load.",
@@ -245,7 +248,7 @@ const R = [
     cost: "Small to medium: one job loops over tasks and writes per-task JSONs; the registry keeps one row per task." },
   { t: "Show other users' load in ops status, and warn before a launch would preempt someone", tag: ["tool", "ops status / launch-run"],
     ev: "Lambda: other users averaged 20.5 of 24 GPUs (Rhys 8.2k GPU-h, another user 2.5k). 29 of their jobs ended within 3 min of one of our preemptive starts on the same node, after running ~610 GPU-h. On jsteinhardt, Rhys alone held ~14.9k GPU-h. ops status shows only our jobs.",
-    save: "Mostly other people's GPU-hours; for us it prevents the 'Lambda looks idle' mistake. Real free Lambda capacity is ~400 GPU-h/week, 2–3.5 GPUs at any hour, with no off-peak window.",
+    st: ["done", "adopted · ops capacity, on branch"], save: "Mostly other people's GPU-hours; for us it prevents the 'Lambda looks idle' mistake. Real free Lambda capacity is ~400 GPU-h/week, 2–3.5 GPUs at any hour, with no off-peak window.",
     cost: "Small: one extra squeue -a per cluster in the snapshot, and a per-node 'others' column." },
   { t: "Flag finished work that nobody collected, and reject unknown experiment names at registration", tag: ["tool", "ops command + hook"],
     ev: "597 completed eval jobs (173 GPU-h) have no result row after 24 h. Evals sat uncollected for 6 days because they were registered under ds64_fast8k. 1,175 GPU-h (17.5%) is registered under 12 names with no STATUS page (pail_ar 318, pail_benchmax 302, ds64_fast8k 125, unassigned 15, …). 4,836 of 6,916 registered runs never got a final state. Chaining is otherwise good: training end → eval launch has a median of 7 min (62% within 10 min), and job end → result recorded has a median of 0.3 h (p90 5.6 h).",
@@ -253,14 +256,14 @@ const R = [
     cost: "Small: an `ops orphans` command run by the job-status and close-out skills, and `ops register` refusing an --experiment with no STATUS page unless given --new." },
   { t: "Calibrate expected_minutes from history", tag: ["tool", "ops register"],
     ev: "Actual/expected runtime over 4,179 completed attempts: median 0.21, p90 0.95. The estimates run about 5× long, so OVERRUN flags rarely fire and minRuntime can't be read off them.",
-    save: "Indirect: makes rec 1 automatic and catches stuck jobs sooner", cost: "Small: default expected_minutes to the median of past runs with the same launcher and arm prefix." },
+    st: ["done", "history median, on branch"], save: "Indirect: makes rec 1 automatic and catches stuck jobs sooner", cost: "Small: default expected_minutes to the median of past runs with the same launcher and arm prefix." },
   { t: "Skip the cross-session GPU lock; keep insurance copies for runs that gate a decision", tag: ["route"],
     ev: "Contention on the jsteinhardt cap happened in 1 of 520 hours (today, three side sessions). The same training run on two pools: 33 runs, 53 GPU-h in the smaller copy (<1%); the incident log shows the copies were used when jupiter preempted the original. Smokes and probes total 129 GPU-h (2%), so packing probes per GPU isn't worth building.",
     save: "—", cost: "None. If contention grows, a one-line `ops cap` per experiment is enough." },
 ];
 const tagCls = { tool: "tool", route: "route", decide: "decide" }, tagTxt = { tool: "tooling", route: "routing rule", decide: "Prasann decides" };
 document.getElementById("recs").innerHTML = R.map((r, i) => `<div class="rec"><div class="n">${i + 1}</div>
-  <h3>${r.t} <span class="pill ${tagCls[r.tag[0]]}">${tagTxt[r.tag[0]]}${r.tag[1] ? " · " + r.tag[1] : ""}</span></h3>
+  <h3>${r.t} <span class="pill ${tagCls[r.tag[0]]}">${tagTxt[r.tag[0]]}${r.tag[1] ? " · " + r.tag[1] : ""}</span>${r.st ? ` <span class="pill st-${r.st[0]}">${r.st[1]}</span>` : ""}</h3>
   <p>${r.ev}</p>
   <div class="meta"><div><b>Saves</b>${r.save}</div><div><b>Costs</b>${r.cost}</div></div></div>`).join("");
 
