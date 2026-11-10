@@ -1,0 +1,21 @@
+base 113923 preemptive_high /tmp/prasann/tdlr/base/q35-4b-base-markerfix  
+mt4-st122 113924 preemptive_high /tmp/prasann/tdlr/ckpts/f8k-mt4s-dense-lra-lr5e-06-lam  
+mt4-st366 113925 preemptive_high /tmp/prasann/tdlr/ckpts/f8k-mt4s1464-dense-lre-lr5e-06-lam  
+mt4-otr10M8-st366 113926 preemptive_high /tmp/prasann/tdlr/ckpts/f8k-mt4s1464-otr10M8-lro-lr2e-06-lam  
+mt11-st330 113927 preemptive_high /tmp/prasann/tdlr/ckpts/f8k-mt11s480-dense-lrg-lr5e-06-lam  
+mt4rows-base 113928 preemptive_high /tmp/prasann/tdlr/base/q35-4b-base-markerfix mt4s1952 1464
+mt4rows-mt4-st366 113929 preemptive_high /tmp/prasann/tdlr/ckpts/f8k-mt4s1464-dense-lre-lr5e-06-lam mt4s1952 1464
+mt4-st31 113930 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s-dense-lrb-lr5e-06-s31-lam  
+mt11-otr20M8-st330 113931 normal /tmp/prasann/tdlr/ckpts/f8k-mt11s480-otr20M8-lro-lr2e-06-lam  
+mt11-st165 113932 normal /tmp/prasann/tdlr/ckpts/f8k-mt11s240-dense-lrg-lr5e-06-lam  
+mt4-st61 113933 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s-dense-lrb-lr5e-06-s61-lam  
+mt4-st366-lr2e-6 113934 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s1464-dense-lri-lr2e-06-lam  
+mt4-st31 113940 preemptive_high (resubmit)
+mt4rows-mt4-st122 113941 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s-dense-lra-lr5e-06-lam mt4s1952 1464
+mt4rows-mt4-otr10M8-st366 113942 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s1464-otr10M8-lro-lr2e-06-lam mt4s1952 1464
+mt4rows-mt4-st31 113943 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s-dense-lrb-lr5e-06-s31-lam mt4s1952 1464
+mt4rows-mt4-st61 113944 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s-dense-lrb-lr5e-06-s61-lam mt4s1952 1464
+mt4rows-mt4-st366-lr2e-6 113945 normal /tmp/prasann/tdlr/ckpts/f8k-mt4s1464-dense-lri-lr2e-06-lam mt4s1952 1464
+mt11-otr20M8-st330 113950 normal /tmp/prasann/tdlr/ckpts/f8k-mt11s480-otr20M8-lro-lr2e-06-lam (resubmit)
+mt11-st165 113951 normal /tmp/prasann/tdlr/ckpts/f8k-mt11s240-dense-lrg-lr5e-06-lam (resubmit)
+mt4rows-mt4-st122 113952 normal (resubmit)

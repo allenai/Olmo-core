@@ -1,0 +1,501 @@
+<title>Gradient Composition Probe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+/* Layout: one lab-notebook column; verdict first, then a sticky filter row driving every chart below. */
+:root {
+  --bg: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10); --wash: #f0efec;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  --r250: #86b6ef; --r350: #5598e7; --r450: #2a78d6; --r550: #1c5cab; --r650: #104281; --r700: #0d366b;
+  --router: #eb6834; --warn: #fab219; --crit: #d03b3b;
+  --seq0: #f2f7fd; --seq1: #cde2fb; --seq2: #86b6ef; --seq3: #3987e5; --seq4: #1c5cab; --seq5: #0d366b;
+  --f-display: "IBM Plex Serif", Georgia, serif; --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10); --wash: #232322;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+  --r250: #184f95; --r350: #1c5cab; --r450: #2a78d6; --r550: #3987e5; --r650: #6da7ec; --r700: #9ec5f4;
+  --router: #d95926; --seq0: #1a1a19; --seq1: #104281; --seq2: #1c5cab; --seq3: #3987e5; --seq4: #86b6ef; --seq5: #cde2fb;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10); --wash: #232322;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+  --r250: #184f95; --r350: #1c5cab; --r450: #2a78d6; --r550: #3987e5; --r650: #6da7ec; --r700: #9ec5f4;
+  --router: #d95926; --seq0: #1a1a19; --seq1: #104281; --seq2: #1c5cab; --seq3: #3987e5; --seq4: #86b6ef; --seq5: #cde2fb;
+  color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; display: grid; gap: 28px; }
+h1 { font: 600 34px/1.15 var(--f-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font: 600 22px/1.25 var(--f-display); margin: 0 0 6px; text-wrap: balance; }
+h3 { font: 600 15px/1.3 var(--f-body); margin: 0 0 4px; }
+p { margin: 0; max-width: 72ch; }
+.lede { color: var(--ink-2); font-size: 16px; }
+.eyebrow { font: 500 11px/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono, code { font-family: var(--f-mono); font-size: 0.92em; }
+.tag { display: inline-block; font: 500 11px/1 var(--f-mono); padding: 3px 6px; border-radius: 4px;
+  background: var(--wash); color: var(--ink-2); vertical-align: 1px; }
+.tag.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--ink); }
+.tag.run { background: color-mix(in srgb, var(--s1) 18%, transparent); color: var(--ink); }
+section { display: grid; gap: 14px; min-width: 0; }
+.verdict { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 20px 22px; display: grid; gap: 12px; }
+.verdict ul { margin: 0; padding-left: 18px; display: grid; gap: 9px; max-width: 92ch; }
+.verdict li b { font-weight: 600; }
+.filters { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; padding-block: 10px; border-bottom: 1px solid var(--grid); }
+.filters label { display: grid; gap: 4px; font: 500 11px/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+select, .seg button { font: 14px/1.2 var(--f-body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--axis); border-radius: 6px; padding: 6px 8px; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; cursor: pointer; }
+.seg button:first-child { border-radius: 6px 0 0 6px; }
+.seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+select:focus-visible, .seg button:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 14px 16px 12px; min-width: 0; display: grid; gap: 6px; }
+.card .note { color: var(--ink-2); font-size: 13px; }
+.chart { width: 100%; min-width: 0; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend i.sq { height: 10px; width: 10px; border-radius: 2px; }
+.tblwrap { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 11px/1.2 var(--f-mono); letter-spacing: 0.04em; color: var(--muted); text-transform: uppercase; }
+td.hl { font-weight: 600; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12); border-radius: 6px; padding: 6px 8px; font: 12px/1.4 var(--f-body); z-index: 20; min-width: 120px; }
+.tip b { font-weight: 600; }
+.heat canvas { width: 100%; image-rendering: pixelated; display: block; border-radius: 4px; }
+.toks { font: 12px/1.6 var(--f-mono); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.toks span { background: var(--wash); border-radius: 4px; padding: 0 5px; white-space: pre; }
+.foot { color: var(--ink-2); font-size: 13px; display: grid; gap: 6px; }
+.foot code { word-break: break-all; }
+@media (max-width: 520px) { h1 { font-size: 27px; } .filters { position: static; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+<header style="display:grid;gap:10px">
+  <div class="eyebrow">grad_composition · Qwen3.5-4B · CTC fine-tuning · __UPDATED__</div>
+  <h1>Where the answer-loss gradient lives, token by token and block by block</h1>
+  <p class="lede">One full forward and backward pass per held-out row, on frozen checkpoints along the dense fine-tuning curve and
+  on online-router checkpoints. Every token's gradient, residual update, parameter-gradient share and attention mass at every one
+  of the 32 blocks. The goal: settings for a train-time token / layer router.</p>
+</header>
+
+<section class="verdict" id="verdict">
+  <div class="eyebrow">Verdict for router design</div>
+  __FINDINGS__
+</section>
+
+<div class="filters" role="group" aria-label="Chart filters">
+  <label>Row set<span class="seg" id="rowset"><button type="button" data-v="mt4" aria-pressed="true">mt4 rows</button><button type="button" data-v="mt11" aria-pressed="false">mt11 rows (11 tasks)</button></span></label>
+  <label for="task">Task<select id="task"></select></label>
+  <label for="ckpt">Checkpoint (single-checkpoint charts)<select id="ckpt"></select></label>
+  <label for="block">Block<select id="block"></select></label>
+</div>
+
+<section>
+  <h2>Where to split: document tokens stop receiving gradient with depth</h2>
+  <p class="note" style="color:var(--ink-2)">Share of each block's gradient energy that sits on document body tokens (all other tokens are query,
+  prompt, markers and answer, which a router always keeps). Dashed: the share of each block's own parameter gradient that document tokens
+  contribute. Grey verticals: full-attention blocks.</p>
+  <div class="grid2">
+    <div class="card"><h3>Document share of ‖dL/dh<sub>b</sub>‖², by block</h3><div class="chart" id="c-body"></div><div class="legend" id="l-body"></div></div>
+    <div class="card"><h3>Split fidelity: parameter-gradient energy kept by a 10% per-document keep before block L</h3>
+      <div class="chart" id="c-split"></div><div class="legend" id="l-split"></div>
+      <div class="note">Every token runs blocks &lt; L; the kept 10% of each document's tokens (ranked by the full-context gradient at L, by ‖h<sub>L</sub>−h<sub>0</sub>‖, or at random) run the rest. A proxy: it ignores how dropping changes the kept tokens' own gradients.</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>How much of the parameter gradient lives in the early blocks</h2>
+  <div class="grid2">
+    <div class="card"><h3>Parameter-gradient energy per block, selected checkpoint</h3><div class="chart" id="c-pgrad"></div>
+      <div class="note" id="n-pgrad"></div></div>
+    <div class="card"><h3>Blocks 0–6 share, every checkpoint and task</h3><div class="tblwrap" id="t-pgrad"></div>
+      <div class="note">‖g‖² share of blocks 0–6 among all block + LM-head parameters, mean of per-row gradients; in brackets the
+      summed (minibatch) gradient over the task's rows. Embedding excluded.</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Is one keep decision enough? Cross-layer stability of token importance</h2>
+  <div class="grid2">
+    <div class="card"><h3>Spearman between blocks of body-token ‖dL/dh<sub>b</sub>‖, selected checkpoint</h3><div class="chart heat" id="c-xcorr"></div>
+      <div class="note">Rows and columns are blocks 0–32 (32 = final output). Hover for values.</div></div>
+    <div class="card"><h3>How well the selected block's ranking predicts every other block</h3><div class="chart" id="c-xline"></div><div class="legend" id="l-xline"></div></div>
+  </div>
+  <div class="card"><h3>Pyramid keep vs one-shot keep: share of a later block's gradient energy held by the kept tokens</h3><div class="tblwrap" id="t-pyr"></div>
+    <div class="note">nest_3_7_16: keep 50% of each document by G<sub>3</sub>, then 10% by G<sub>7</sub> among survivors, then 3% by G<sub>16</sub>. one_k_x: a single per-document top-x% by G<sub>k</sub>. Full-context rankings.</div></div>
+</section>
+
+<section>
+  <h2>Concentration, composition and what a drop throws away</h2>
+  <div class="grid2">
+    <div class="card"><h3>Share of body gradient energy in the top 10% of body tokens, by block</h3><div class="chart" id="c-conc"></div><div class="legend" id="l-conc"></div>
+      <div class="note">Solid: row-level top 10%. Dashed: each document's own top 10% (what the router keeps).</div></div>
+    <div class="card"><h3>Who carries the gradient, selected checkpoint</h3><div class="chart" id="c-comp"></div><div class="legend" id="l-comp"></div></div>
+  </div>
+  <div class="card"><h3>Every task at the selected checkpoint</h3><div class="tblwrap" id="t-task"></div>
+    <div class="note">Dropped: share of G<sub>7</sub>² that a per-document 10% keep by G<sub>7</sub> drops. Top 10% of dropped: share of the dropped mass in the
+    dropped tokens' own top 10% (low = spread out, so nothing small to rescue). Lag-1: correlation of log G<sub>7</sub> between neighbouring tokens
+    (high = smooth, so merging spans loses little).</div></div>
+</section>
+
+<section>
+  <h2>Gradient vs activation targets</h2>
+  <div class="grid2">
+    <div class="card"><h3>Forward-only ablation: ΔCE after keeping 10% of each document before block 7</h3><div class="chart" id="c-abl"></div>
+      <div class="note">Ranking rules: g7 = ‖dL/dh<sub>7</sub>‖ (the router's target), dh7 = ‖h<sub>7</sub>−h<sub>0</sub>‖ (activation), amlate = answer-position
+      attention at full-attention blocks ≥ 7, pwdown / attrdown = downstream parameter-gradient / skip-attribution sums (oracles). Bars: mean ± 1 SE.</div></div>
+    <div class="card"><h3>Rank agreement of the gradient with activation-side signals, by block</h3><div class="chart" id="c-agree"></div><div class="legend" id="l-agree"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Token × block maps, one example row</h2>
+  <p class="note" style="color:var(--ink-2)">Columns are positions (max-pooled into bins), rows are blocks 0 (top) to 32. Strip below: token category.
+  Darker = larger (log scale, per-map range).</p>
+  <div class="grid2" id="heats"></div>
+  <div class="card"><h3>Hottest tokens by ‖dL/dh<sub>b</sub>‖ in this row</h3><div id="hot-toks" class="toks"></div></div>
+</section>
+
+<section id="cpt">
+  <div class="eyebrow">Addendum · continued pretraining</div>
+  <h2>OLMo 3 7B, 32k continued pretraining on Longmino</h2>
+  __CPT_FINDINGS__
+  <div class="grid2">
+    <div class="card"><h3>Parameter-gradient energy per block</h3><div class="chart" id="cpt-pg"></div><div class="legend" id="cpt-l1"></div></div>
+    <div class="card"><h3>Share of ‖dL/dh<sub>b</sub>‖² in the top 10% of tokens</h3><div class="chart" id="cpt-conc"></div><div class="legend" id="cpt-l2"></div></div>
+    <div class="card"><h3>Spearman of token ‖dL/dh<sub>b</sub>‖ with block 7</h3><div class="chart" id="cpt-x7"></div><div class="legend" id="cpt-l3"></div></div>
+    <div class="card"><h3>Context share of each block's hidden-state gradient</h3><div class="chart" id="cpt-ctx"></div><div class="legend" id="cpt-l4"></div>
+      <div class="note">‖g<sub>full</sub> − g<sub>own</sub>‖² / ‖g<sub>full</sub>‖², where g<sub>own</sub> comes from a second backward with every attention layer's keys and values detached, so it
+      only carries the token's own label. The rest is what the token receives for serving as keys and values to later tokens.</div></div>
+  </div>
+  <div class="card"><h3>Router fidelity and structure, every checkpoint</h3><div class="tblwrap" id="cpt-t1"></div></div>
+  <div class="card"><h3>Long-context gain over the base, by target position and repeat category</h3><div class="tblwrap" id="cpt-t2"></div>
+    <div class="note">CE(base) − CE(checkpoint) per target token. Near repeat: the 4-gram ending at the target last occurred ≤ 4,096 tokens back, within every sliding
+    window. Far-only: it occurred earlier but only further back, so only the 8 full-attention layers can reach it. Novel: it never occurred. ± is the SE over rows.</div></div>
+</section>
+
+<section class="foot" id="setup">
+  <h2>Setup, limits, files</h2>
+  __SETUP__
+</section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script type="application/json" id="data">__DATA__</script>
+<script type="application/json" id="heatdata">__HEAT__</script>
+<script type="application/json" id="cptdata">__CPT__</script>
+<script>
+(function(){
+const D = JSON.parse(document.getElementById('data').textContent);
+const H = JSON.parse(document.getElementById('heatdata').textContent);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const FULL = D.full_blocks;
+const CATS = D.cats;
+const GROUPS = [["gold docs",["hdr_g","first_g","mid_g","last_g"],"--s3"],["other docs",["hdr_n","first_n","mid_n","last_n"],"--s1"],
+  ["markers",["marker"],"--s4"],["query",["query"],"--s2"],["answer",["answer"],"--s5"],["prompt / other",["prompt","other"],"--s6"]];
+const SERIES = {mt4: ["bk-mt4rows-base","bk-mt4rows-mt4-st31","bk-mt4rows-mt4-st61","bk-mt4rows-mt4-st122","bk-mt4rows-mt4-st366","bk-mt4rows-mt4-st366-lr2e-6","bk-mt4rows-mt4-otr10M8-st366"],
+  mt11: ["bk-mt11rows-base","bk-mt11rows-mt11-st165","bk-mt11rows-mt11-st330","bk-mt11rows-mt11-st495","bk-mt11rows-mt11-otr10M8-st330","bk-mt11rows-mt11-otr10M8-st495"]};
+const st = {rowset: "mt4", task: null, ckpt: null, block: 7};
+try { const s = JSON.parse(localStorage.getItem('gc-filters')||'null'); if (s) Object.assign(st, s); } catch(e) {}
+const labs = () => SERIES[st.rowset].filter(l => D.data[l]);
+function color(l){
+  const L = D.labels[l]; if (!L) return css('--muted');
+  if (L.kind === 'router') return css('--router');
+  if (L.kind === 'router2') return css('--s5');
+  if (L.kind === 'ood') return css('--muted');
+  if (L.kind === 'dense-lr2e-6') return css('--s3');
+  const steps = labs().filter(x => ['base','dense'].includes(D.labels[x].kind)).map(x => D.labels[x].steps);
+  const ramp = ['--r250','--r350','--r450','--r550','--r650','--r700'];
+  const i = steps.sort((a,b)=>a-b).indexOf(L.steps);
+  return css(ramp[Math.round(i * (ramp.length-1) / Math.max(1, steps.length-1))]);
+}
+const dash = l => D.labels[l] && ['ood', 'dense-lr2e-6'].includes(D.labels[l].kind) ? '4 3' : '';
+const fmt = (v, d=2) => (v == null || isNaN(v)) ? '–' : (+v).toFixed(d);
+const tip = document.getElementById('tip');
+function showTip(ev, html){ tip.innerHTML = html; tip.hidden = false;
+  const W = document.documentElement.clientWidth, r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + window.scrollY + 12; if (x + r.width > W - 8) x = ev.clientX - r.width - 14;
+  tip.style.left = Math.max(8, x + window.scrollX) + 'px'; tip.style.top = y + 'px'; }
+function hideTip(){ tip.hidden = true; }
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent){ const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+// ---- line chart with crosshair tooltip
+function lineChart(host, o){
+  host.innerHTML = '';
+  const W = 520, Hh = o.h || 260, m = {l: 44, r: 12, t: 10, b: 34};
+  const svg = el('svg', {viewBox: `0 0 ${W} ${Hh}`, role: 'img', 'aria-label': o.aria || ''}, host);
+  const xs = o.xs, x0 = xs[0], x1 = xs[xs.length-1];
+  let lo = o.ymin, hi = o.ymax;
+  if (lo == null || hi == null) { const all = o.series.flatMap(s => s.values.filter(v => v != null)); lo = lo ?? Math.min(0, ...all); hi = hi ?? Math.max(...all); }
+  const X = v => m.l + (v - x0) / (x1 - x0 || 1) * (W - m.l - m.r), Y = v => Hh - m.b - (v - lo) / (hi - lo || 1) * (Hh - m.t - m.b);
+  for (const b of (o.vlines || [])) el('line', {x1: X(b), x2: X(b), y1: m.t, y2: Hh - m.b, stroke: css('--grid'), 'stroke-width': 1}, svg);
+  const nt = 4; for (let i = 0; i <= nt; i++) { const v = lo + (hi - lo) * i / nt;
+    el('line', {x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css('--grid'), 'stroke-width': 1, 'stroke-dasharray': i ? '' : ''}, svg);
+    const t = el('text', {x: m.l - 6, y: Y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--muted'), 'font-family': css('--f-mono')}, svg); t.textContent = (o.yfmt || (z => fmt(z, 2)))(v); }
+  el('line', {x1: m.l, x2: W - m.r, y1: Hh - m.b, y2: Hh - m.b, stroke: css('--axis')}, svg);
+  for (const v of (o.xticks || xs)) { const t = el('text', {x: X(v), y: Hh - m.b + 15, 'text-anchor': 'middle', 'font-size': 11, fill: css('--muted'), 'font-family': css('--f-mono')}, svg); t.textContent = v; }
+  if (o.xlabel) { const t = el('text', {x: (W + m.l) / 2, y: Hh - 3, 'text-anchor': 'middle', 'font-size': 11, fill: css('--ink-2')}, svg); t.textContent = o.xlabel; }
+  for (const s of o.series) {
+    let d = ''; s.values.forEach((v, i) => { if (v == null) return; d += (d ? 'L' : 'M') + X(xs[i]).toFixed(1) + ',' + Y(v).toFixed(1); });
+    el('path', {d, fill: 'none', stroke: s.color, 'stroke-width': s.w || 2, 'stroke-dasharray': s.dash || '', 'stroke-linejoin': 'round', 'stroke-linecap': 'round'}, svg);
+  }
+  const cross = el('line', {y1: m.t, y2: Hh - m.b, stroke: css('--axis'), 'stroke-width': 1, visibility: 'hidden'}, svg);
+  const dots = o.series.map(s => el('circle', {r: 4, fill: s.color, stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}, svg));
+  const hit = el('rect', {x: m.l, y: m.t, width: W - m.l - m.r, height: Hh - m.t - m.b, fill: 'transparent'}, svg);
+  hit.addEventListener('pointermove', ev => {
+    const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse());
+    let i = 0, best = 1e9; xs.forEach((v, j) => { const dd = Math.abs(X(v) - q.x); if (dd < best) { best = dd; i = j; } });
+    cross.setAttribute('x1', X(xs[i])); cross.setAttribute('x2', X(xs[i])); cross.setAttribute('visibility', 'visible');
+    let html = `<b>${o.xname || 'x'} ${xs[i]}</b>`;
+    o.series.forEach((s, k) => { const v = s.values[i]; if (v == null) { dots[k].setAttribute('visibility', 'hidden'); return; }
+      dots[k].setAttribute('cx', X(xs[i])); dots[k].setAttribute('cy', Y(v)); dots[k].setAttribute('visibility', 'visible');
+      html += `<br><span style="color:${s.color}">●</span> ${s.name}: <b>${(o.yfmt || (z => fmt(z, 3)))(v)}</b>`; });
+    showTip(ev, html); });
+  hit.addEventListener('pointerleave', () => { hideTip(); cross.setAttribute('visibility', 'hidden'); dots.forEach(d => d.setAttribute('visibility', 'hidden')); });
+}
+function legend(host, items){ host.innerHTML = items.map(it => `<span><i class="${it.sq ? 'sq' : ''}" style="background:${it.color};${it.dash ? 'background:repeating-linear-gradient(90deg,' + it.color + ' 0 4px,transparent 4px 7px)' : ''}"></i>${it.name}</span>`).join(''); }
+
+// ---- bar chart (vertical) with optional error bars
+function barChart(host, o){
+  host.innerHTML = '';
+  const W = 520, Hh = o.h || 240, m = {l: 44, r: 10, t: 10, b: o.rot ? 58 : 30};
+  const svg = el('svg', {viewBox: `0 0 ${W} ${Hh}`, role: 'img', 'aria-label': o.aria || ''}, host);
+  const n = o.values.length, vals = o.values.map((v, i) => v + (o.err ? o.err[i] : 0));
+  let lo = Math.min(0, ...o.values.map((v, i) => v - (o.err ? o.err[i] : 0))), hi = Math.max(...vals, 1e-9);
+  if (o.ymax != null) hi = o.ymax;
+  const bw = (W - m.l - m.r) / n, X = i => m.l + i * bw, Y = v => Hh - m.b - (v - lo) / (hi - lo) * (Hh - m.t - m.b);
+  for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4; el('line', {x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css('--grid')}, svg);
+    const t = el('text', {x: m.l - 6, y: Y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--muted'), 'font-family': css('--f-mono')}, svg); t.textContent = (o.yfmt || (z => fmt(z, 2)))(v); }
+  o.values.forEach((v, i) => {
+    const y0 = Y(Math.max(0, v)), y1 = Y(Math.min(0, v)), gap = Math.min(2, bw * 0.15);
+    const r = el('path', {d: roundedBar(X(i) + gap, y0, bw - 2 * gap, Math.max(1, y1 - y0), v >= 0), fill: o.colors[i]}, svg);
+    if (o.err) { const cx = X(i) + bw / 2; el('line', {x1: cx, x2: cx, y1: Y(v - o.err[i]), y2: Y(v + o.err[i]), stroke: css('--ink-2'), 'stroke-width': 1.5}, svg); }
+    if (o.labels && (!o.labelEvery || i % o.labelEvery === 0)) { const t = el('text', {x: X(i) + bw / 2, y: Hh - m.b + 14, 'text-anchor': o.rot ? 'end' : 'middle',
+      transform: o.rot ? `rotate(-35 ${X(i) + bw / 2} ${Hh - m.b + 14})` : '', 'font-size': 11, fill: css('--muted'), 'font-family': css('--f-mono')}, svg); t.textContent = o.labels[i]; }
+    const hit = el('rect', {x: X(i), y: m.t, width: bw, height: Hh - m.t - m.b, fill: 'transparent'}, svg);
+    hit.addEventListener('pointermove', ev => showTip(ev, `<b>${o.tipName ? o.tipName(i) : o.labels[i]}</b><br>${fmt(v, 3)}${o.err ? ' ± ' + fmt(o.err[i], 3) : ''}`));
+    hit.addEventListener('pointerleave', hideTip);
+  });
+  el('line', {x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), stroke: css('--axis')}, svg);
+}
+function roundedBar(x, y, w, h, up){ const r = Math.min(4, w / 2, h); return up
+  ? `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`
+  : `M${x},${y}V${y + h - r}Q${x},${y + h} ${x + r},${y + h}H${x + w - r}Q${x + w},${y + h} ${x + w},${y + h - r}V${y}Z`; }
+
+// ---- stacked bars across blocks (category composition)
+function stackChart(host, o){
+  host.innerHTML = '';
+  const W = 520, Hh = 250, m = {l: 40, r: 8, t: 8, b: 30};
+  const svg = el('svg', {viewBox: `0 0 ${W} ${Hh}`, role: 'img', 'aria-label': 'category composition'}, host);
+  const n = o.stacks.length, bw = (W - m.l - m.r) / n, Y = v => Hh - m.b - v * (Hh - m.t - m.b);
+  for (let i = 0; i <= 4; i++) { const v = i / 4; el('line', {x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css('--grid')}, svg);
+    const t = el('text', {x: m.l - 6, y: Y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--muted'), 'font-family': css('--f-mono')}, svg); t.textContent = fmt(v, 2); }
+  o.stacks.forEach((parts, i) => { let acc = 0;
+    parts.forEach((v, k) => { const y1 = Y(acc), y0 = Y(acc + v); acc += v; if (v <= 0) return;
+      el('rect', {x: m.l + i * bw + 0.5, y: y0 + (k ? 1 : 0), width: Math.max(1, bw - 1), height: Math.max(0, y1 - y0 - (k ? 1 : 0)), fill: o.colors[k]}, svg); });
+    const hit = el('rect', {x: m.l + i * bw, y: m.t, width: bw, height: Hh - m.t - m.b, fill: 'transparent'}, svg);
+    hit.addEventListener('pointermove', ev => showTip(ev, `<b>block ${o.xs[i]}</b>` + parts.map((v, k) => `<br><span style="color:${o.colors[k]}">■</span> ${o.names[k]}: <b>${fmt(v, 3)}</b>`).join('')));
+    hit.addEventListener('pointerleave', hideTip);
+    if (o.xs[i] % 4 === 0) { const t = el('text', {x: m.l + (i + 0.5) * bw, y: Hh - m.b + 15, 'text-anchor': 'middle', 'font-size': 11, fill: css('--muted'), 'font-family': css('--f-mono')}, svg); t.textContent = o.xs[i]; }
+  });
+  const t = el('text', {x: (W + m.l) / 2, y: Hh - 2, 'text-anchor': 'middle', 'font-size': 11, fill: css('--ink-2')}, svg); t.textContent = 'block b (input of)';
+}
+
+// ---- sequential color for heatmaps
+function hexRgb(h){ h = h.replace('#', ''); return [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16)); }
+function seq(t){ const stops = ['--seq0','--seq1','--seq2','--seq3','--seq4','--seq5'].map(v => hexRgb(css(v))); t = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(t)), f = t - i; return stops[i].map((c, k) => Math.round(c + (stops[i + 1][k] - c) * f)); }
+function matrixHeat(host, M, o){
+  host.innerHTML = ''; const n = M.length, s = 8; const c = document.createElement('canvas'); c.width = n * s; c.height = n * s; host.appendChild(c);
+  const ctx = c.getContext('2d');
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const [r, g, b] = seq((M[i][j] - o.lo) / (o.hi - o.lo)); ctx.fillStyle = `rgb(${r},${g},${b})`; ctx.fillRect(j * s, i * s, s, s); }
+  c.style.maxWidth = '420px'; c.setAttribute('role', 'img'); c.setAttribute('aria-label', o.aria || 'matrix');
+  c.addEventListener('pointermove', ev => { const r = c.getBoundingClientRect(); const j = Math.floor((ev.clientX - r.left) / r.width * n), i = Math.floor((ev.clientY - r.top) / r.height * n);
+    if (i >= 0 && j >= 0 && i < n && j < n) showTip(ev, `<b>block ${i} vs ${j}</b><br>Spearman ${fmt(M[i][j], 2)}`); });
+  c.addEventListener('pointerleave', hideTip);
+}
+function unpack(p){ const bin = atob(p.b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+function tokenHeat(host, rec, key, title){
+  const p = rec[key], [L, n] = p.shape, a = unpack(p), card = document.createElement('div'); card.className = 'card heat';
+  card.innerHTML = `<h3>${title}</h3>`; const c = document.createElement('canvas'); c.width = n; c.height = L + 3; card.appendChild(c);
+  c.style.height = Math.round((L + 3) * 4) + 'px';
+  const ctx = c.getContext('2d'), img = ctx.createImageData(n, L + 3);
+  for (let i = 0; i < L; i++) for (let j = 0; j < n; j++) { const [r, g, b] = seq(a[i * n + j] / 255), q = (i * n + j) * 4; img.data[q] = r; img.data[q + 1] = g; img.data[q + 2] = b; img.data[q + 3] = 255; }
+  const gc = GROUPS.map(g => hexRgb(css(g[2])));
+  rec.cat.forEach((cv, j) => { const gi = GROUPS.findIndex(g => g[1].includes(CATS[cv])); const col = gi >= 0 ? gc[gi] : [128, 128, 128];
+    for (let k = 1; k < 3; k++) { const q = ((L + k) * n + j) * 4; img.data[q] = col[0]; img.data[q + 1] = col[1]; img.data[q + 2] = col[2]; img.data[q + 3] = 255; } });
+  ctx.putImageData(img, 0, 0);
+  c.setAttribute('role', 'img'); c.setAttribute('aria-label', title);
+  c.addEventListener('pointermove', ev => { const r = c.getBoundingClientRect(); const j = Math.floor((ev.clientX - r.left) / r.width * n), i = Math.floor((ev.clientY - r.top) / r.height * (L + 3));
+    if (i < L && j >= 0 && j < n) { const v = p.lo + a[i * n + j] / 255 * (p.hi - p.lo); showTip(ev, `<b>block ${i}</b>, tokens ≈ ${Math.round(j / n * rec.T)}–${Math.round((j + 1) / n * rec.T)}<br>log10 = ${fmt(v, 2)}<br>${CATS[rec.cat[j]]}`); } });
+  c.addEventListener('pointerleave', hideTip);
+  host.appendChild(card);
+}
+
+// ---- controls
+const taskSel = document.getElementById('task'), ckSel = document.getElementById('ckpt'), blSel = document.getElementById('block');
+for (let b = 0; b <= 32; b++) blSel.add(new Option(b + (FULL.includes(b) ? ' (full attn)' : ''), b));
+function fill(){
+  const ls = labs(); const tasks = Object.keys(D.data[ls[0]] || {});
+  taskSel.innerHTML = ''; tasks.forEach(t => taskSel.add(new Option(t === 'all' ? 'all tasks (pooled)' : t, t)));
+  if (!tasks.includes(st.task)) st.task = tasks.includes('strmatch') ? 'strmatch' : tasks[0];
+  taskSel.value = st.task;
+  ckSel.innerHTML = ''; ls.forEach(l => ckSel.add(new Option(D.labels[l].name, l)));
+  if (!ls.includes(st.ckpt)) st.ckpt = ls.filter(l => D.labels[l].kind === 'dense').slice(-1)[0] || ls[0];
+  ckSel.value = st.ckpt; blSel.value = st.block;
+  document.querySelectorAll('#rowset button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === st.rowset));
+}
+function save(){ try { localStorage.setItem('gc-filters', JSON.stringify(st)); } catch(e) {} }
+document.querySelectorAll('#rowset button').forEach(b => b.addEventListener('click', () => { st.rowset = b.dataset.v; 
+fill(); render(); renderCPT(); save(); }));
+taskSel.addEventListener('change', () => { st.task = taskSel.value; render(); save(); });
+ckSel.addEventListener('change', () => { st.ckpt = ckSel.value; render(); save(); });
+blSel.addEventListener('change', () => { st.block = +blSel.value; render(); save(); });
+
+const B33 = Array.from({length: 33}, (_, i) => i), B32 = B33.slice(0, 32);
+function render(){
+  const ls = labs(), t = st.task, d = l => D.data[l] && D.data[l][t], cur = d(st.ckpt);
+  const flag = e => e && e.eval_size < 500 ? ` <span class="tag warn">eval_size=${e.eval_size}</span>` : '';
+  // body share by block
+  lineChart(document.getElementById('c-body'), {xs: B33, xticks: [0, 4, 8, 12, 16, 20, 24, 28, 32], vlines: FULL, xname: 'block', xlabel: 'block b', ymin: 0, ymax: 1,
+    series: ls.filter(d).flatMap(l => [{name: D.labels[l].name, color: color(l), values: d(l)['body/g2'], dash: dash(l)}]), aria: 'document share of gradient by block'});
+  legend(document.getElementById('l-body'), ls.filter(d).map(l => ({name: D.labels[l].name + (D.labels[l].kind === 'ood' ? ' (out-of-format rows)' : ''), color: color(l), dash: !!dash(l)})));
+  // split fidelity for selected checkpoint + base
+  const sp = D.splits, sc = D.split_cols;
+  const F = (e, c) => e.split.map(row => row[5] + (1 - row[5]) * row[c]);
+  const sbase = ls[0], sl = [];
+  for (const [l, tag] of [[st.ckpt, ''], [sbase, ' (base)']]) { const e = d(l); if (!e || (tag && l === st.ckpt)) continue;
+    sl.push({name: 'G_L ranking' + tag, color: tag ? css('--r250') : css('--s1'), values: F(e, 0), dash: tag ? '4 3' : ''});
+    sl.push({name: '‖h_L−h_0‖' + tag, color: tag ? css('--axis') : css('--s4'), values: F(e, 1), dash: tag ? '4 3' : ''});
+    sl.push({name: 'random' + tag, color: css('--muted'), values: F(e, 3), dash: tag ? '2 3' : '', w: 1.5}); }
+  lineChart(document.getElementById('c-split'), {xs: sp, xticks: [0, 4, 8, 12, 16, 20, 24], vlines: FULL.filter(b => b <= 24), xname: 'split L', xlabel: 'split before block L', series: sl, aria: 'split fidelity'});
+  legend(document.getElementById('l-split'), sl.map(s => ({name: s.name, color: s.color, dash: !!s.dash})));
+  // parameter gradient per block
+  if (cur) { barChart(document.getElementById('c-pgrad'), {values: cur.pgrad_block, colors: B32.map(b => b < 7 ? css('--s2') : css('--s1')), labels: B32.map(String), labelEvery: 4,
+      tipName: i => 'block ' + i + (FULL.includes(i) ? ' (full attention)' : ''), yfmt: v => fmt(v, 2), aria: 'parameter gradient energy per block'});
+    const a = cur.pgrad_block.slice(0, 7).reduce((x, y) => x + y, 0), b = cur.pgrad_block.slice(7).reduce((x, y) => x + y, 0);
+    document.getElementById('n-pgrad').innerHTML = `<b>${D.labels[st.ckpt].name}</b>, ${t}: blocks 0–6 hold <b>${fmt(a, 2)}</b> of the energy (orange), 7–31 <b>${fmt(b, 2)}</b>, LM head ${fmt(cur.pgrad_head, 2)}; block 0 alone ${fmt(cur.pgrad_block[0], 2)}.${flag(cur)}`; }
+  // table: share 0-6 per ckpt x task
+  const tasks = Object.keys(D.data[ls[0]]);
+  let h = '<table><thead><tr><th>checkpoint</th>' + tasks.map(x => `<th>${x === 'all' ? 'all' : x}</th>`).join('') + '</tr></thead><tbody>';
+  for (const l of ls) { h += `<tr><td>${D.labels[l].name}</td>` + tasks.map(x => { const e = D.data[l][x]; if (!e) return '<td>–</td>';
+      const a = e.pgrad_block.slice(0, 7).reduce((p, q) => p + q, 0), s = e.pgrad_block_summed ? e.pgrad_block_summed.slice(0, 7).reduce((p, q) => p + q, 0) : null;
+      return `<td class="${x === t ? 'hl' : ''}">${fmt(a, 2)}${s != null ? ' <span style="color:var(--muted)">(' + fmt(s, 2) + ')</span>' : ''}</td>`; }).join('') + '</tr>'; }
+  document.getElementById('t-pgrad').innerHTML = h + '</tbody></table>';
+  // cross-layer correlation
+  if (cur) matrixHeat(document.getElementById('c-xcorr'), cur['xcorr/g'], {lo: 0, hi: 1, aria: 'cross-block Spearman'});
+  const bsel = st.block;
+  lineChart(document.getElementById('c-xline'), {xs: B33, xticks: [0, 4, 8, 12, 16, 20, 24, 28, 32], vlines: [bsel], xname: 'block', xlabel: `Spearman with block ${bsel}`, ymin: -0.4, ymax: 1,
+    series: ls.filter(d).map(l => ({name: D.labels[l].name, color: color(l), values: d(l)['xcorr/g'][bsel], dash: dash(l)})), aria: 'correlation with selected block'});
+  legend(document.getElementById('l-xline'), ls.filter(d).map(l => ({name: D.labels[l].name, color: color(l), dash: !!dash(l)})));
+  // pyramid table
+  h = '<table><thead><tr><th>checkpoint</th>' + D.pyr_sets.map(s => `<th>${s}</th>`).join('') + '</tr></thead><tbody>';
+  for (const l of ls) { const e = d(l); if (!e) continue; const gi = D.pyr_tgts.indexOf('g24');
+    h += `<tr><td>${D.labels[l].name}</td>` + e.pyr_nested.map(r => `<td>${fmt(r[gi], 2)}</td>`).join('') + '</tr>'; }
+  document.getElementById('t-pyr').innerHTML = h + `</tbody></table><div class="note">Target: G<sub>24</sub>² mass; task ${t}.${flag(cur)}</div>`;
+  // concentration
+  const cs = [];
+  for (const l of ls.filter(d)) { cs.push({name: D.labels[l].name, color: color(l), values: d(l)['conc10/g2'], dash: dash(l)});
+    cs.push({name: D.labels[l].name + ' per doc', color: color(l), values: d(l)['docconc10/g2'], dash: '5 3', w: 1.5}); }
+  lineChart(document.getElementById('c-conc'), {xs: B33, xticks: [0, 4, 8, 12, 16, 20, 24, 28, 32], vlines: FULL, xname: 'block', xlabel: 'block b', ymin: 0, ymax: 1, series: cs, aria: 'concentration'});
+  legend(document.getElementById('l-conc'), ls.filter(d).map(l => ({name: D.labels[l].name, color: color(l)})));
+  // composition
+  if (cur) { const sh = cur['catshare/g2']; const stacks = sh.map(row => GROUPS.map(g => g[1].reduce((s, c) => s + row[CATS.indexOf(c)], 0)));
+    stackChart(document.getElementById('c-comp'), {stacks, xs: B33, colors: GROUPS.map(g => css(g[2])), names: GROUPS.map(g => g[0])});
+    legend(document.getElementById('l-comp'), GROUPS.map(g => ({name: g[0], color: css(g[2]), sq: true}))); }
+  // per-task table at selected checkpoint
+  const R = D.abl_rules, dc = D.drop_conc_cols;
+  h = '<table><thead><tr><th>task</th><th>eval_size</th><th>CE</th><th>docs</th><th>body tok</th><th>doc share G7²</th><th>doc share G24²</th><th>top10% row / per-doc</th><th>ρ(G7,G16)</th><th>ρ(G7,G24)</th><th>ΔCE g7</th><th>ΔCE dh7</th><th>ΔCE random</th><th>dropped</th><th>top10% of dropped</th><th>lag-1</th></tr></thead><tbody>';
+  for (const x of Object.keys(D.data[st.ckpt] || {})) { const e = D.data[st.ckpt][x];
+    h += `<tr><td class="${x === t ? 'hl' : ''}">${x}</td><td>${e.eval_size}${e.eval_size < 500 ? ' ⚠' : ''}</td><td>${fmt(e.ce, 3)}</td><td>${fmt(e.n_docs, 0)}</td><td>${fmt(e.n_body, 0)}</td><td>${fmt(e['body/g2'][7])}</td><td>${fmt(e['body/g2'][24])}</td>
+      <td>${fmt(e['conc10/g2'][7])} / ${fmt(e['docconc10/g2'][7])}</td><td>${fmt(e['xcorr/g'][7][16])}</td><td>${fmt(e['xcorr/g'][7][24])}</td>
+      <td>${fmt(e.abl_mean[R.indexOf('g7')], 2)}</td><td>${fmt(e.abl_mean[R.indexOf('dh7')], 2)}</td><td>${fmt(e.abl_mean[R.indexOf('random')], 2)}</td>
+      <td>${fmt(e.drop_conc[dc.indexOf('g7_dropped_share')])}</td><td>${fmt(e.drop_conc[dc.indexOf('g7_top10_of_dropped')])}</td><td>${fmt(e.drop_conc[dc.indexOf('lag1_corr_logG7')])}</td></tr>`; }
+  document.getElementById('t-task').innerHTML = h + `</tbody></table><div class="note">Checkpoint: ${D.labels[st.ckpt].name}. ⚠ eval_size = rows per task (below the 500-example default; per-row statistics, not a graded eval).</div>`;
+  // ablation bars
+  if (cur) { const order = R.map((r, i) => i); barChart(document.getElementById('c-abl'), {values: order.map(i => cur.abl_mean[i]), err: order.map(i => cur.abl_se[i]), labels: R, rot: true,
+      colors: R.map(r => r === 'g7' ? css('--s1') : r === 'dh7' ? css('--s4') : r === 'random' || r === 'first_last' ? css('--muted') : css('--s3')), aria: 'ablation delta CE'}); }
+  // agreement
+  const ag = [];
+  if (cur) { ag.push({name: 'G vs ‖h_{b+1}−h_b‖', color: css('--s4'), values: cur['agree/g_dh']});
+    ag.push({name: 'G vs ‖h_b−h_0‖', color: css('--s5'), values: cur['agree/g_dh0']});
+    ag.push({name: 'G vs skip attribution', color: css('--s3'), values: cur['agree/g_attr']});
+    const am = B32.map(b => FULL.includes(b) ? cur['agree/g_am'][FULL.indexOf(b)] : null); ag.push({name: 'G vs answer attention (full-attn blocks)', color: css('--s1'), values: am}); }
+  lineChart(document.getElementById('c-agree'), {xs: B32, xticks: [0, 4, 8, 12, 16, 20, 24, 28], vlines: FULL, xname: 'block', xlabel: 'block b', ymin: -0.4, ymax: 1, series: ag.map(s => ({...s, values: s.values.map(v => v)})), aria: 'gradient vs activation agreement'});
+  legend(document.getElementById('l-agree'), ag);
+  // heatmaps
+  const hh = document.getElementById('heats'); hh.innerHTML = '';
+  const hl = ls.filter(l => H[`${l}|${t}`]);
+  const tops = document.getElementById('hot-toks'); tops.innerHTML = '';
+  if (!hl.length) { hh.innerHTML = '<div class="note">No example row stored for this task and row set.</div>'; }
+  for (const l of hl.slice(0, 3)) { const rec = H[`${l}|${t}`];
+    tokenHeat(hh, rec, 'G', `${D.labels[l].name}: log ‖dL/dh<sub>b</sub>‖`);
+    if (l === hl[0]) tokenHeat(hh, rec, 'dh', `${D.labels[l].name}: log ‖h<sub>b+1</sub>−h<sub>b</sub>‖ (activation)`); }
+  const rec = H[`${st.ckpt}|${t}`] || (hl.length && H[`${hl[hl.length - 1]}|${t}`]);
+  if (rec && rec.top) for (const b of Object.keys(rec.top)) tops.innerHTML += `<div style="width:100%"><b style="color:var(--ink)">block ${b}:</b> ` + rec.top[b].map(([pos, tok, cv]) =>
+    `<span title="position ${pos}, ${CATS[cv]}">${tok.replace(/[<>&]/g, c => ({'<': '&lt;', '>': '&gt;', '&': '&amp;'}[c])).replace(/\n/g, '⏎') || '∅'} <small style="color:var(--muted)">${CATS[cv]}</small></span>`).join(' ') + '</div>';
+}
+
+// ---- CPT addendum
+function renderCPT(){
+  const el0 = document.getElementById('cptdata'); if (!el0) return;
+  let C; try { C = JSON.parse(el0.textContent); } catch (e) { return; }
+  if (!C || !C.labels) return;
+  const NAMES = {"base": "base (stage 2)", "dlr20-12": "dense 12", "dlr20-48": "dense 48", "dlr20-120": "dense 120", "dlr20-240": "dense 240",
+    "dlr20-480": "dense 480", "otr10m7-310": "router OTR10M7, 310", "stage3": "OLMo stage 3 (ref)"};
+  const dense = C.labels.filter(l => l === 'base' || l.startsWith('dlr20'));
+  const ramp = ['--r250','--r350','--r450','--r550','--r650','--r700'];
+  const col = l => l === 'otr10m7-310' ? css('--router') : l === 'stage3' ? css('--muted') : css(ramp[Math.round(dense.indexOf(l) * (ramp.length - 1) / Math.max(1, dense.length - 1))]);
+  const dsh = l => l === 'stage3' ? '4 3' : '';
+  const ser = f => C.labels.map(l => ({name: NAMES[l] || l, color: col(l), values: f(C.data[l]), dash: dsh(l)}));
+  const leg = id => legend(document.getElementById(id), C.labels.map(l => ({name: NAMES[l] || l, color: col(l), dash: !!dsh(l)})));
+  const B33 = Array.from({length: 33}, (_, i) => i), B32 = B33.slice(0, 32), xt = [0, 4, 8, 12, 16, 20, 24, 28, 32];
+  lineChart(document.getElementById('cpt-pg'), {xs: B32, xticks: [0, 4, 8, 12, 16, 20, 24, 28], vlines: C.full_blocks, xname: 'block', xlabel: 'block', series: ser(e => e.pgrad_block), aria: 'CPT parameter gradient per block'});
+  leg('cpt-l1');
+  lineChart(document.getElementById('cpt-conc'), {xs: B33, xticks: xt, vlines: C.full_blocks, xname: 'block', xlabel: 'block b (input of)', ymin: 0, ymax: 1, series: ser(e => e.conc.map(r => r[3])), aria: 'CPT concentration'});
+  leg('cpt-l2');
+  lineChart(document.getElementById('cpt-x7'), {xs: B33, xticks: xt, vlines: [7], xname: 'block', xlabel: 'block b', ymin: -0.2, ymax: 1, series: ser(e => e.xcorr[7]), aria: 'CPT correlation with block 7'});
+  leg('cpt-l3');
+  lineChart(document.getElementById('cpt-ctx'), {xs: B33, xticks: xt, vlines: C.full_blocks, xname: 'block', xlabel: 'block b (input of)', ymin: 0, ymax: 1, series: ser(e => e.ctx_share), aria: 'CPT context share'});
+  leg('cpt-l4');
+  const P = C.pyr, si = n => C.pyr_sets.indexOf(n), ti = n => C.pyr_tgts.indexOf(n);
+  let h = '<table><thead><tr><th>checkpoint</th><th>rows</th><th>loss</th><th>blocks 0–6 (summed)</th><th>LM head</th><th>top10% @24</th><th>top30% @24</th><th>ρ(7,16)</th><th>ρ(7,24)</th><th>top10%@7 holds G24²</th><th>random 10%</th><th>nested 50/10/3</th><th>context share @7 / @16 / @24</th><th>far attention @7 / @31</th><th>G24² in 0–4k / 16–32k</th></tr></thead><tbody>';
+  for (const l of C.labels) { const e = C.data[l], cm = e.contain_mass, fb = C.full_blocks;
+    const pg06 = e.pgrad_block.slice(0, 7).reduce((a, b) => a + b, 0);
+    h += `<tr><td>${NAMES[l] || l}</td><td>${e.eval_size_rows} ⚠</td><td>${fmt(e.loss, 3)}</td><td>${fmt(pg06)} (${fmt(e.pgrad_0_6_summed)})</td><td>${fmt(e.pgrad_head)}</td>
+      <td>${fmt(e.conc[24][3])}</td><td>${fmt(e.conc[24][5])}</td><td>${fmt(e.xcorr[7][16])}</td><td>${fmt(e.xcorr[7][24])}</td>
+      <td>${fmt(cm[P.indexOf(7)][P.indexOf(24)][2])}</td><td>${fmt(e.pyr_nested[si('random_10pct')][ti('g24')])}</td><td>${fmt(e.pyr_nested[si('nest_3_7_16')][ti('g24')])}</td>
+      <td>${fmt(e.ctx_share[7])} / ${fmt(e.ctx_share[16])} / ${fmt(e.ctx_share[24])}</td><td>${fmt(e.am_far_frac[fb.indexOf(7)])} / ${fmt(e.am_far_frac[fb.indexOf(31)])}</td>
+      <td>${fmt(e.pos_share[24][0])} / ${fmt(e.pos_share[24][3])}</td></tr>`; }
+  document.getElementById('cpt-t1').innerHTML = h + '</tbody></table><div class="note">⚠ eval_size = rows of 32,768 tokens each (below the 500-example default). Token shares of the position bins are 0.125 / 0.125 / 0.25 / 0.5.</div>';
+  const bins = C.pos_edges.slice(0, -1).map((lo, i) => `${lo / 1024}k–${C.pos_edges[i + 1] / 1024}k`);
+  h = '<table><thead><tr><th>checkpoint</th>' + bins.map(b => `<th>${b}: all</th><th>novel</th><th>near</th><th>far-only</th>`).join('') + '</tr></thead><tbody>';
+  for (const l of C.labels) { const g = C.data[l].ce_gain; if (!g) continue;
+    h += `<tr><td>${NAMES[l] || l}</td>` + bins.map((_, b) => ['all', 'novel', 'near', 'far_only'].map(c => { const x = g[`${b}/${c}`];
+      return `<td>${x && x.gain != null ? (x.gain >= 0 ? '+' : '') + fmt(x.gain, 3) + ' <span style="color:var(--muted)">±' + fmt(x.se, 3) + '</span>' : '–'}</td>`; }).join('')).join('') + '</tr>'; }
+  document.getElementById('cpt-t2').innerHTML = h + `</tbody></table><div class="note">Target shares: novel ${fmt(C.rep_share[0])}, near ${fmt(C.rep_share[1])}, far-only ${fmt(C.rep_share[2])}.</div>`;
+}
+
+fill(); render(); renderCPT();
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { render(); renderCPT(); }, 150); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { render(); renderCPT(); });
+new MutationObserver(() => { render(); renderCPT(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+})();
+</script>
