@@ -72,6 +72,9 @@ def main():
     ap.add_argument("--rows", required=True)
     ap.add_argument("--m-hi", type=int, default=32768)
     ap.add_argument("--m-lo", type=int, default=8192)
+    ap.add_argument("--span", type=int, default=0,
+                    help="> 0: loss = CE of the last SPAN targets; rules select context cells (before the span), span "
+                         "cells are always kept")
     ap.add_argument("--label", required=True)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
@@ -88,15 +91,17 @@ def main():
     D = {"dn": a.m_hi, "wm": a.m_lo + a.m_hi}
     nblk = {"dn": NB - SPLIT, "wm": NB}
     rules_f = ("row", "blockrow", "random")
-    acc = {s: {"F": torch.zeros(D[s], device=dev, dtype=torch.float64),
+    acc = {s: {"F": torch.zeros(D[s], device=dev, dtype=torch.float64), "Fs": torch.zeros(D[s], device=dev, dtype=torch.float64),
                "global": torch.zeros(len(THR), D[s], device=dev, dtype=torch.float64), "global_cnt": np.zeros(len(THR)),
                **{r: torch.zeros(len(FRACS), D[s], device=dev, dtype=torch.float64) for r in rules_f},
                **{f"{r}_cnt": np.zeros(len(FRACS)) for r in rules_f}, "cells": 0} for s in D}
     gen = torch.Generator(device="cpu").manual_seed(0)
     state = {}
 
-    def on_block(b, sp, Sb, e):
-        T = Sb.shape[0]
+    def on_block(b, sp, Sb_all, e_all):
+        T = state["s"]
+        Sb, e = Sb_all[:T], e_all[:T]
+        tot_s = Sb_all[T:].double().sum(0)
         order = e.argsort(descending=True)
         sc = e[order].double().cpu().numpy()
         cg = np.searchsorted(-sc, -THR, side="right")
@@ -112,6 +117,7 @@ def main():
             sl = slice(off, off + Sb.shape[1])
             A = acc[s]
             A["F"][sl] += tot
+            A["Fs"][sl] += tot_s
             A["global"][:, sl] += pre_g
             A["global_cnt"] += cg
             A["blockrow"][:, sl] += pre_f
@@ -130,9 +136,12 @@ def main():
         x = torch.from_numpy(allrows[ri].astype(np.int64)).cuda()
         tgt = torch.from_numpy(masks[ri]).cuda()[1:].clone()
         T = x.numel()
+        state["s"] = T - 1 - a.span if a.span else T
+        if a.span:
+            tgt &= torch.arange(T - 1, device=dev) >= state["s"]
         for s in D:
             state[s] = {"P": torch.zeros(len(THR), D[s], device=dev, dtype=torch.float64), "cnt": np.zeros(len(THR))}
-        f_before = {s: acc[s]["F"].clone() for s in D}
+        f_before = {s: (acc[s]["F"] + acc[s]["Fs"]).clone() for s in D}
         pg.enable(True)
         loss, _ = run_pass(model, None, sk, x, tgt, True, lambda b, g: None)
         if sk.xs or sk.gs or sk.buf:
@@ -140,11 +149,11 @@ def main():
         pgr = pg.take()
         pg.enable(False)
         ex_hi = float(pgr[SPLIT:NB, :2].sum())
-        sh = float((acc["dn"]["F"] - f_before["dn"]).pow(2).sum())
+        sh = float((acc["dn"]["F"] + acc["dn"]["Fs"] - f_before["dn"]).pow(2).sum())
         checks.append(dict(row=ri, hi_ratio=sh / ex_hi))
         # per-row cell quota: the row's threshold grid point whose kept count first reaches f x the row's cells
         for s in D:
-            cells = T * nblk[s]
+            cells = state["s"] * nblk[s]
             cnt = state[s]["cnt"]
             for fi, f in enumerate(FRACS):
                 j = int(np.searchsorted(cnt, f * cells, side="left"))
@@ -158,18 +167,22 @@ def main():
             f"{checks[-1]['hi_ratio']:.3f}; {el:.0f}s, ETA {el / n * (len(rows_idx) - n):.0f}s; "
             f"GPU peak {torch.cuda.max_memory_allocated() / 2**30:.0f} GiB")
     res = dict(label=a.label, ckpt=a.ckpt, dev=a.dev, rows=meta, step_rows=len(rows_idx), T=L, m_hi=a.m_hi, m_lo=a.m_lo,
-               split=SPLIT, unit="cells", sketch_check=[dict(c, lo_ratio=float("nan")) for c in checks], budgets={},
+               split=SPLIT, span=a.span, unit="cells", sketch_check=[dict(c, lo_ratio=float("nan")) for c in checks], budgets={},
                curves={})
     for s, A in acc.items():
-        Fn = A["F"].norm()
+        Fall = A["F"] + A["Fs"]
+        res[f"{s}_ctx_energy_share"] = float(A["F"].pow(2).sum() / Fall.pow(2).sum().clamp(min=1e-300))
         for rule in ("global",) + rules_f:
             P = A[rule]
-            cos = ((P @ A["F"]) / (P.norm(dim=1) * Fn).clamp(min=1e-300)).cpu().numpy()
+            Pt = P + A["Fs"]
+            cos = ((Pt @ Fall) / (Pt.norm(dim=1) * Fall.norm()).clamp(min=1e-300)).cpu().numpy()
+            cosc = ((P @ A["F"]) / (P.norm(dim=1) * A["F"].norm()).clamp(min=1e-300)).cpu().numpy()
             kept = A[f"{rule}_cnt"] / A["cells"]
-            res["curves"][f"{s}_{rule}"] = dict(kept=kept.tolist(), cos=cos.tolist())
+            res["curves"][f"{s}_{rule}"] = dict(kept=kept.tolist(), cos=cos.tolist(), cos_ctx=cosc.tolist())
             for thr in (0.9, 0.95, 0.99):
-                ok = np.flatnonzero(cos >= thr)
-                res["budgets"][f"{s}_{rule}_{thr}"] = float(kept[ok].min()) if ok.size else None
+                for nm, cv in (("", cos), ("ctx_", cosc)):
+                    ok = np.flatnonzero(cv >= thr)
+                    res["budgets"][f"{nm}{s}_{rule}_{thr}"] = float(kept[ok].min()) if ok.size else None
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     json.dump(res, open(a.out + ".json", "w"), indent=1)
     for kk, v in res["budgets"].items():

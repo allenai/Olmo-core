@@ -117,10 +117,11 @@ class Acc:
     """Step accumulators for one scope: full sum, and per rule the sketch of the kept set at every grid point."""
 
     def __init__(self, dims, dev):
-        self.F = torch.zeros(dims, device=dev, dtype=torch.float64)
+        self.F = torch.zeros(dims, device=dev, dtype=torch.float64)  # context tokens (all tokens when --span 0)
+        self.Fs = torch.zeros(dims, device=dev, dtype=torch.float64)  # span tokens (always kept)
         self.P = {"global": torch.zeros(len(THR), dims, device=dev, dtype=torch.float64)}
         self.cnt = {"global": np.zeros(len(THR))}
-        for r in ("row", "blk512", "random"):
+        for r in ("row", "blk512", "random", "recent"):
             self.P[r] = torch.zeros(len(FRACS), dims, device=dev, dtype=torch.float64)
             self.cnt[r] = np.zeros(len(FRACS))
         self.T = 0
@@ -157,6 +158,9 @@ def main():
     ap.add_argument("--rows", required=True)
     ap.add_argument("--m-hi", type=int, default=32768)
     ap.add_argument("--m-lo", type=int, default=8192)
+    ap.add_argument("--span", type=int, default=0,
+                    help="> 0: loss = CE of the last SPAN targets only; tokens before the span are the context that the "
+                         "rules select from, span tokens are always kept")
     ap.add_argument("--label", required=True)
     ap.add_argument("--out", required=True, help="output path stem (.npz / .json)")
     a = ap.parse_args()
@@ -180,6 +184,9 @@ def main():
         x = torch.from_numpy(allrows[ri].astype(np.int64)).cuda()
         tgt = torch.from_numpy(masks[ri]).cuda()[1:].clone()
         T = x.numel()
+        sp0 = T - 1 - a.span if a.span else T  # context = positions < sp0
+        if a.span:
+            tgt &= torch.arange(T - 1, device=dev) >= sp0
         sk.S = {0: torch.zeros(T, a.m_lo, device=dev), 1: torch.zeros(T, a.m_hi, device=dev)}
         sk.xs.clear()
         sk.gs.clear()
@@ -194,37 +201,44 @@ def main():
         ex_hi, ex_lo = float(pgr[SPLIT:NB, :2].sum()), float(pgr[:SPLIT, :2].sum())
         sh, sl = float(sk.S[1].double().sum(0).pow(2).sum()), float(sk.S[0].double().sum(0).pow(2).sum())
         checks.append(dict(row=ri, hi_ratio=sh / ex_hi, lo_ratio=sl / ex_lo))
-        for scope, score, parts in (("dn", E[SPLIT:].sum(0), [sk.S[1]]), ("wm", E.sum(0), [sk.S[0], sk.S[1]])):
+        for scope, score_all, parts_all in (("dn", E[SPLIT:].sum(0), [sk.S[1]]), ("wm", E.sum(0), [sk.S[0], sk.S[1]])):
             A = acc[scope]
-            A.T += T
+            T_c = sp0
+            score = score_all[:T_c]
+            parts = [v[:T_c] for v in parts_all]
+            A.T += T_c
             A.F += torch.cat([v.double().sum(0) for v in parts])
+            A.Fs += torch.cat([v[T_c:].double().sum(0) for v in parts_all])
             order = score.argsort(descending=True)
             sc_sorted = score[order].double().cpu().numpy()
-            # global: counts of tokens at or above each threshold
+            # global: counts of context tokens at or above each threshold
             cg = np.searchsorted(-sc_sorted, -THR, side="right")
             A.P["global"] += prefix_sums(parts, order, cg)
             A.cnt["global"] += cg
-            kf = np.minimum(T, np.ceil(FRACS * T).astype(int))
+            kf = np.minimum(T_c, np.ceil(FRACS * T_c).astype(int))
             A.P["row"] += prefix_sums(parts, order, kf)
             A.cnt["row"] += kf
             # per 512-token block: order by within-block rank, ties by score
-            nb = T // BLK
-            rk = torch.empty(T, dtype=torch.long, device=dev)
+            nb = T_c // BLK
+            rk = torch.empty(T_c, dtype=torch.long, device=dev)
             sb = score[:nb * BLK].view(nb, BLK)
             ob = sb.argsort(dim=1, descending=True)
             rr = torch.empty_like(ob)
             rr.scatter_(1, ob, torch.arange(BLK, device=dev).expand(nb, BLK))
             rk[:nb * BLK] = rr.reshape(-1)
-            if T > nb * BLK:
+            if T_c > nb * BLK:
                 rk[nb * BLK:] = BLK - 1
             key = rk.double() * 1e6 - torch.log(score.double().clamp(min=1e-300)) / 1e3
             ordb = key.argsort()
-            kb = np.minimum(T, np.ceil(FRACS * BLK).astype(int) * nb)
+            kb = np.minimum(T_c, np.ceil(FRACS * BLK).astype(int) * max(nb, 1))
             A.P["blk512"] += prefix_sums(parts, ordb, kb)
             A.cnt["blk512"] += kb
-            perm = torch.randperm(T, generator=gen).to(dev)
+            perm = torch.randperm(T_c, generator=gen).to(dev)
             A.P["random"] += prefix_sums(parts, perm, kf)
             A.cnt["random"] += kf
+            # recency: the most recent context tokens first (a local window ending at the span / row end)
+            A.P["recent"] += prefix_sums(parts, torch.arange(T_c - 1, -1, -1, device=dev), kf)
+            A.cnt["recent"] += kf
         meta.append(dict(row=ri, loss=loss, T=T))
         sk.S = None
         el = time.time() - t0
@@ -233,21 +247,27 @@ def main():
             f"{checks[-1]['hi_ratio']:.3f}, 0-6 {checks[-1]['lo_ratio']:.3f}; {el:.0f}s, ETA "
             f"{el / n * (len(rows_idx) - n):.0f}s; GPU peak {torch.cuda.max_memory_allocated() / 2**30:.0f} GiB")
     res = dict(label=a.label, ckpt=a.ckpt, dev=a.dev, rows=meta, step_rows=len(rows_idx), T=L, m_hi=a.m_hi, m_lo=a.m_lo,
-               split=SPLIT, sketch_check=checks, budgets={}, curves={})
+               split=SPLIT, span=a.span, sketch_check=checks, budgets={}, curves={})
     npz = {}
     for scope, A in acc.items():
-        Fn = A.F.norm()
+        Fall = A.F + A.Fs
+        res[f"{scope}_ctx_energy_share"] = float(A.F.pow(2).sum() / Fall.pow(2).sum().clamp(min=1e-300))
+        res[f"{scope}_cos_ctx_full"] = float(A.F @ Fall / (A.F.norm() * Fall.norm()).clamp(min=1e-300))
         for rule, P in A.P.items():
-            cos = ((P @ A.F) / (P.norm(dim=1) * Fn).clamp(min=1e-300)).cpu().numpy()
+            Pt = P + A.Fs
+            cos = ((Pt @ Fall) / (Pt.norm(dim=1) * Fall.norm()).clamp(min=1e-300)).cpu().numpy()
+            cosc = ((P @ A.F) / (P.norm(dim=1) * A.F.norm()).clamp(min=1e-300)).cpu().numpy()
             kept = A.cnt[rule] / A.T
-            res["curves"][f"{scope}_{rule}"] = dict(kept=kept.tolist(), cos=cos.tolist())
+            res["curves"][f"{scope}_{rule}"] = dict(kept=kept.tolist(), cos=cos.tolist(), cos_ctx=cosc.tolist())
             for thr in (0.9, 0.95, 0.99):
-                ok = np.flatnonzero(cos >= thr)
-                j = ok[np.argmin(kept[ok])] if ok.size else None
-                res["budgets"][f"{scope}_{rule}_{thr}"] = None if j is None else float(kept[j])
+                for nm, cv in (("", cos), ("ctx_", cosc)):
+                    ok = np.flatnonzero(cv >= thr)
+                    j = ok[np.argmin(kept[ok])] if ok.size else None
+                    res["budgets"][f"{nm}{scope}_{rule}_{thr}"] = None if j is None else float(kept[j])
             npz[f"{scope}_{rule}_P"] = P.float().cpu().numpy()
             npz[f"{scope}_{rule}_cnt"] = A.cnt[rule]
         npz[f"{scope}_F"] = A.F.cpu().numpy()
+        npz[f"{scope}_Fs"] = A.Fs.cpu().numpy()
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     np.savez_compressed(a.out + ".npz", **npz)
     json.dump(res, open(a.out + ".json", "w"), indent=1)
