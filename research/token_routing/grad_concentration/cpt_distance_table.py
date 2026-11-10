@@ -78,6 +78,26 @@ def main():
         G = B.sum(1)
         ipg = np.array([(B[:, g] * G).sum() for g in range(nch)]) / (G * G).sum()
         e["cum_by_gap"] = np.cumsum(ipg).tolist()
+        # per-gap projection share, gap 0 split into own label / other same-chunk tokens; per band and whole model
+        own_ip = (O * G).sum(-1)
+        gg = (G * G).sum(-1)
+        per_band = np.stack([(B[:, g] * G).sum(-1) for g in range(B.shape[1])], 1)  # (nb, nch)
+        e["gap_share_band"] = (per_band / np.maximum(gg, 1e-300)[:, None]).tolist()
+        e["own_share_band"] = (own_ip / np.maximum(gg, 1e-300)).tolist()
+        e["gap_share_whole"] = (per_band.sum(0) / gg.sum()).tolist()
+        e["own_share_whole"] = float(own_ip.sum() / gg.sum())
+        # per-row whole-model per-gap shares (for an SE band)
+        prs = []
+        for r in rows:
+            b_ = r["bins"].astype(np.float64)
+            o_ = r["own"].astype(np.float64)
+            G_ = b_.sum(1)
+            g2 = (G_ * G_).sum()
+            v = np.array([(b_[:, g] * G_).sum() for g in range(b_.shape[1])]) / g2
+            prs.append(np.concatenate([[float((o_ * G_).sum() / g2)], v]))
+        prs = np.array(prs)  # (rows, 1 + nch): own, then gaps (gap 0 includes own)
+        e["row_gap_share_mean"] = prs.mean(0).tolist()
+        e["row_gap_share_se"] = (prs.std(0, ddof=1) / np.sqrt(len(prs))).tolist()
         res[lab] = e
     json.dump(res, open(os.path.join(a.out_dir, "distance_decomp.json"), "w"), indent=1)
     labs = list(res)
@@ -153,6 +173,50 @@ def main():
                  f"{res[labs[0]]['rows']} rows x {res[labs[0]]['T'] // 1024}k = one step)", fontsize=9)
     fig.tight_layout()
     fig.savefig(os.path.join(a.out_dir, "sum_distance_decomp.png"), dpi=110)
+    plt.close(fig)
+    # percentage of the gradient as a function of distance
+    fig, axs = plt.subplots(1, 3, figsize=(17, 4.4))
+    bcol = ["#1b9e77", "#d95f02", "#7570b3", "#e7298a"]
+    for lab in labs:
+        e = res[lab]
+        W = e["chunk"]
+        c = col.get(lab.split("_")[1], "k")
+        nch = len(e["gap_share_whole"])
+        # x: own label at a nominal distance, then gap g at its midpoint distance; gap 0 minus own = same chunk
+        xs = [0.5, W / 2] + [g * W for g in range(1, nch)]
+        ws = [e["own_share_whole"], e["gap_share_whole"][0] - e["own_share_whole"]] + e["gap_share_whole"][1:]
+        axs[0].plot(xs[1:], 100 * np.array(ws[1:]), marker="o", ms=3, color=c, label=f"{lab}")
+        axs[0].scatter([xs[0]], [100 * ws[0]], color=c, marker="*", s=80, zorder=3)
+        m = np.array(e["row_gap_share_mean"])
+        se = np.array(e["row_gap_share_se"])
+        axs[1].plot(xs[2:], 100 * m[2:], color=c, marker="o", ms=3, label=lab)
+        axs[1].fill_between(xs[2:], 100 * (m[2:] - se[2:]), 100 * (m[2:] + se[2:]), color=c, alpha=0.2)
+        for bi, bn in enumerate(BAND_NAMES):
+            sb = e["gap_share_band"][bi]
+            ls = "-" if lab.split("_")[1] == "cpt" else ":"
+            axs[2].plot(xs[2:], 100 * np.array(sb[1:]), color=bcol[bi], ls=ls, lw=1.2,
+                        label=f"{lab.split('_')[1]} {bn}")
+    for ax in axs:
+        ax.set_xscale("log")
+        ax.axhline(0, color="k", lw=0.5)
+        for D in (4096, 16384):
+            ax.axvline(D, color="grey", lw=0.6)
+        ax.set_xlabel("distance from target back to the token (tokens; 1k-chunk gaps)")
+        ax.tick_params(labelsize=7.5)
+    axs[0].set_ylabel("% of the step gradient (projection share)")
+    axs[0].set_title("Whole model: % of the gradient at each distance\n(star = own label, distance 0; first dot = rest of the "
+                     "same 1k chunk)", fontsize=8.5)
+    axs[1].set_ylabel("% (per-row mean ± SE)")
+    axs[1].set_title("Gaps >= 1 chunk, per-row mean ± SE over rows", fontsize=8.5)
+    axs[2].set_ylabel("% of that band's gradient")
+    axs[2].set_title("By block band, gaps >= 1 chunk (solid: dense CPT, dotted: base)", fontsize=8.5)
+    axs[0].legend(fontsize=7)
+    axs[1].legend(fontsize=7)
+    axs[2].legend(fontsize=6, ncol=2)
+    fig.suptitle(f"Gradient percentage as a function of dependency distance (exact additive decomposition, sketched; "
+                 f"{res[labs[0]]['rows']} rows x {res[labs[0]]['T'] // 1024}k = one step; grey: 4k / 16k)", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(os.path.join(a.out_dir, "sum_distance_pct.png"), dpi=110)
     plt.close(fig)
 
 

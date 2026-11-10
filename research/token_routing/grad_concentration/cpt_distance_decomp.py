@@ -100,7 +100,7 @@ class BandSketch:
         self.fired += 1
 
 
-def run_pass(model, sk, x, tmask, denom):
+def run_pass(model, sk, x, tmask, denom, kv_detached=False):
     """Forward + backward of sum(CE over tmask) / denom (block loop as in cpt_gradmap.run_pass)."""
     from torch.utils.checkpoint import checkpoint
 
@@ -130,7 +130,14 @@ def run_pass(model, sk, x, tmask, denom):
     sk.phase = "bwd"
     loss.backward()
     sk.on = False
-    if sk.fired != sk.n or sk.xs or sk.gs:
+    if kv_detached:
+        # keys / values detached: w_k and w_v get no gradient (their own-label term is exactly 0), so their stashed
+        # inputs never pair; everything else must have fired
+        n_kv = len(sk.xs)
+        if sk.gs or sk.fired + n_kv != sk.n or n_kv != 2 * NB:
+            raise SystemExit(f"own pass: fired {sk.fired}, unpaired {n_kv} x {len(sk.gs)} g (expected {2 * NB} x)")
+        sk.xs.clear()
+    elif sk.fired != sk.n or sk.xs or sk.gs:
         raise SystemExit(f"sketch hooks: fired {sk.fired}/{sk.n}, unpaired {len(sk.xs)} x {len(sk.gs)} g")
     return float(loss)
 
@@ -197,7 +204,7 @@ def main():
         # own-label pass: full loss with keys / values detached
         cap.detach_kv = True
         sk.S = torch.zeros(nb, T, a.m, device=dev)
-        loss_own = run_pass(model, sk, x, tgt_all, N)
+        loss_own = run_pass(model, sk, x, tgt_all, N, kv_detached=True)
         cap.detach_kv = False
         pg.take()
         pg.enable(False)
