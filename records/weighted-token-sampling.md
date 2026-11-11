@@ -5,7 +5,7 @@ updated: 2026-11-11
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (round 2: temp 0.5 + attention weights reaches 0.840 at 8k, within noise of the recipe on seed 0; seed 1 and deep-cut top-k running)
+status: in progress (round 3: sampling at block 7 + the recipe's top-k at block 16 (S2aH) matches the recipe at 8k on seed 0, 0.847; seed 1 and 3,904 rows running)
 superseded_by: 
 artifact: 
 summary: Replaces the recipe's fixed top-k token drop (20% after block 7, 7% after 16) with sampled survival (exact inclusion probabilities), token weights w = 1/p carried into attention (log w key bias) and Gated DeltaNet (exact w-fold write), an IPW router fit, and a price rule p = clip(s / (tau sqrt(c)), pmin, 1) with tau set by a FLOP controller. Staged S0-S5; results tables below.
@@ -103,6 +103,11 @@ SE of the 4-task 8k mean is about 0.008; per task about 0.01-0.02 (outlier at 0.
 | wtsS2aT2 (attention weights, temp 0.2) | 0.215 | 24.2 | 0.945 | 0.908 | 0.835 | 0.626 | 0.829 | 0.907 | 0.158 |
 | wtsS1T2 (no weights, temp 0.2) | 0.215 | 24.2 | 0.946 | 0.914 | 0.843 | 0.628 | 0.833 | 0.899 | 0.152 |
 | wtsS3aT5 (price, attention weights, temp 0.5) | 0.211 | 24.4 | 0.962 | 0.910 | 0.778 | 0.630 | 0.820 | 0.914 | 0.220 |
+| *round 3* | | | | | | | | | |
+| wtsS2aT5 seed 1 | 0.215 | 24.2 | 0.944 | 0.888 | 0.852 | 0.662 | 0.837 | 0.920 | 0.144 |
+| **wtsS2aH (sampled at block 7, top-k at block 16, attention weights)** | 0.218 | 24.2 | 0.956 | 0.934 | 0.851 | 0.648 | **0.847** | 0.918 | 0.148 |
+| wtsS2aT5H (as S2aH, temp 0.5) | 0.218 | 24.2 | 0.948 | 0.910 | 0.757 | 0.626 | 0.810 | 0.920 | 0.238 |
+| wtsS3aT2 (price, attention weights, temp 0.2) | 0.203 | 24.2 | 0.963 | 0.910 | 0.815 | 0.639 | 0.832 | 0.924 | 0.176 |
 
 \* S1 / S2b logged 30.4 GiB because of the diag leak; the same config without diag (memory probe) peaks at 24.1.
 The recipe's 26.9 includes its dense step 1: routed from step 1 (S0wr) it peaks at 24.2. FTM vs the dense curve is an
@@ -125,6 +130,16 @@ noise of S2aT5 but not above it). The none-right share falls to the top-k level 
 (S3 0.795 -> S3aT5 0.820, outlier 0.725 -> 0.778) but still trails, consistent with it keeping less after block 16.
 Cost 0.211-0.215 and peak 24.2-24.4 GiB, under the recipe's 0.221 / 26.9. Round 3: S2aT5 seed 1 (the bar), S2aT5H
 and S2aH (`hard=1`: the recipe's top-k at block 16, sampling only at block 7), S3aT2 (price, temp 0.2).
+
+Round 3 (11-11; every run resumed from its step-400 checkpoint for the last 88 steps because the first launch saved
+no final model; the resume restores the router fit, FLOP meter and data position). S2aT5 holds on seed 1 (0.837;
+2-seed mean 0.8385 vs recipe 0.8465, -0.008, about one SE). Top-k at the deep cut (`hard=1`) with the default temp
+(S2aH) reaches 0.847, the recipe's number, at 0.218x and 24.2 GiB: sampling at block 7 plus weights costs nothing once
+block 16 keeps the recipe's top-k, so the residual gap in S2aT5 is the soft deep cut. Combining temp 0.5 with
+`hard=1` (S2aT5H) drops outlier to 0.757 (none right 0.238); one seed, so a seed-1 rerun is running before reading
+anything into it. The price rule keeps improving with sharper scores (S3aT2 0.832 at 0.203x, the cheapest arm). The
+3,904-row shard was built on mooney the same way as f1952 (`merge_tasks.py --rows-per-src 3904 --allow-no-gold` over
+the node-local `*_fresh` pools; the f1952 rebuild is byte-identical to the shard every 1,952-row arm used).
 
 Training-side detail:
 
@@ -165,6 +180,6 @@ alloc=doc arm wtsS3d keeps every document's share).
 | 11-11 | sampling loses only through IPW noise; weights fix it | partly: weights recover 0.67 -> 0.81 outlier, still under top-k 0.84-0.86 |
 | 11-11 | price rule needs alloc=doc to keep every document (outlier) | no: S3d 0.710 vs S3 0.725; empty documents are not the cause |
 | 11-11 | soft selection costs outlier; sharper scores (temp 0.5, 0.2) close the gap | yes: S2aT5 0.840 (outlier 0.841), S1T2 0.833 (0.843); temp 1 was too flat. Price rule gains (0.795 -> 0.820) but trails |
-| 11-11 | the remaining gap is the soft deep cut; top-k there (`hard=1`) matches the recipe | round 3 running (S2aH, S2aT5H) |
+| 11-11 | the remaining gap is the soft deep cut; top-k there (`hard=1`) matches the recipe | yes on seed 0: S2aH 0.847 (recipe 0.846 / 0.847); seed 1 and 3,904 rows running. With temp 0.5 (S2aT5H) 0.810: seed 1 running |
 | 11-10 | peak memory creeps 26.9 -> 30.5 GiB in S1/S2b | diag (`--st-otr-diag-every`) shallow-copied router links, leaking stale router copies each diag; fixed in the callback, probe without diag flat at 24.1 GiB |
 | 11-10 | row-centred targets let one price trade off two cuts | no: centring erases the gradient scale between cuts; added `center=none` and tau calibration |
