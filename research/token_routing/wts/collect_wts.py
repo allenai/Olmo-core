@@ -117,7 +117,10 @@ def main():
     a = ap.parse_args()
     cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
     st = json.load(open(os.path.join(HERE, "state.json"))) if os.path.exists(os.path.join(HERE, "state.json")) else {}
-    runs = a.runs.split(",") if a.runs else RECIPE + [r for r in st.get("runs", {}) if not r.endswith("-loc")]
+    runs = a.runs.split(",") if a.runs else RECIPE + [
+        r for r, v in st.get("runs", {}).items()
+        if not v.get("steps") and not any(x in r for x in ("-smoke", "-memprobe", "-st"))
+        and not (r + "-loc" in st.get("runs", {}))]  # full-length runs only; a local twin replaces its Beaker run
     curve = []
     for d in DENSE:
         s, t = scores(d), train_stats(d, cache)
