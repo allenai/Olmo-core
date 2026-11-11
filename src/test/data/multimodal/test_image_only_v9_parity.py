@@ -24,6 +24,9 @@ class _FakeTokenizer:
     [src.name for g in IMAGE_ONLY_V9_SUBMIXTURES for src in g.datasets],
 )
 def test_build_image_only_v9_dataset_registered(name):
-    ds = build_image_only_v9_dataset(name, _FakeTokenizer())
+    try:
+        ds = build_image_only_v9_dataset(name, _FakeTokenizer())
+    except FileNotFoundError:
+        pytest.skip(f"{name} data not available")
     assert hasattr(ds, "__len__")
     assert hasattr(ds, "__getitem__")

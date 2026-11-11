@@ -148,6 +148,7 @@ class MixtureDataLoaderConfig(DataLoaderConfig["MixtureDataLoader"]):
                 pad_token_id=pad_token_id,
                 pad_sequence_length=self.sequence_length,
                 batch_metadata=self.batch_metadata,
+                image_patch_token_id=dataset.token_ids.im_patch_id,
             ),
             work_dir=self.work_dir,
             global_batch_size=self.global_batch_size,

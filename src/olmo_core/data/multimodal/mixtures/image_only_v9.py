@@ -215,19 +215,23 @@ def build_image_only_v9_dataset(
         return Tulu4DatasetConfig(**tulu_kw).build(tokenizer)
 
     src = sources[name]
+    # The multi-image sources reject or truncate examples longer than the recipe's length.
+    seq_kw: Dict[str, Any] = (
+        {} if max_sequence_length is None else {"max_sequence_length": max_sequence_length}
+    )
     if name == "correction_qa_multi_only_max5":
         from olmo_core.data.multimodal.multi_image_datasets import (
             CorrectionQaDatasetConfig,
         )
 
-        return CorrectionQaDatasetConfig(seed=seed).build(tokenizer)
+        return CorrectionQaDatasetConfig(seed=seed, **seq_kw).build(tokenizer)
     if name.startswith("mantis_instruct_"):
         from olmo_core.data.multimodal.multi_image_datasets import (
             MantisInstructDatasetConfig,
         )
 
         subset = name[len("mantis_instruct_") :].replace("_multi_only", "")
-        return MantisInstructDatasetConfig(subset=subset, seed=seed).build(tokenizer)
+        return MantisInstructDatasetConfig(subset=subset, seed=seed, **seq_kw).build(tokenizer)
     if name.startswith("cosyn_multidoc_"):
         from olmo_core.data.multimodal.multi_image_datasets import (
             CoSynMultiDocDatasetConfig,
@@ -235,7 +239,7 @@ def build_image_only_v9_dataset(
 
         doc_type = name[len("cosyn_multidoc_") :].replace("_exp", "")
         return CoSynMultiDocDatasetConfig(
-            doc_type=doc_type, use_exp=name.endswith("_exp"), seed=seed
+            doc_type=doc_type, use_exp=name.endswith("_exp"), seed=seed, **seq_kw
         ).build(tokenizer)
     if name == "pixmo_multi_points":
         from olmo_core.data.multimodal.multi_image_datasets import (
@@ -247,6 +251,7 @@ def build_image_only_v9_dataset(
             message_weight=src.message_weight,
             p_high_res=src.override_p_high_res or 0.0,
             seed=seed,
+            **seq_kw,
         ).build(tokenizer)
     if name == "pixmo_points_train":
         return PixMoPointsDatasetConfig(
