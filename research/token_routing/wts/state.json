@@ -86,5 +86,46 @@
    "steps": 60
   }
  },
- "evals": {}
+ "evals": {
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evcontradiction": {
+   "ex": "01M7407A58VFD7KB0133ZZWB49",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "contradiction"
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evnq": {
+   "ex": "01M7408H9J5N2HZ5FFAS0KMTXY",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "nq"
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evoutlier": {
+   "ex": "01M7409PCV3EG2NPHV708TBZYX",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "outlier"
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evoolong": {
+   "ex": "01M740AMG4PP8VQWEJT9TXAHB2",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "oolong"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evcontradiction": {
+   "ex": "01M740WNWA0TS4BRNGCE1JPXFK",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "contradiction"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evnq": {
+   "ex": "01M740XTJ29WQRSQ1SXM2R0JZH",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "nq"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evoutlier": {
+   "ex": "01M740Z4NKA98F54T4T8TQE3JG",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "outlier"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evoolong": {
+   "ex": "01M7410DCQG0Q39MTHTA4RYDSD",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "oolong"
+  }
+ }
 }
