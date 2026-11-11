@@ -25,6 +25,7 @@ from olmo_core.data.multimodal.mixture_data_loader import (
     MixtureDataLoaderConfig,
 )
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 THREAD_NAME = "mixture-batch-prefetch"
 
@@ -431,6 +432,7 @@ def test_batch_prefetch_depth_config_default_off_and_round_trip(tmp_path):
         weights=[1.0],
         names=["caption"],
         tokenizer=SimpleNamespace(pad_token_id=0),
+        token_ids=Molmo2TokenIds(),
     )
     loader = restored.build(dataset)
     assert loader.batch_prefetch_depth == 2
