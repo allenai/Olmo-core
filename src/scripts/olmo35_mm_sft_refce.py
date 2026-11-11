@@ -55,7 +55,8 @@ def main():
 
     cfg = transformers.AutoConfig.from_pretrained(a.hf_dir, trust_remote_code=True)
     if "Vision" in (cfg.architectures or [""])[0]:
-        model = transformers.AutoModelForImageTextToText.from_pretrained(
+        # The multimodal export maps AutoModelForCausalLM to the whole vision model.
+        model = transformers.AutoModelForCausalLM.from_pretrained(
             a.hf_dir, dtype=torch.bfloat16, trust_remote_code=True
         )
         lm = model.language_model

@@ -375,6 +375,9 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
         work_dir=f"{recipe.work_dir}/{cli.run_name}/text",
         sequence_length=L,
         extra_numpy_dirs=list(recipe.replay_dirs),
+        # Same ids as open-instruct's dolma2() (only pad/EOS matter for packing); one tokenizer
+        # config in the saved experiment, as the HF converter requires.
+        tokenizer=TOKENIZER,
     )
     run_dir = f"{recipe.output_root}/{cli.run_name}"
 
@@ -481,6 +484,8 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
     train_module.max_grad_norm = recipe.max_grad_norm
     train_module.compile_model = recipe.compile_model
     train_module.reset_optimizer_states_on_load = True
+    # Router losses over loss tokens, as the text SFT trainer divides them (step-matching gate).
+    train_module.router_loss_divisor = "loss_tokens"
     train_module.source_loss_mass_targets = (
         dict(schedule["target_loss_mass"]) if dataset is not None and len(schedule["target_loss_mass"]) > 1 else None
     )

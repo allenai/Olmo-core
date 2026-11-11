@@ -861,8 +861,12 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         trim_microbatch_image_padding: bool = False,
         padding_input_token_id: Optional[int] = None,
         balance_vit_crops: bool = False,
+        router_loss_divisor: str = "valid_tokens",
         **kwargs,
     ):
+        if router_loss_divisor not in ("valid_tokens", "loss_tokens"):
+            raise OLMoConfigurationError(f"Unknown router_loss_divisor {router_loss_divisor!r}")
+        self.router_loss_divisor = router_loss_divisor
         from olmo_core.nn.vision import MultimodalOLMoDDPModel
 
         if not isinstance(model, MultimodalOLMoDDPModel):
@@ -1086,12 +1090,18 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             valid_tokens = token_mask.sum(dtype=torch.long)
         else:
             valid_tokens = torch.tensor(batch["input_ids"].numel(), dtype=torch.long)
-        kwargs = {"router_loss_div_factor": self._global_batch_divisor(valid_tokens)}
+        kwargs = {}
         if (loss_masks := batch.get("loss_masks")) is not None:
             loss_masks = loss_masks.float()
             kwargs["loss_weight_div_factor"] = self._global_batch_divisor(
                 (loss_masks * (loss_masks > 0)).sum()
             )
+        if getattr(self, "router_loss_divisor", "valid_tokens") == "loss_tokens":
+            if "loss_weight_div_factor" not in kwargs:
+                raise OLMoConfigurationError("router_loss_divisor='loss_tokens' needs loss_masks")
+            kwargs["router_loss_div_factor"] = kwargs["loss_weight_div_factor"]
+        else:
+            kwargs["router_loss_div_factor"] = self._global_batch_divisor(valid_tokens)
         return kwargs
 
     def _global_batch_divisor(self, local_value: torch.Tensor) -> torch.Tensor:
@@ -2041,6 +2051,13 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     without this every rank waits for the one holding the most crops. Features and summed
     gradients are unchanged up to floating-point rounding. Requires zero vision dropout: a crop
     encoded on another rank would draw that rank's dropout randomness."""
+
+    router_loss_divisor: str = "valid_tokens"
+    """What the router auxiliary losses (load balancing, router z-loss) are divided by:
+    ``valid_tokens`` (every non-padding token, mixed mid-training's convention) or
+    ``loss_tokens`` (the CE's divisor, the global sum of positive ``loss_masks``), the text
+    train module's convention (``OLMoDDPTrainModule`` divides them by its label-token count),
+    which multimodal SFT uses so its text steps match the text SFT trainer's."""
 
     def _build_train_module(self, **kwargs) -> MultimodalOLMoDDPTrainModule:
         return MultimodalOLMoDDPTrainModule(**kwargs)
