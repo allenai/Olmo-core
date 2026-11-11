@@ -66,6 +66,9 @@ ARMS = {
     "wtsS2aT2": wts("sample=1,weights=attn,temp=0.2"),
     "wtsS1T2": wts("sample=1,weights=none,temp=0.2"),
     "wtsS3aT5": wts("sample=1,weights=attn,price=0.216,center=none,temp=0.5", stages="7:0.4,16:0.2"),
+    # round 3 fallback: sample only at the first cut (block 7), the recipe's top-k at the deep cut (block 16)
+    "wtsS2aH": wts("sample=1,weights=attn,hard=1"),
+    "wtsS2aT5H": wts("sample=1,weights=attn,temp=0.5,hard=1"),
     # S3 at more cuts: every full-attention block from 7 on
     "wtsS3m": wts("sample=1,weights=both,price=0.216,center=none",
                   stages="7:0.4,11:0.3,15:0.2,19:0.2,23:0.2,27:0.2"),
