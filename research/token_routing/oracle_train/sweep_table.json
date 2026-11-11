@@ -1,0 +1,750 @@
+{
+ "dense": [
+  {
+   "run": "f8k-mt4-dense-f488-tde-lr5e-06-cub",
+   "rows": 488,
+   "pf": 379.18001,
+   "steps": 122,
+   "y8": null,
+   "y2": null,
+   "out8": null,
+   "cells": 0
+  },
+  {
+   "run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
+   "rows": 976,
+   "pf": 762.41774,
+   "steps": 244,
+   "y8": null,
+   "y2": null,
+   "out8": null,
+   "cells": 0
+  },
+  {
+   "run": "f8k-mt4-dense-f1952-tde-lr5e-06",
+   "rows": 1952,
+   "pf": 1531.25242,
+   "steps": 488,
+   "y8": 0.8425,
+   "y2": 0.93275,
+   "out8": 0.817,
+   "cells": 8
+  },
+  {
+   "run": "f8k-mt4-dense-f3904-tde-lr5e-06",
+   "rows": 3904,
+   "pf": 3063.15168,
+   "steps": 976,
+   "y8": 0.899,
+   "y2": 0.9525,
+   "out8": 0.976,
+   "cells": 8
+  },
+  {
+   "run": "f8k-mt4-dense-f5856-tde-lr5e-06",
+   "rows": 5856,
+   "pf": 4594.9259,
+   "steps": 1464,
+   "y8": 0.90125,
+   "y2": 0.95475,
+   "out8": 0.981,
+   "cells": 8
+  },
+  {
+   "run": "f8k-mt4-dense-f7808-tde-lr5e-06",
+   "rows": 7808,
+   "pf": 6128.21971,
+   "steps": 1952,
+   "y8": 0.9039999999999999,
+   "y2": 0.958,
+   "out8": 0.987,
+   "cells": 8
+  }
+ ],
+ "arms": [
+  {
+   "label": "orc1doc (0.95)",
+   "run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "kind": "oracle",
+   "target": 0.95,
+   "cells": 8,
+   "pf": 558.9562721666921,
+   "step_cost": 0.3650320906377357,
+   "speedup": 2.739485173078708,
+   "steps": null,
+   "resumes": 0,
+   "starts": 0,
+   "y8": 0.85,
+   "y2": 0.902,
+   "t8": {
+    "contradiction": 0.973,
+    "nq": 0.93,
+    "outlier": 0.828,
+    "oolong": 0.669
+   },
+   "t2": {
+    "contradiction": 0.985,
+    "nq": 0.978,
+    "outlier": 0.789,
+    "oolong": 0.856
+   },
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
+   "keep": 0.3552864811136092,
+   "keep_q": [
+    0.39108350308053397,
+    0.39209182339167964,
+    0.3357535831224217,
+    0.3022170148598016
+   ],
+   "attr": 0.9586332228828933,
+   "gcos": 0.5754749904742171,
+   "gcos_adam": 0.6582001220775328,
+   "gnorm": 1.248873580091015,
+   "ce_dense": 0.14820489274398957,
+   "ce_routed": 0.15075962828686001,
+   "ce_q_dense": [
+    0.25972742856037423,
+    0.1396661676832887,
+    0.10909380498113203,
+    0.0843321697511634
+   ],
+   "ce_q_routed": [
+    0.269347183406353,
+    0.14057706852183968,
+    0.11041649391294503,
+    0.08269776730630242
+   ],
+   "oracle_routed_over_dense": 0.37601359273560847,
+   "gold_keep": 0.0,
+   "distr_keep": 0.3552864811136092,
+   "gold_orc_keep": null,
+   "distr_orc_keep": null,
+   "orc_share": 0.3552864811136092,
+   "zero_docs": 0.0,
+   "zero_docs_orc": null,
+   "orc_keep_q": [
+    0.39108350308053397,
+    0.39209182339167964,
+    0.3357535831224217,
+    0.3022170148598016
+   ],
+   "meta_steps": 488,
+   "ftm_txt": "3.00x",
+   "ftm": 3.0035914766287686
+  },
+  {
+   "label": "orc1doc90",
+   "run": "f8k-mt4-orc1doc90-f1952-orc-lr1e-05-lam",
+   "kind": "oracle",
+   "target": 0.9,
+   "cells": 0,
+   "pf": 404.0738,
+   "step_cost": 0.2638845135670055,
+   "speedup": 3.7895365153593232,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.1828300751895821,
+   "keep_q": [
+    0.19073807434427031,
+    0.20976173116737068,
+    0.17457472534099416,
+    0.15624576990569322
+   ],
+   "attr": 0.910881096720024,
+   "gcos": 0.4405596537224041,
+   "gcos_adam": 0.5333663121745955,
+   "gnorm": 1.1654529255484418,
+   "ce_dense": 0.15991232614032924,
+   "ce_routed": 0.15747768145634747,
+   "ce_q_dense": [
+    0.2874950400752122,
+    0.14604632800719777,
+    0.1135921295976541,
+    0.09251580688125285
+   ],
+   "ce_q_routed": [
+    0.30428666926798276,
+    0.14247342822004538,
+    0.10644424834945163,
+    0.07670637998791015
+   ],
+   "oracle_routed_over_dense": 0.2798402730565745,
+   "gold_keep": 0.18221515084867815,
+   "distr_keep": 0.18285032579132784,
+   "gold_orc_keep": 0.18221515084867815,
+   "distr_orc_keep": 0.18285032579132784,
+   "orc_share": 0.1828300751895821,
+   "zero_docs": 0.0,
+   "zero_docs_orc": 0.0,
+   "orc_keep_q": [
+    0.19073807434427031,
+    0.20976173116737068,
+    0.17457472534099416,
+    0.15624576990569322
+   ],
+   "meta_steps": 488,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "orc1doc85",
+   "run": "f8k-mt4-orc1doc85-f1952-orc-lr1e-05-lam",
+   "kind": "oracle",
+   "target": 0.85,
+   "cells": 0,
+   "pf": 357.81467,
+   "step_cost": 0.23367451722949764,
+   "speedup": 4.279456792534527,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.13083501216917434,
+   "keep_q": [
+    0.10765101322349085,
+    0.146806049520243,
+    0.13917635928366562,
+    0.12970662664929797
+   ],
+   "attr": 0.8640751550110198,
+   "gcos": 0.36148693073426114,
+   "gcos_adam": 0.4514844632087026,
+   "gnorm": 1.1160258157025633,
+   "ce_dense": 0.16421417404943314,
+   "ce_routed": 0.1553007626913671,
+   "ce_q_dense": [
+    0.29187889641425646,
+    0.15367645800846522,
+    0.11767105614674873,
+    0.09363028562826212
+   ],
+   "ce_q_routed": [
+    0.31090885816050357,
+    0.1395547964655962,
+    0.10094439554348832,
+    0.06979500059588034
+   ],
+   "oracle_routed_over_dense": 0.2511577617325218,
+   "gold_keep": 0.1302041009558001,
+   "distr_keep": 0.13085571376452745,
+   "gold_orc_keep": 0.1302041009558001,
+   "distr_orc_keep": 0.13085571376452745,
+   "orc_share": 0.13083501216917434,
+   "zero_docs": 0.0,
+   "zero_docs_orc": 0.0,
+   "orc_keep_q": [
+    0.10765101322349085,
+    0.146806049520243,
+    0.13917635928366562,
+    0.12970662664929797
+   ],
+   "meta_steps": 488,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "orc1doc80",
+   "run": "f8k-mt4-orc1doc80-f1952-orc-lr1e-05-lam",
+   "kind": "oracle",
+   "target": 0.8,
+   "cells": 0,
+   "pf": 348.03621,
+   "step_cost": 0.22728859426063797,
+   "speedup": 4.399692836558587,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.11958127834526754,
+   "keep_q": [
+    0.06205162170147633,
+    0.10515322079646977,
+    0.15026084978134616,
+    0.16085942110177792
+   ],
+   "attr": 0.8195362790871698,
+   "gcos": 0.2855250092587837,
+   "gcos_adam": 0.3541406512874296,
+   "gnorm": 0.9498999051713872,
+   "ce_dense": 0.21145290423367843,
+   "ce_routed": 0.15156280914833006,
+   "ce_q_dense": [
+    0.3409783968427142,
+    0.19199321736566355,
+    0.16846059452070564,
+    0.14437940820563036
+   ],
+   "ce_q_routed": [
+    0.33982140668591515,
+    0.1302990899039585,
+    0.07915887096133388,
+    0.05697186904211269
+   ],
+   "oracle_routed_over_dense": 0.24501191961591706,
+   "gold_keep": 0.11895642250486248,
+   "distr_keep": 0.119601968057605,
+   "gold_orc_keep": 0.11895642250486248,
+   "distr_orc_keep": 0.119601968057605,
+   "orc_share": 0.11958127834526754,
+   "zero_docs": 0.0,
+   "zero_docs_orc": 0.0,
+   "orc_keep_q": [
+    0.06205162170147633,
+    0.10515322079646977,
+    0.15026084978134616,
+    0.16085942110177792
+   ],
+   "meta_steps": 488,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "orc1doc70",
+   "run": "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub",
+   "kind": "oracle",
+   "target": 0.7,
+   "cells": 0,
+   "pf": 281.9436,
+   "step_cost": 0.1841261416586039,
+   "speedup": 5.431059332433862,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.04455134841129846,
+   "keep_q": [
+    0.023722903850909593,
+    0.04724952276600987,
+    0.05168954694827263,
+    0.055543420080001765
+   ],
+   "attr": 0.7198803740090719,
+   "gcos": 0.22748022041445945,
+   "gcos_adam": 0.28725272514473743,
+   "gnorm": 0.9210606838289915,
+   "ce_dense": 0.24009855512957104,
+   "ce_routed": 0.15048790121160935,
+   "ce_q_dense": [
+    0.36979541475655603,
+    0.22449675116871223,
+    0.18560984687971288,
+    0.18049220771330302
+   ],
+   "ce_q_routed": [
+    0.35744606556951025,
+    0.11826217253921462,
+    0.07354324633163996,
+    0.05270012040607265
+   ],
+   "oracle_routed_over_dense": 0.20396651975958757,
+   "gold_keep": 0.04389644269625247,
+   "distr_keep": 0.04457299853680047,
+   "gold_orc_keep": 0.04389644269625247,
+   "distr_orc_keep": 0.04457299853680047,
+   "orc_share": 0.04455134841129846,
+   "zero_docs": 0.0,
+   "zero_docs_orc": 0.0,
+   "orc_keep_q": [
+    0.023722903850909593,
+    0.04724952276600987,
+    0.05168954694827263,
+    0.055543420080001765
+   ],
+   "meta_steps": 488,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "orc1doc60",
+   "run": "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub",
+   "kind": "oracle",
+   "target": 0.6,
+   "cells": 0,
+   "pf": 257.96893,
+   "step_cost": 0.16846923905596178,
+   "speedup": 5.935801726200128,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.01709914079446902,
+   "keep_q": [
+    0.013971209966159548,
+    0.016059580246730272,
+    0.01837813179774996,
+    0.0199876411672363
+   ],
+   "attr": 0.6314976978555804,
+   "gcos": 0.22723692072973267,
+   "gcos_adam": 0.28546729295530576,
+   "gnorm": 0.9087484839631708,
+   "ce_dense": 0.2412609761947247,
+   "ce_routed": 0.16045160391215296,
+   "ce_q_dense": [
+    0.3925615384197626,
+    0.2169428224690625,
+    0.19501476386775735,
+    0.1605247800223163
+   ],
+   "ce_q_routed": [
+    0.3776621770907621,
+    0.12429857779233182,
+    0.07840454237932554,
+    0.0614411183861924
+   ],
+   "oracle_routed_over_dense": 0.18904617468321408,
+   "gold_keep": 0.0161531712244422,
+   "distr_keep": 0.01713057708308369,
+   "gold_orc_keep": 0.0161531712244422,
+   "distr_orc_keep": 0.01713057708308369,
+   "orc_share": 0.01709914079446902,
+   "zero_docs": 0.0,
+   "zero_docs_orc": 0.0,
+   "orc_keep_q": [
+    0.013971209966159548,
+    0.016059580246730272,
+    0.01837813179774996,
+    0.0199876411672363
+   ],
+   "meta_steps": 488,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "per-row 0.90 + random x1.15 (row scope)",
+   "run": "f8k-mt4-orc1row90r115-f1952-orc-lr1e-05-lam",
+   "kind": "oracle_row",
+   "target": 0.9,
+   "cells": 0,
+   "pf": 553.83853,
+   "step_cost": 0.36168989695376286,
+   "speedup": 2.7647993721202457,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.34763158380354864,
+   "keep_q": [
+    0.29463439633476407,
+    0.286700277555142,
+    0.3199149467143864,
+    0.4892767146099021
+   ],
+   "attr": 0.9130442756743504,
+   "gcos": 0.4532594325347703,
+   "gcos_adam": 0.47275742683763516,
+   "gnorm": 0.7525410701843083,
+   "ce_dense": 0.1840288366923933,
+   "ce_routed": 0.10632889131542111,
+   "ce_q_dense": [
+    0.291219029880938,
+    0.18387718510920883,
+    0.14240992368489017,
+    0.11860920809453628
+   ],
+   "ce_q_routed": [
+    0.2054641676730797,
+    0.09719915281920159,
+    0.06558363802242474,
+    0.057068606746978445
+   ],
+   "oracle_routed_over_dense": 0.3724835603920941,
+   "gold_keep": 0.7740110948027192,
+   "distr_keep": 0.33431766984821565,
+   "gold_orc_keep": 0.7171769479680628,
+   "distr_orc_keep": 0.144736228409299,
+   "orc_share": 0.16221126505875244,
+   "zero_docs": 0.00530313900597947,
+   "zero_docs_orc": 0.17539524322100838,
+   "orc_keep_q": [
+    0.13703814428203084,
+    0.1333494409208668,
+    0.1487976824770001,
+    0.229659792555112
+   ],
+   "meta_steps": 488,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "random 19% (rnd1doc19)",
+   "run": "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub",
+   "kind": "random",
+   "target": null,
+   "cells": 0,
+   "pf": 416.14356,
+   "step_cost": 0.2717667933546841,
+   "speedup": 3.679625415806026,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.196824,
+   "keep_q": [
+    0.196325,
+    0.19714615384615383,
+    0.19725,
+    0.19656923076923077
+   ],
+   "ce_routed": 0.20217766393442624,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "random 17% (rnd1doc17)",
+   "run": "f8k-mt4-rnd1doc17-f1952-orc-lr1e-05",
+   "kind": "random",
+   "target": null,
+   "cells": 0,
+   "pf": null,
+   "step_cost": null,
+   "speedup": null,
+   "steps": null,
+   "resumes": null,
+   "starts": null,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "random 11% (rnd1doc11)",
+   "run": "f8k-mt4-rnd1doc11-f1952-orc-lr1e-05",
+   "kind": "random",
+   "target": null,
+   "cells": 0,
+   "pf": null,
+   "step_cost": null,
+   "speedup": null,
+   "steps": null,
+   "resumes": null,
+   "starts": null,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "random 9% (rnd1doc9)",
+   "run": "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub",
+   "kind": "random",
+   "target": null,
+   "cells": 0,
+   "pf": 327.66663,
+   "step_cost": 0.21398603242697242,
+   "speedup": 4.673202211650298,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": null,
+   "y2": null,
+   "t8": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "t2": {
+    "contradiction": null,
+    "nq": null,
+    "outlier": null,
+    "oolong": null
+   },
+   "eval_sizes": [],
+   "cot": [],
+   "keep": 0.0967784,
+   "keep_q": [
+    0.09623166666666666,
+    0.09720076923076924,
+    0.09716166666666666,
+    0.09650692307692307
+   ],
+   "ce_routed": 0.23178176229508196,
+   "ftm_txt": "-",
+   "ftm": null
+  },
+  {
+   "label": "recipe lora64all32r20to7",
+   "run": "f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05",
+   "kind": "recipe",
+   "target": null,
+   "cells": 8,
+   "pf": 345.3306,
+   "step_cost": 0.2255216680735107,
+   "speedup": 4.434163726006325,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": 0.8455,
+   "y2": 0.9215,
+   "t8": {
+    "contradiction": 0.96,
+    "nq": 0.912,
+    "outlier": 0.86,
+    "oolong": 0.65
+   },
+   "t2": {
+    "contradiction": 0.978,
+    "nq": 0.972,
+    "outlier": 0.879,
+    "oolong": 0.857
+   },
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
+   "keep": 0.205478,
+   "keep_q": [
+    0.20501666666666665,
+    0.2057846153846154,
+    0.20588333333333333,
+    0.20522307692307692
+   ],
+   "ce_routed": 0.17577725409836067,
+   "ftm_txt": "4.60x",
+   "ftm": 4.600451838181004
+  }
+ ]
+}

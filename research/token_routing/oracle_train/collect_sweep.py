@@ -84,13 +84,14 @@ def meta_line(kind, run):
     return hit
 
 
-def resolve(base):
-    """the copy of an arm (Beaker / -lam / -cub) that was evaluated: most score cells, then a finished training log"""
+def resolve(base, cache):
+    """the copy of an arm (Beaker / -lam / -cub) that was evaluated: most score cells, then one with training data
+    (a local LOGJSON line, or a cached finished Beaker log), then the Beaker name"""
     best = None
     for c in COPIES:
         run = base + c
         sc = scores(run)
-        key = (len(sc), bool(meta_line("LOGJSON", run)) or c == "")
+        key = (len(sc), bool(meta_line("LOGJSON", run)) or run in cache)
         if best is None or key > best[0]:
             best = (key, run, sc)
     return best[1], best[2]
@@ -175,7 +176,7 @@ def main():
                          for r in a.random.split(",") if r] + [RECIPE]
     dense = []
     for base in DENSE:
-        run, sc = resolve(base)
+        run, sc = resolve(base, cache)
         lg = train_log_stats(run, cache) or {}
         dense.append({"run": run, "rows": int(re.search(r"-f(\d+)-", run).group(1)), "pf": lg.get("pf"),
                       "steps": lg.get("steps"), "y8": mean_rung(sc, "8k"), "y2": mean_rung(sc, "2k"),
@@ -183,7 +184,7 @@ def main():
     d1952 = next(d for d in dense if d["rows"] == 1952)
     rows = []
     for label, base, kind, target in arms:
-        run, sc = resolve(base)
+        run, sc = resolve(base, cache)
         lg = train_log_stats(run, cache) or {}
         fj = flops_json_of(run)
         pf = lg.get("pf") or (fj or {}).get("actual_pflops")
