@@ -1,9 +1,11 @@
 #!/bin/bash
 # Weighted token sampling on jsteinhardt (smokes, short proxies). Code is staged on the node first (stage_code.sh);
 # the base and the fresh-pool shard must be on the node's /data (mooney: q35-4b-base-markerfix, oracle/shards/mt4f1952).
-# Launched by launch_wts.py local (env: RUN, ARM_ARGS, CODE, MAX_STEPS, SEED, LR, MINUTES, NGPU; NOWANDB=1).
+# QOS preemptive (no per-user cap; any preemptive_high job can bump it, so the job requeues and resumes from
+# --save-folder). Launched by launch_wts.py local (env: RUN, ARM_ARGS, CODE, MAX_STEPS, SEED, LR, MINUTES, NGPU; NOWANDB=1).
 #SBATCH --partition=jsteinhardt
-#SBATCH --qos=preemptive_high
+#SBATCH --qos=preemptive
+#SBATCH --requeue
 #SBATCH --gres=gpu:2
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=200G

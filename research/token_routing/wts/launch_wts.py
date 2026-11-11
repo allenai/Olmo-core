@@ -134,6 +134,8 @@ def do_local(a):
         budget = a.budgets.split(",")[0]
         name = run_name(arm, budget, a.lr, a.seed, a.name_tag or (f"-st{a.steps}" if a.steps else "")) + "-loc"
         extra = arm_extra(arm) + (f" {a.extra}" if a.extra else "")
+        if a.resume_every and (not a.steps or a.steps > a.resume_every):  # preemptive QOS: requeued jobs resume
+            extra = f"{extra} --ephemeral-save-interval {a.resume_every}"
         env = dict(os.environ, RUN=name, ARM_ARGS=extra, CODE=a.code, SEED=str(a.seed), LR=str(a.lr),
                    MAX_STEPS=str(a.steps or 0), MINUTES=str(a.minutes or 60), NGPU=str(a.ngpu))
         cmd = ["sbatch", "-w", a.node, "-J", f"wts-{arm}", f"--gres=gpu:{a.ngpu}", f"{HERE}/run_wts_local.sbatch"]
@@ -144,6 +146,8 @@ def do_local(a):
             st["runs"][name] = {"ex": jid, "arm": arm, "budget": budget, "lr": a.lr, "seed": a.seed,
                                 "cluster": f"slurm:{a.node}", "git": git_head(), "extra": extra, "steps": a.steps}
             save(st)
+            sh([OPS, "register", "--run-id", name, "--experiment", "tokdrop_lr", "--cluster", "slurm",
+                "--job-id", jid, "--expected-minutes", str(a.minutes or 60), "--git", REPO])
 
 
 def do_eval(a):
