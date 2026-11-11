@@ -95,7 +95,10 @@ class EmoRouterV2(MoERouterV2):
         else:
             raise NotImplementedError(self.gating_function)
 
-        if self._profile_document_pool and scores.is_cuda and self.num_experts == 512:
+        if self.emo.causal_pool:
+            document_scores = ops.doc_prefix_sum(scores, segment_ids)
+            keep = ops.pool_keep_mask(document_scores, self._pool_sizes(segment_ids))
+        elif self._profile_document_pool and scores.is_cuda and self.num_experts == 512:
             from olmo_core.ops.emo_document_pool import document_pool_keep_mask
 
             keep = document_pool_keep_mask(scores, segment_ids, self._pool_sizes(segment_ids))
@@ -138,4 +141,5 @@ class EmoRouterV2(MoERouterV2):
         return (
             f"{super().extra_repr()}, emo_pool="
             f"[{self.emo.min_document_expert_pool}, {self.emo.max_document_expert_pool}]"
+            + (", causal" if self.emo.causal_pool else "")
         )
