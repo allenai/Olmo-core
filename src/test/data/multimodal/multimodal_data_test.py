@@ -864,3 +864,33 @@ def test_collator_refuses_to_truncate_image_tokens():
     # Cutting only trailing text is fine.
     out = MultimodalCollator(pad_token_id=0, pad_sequence_length=6)([ex])
     assert out["input_ids"].shape == (1, 6)
+
+
+def test_collator_protects_the_configured_image_patch_id():
+    """The fixed-length cut must guard the tokenizer's ``<im_patch>`` id, not only the released
+    constant, or a mixture with other token ids would silently cut an image block."""
+    from olmo_core.data.multimodal.collator import (
+        MultimodalCollator,
+        MultimodalCollatorConfig,
+    )
+    from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID
+
+    custom_id = IM_PATCH_ID + 5
+    ex = _two_branch_example()
+    ex["input_ids"] = np.where(ex["input_ids"] == IM_PATCH_ID, custom_id, ex["input_ids"])
+    ex.update(
+        images=np.zeros((1, 4, 8), dtype=np.float32),
+        pooled_patches_idx=np.zeros((1, 4), dtype=np.int64),
+    )
+    # The released id is not in the example, so the default collator lets the cut through ...
+    MultimodalCollator(pad_token_id=0, pad_sequence_length=1)([ex])
+    # ... while one told about the custom id refuses it.
+    with pytest.raises(ValueError, match="<im_patch>"):
+        MultimodalCollator(pad_token_id=0, pad_sequence_length=1, image_patch_token_id=custom_id)(
+            [ex]
+        )
+    built = MultimodalCollatorConfig(
+        pad_token_id=0, pad_sequence_length=1, image_patch_token_id=custom_id
+    ).build()
+    assert built.image_patch_token_id == custom_id
+    assert MultimodalCollatorConfig(pad_token_id=0).build().image_patch_token_id == IM_PATCH_ID

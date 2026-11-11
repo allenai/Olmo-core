@@ -20,6 +20,7 @@ from olmo_core.data.multimodal.packing import (
     iter_packs,
     pack_examples,
 )
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 
 def _example(tag, crops, size=7, dtype=np.float32):
@@ -217,5 +218,6 @@ def test_direct_image_copy_config_build_roundtrip_and_nested_default_omission(tm
         weights=[1.0],
         names=["caption"],
         tokenizer=SimpleNamespace(pad_token_id=0),
+        token_ids=Molmo2TokenIds(),
     )
     assert restored.build(dataset).defer_packed_image_copy is bool(flag)

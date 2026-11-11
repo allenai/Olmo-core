@@ -40,12 +40,17 @@ class MultimodalCollatorConfig(Config):
     """Also emit ``router_token_mask``, ``image_crop_counts`` and ``pooled_token_counts``
     (consumed by the OLMoDDP multimodal train module); off by default."""
 
+    image_patch_token_id: int = IM_PATCH_ID
+    """``<im_patch>`` id that truncation must never cut. Set it from the tokenizer's
+    :class:`~olmo_core.nn.vision.molmo2_tokens.Molmo2TokenIds` when it is not the released one."""
+
     def build(self) -> "MultimodalCollator":
         return MultimodalCollator(
             pad_token_id=self.pad_token_id,
             label_ignore_index=self.label_ignore_index,
             pad_sequence_length=self.pad_sequence_length,
             batch_metadata=self.batch_metadata,
+            image_patch_token_id=self.image_patch_token_id,
         )
 
 
@@ -64,6 +69,7 @@ class MultimodalCollator:
     :param batch_metadata: Also emit a boolean ``router_token_mask`` (real, non-padding token
         slots) and per-row ``image_crop_counts`` / ``pooled_token_counts``. Off by default,
         so the batch keys match the Molmo2 training scripts.
+    :param image_patch_token_id: The ``<im_patch>`` id that a fixed-length cut must not drop.
     """
 
     def __init__(
@@ -72,11 +78,13 @@ class MultimodalCollator:
         label_ignore_index: int = -100,
         pad_sequence_length: Optional[int] = None,
         batch_metadata: bool = False,
+        image_patch_token_id: int = IM_PATCH_ID,
     ):
         self.pad_token_id = pad_token_id
         self.label_ignore_index = label_ignore_index
         self.pad_sequence_length = pad_sequence_length
         self.batch_metadata = batch_metadata
+        self.image_patch_token_id = image_patch_token_id
 
     def _pad_1d(self, arrays: List[np.ndarray], value, max_len: int, dtype) -> torch.Tensor:
         out = np.full((len(arrays), max_len), value, dtype=dtype)
@@ -93,7 +101,7 @@ class MultimodalCollator:
             # pooled features than image tokens, which the model rejects, so refuse early.
             max_len = self.pad_sequence_length
             for ex in examples:
-                if np.any(ex["input_ids"][max_len:] == IM_PATCH_ID):
+                if np.any(ex["input_ids"][max_len:] == self.image_patch_token_id):
                     raise ValueError(
                         f"pad_sequence_length={max_len} would truncate <im_patch> tokens "
                         "(the image block must fit entirely within the sequence)"

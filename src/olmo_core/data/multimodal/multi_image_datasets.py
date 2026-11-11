@@ -36,6 +36,7 @@ from .message_sequence import encode_sft_example
 from .paths import ACADEMIC_DATASETS, PIXMO_DATASETS, TORCH_DATASETS
 from .pixmo_ama import NO_POINT_PREFIX
 from .sequence_builder import example_rng
+from .sft_common import truncate_example
 from .sft_formatter import SftFormatter
 
 __all__ = [
@@ -78,7 +79,7 @@ class _MultiImageSftDataset:
         formatted = self._format_row(self._rows[index], rng)
         turns = self._formatter.format_branches(formatted, index=index, rng=rng)
         images = _open_images(formatted["image"])
-        return encode_sft_example(
+        seq = encode_sft_example(
             self.tokenizer,
             images,
             turns,
@@ -88,6 +89,15 @@ class _MultiImageSftDataset:
             loss_token_weighting=self.config.loss_token_weighting,
             message_weight=self.config.message_weight,
             shuffle_rng=rng,
+        )
+        max_len = getattr(self.config, "max_sequence_length", None)
+        if max_len is None:
+            return seq
+        # Several high-resolution images can need more tokens than the recipe's sequence length.
+        # Raising here lets the loader skip the example like any other bad row; left to the
+        # collator it would stop the run.
+        return truncate_example(
+            seq, max_len, recompute_root_subsegments=self.config.loss_token_weighting != "none"
         )
 
 
@@ -102,6 +112,9 @@ class MantisInstructDatasetConfig(Config):
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: Optional[float] = None
     seed: int = 0
+    max_sequence_length: Optional[int] = None
+    """Maximum example length. A longer example is tail-truncated, or rejected (so the loader
+    skips it) when that would cut an image block. ``None`` leaves examples unchanged."""
 
     def build(self, tokenizer) -> "MantisInstructDataset":
         return MantisInstructDataset(self, tokenizer)
@@ -159,6 +172,9 @@ class CorrectionQaDatasetConfig(Config):
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: Optional[float] = None
     seed: int = 0
+    max_sequence_length: Optional[int] = None
+    """Maximum example length. A longer example is tail-truncated, or rejected (so the loader
+    skips it) when that would cut an image block. ``None`` leaves examples unchanged."""
 
     def build(self, tokenizer) -> "CorrectionQaDataset":
         return CorrectionQaDataset(self, tokenizer)
@@ -208,6 +224,9 @@ class CoSynMultiDocDatasetConfig(Config):
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: Optional[float] = None
     seed: int = 0
+    max_sequence_length: Optional[int] = None
+    """Maximum example length. A longer example is tail-truncated, or rejected (so the loader
+    skips it) when that would cut an image block. ``None`` leaves examples unchanged."""
 
     def build(self, tokenizer) -> "CoSynMultiDocDataset":
         return CoSynMultiDocDataset(self, tokenizer)
@@ -265,6 +284,9 @@ class PixMoMultiPointsDatasetConfig(Config):
     loss_token_weighting: str = "none"
     message_weight: Optional[float] = None
     seed: int = 0
+    max_sequence_length: Optional[int] = None
+    """Maximum example length. A longer example is tail-truncated, or rejected (so the loader
+    skips it) when that would cut an image block. ``None`` leaves examples unchanged."""
 
     def build(self, tokenizer) -> "PixMoMultiPointsDataset":
         return PixMoMultiPointsDataset(self, tokenizer)

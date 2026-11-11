@@ -15,6 +15,7 @@ from olmo_core.data.multimodal.mixture_data_loader import (
     MixtureDataLoaderConfig,
 )
 from olmo_core.exceptions import OLMoConfigurationError
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 
 class _Dataset:
@@ -102,6 +103,7 @@ def test_prefetch_config_round_trip_and_build(tmp_path, depth):
         weights=[1.0],
         names=["caption"],
         tokenizer=SimpleNamespace(pad_token_id=0),
+        token_ids=Molmo2TokenIds(),
     )
     loader = restored.build(dataset)
     assert loader.prefetch_workers == 4
@@ -176,3 +178,19 @@ def test_native_prefetch_preserves_every_batch_field_and_state(
                 _assert_equal(state, expected_state)
         finally:
             iterator.close()
+
+
+def test_loader_collator_guards_the_mixtures_image_patch_id(tmp_path):
+    """The collator's truncation guard has to follow the mixture's token ids, which are not the
+    released Molmo2 ones when the tokenizer is prepared differently."""
+    config = MixtureDataLoaderConfig(
+        global_batch_size=16, sequence_length=16, work_dir=str(tmp_path)
+    )
+    dataset: Any = SimpleNamespace(
+        datasets=[_Dataset(100)],
+        weights=[1.0],
+        names=["caption"],
+        tokenizer=SimpleNamespace(pad_token_id=0),
+        token_ids=Molmo2TokenIds(im_patch_id=Molmo2TokenIds().im_patch_id + 11),
+    )
+    assert config.build(dataset).collator.image_patch_token_id == Molmo2TokenIds().im_patch_id + 11
