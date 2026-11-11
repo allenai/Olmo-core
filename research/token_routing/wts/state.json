@@ -117,6 +117,39 @@
    "git": "9a94b49db364649a8596f6e3fb68ec407bfd900c",
    "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,11:0.3,15:0.2,19:0.2,23:0.2,27:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both,price=0.216,center=none --ephemeral-save-interval 100",
    "steps": 0
+  },
+  "f8k-mt4-wtsS2a-f1952-wts-lr1e-05-loc": {
+   "ex": "4432903",
+   "arm": "wtsS2a",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "30856af1d2be350354b23b283ddf9cbe106c44e6",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2g-f1952-wts-lr1e-05-loc": {
+   "ex": "4432904",
+   "arm": "wtsS2g",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "30856af1d2be350354b23b283ddf9cbe106c44e6",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=gdn --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS0wr-f1952-wts-lr1e-05-loc": {
+   "ex": "4432905",
+   "arm": "wtsS0wr",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "30856af1d2be350354b23b283ddf9cbe106c44e6",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100",
+   "steps": 0
   }
  },
  "evals": {
