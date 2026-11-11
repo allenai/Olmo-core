@@ -1096,11 +1096,13 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             kwargs["loss_weight_div_factor"] = self._global_batch_divisor(
                 (loss_masks * (loss_masks > 0)).sum()
             )
-        if getattr(self, "router_loss_divisor", "valid_tokens") == "loss_tokens":
-            if "loss_weight_div_factor" not in kwargs:
-                raise OLMoConfigurationError("router_loss_divisor='loss_tokens' needs loss_masks")
+        if (
+            getattr(self, "router_loss_divisor", "valid_tokens") == "loss_tokens"
+            and "loss_weight_div_factor" in kwargs
+        ):
             kwargs["router_loss_div_factor"] = kwargs["loss_weight_div_factor"]
         else:
+            # Valid tokens, also for batches without loss weights (the trainer's dry-run batch).
             kwargs["router_loss_div_factor"] = self._global_batch_divisor(valid_tokens)
         return kwargs
 
