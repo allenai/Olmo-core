@@ -1664,7 +1664,12 @@ class Trainer:
             return  # for backwards compatibility
 
         log.info("Starting forward/backward dry-run batch...")
+        # The dry run must not advance the RNGs: a resumed run restored them from its checkpoint,
+        # and a model that samples in its forward (EMo document pools) would otherwise train the
+        # next step on different draws than the uninterrupted run.
+        rng_state = EnvRngStates.current_state()
         self.train_module.train_batch(batch, dry_run=True)
+        rng_state.restore()
         log.info("Dry-run complete")
         self._log_ep_no_sync_symm_buffer_summary(context="after dry-run")
 
