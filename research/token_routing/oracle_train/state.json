@@ -356,6 +356,126 @@
    "ex": "01M6M5JHT82PNEWRJSH2H2S46E",
    "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
    "task": "oolong"
+  },
+  "f8k-mt4-dense-f488-tde-lr5e-06-cub-evcontradiction": {
+   "ex": "01M748DWCT9WDJQ0SBGNZ1EV5W",
+   "train_run": "f8k-mt4-dense-f488-tde-lr5e-06-cub",
+   "task": "contradiction"
+  },
+  "f8k-mt4-dense-f488-tde-lr5e-06-cub-evnq": {
+   "ex": "01M748EP8SZK3VNNJDBWKFP6AT",
+   "train_run": "f8k-mt4-dense-f488-tde-lr5e-06-cub",
+   "task": "nq"
+  },
+  "f8k-mt4-dense-f488-tde-lr5e-06-cub-evoutlier": {
+   "ex": "01M748FJ1PMFE18WRWS43Y2B7Y",
+   "train_run": "f8k-mt4-dense-f488-tde-lr5e-06-cub",
+   "task": "outlier"
+  },
+  "f8k-mt4-dense-f488-tde-lr5e-06-cub-evoolong": {
+   "ex": "01M748GNMER70YKNZTZKSY3CFS",
+   "train_run": "f8k-mt4-dense-f488-tde-lr5e-06-cub",
+   "task": "oolong"
+  },
+  "f8k-mt4-dense-f976-tde-lr5e-06-cub-evcontradiction": {
+   "ex": "01M748HM3EKHV931VG4S444761",
+   "train_run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
+   "task": "contradiction"
+  },
+  "f8k-mt4-dense-f976-tde-lr5e-06-cub-evnq": {
+   "ex": "01M748JFBSPX68X1H8ZN78Y447",
+   "train_run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
+   "task": "nq"
+  },
+  "f8k-mt4-dense-f976-tde-lr5e-06-cub-evoutlier": {
+   "ex": "01M748M07XHT8DD1FE2V9J5ZN2",
+   "train_run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
+   "task": "outlier"
+  },
+  "f8k-mt4-dense-f976-tde-lr5e-06-cub-evoolong": {
+   "ex": "01M748N3VMJWPDCY6SRXVKEEM2",
+   "train_run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
+   "task": "oolong"
+  },
+  "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub-evcontradiction": {
+   "ex": "01M74DPTW1MSH71T8VT6S849HZ",
+   "train_run": "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub",
+   "task": "contradiction"
+  },
+  "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub-evnq": {
+   "ex": "01M74DR3V9A7K5EPYR0TPZA2K3",
+   "train_run": "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub",
+   "task": "nq"
+  },
+  "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub-evoutlier": {
+   "ex": "01M74DS266DF3M5693WBS0JZK3",
+   "train_run": "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub",
+   "task": "outlier"
+  },
+  "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub-evoolong": {
+   "ex": "01M74DSVNTJD0M0TCS1BE7JN7K",
+   "train_run": "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub",
+   "task": "oolong"
+  },
+  "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub-evcontradiction": {
+   "ex": "01M74DTP3ZCC2CJ3WH382BDEZ6",
+   "train_run": "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub",
+   "task": "contradiction"
+  },
+  "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub-evnq": {
+   "ex": "01M74DVQKMMJTV9NR94MNEMYKT",
+   "train_run": "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub",
+   "task": "nq"
+  },
+  "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub-evoutlier": {
+   "ex": "01M74DWKGVCKKDAN04BY9DZY15",
+   "train_run": "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub",
+   "task": "outlier"
+  },
+  "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub-evoolong": {
+   "ex": "01M74DXHHDMAECDD72ZY5PW7Q8",
+   "train_run": "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub",
+   "task": "oolong"
+  },
+  "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub-evcontradiction": {
+   "ex": "01M74DYERA4AESJHX16QXD4CPP",
+   "train_run": "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub-evnq": {
+   "ex": "01M74DZAF620KSWS5W781TENK6",
+   "train_run": "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub-evoutlier": {
+   "ex": "01M74E06Z2GKC3774J2CX1E0XE",
+   "train_run": "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub-evoolong": {
+   "ex": "01M74E1AWRQN9FR6BJHKWCVY5Y",
+   "train_run": "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub",
+   "task": "oolong"
+  },
+  "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub-evcontradiction": {
+   "ex": "01M74E2N23ETQ8Z81B68E2KBBD",
+   "train_run": "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub-evnq": {
+   "ex": "01M74E3YCG41TCAGNGE2BM08B9",
+   "train_run": "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub-evoutlier": {
+   "ex": "01M74E4TCBBSZAZ8FX6Y11EQ08",
+   "train_run": "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub-evoolong": {
+   "ex": "01M74E5QT0P70CQJMYXJQKE1PA",
+   "train_run": "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub",
+   "task": "oolong"
   }
  },
  "insurance": {
