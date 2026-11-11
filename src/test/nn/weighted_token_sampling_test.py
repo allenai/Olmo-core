@@ -179,7 +179,8 @@ def test_parse_wts():
     o = parse_wts("weights=both,mix=0.2,price=0.26")
     assert o["weights"] == "both" and o["mix"] == 0.2 and o["price"] == 0.26 and o["sample"] == 1
     assert parse_wts("") is None
-    for bad in ("foo=1", "weights=x", "sampler=z", "sample=0"):
+    assert parse_wts("hard=1")["hard"] == "1"
+    for bad in ("foo=1", "weights=x", "sampler=z", "sample=0", "hard=a"):
         with pytest.raises(ValueError):
             parse_wts(bad)
     with pytest.raises(ValueError):
@@ -245,6 +246,38 @@ def test_wts_two_cuts_carry_weights_cpu():
     model.eval()
     with torch.no_grad():
         assert torch.isfinite(model(ids, labels=labels).loss)
+
+
+def test_wts_hard_stage_is_topk_and_keeps_weights_cpu():
+    """hard=1: the first cut samples (weights w = 1/p), the second keeps the recipe's top-k -- no survival
+    probabilities, so its survivors carry their first-cut weights unchanged and its fit is unweighted."""
+    model, router = _wts_model(4, stages="1:0.5,2:0.25", wts="weights=attn,hard=1")
+    chain = router.chain()
+    seen = {}
+    for i, blk in enumerate(model.blocks.values()):
+        orig = blk.attention.forward
+
+        def fwd(*a, _o=orig, _i=i, **kw):
+            seen[_i] = kw.get("token_weight")
+            return _o(*a, **kw)
+
+        blk.attention.forward = fwd
+    ids, cid, labels = _row(B=2)
+    for step in (1, 2, 3):
+        model.zero_grad(set_to_none=True)
+        for r in chain:
+            r.begin_step(step, model=model)
+            r.metrics()
+        out = model(ids, labels=labels)
+        assert torch.isfinite(out.loss)
+        out.loss.backward()
+        assert chain[0]._last_p is not None and chain[1]._last_p is None
+        assert chain[0]._pending[-1]["ipw"] is not None and chain[1]._pending[-1]["ipw"] is None
+        w1, w2 = seen[1], seen[2]
+        assert w1 is not None and w2 is not None and float(w1.max()) > 1.0
+        # the second cut adds no weight: its survivors' weights are a subset of the first cut's values
+        v1 = set(torch.unique(w1).tolist())
+        assert set(torch.unique(w2).tolist()) <= v1
 
 
 def test_wts_all_ones_is_bit_exact_cpu():

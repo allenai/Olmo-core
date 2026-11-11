@@ -94,9 +94,11 @@ TARGETS = ("gnorm", "gxh", "dh", "mix")
 #:                  the first cut keeps this share of body tokens in expectation; the controller takes over after
 #:   center   row   router targets centred per row (row: only within-row ratios are fit), over the batch (batch), or
 #:                  not at all (none: the absolute gradient scale, so one price compares cuts and rows)
+#:   hard     ""    stage indices (0 = first cut, "+"-separated, e.g. "1") that keep the recipe's deterministic top-k
+#:                  instead of sampling: p = 1 for their survivors, so weights pass through unchanged
 WTS_DEFAULTS: Dict[str, Any] = {"sample": 1, "weights": "none", "mix": 0.1, "temp": 1.0, "sampler": "sys", "ipw": 1,
                                 "tcorr": 1, "clip": 0.0, "price": 0.0, "pmin": 0.02, "alloc": "row", "multw": 1,
-                                "gain": 0.5, "tau0": 5.0, "init": 0.2, "center": "row"}
+                                "gain": 0.5, "tau0": 5.0, "init": 0.2, "center": "row", "hard": ""}
 
 
 def parse_wts(spec: str) -> Optional[Dict[str, Any]]:
@@ -124,6 +126,8 @@ def parse_wts(spec: str) -> Optional[Dict[str, Any]]:
         raise ValueError(f"online router wts alloc must be row / doc, got {out['alloc']!r}")
     if not out["sample"]:
         raise ValueError("online router wts needs sample=1 (top-k keeps carry no inclusion probabilities)")
+    if out["hard"] and not all(x.strip().isdigit() for x in out["hard"].split("+")):
+        raise ValueError(f"online router wts hard must be '+'-separated stage indices, got {out['hard']!r}")
     if not 0.0 <= out["mix"] <= 1.0 or out["temp"] <= 0 or not 0.0 < out["pmin"] <= 1.0 or out["price"] < 0:
         raise ValueError("online router wts: mix in [0, 1], temp > 0, pmin in (0, 1], price >= 0")
     return out
@@ -1102,7 +1106,7 @@ class OnlineTokenRouter:
         self._last_p = None
         if dense:
             keep = body.clone()
-        elif self.wts is not None:
+        elif self.wts is not None and str(self.stage_idx) not in str(self.wts["hard"]).split("+"):
             keep = self._wts_keep(model, fp, ids, cid, score, kf, gen,
                                   uniform=warm_rand or c.score == "random" or c.explore_frac >= 1.0)
         else:
