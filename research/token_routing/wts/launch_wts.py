@@ -149,6 +149,8 @@ def do_local(a):
                    MAX_STEPS=str(a.steps or 0), MINUTES=str(a.minutes or 60), NGPU=str(a.ngpu))
         # a full-length run must leave the final model in the run root (the eval reads it); never rely on the shell
         env.setdefault("NOWANDB", "1")
+        # the node-local shard for this budget (f<rows>[@steps] -> mt4f<rows>); the sbatch default is mt4f1952
+        env["DATA"] = f"/data/prasann/oracle/shards/mt4{budget.split('@')[0]}"
         if not a.steps:
             env["SAVECK"] = "1"
         elif not env.get("SAVECK"):
