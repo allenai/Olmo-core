@@ -174,9 +174,10 @@ class Checkpointer:
 
         # Save model and optim state.
         train_module_dir = f"{dir}/model_and_optim"
+        state_dict = train_module.state_dict_to_save()
         future = async_save_state_dict(
             train_module_dir,
-            train_module.state_dict_to_save(),
+            state_dict,
             process_group=self.process_group,
             thread_count=self.save_thread_count,
             #  process_count=self.save_process_count,
@@ -189,6 +190,9 @@ class Checkpointer:
 
         def done_callback(fut: Future):
             del fut
+            # A ThreadPoolExecutor keeps its call arguments alive until all callbacks
+            # finish, so release the staged tensors before downstream callbacks run.
+            state_dict.clear()
             self._save_metadata(dir, CheckpointMetadata(ephemeral=ephemeral))
 
         # Upload metadata when everything else is done.
