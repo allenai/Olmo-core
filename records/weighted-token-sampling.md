@@ -5,7 +5,7 @@ updated: 2026-11-10
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (S1/S2 runs training)
+status: in progress (S1-S3 scored at 1,952 rows: all trail the recipe on outlier; round 2 running)
 superseded_by: 
 artifact: 
 summary: Replaces the recipe's fixed top-k token drop (20% after block 7, 7% after 16) with sampled survival (exact inclusion probabilities), token weights w = 1/p carried into attention (log w key bias) and Gated DeltaNet (exact w-fold write), an IPW router fit, and a price rule p = clip(s / (tau sqrt(c)), pmin, 1) with tau set by a FLOP controller. Staged S0-S5; results tables below.
@@ -82,7 +82,38 @@ not match the log; comparisons here use the measured values.
 
 ## Results
 
-(scores filled in as evals land; Beaker evals for S1 / S2b queued since 11-10 afternoon)
+### 8k scores, 1,952 rows/task, seed 0 (eval_size 500 per cell, no-cot; local slurm eval path, 11-11)
+
+SE of the 4-task 8k mean is about 0.008; per task about 0.01-0.02 (outlier at 0.8: 0.018).
+
+| arm | step cost (x dense) | peak GiB | contra | nq | outlier | oolong | 8k mean | 2k mean | outlier 8k: share with none right |
+|---|---|---|---|---|---|---|---|---|---|
+| recipe `lora64all32r20to7` (seed 0 / seed 1) | 0.221 / 0.220 | 26.9 / 27.2 | 0.960 / 0.956 | 0.912 / 0.922 | 0.860 / 0.861 | 0.650 / 0.649 | **0.846 / 0.847** | 0.921 / 0.919 | - |
+| dense (LR 5e-6, f488 point of the curve) | 1.0 | - | | | | | 0.843 | | - |
+| wtsS0wr (recipe top-k, warmup routed) | 0.219 | 24.2 | 0.956 | 0.920 | 0.838 | 0.633 | 0.837 | 0.907 | 0.158 |
+| wtsS1 (sampled, no weights) | 0.215 | 24.1* | 0.942 | 0.930 | 0.670 | 0.620 | 0.790 | 0.895 | 0.326 |
+| wtsS2a (weights: attention) | 0.215 | 24.2 | 0.945 | 0.914 | 0.811 | 0.638 | 0.827 | 0.903 | 0.184 |
+| wtsS2g (weights: DeltaNet) | 0.215 | 24.2 | 0.941 | 0.902 | 0.775 | 0.641 | 0.815 | 0.924 | 0.220 |
+| wtsS2b (weights: both) | 0.215 | 24.1* | 0.937 | 0.920 | 0.794 | 0.637 | 0.822 | 0.918 | 0.202 |
+| wtsS3 (price, cuts 7 / 16) | 0.214 | 24.6 | 0.934 | 0.914 | 0.725 | 0.609 | 0.795 | 0.929 | 0.274 |
+| wtsS3d (price, alloc=doc) | 0.216 | 24.2 | 0.919 | 0.914 | 0.710 | 0.638 | 0.795 | 0.922 | 0.288 |
+| wtsS3m (price, 6 cuts) | 0.213 | 25.8 | 0.953 | 0.910 | 0.665 | 0.629 | 0.789 | 0.910 | 0.332 |
+
+\* S1 / S2b logged 30.4 GiB because of the diag leak; the same config without diag (memory probe) peaks at 24.1.
+The recipe's 26.9 includes its dense step 1: routed from step 1 (S0wr) it peaks at 24.2. FTM vs the dense curve is an
+upper bound for every wts arm (below the lowest dense point, 0.843 at 1,531 PF): `<=` 4.9-5.0x; recipe `=` 4.6-4.7x.
+
+Reading. The gap is almost all outlier (recipe 0.86; wts 0.67-0.81), with contra about -0.02 and oolong about -0.01.
+Outlier errors are all-or-nothing (an example gets all three outlier documents or none), so they are not a parsing or
+partial-recall effect (outputs checked: no empty or malformed generations). Order: top-k (S0wr) > weights in attention
+(S2a) > both (S2b) > DeltaNet (S2g) > no weights (S1). Weights recover most of what sampling loses, attention weights
+more than DeltaNet weights. The price rule (S3*) loses outlier again: it keeps less after block 16 (4.5% of the body vs
+7%) and uses DeltaNet weights. Per-document allocation (S3d) does not help (0.710 vs 0.725), so empty documents
+(15% in S3, 0.2% in S3d) are not the cause. With the oracle sweep (uniform per-document random at 19.7% keep after
+block 7 alone: outlier 0.857; at 9.7%: 0.689), the deep cut is the likely place sampling hurts: the recipe's top-k at
+block 16 keeps 7% well, a soft sample keeps 7% close to random.
+
+Training-side detail:
 
 Training-side, 1,952 rows/task, 488 steps, 2 H200 (mooney), seed 0:
 
@@ -118,5 +149,8 @@ alloc=doc arm wtsS3d keeps every document's share).
 | date | hypothesis | outcome |
 |---|---|---|
 | 11-10 | `1 - (1-b)^w`, `w g` alone reproduce w writes | false with decay: value needs the rescale `c`; with it exact (tests) |
+| 11-11 | sampling loses only through IPW noise; weights fix it | partly: weights recover 0.67 -> 0.81 outlier, still under top-k 0.84-0.86 |
+| 11-11 | price rule needs alloc=doc to keep every document (outlier) | no: S3d 0.710 vs S3 0.725; empty documents are not the cause |
+| 11-11 | soft selection at the deep cut costs outlier; sharper scores (temp 0.5, 0.2) close the gap | round 2 running (S2aT5, S2aT2, S1T2, S3aT5) |
 | 11-10 | peak memory creeps 26.9 -> 30.5 GiB in S1/S2b | diag (`--st-otr-diag-every`) shallow-copied router links, leaking stale router copies each diag; fixed in the callback, probe without diag flat at 24.1 GiB |
 | 11-10 | row-centred targets let one price trade off two cuts | no: centring erases the gradient scale between cuts; added `center=none` and tau calibration |
