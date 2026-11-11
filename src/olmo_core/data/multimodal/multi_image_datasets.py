@@ -29,6 +29,7 @@ import numpy as np
 from PIL import Image
 
 from olmo_core.config import Config
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .dataset_compat import load_from_disk_compat
 from .detect_counting_question import is_pixmo_point_and_count_question
@@ -36,6 +37,7 @@ from .message_sequence import encode_sft_example
 from .paths import ACADEMIC_DATASETS, PIXMO_DATASETS, TORCH_DATASETS
 from .pixmo_ama import NO_POINT_PREFIX
 from .sequence_builder import example_rng
+from .sft_common import SftMessageFormat
 from .sft_formatter import SftFormatter
 
 __all__ = [
@@ -88,6 +90,8 @@ class _MultiImageSftDataset:
             loss_token_weighting=self.config.loss_token_weighting,
             message_weight=self.config.message_weight,
             shuffle_rng=rng,
+            token_ids=self.config.token_ids,
+            message_format=self.config.message_format,
         )
 
 
@@ -101,6 +105,10 @@ class MantisInstructDatasetConfig(Config):
     max_images: int = 5
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: Optional[float] = None
+    token_ids: Optional[Molmo2TokenIds] = None
+    """Image token IDs of the language model; the mixture sets them (``None``: Molmo2's)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``qwen3`` (released Molmo2) or ``olmo35`` (the Olmo 3.5 text SFT chat template)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "MantisInstructDataset":
@@ -158,6 +166,10 @@ class CorrectionQaDatasetConfig(Config):
     max_crops: int = 8
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: Optional[float] = None
+    token_ids: Optional[Molmo2TokenIds] = None
+    """Image token IDs of the language model; the mixture sets them (``None``: Molmo2's)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``qwen3`` (released Molmo2) or ``olmo35`` (the Olmo 3.5 text SFT chat template)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "CorrectionQaDataset":
@@ -207,6 +219,10 @@ class CoSynMultiDocDatasetConfig(Config):
     max_crops: int = 8
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: Optional[float] = None
+    token_ids: Optional[Molmo2TokenIds] = None
+    """Image token IDs of the language model; the mixture sets them (``None``: Molmo2's)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``qwen3`` (released Molmo2) or ``olmo35`` (the Olmo 3.5 text SFT chat template)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "CoSynMultiDocDataset":
@@ -264,6 +280,10 @@ class PixMoMultiPointsDatasetConfig(Config):
     p_high_res: float = 0.0
     loss_token_weighting: str = "none"
     message_weight: Optional[float] = None
+    token_ids: Optional[Molmo2TokenIds] = None
+    """Image token IDs of the language model; the mixture sets them (``None``: Molmo2's)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``qwen3`` (released Molmo2) or ``olmo35`` (the Olmo 3.5 text SFT chat template)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "PixMoMultiPointsDataset":

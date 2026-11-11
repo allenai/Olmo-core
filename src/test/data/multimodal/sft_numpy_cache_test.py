@@ -102,3 +102,62 @@ def test_mid_row_cut_cache_is_refused(numpy_dir):
     stats_path.write_text(json.dumps(stats))
     with pytest.raises(OLMoConfigurationError, match="row_aligned_parts"):
         check_row_aligned_cache(str(numpy_dir))
+
+
+def _write_replay_dir(path: Path, row_lengths, *, seed: int = 0, metadata: bool = True) -> Path:
+    """A long-context replay dir as the current text SFT recipe's: one document plus EOS per row,
+    every position a label, one metadata line per row, uint32 tokens (Dolma2's vocabulary)."""
+    rng = np.random.RandomState(seed)
+    path.mkdir()
+    tokens, lines, start = [], [], 0
+    for length in row_lengths:
+        row = rng.randint(1000, 90000, size=length - 1).tolist() + [EOS]
+        tokens += row
+        lines.append(f"{start},{start + length}")
+        start += length
+    (path / "token_ids_part_0000.npy").write_bytes(np.asarray(tokens, dtype=np.uint32).tobytes())
+    (path / "labels_mask_part_0000.npy").write_bytes(np.ones(len(tokens), dtype=np.uint8).tobytes())
+    if metadata:
+        with gzip.open(path / "token_ids_part_0000.csv.gz", "wt") as f:
+            f.write("\n".join(lines) + "\n")
+    return path
+
+
+def test_extra_numpy_dir_adds_replay_instances(tmp_path, numpy_dir, reference):
+    sequence_length = int(reference["sequence_length"])
+    replay = _write_replay_dir(tmp_path / "replay", [sequence_length // 2, sequence_length // 3])
+    base = SftNumpyCacheConfig(
+        numpy_dir=str(numpy_dir), work_dir=str(tmp_path / "w0"), sequence_length=sequence_length
+    ).build()
+    with_replay = SftNumpyCacheConfig(
+        numpy_dir=str(numpy_dir),
+        work_dir=str(tmp_path / "w1"),
+        sequence_length=sequence_length,
+        extra_numpy_dirs=[str(replay)],
+    ).build()
+    assert len(with_replay) > len(base)
+    # The cache's instances are unchanged; the replay's rows train every position but the last.
+    for index in range(len(base)):
+        np.testing.assert_array_equal(base[index]["input_ids"], with_replay[index]["input_ids"])
+    replay_ids = set(np.frombuffer((replay / "token_ids_part_0000.npy").read_bytes(), np.uint32))
+    found = False
+    for index in range(len(base), len(with_replay)):
+        example = with_replay[index]
+        doc = example["document_ids"]
+        for d in np.unique(doc):
+            ids = example["input_ids"][doc == d]
+            if ids[-1] == EOS and set(ids.tolist()) <= replay_ids:
+                found = True
+                assert (example["loss_masks"][doc == d][:-1] > 0).all()
+    assert found
+
+
+def test_extra_numpy_dir_without_metadata_is_refused(tmp_path, numpy_dir, reference):
+    replay = _write_replay_dir(tmp_path / "replay", [100, 200], metadata=False)
+    with pytest.raises(OLMoConfigurationError, match="metadata"):
+        SftNumpyCacheConfig(
+            numpy_dir=str(numpy_dir),
+            work_dir=str(tmp_path / "w"),
+            sequence_length=int(reference["sequence_length"]),
+            extra_numpy_dirs=[str(replay)],
+        ).build()

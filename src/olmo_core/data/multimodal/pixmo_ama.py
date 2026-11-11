@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from PIL import Image
 
 from olmo_core.config import Config
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .detect_counting_question import is_pixmo_point_and_count_question
 from .message_sequence import encode_sft_example
 from .paths import PIXMO_DATASETS
 from .sequence_builder import example_rng
+from .sft_common import SftMessageFormat
 
 __all__ = ["PixMoAmaDatasetConfig", "PixMoAmaDataset"]
 
@@ -56,6 +58,10 @@ NO_POINT_PREFIX = (
 class PixMoAmaDatasetConfig(Config):
     max_crops: int = 8
     loss_token_weighting: str = "root_subsegments_root_tokens"
+    token_ids: Optional[Molmo2TokenIds] = None
+    """Image token IDs of the language model; the mixture sets them (``None``: Molmo2's)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``qwen3`` (released Molmo2) or ``olmo35`` (the Olmo 3.5 text SFT chat template)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "PixMoAmaDataset":
@@ -93,4 +99,6 @@ class PixMoAmaDataset:
             max_crops=self.config.max_crops,
             loss_token_weighting=self.config.loss_token_weighting,
             shuffle_rng=rng,
+            token_ids=self.config.token_ids,
+            message_format=self.config.message_format,
         )
