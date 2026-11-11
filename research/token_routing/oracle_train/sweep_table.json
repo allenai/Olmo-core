@@ -2,6 +2,7 @@
  "dense": [
   {
    "run": "f8k-mt4-dense-f488-tde-lr5e-06-cub",
+   "eval_path": "local slurm",
    "rows": 488,
    "pf": 379.18001,
    "steps": 122,
@@ -12,6 +13,7 @@
   },
   {
    "run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
+   "eval_path": "local slurm",
    "rows": 976,
    "pf": 762.41774,
    "steps": 244,
@@ -22,6 +24,7 @@
   },
   {
    "run": "f8k-mt4-dense-f1952-tde-lr5e-06",
+   "eval_path": "Beaker",
    "rows": 1952,
    "pf": 1531.25242,
    "steps": 488,
@@ -32,6 +35,7 @@
   },
   {
    "run": "f8k-mt4-dense-f3904-tde-lr5e-06",
+   "eval_path": "Beaker",
    "rows": 3904,
    "pf": 3063.15168,
    "steps": 976,
@@ -42,6 +46,7 @@
   },
   {
    "run": "f8k-mt4-dense-f5856-tde-lr5e-06",
+   "eval_path": "Beaker",
    "rows": 5856,
    "pf": 4594.9259,
    "steps": 1464,
@@ -52,6 +57,7 @@
   },
   {
    "run": "f8k-mt4-dense-f7808-tde-lr5e-06",
+   "eval_path": "Beaker",
    "rows": 7808,
    "pf": 6128.21971,
    "steps": 1952,
@@ -65,6 +71,7 @@
   {
    "label": "orc1doc (0.95)",
    "run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "eval_path": "Beaker",
    "kind": "oracle",
    "target": 0.95,
    "cells": 8,
@@ -140,6 +147,7 @@
   {
    "label": "orc1doc90",
    "run": "f8k-mt4-orc1doc90-f1952-orc-lr1e-05-lam",
+   "eval_path": "local slurm (re-score of the Lambda copy)",
    "kind": "oracle",
    "target": 0.9,
    "cells": 8,
@@ -149,19 +157,19 @@
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": 0.8230229882240814,
-   "y2": 0.8835442419687907,
+   "y8": 0.82425,
+   "y2": 0.88175,
    "t8": {
-    "contradiction": 0.9573333333333334,
+    "contradiction": 0.957,
     "nq": 0.924,
-    "outlier": 0.7562666666666666,
-    "oolong": 0.6544919528963253
+    "outlier": 0.76,
+    "oolong": 0.656
    },
    "t2": {
-    "contradiction": 0.98,
+    "contradiction": 0.979,
     "nq": 0.98,
-    "outlier": 0.7212666666666666,
-    "oolong": 0.8529103012084961
+    "outlier": 0.712,
+    "oolong": 0.856
    },
    "eval_sizes": [
     500
@@ -209,12 +217,13 @@
     0.15624576990569322
    ],
    "meta_steps": 488,
-   "ftm_txt": "3.42x",
-   "ftm": 3.416315345030381
+   "ftm_txt": "3.44x",
+   "ftm": 3.4387027217908313
   },
   {
    "label": "orc1doc85",
    "run": "f8k-mt4-orc1doc85-f1952-orc-lr1e-05-lam",
+   "eval_path": "Lambda",
    "kind": "oracle",
    "target": 0.85,
    "cells": 8,
@@ -290,6 +299,7 @@
   {
    "label": "orc1doc80",
    "run": "f8k-mt4-orc1doc80-f1952-orc-lr1e-05-lam",
+   "eval_path": "local slurm (re-score of the Lambda copy)",
    "kind": "oracle",
    "target": 0.8,
    "cells": 8,
@@ -299,19 +309,19 @@
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": 0.7209834322706676,
-   "y2": 0.8084402854601542,
+   "y8": 0.72075,
+   "y2": 0.8079999999999999,
    "t8": {
-    "contradiction": 0.9006666666666666,
+    "contradiction": 0.898,
     "nq": 0.932,
-    "outlier": 0.4072,
-    "oolong": 0.6440670624160036
+    "outlier": 0.409,
+    "oolong": 0.644
    },
    "t2": {
-    "contradiction": 0.9493333333333334,
-    "nq": 0.98,
-    "outlier": 0.4567333333333333,
-    "oolong": 0.8476944751739502
+    "contradiction": 0.949,
+    "nq": 0.982,
+    "outlier": 0.453,
+    "oolong": 0.848
    },
    "eval_sizes": [
     500
@@ -360,11 +370,12 @@
    ],
    "meta_steps": 488,
    "ftm_txt": "2.30x",
-   "ftm": 2.3040555192484584
+   "ftm": 2.3011942321007153
   },
   {
    "label": "orc1doc70",
    "run": "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub",
+   "eval_path": "local slurm",
    "kind": "oracle",
    "target": 0.7,
    "cells": 8,
@@ -440,6 +451,7 @@
   {
    "label": "orc1doc60",
    "run": "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub",
+   "eval_path": "local slurm",
    "kind": "oracle",
    "target": 0.6,
    "cells": 8,
@@ -515,6 +527,7 @@
   {
    "label": "per-row 0.90 + random x1.15 (row scope)",
    "run": "f8k-mt4-orc1row90r115-f1952-orc-lr1e-05-lam",
+   "eval_path": "Lambda",
    "kind": "oracle_row",
    "target": 0.9,
    "cells": 8,
@@ -590,6 +603,7 @@
   {
    "label": "random 19% (rnd1doc19)",
    "run": "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub",
+   "eval_path": "local slurm",
    "kind": "random",
    "target": null,
    "cells": 8,
@@ -633,6 +647,7 @@
   {
    "label": "random 17% (rnd1doc17)",
    "run": "f8k-mt4-rnd1doc17-f1952-orc-lr1e-05-cub",
+   "eval_path": "local slurm",
    "kind": "random",
    "target": null,
    "cells": 8,
@@ -676,6 +691,7 @@
   {
    "label": "random 11% (rnd1doc11)",
    "run": "f8k-mt4-rnd1doc11-f1952-orc-lr1e-05-cub",
+   "eval_path": "local slurm",
    "kind": "random",
    "target": null,
    "cells": 8,
@@ -719,6 +735,7 @@
   {
    "label": "random 9% (rnd1doc9)",
    "run": "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub",
+   "eval_path": "local slurm",
    "kind": "random",
    "target": null,
    "cells": 8,
@@ -762,6 +779,7 @@
   {
    "label": "recipe lora64all32r20to7",
    "run": "f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05",
+   "eval_path": "Beaker",
    "kind": "recipe",
    "target": null,
    "cells": 8,

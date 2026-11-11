@@ -94,7 +94,14 @@ def resolve(base, cache):
         key = (len(sc), bool(meta_line("LOGJSON", run)) or run in cache)
         if best is None or key > best[0]:
             best = (key, run, sc)
-    return best[1], best[2]
+    run, sc = best[1], best[2]
+    # a Lambda-trained arm re-scored on the local slurm path is filed as `<run>-lpath`: prefer those scores so every
+    # arm in a comparison went through the same eval path (Lambda scores stay in ops for the per-cell diff)
+    lp = scores(run + "-lpath")
+    if len(lp) >= len(sc) and lp:
+        return run, lp, "local slurm (re-score of the Lambda copy)"
+    path = {"-lam": "Lambda", "-cub": "local slurm"}.get(run[-4:], "Beaker")
+    return run, sc, path
 
 
 def train_log_stats(run, cache):
@@ -176,21 +183,21 @@ def main():
                          for r in a.random.split(",") if r] + [RECIPE]
     dense = []
     for base in DENSE:
-        run, sc = resolve(base, cache)
+        run, sc, path = resolve(base, cache)
         lg = train_log_stats(run, cache) or {}
-        dense.append({"run": run, "rows": int(re.search(r"-f(\d+)-", run).group(1)), "pf": lg.get("pf"),
+        dense.append({"run": run, "eval_path": path, "rows": int(re.search(r"-f(\d+)-", run).group(1)), "pf": lg.get("pf"),
                       "steps": lg.get("steps"), "y8": mean_rung(sc, "8k"), "y2": mean_rung(sc, "2k"),
                       "out8": sc.get(("outlier", "8k"), (None,))[0], "cells": len(sc)})
     d1952 = next(d for d in dense if d["rows"] == 1952)
     rows = []
     for label, base, kind, target in arms:
-        run, sc = resolve(base, cache)
+        run, sc, path = resolve(base, cache)
         lg = train_log_stats(run, cache) or {}
         fj = flops_json_of(run)
         pf = lg.get("pf") or (fj or {}).get("actual_pflops")
         over = (pf / d1952["pf"]) if (pf and d1952["pf"]) else (fj or {}).get("actual_over_dense")
         m = meta_of(run) if kind.startswith("oracle") else None
-        r = {"label": label, "run": run, "kind": kind, "target": target, "cells": len(sc), "pf": pf,
+        r = {"label": label, "run": run, "eval_path": path, "kind": kind, "target": target, "cells": len(sc), "pf": pf,
              "step_cost": over, "speedup": (1 / over) if over else None, "steps": lg.get("steps"),
              "resumes": lg.get("resumes"), "starts": lg.get("starts"),
              "y8": mean_rung(sc, "8k"), "y2": mean_rung(sc, "2k"),

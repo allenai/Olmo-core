@@ -1,0 +1,395 @@
+{
+ "date": "2026-11-11",
+ "status": "done",
+ "track": "sft4",
+ "who": "side session (oracle-thresh-sweep)",
+ "title": "Oracle threshold sweep: per-document oracle at attribution-cos 0.90\u21920.60 vs matched per-document random, plus dense f488/f976",
+ "result": "No: the attribution oracle is not a better per-document selector than uniform random at matched keep, and it loses below 0.85. 1,952 rows/task, single cut @7, eval_size 500/cell, no-cot, 1 seed each (seed noise ~\u00b10.03 on the 8k mean: random 17.7% vs 19.7% differ by .028). 8k mean: ~18% keep oracle 0.90 .824 vs random .813 (17.7%) / .841 (19.7%), a tie; ~12% keep oracle 0.80 .721 vs random .796 (11.7%), outlier .409 vs .740; 0.85 .837 (13.1%); 0.70 .648 / 0.60 .643 sit at dense f488 (.667) cost-for-cost (FTM <=1.34x/<=1.47x). Best oracle FTM 4.16x (0.85) vs recipe 4.60x. Per-doc allocation = no empty docs and gold share = body share for both; the oracle differs only by piling picks on each document's first tokens (outlier first-8-token share 27% at 0.90 \u2192 71% at 0.60, uniform 5%), and its routed train CE drops far below dense (0.80: .152 vs .211). Per-row 0.90 + random x1.15: total keep 34.8% (oracle 16.2%), gold keep .774 vs distractor .334, routed CE .106 vs dense .184, 8k .733 (outlier .408): random tokens do not fix the per-row leak. 0.90/0.80 re-scored on the local path (same as random): within 0.004/cell of Lambda.",
+ "match": "orc1doc9,orc1doc8,orc1doc7,orc1doc6,orc1row90r115,rnd1doc,dense-f488-tde,dense-f976-tde",
+ "record": "records/oracle-threshold-sweep.md",
+ "branch": "claude/oracle-thresh-sweep-69bc7d",
+ "tables": [
+  {
+   "title": "8k rung (primary) and 2k mean, 1,952 rows/task",
+   "cols": [
+    "arm",
+    "8k mean",
+    "contra",
+    "nq",
+    "outlier",
+    "oolong",
+    "2k mean"
+   ],
+   "rows": [
+    [
+     "oracle doc 0.95 (11-04)",
+     0.85,
+     0.973,
+     0.93,
+     0.828,
+     0.669,
+     0.902
+    ],
+    [
+     "oracle doc 0.90",
+     0.824,
+     0.957,
+     0.924,
+     0.76,
+     0.656,
+     0.882
+    ],
+    [
+     "oracle doc 0.85",
+     0.837,
+     0.959,
+     0.936,
+     0.82,
+     0.633,
+     0.871
+    ],
+    [
+     "oracle doc 0.80",
+     0.721,
+     0.898,
+     0.932,
+     0.409,
+     0.644,
+     0.808
+    ],
+    [
+     "oracle doc 0.70",
+     0.648,
+     0.82,
+     0.916,
+     0.254,
+     0.601,
+     0.77
+    ],
+    [
+     "oracle doc 0.60",
+     0.643,
+     0.861,
+     0.922,
+     0.21,
+     0.581,
+     0.75
+    ],
+    [
+     "oracle ROW 0.90 + random x1.15 (other scope)",
+     0.733,
+     0.958,
+     0.916,
+     0.408,
+     0.651,
+     0.826
+    ],
+    [
+     "random doc 19.7%",
+     0.841,
+     0.945,
+     0.926,
+     0.857,
+     0.634,
+     0.885
+    ],
+    [
+     "random doc 17.7%",
+     0.813,
+     0.928,
+     0.904,
+     0.783,
+     0.637,
+     0.911
+    ],
+    [
+     "random doc 11.7%",
+     0.796,
+     0.931,
+     0.878,
+     0.74,
+     0.637,
+     0.895
+    ],
+    [
+     "random doc 9.7%",
+     0.769,
+     0.915,
+     0.862,
+     0.689,
+     0.609,
+     0.868
+    ],
+    [
+     "recipe (router, 2 cuts)",
+     0.846,
+     0.96,
+     0.912,
+     0.86,
+     0.65,
+     0.921
+    ],
+    [
+     "dense f488",
+     0.667,
+     null,
+     null,
+     0.344,
+     null,
+     0.805
+    ],
+    [
+     "dense f976",
+     0.712,
+     null,
+     null,
+     0.38,
+     null,
+     0.816
+    ],
+    [
+     "dense f1952",
+     0.843,
+     null,
+     null,
+     0.817,
+     null,
+     0.933
+    ]
+   ],
+   "note": "eval_size 500/cell, no-cot, f1 (oolong: score). 1 seed per arm; 4-task-mean eval SE ~\u00b10.008, outlier cell \u00b10.02, seed-to-seed ~\u00b10.03. 0.90/0.80 scores from the local slurm re-score; 0.85 and row from Lambda; 0.95, recipe, dense f1952 from Beaker; the rest local slurm."
+  },
+  {
+   "title": "Cost, fit and gradient",
+   "cols": [
+    "arm",
+    "realised keep",
+    "step cost (routed pass / dense f1952)",
+    "FTM 8k",
+    "grad cos (LoRA)",
+    "train CE dense \u2192 routed",
+    "eval path"
+   ],
+   "rows": [
+    [
+     "oracle doc 0.95 (11-04)",
+     "35.5%",
+     0.365,
+     "3.00x",
+     0.575,
+     "0.148 \u2192 0.151",
+     "Beaker"
+    ],
+    [
+     "oracle doc 0.90",
+     "18.3%",
+     0.264,
+     "3.44x",
+     0.441,
+     "0.160 \u2192 0.157",
+     "local slurm (re-score of the Lambda copy)"
+    ],
+    [
+     "oracle doc 0.85",
+     "13.1%",
+     0.234,
+     "4.16x",
+     0.361,
+     "0.164 \u2192 0.155",
+     "Lambda"
+    ],
+    [
+     "oracle doc 0.80",
+     "12.0%",
+     0.227,
+     "2.30x",
+     0.286,
+     "0.211 \u2192 0.152",
+     "local slurm (re-score of the Lambda copy)"
+    ],
+    [
+     "oracle doc 0.70",
+     "4.5%",
+     0.184,
+     "<=1.34x",
+     0.227,
+     "0.240 \u2192 0.150",
+     "local slurm"
+    ],
+    [
+     "oracle doc 0.60",
+     "1.7%",
+     0.168,
+     "<=1.47x",
+     0.227,
+     "0.241 \u2192 0.160",
+     "local slurm"
+    ],
+    [
+     "oracle ROW 0.90 + random x1.15 (other scope)",
+     "34.8%",
+     0.362,
+     "1.54x",
+     0.453,
+     "0.184 \u2192 0.106",
+     "Lambda"
+    ],
+    [
+     "random doc 19.7%",
+     "19.7%",
+     0.272,
+     "3.64x",
+     null,
+     "- \u2192 0.202",
+     "local slurm"
+    ],
+    [
+     "random doc 17.7%",
+     "17.7%",
+     0.26,
+     "3.29x",
+     null,
+     "- \u2192 0.226",
+     "local slurm"
+    ],
+    [
+     "random doc 11.7%",
+     "11.7%",
+     0.225,
+     "3.47x",
+     null,
+     "- \u2192 0.228",
+     "local slurm"
+    ],
+    [
+     "random doc 9.7%",
+     "9.7%",
+     0.214,
+     "3.16x",
+     null,
+     "- \u2192 0.232",
+     "local slurm"
+    ],
+    [
+     "recipe (router, 2 cuts)",
+     "20.5%",
+     0.226,
+     "4.60x",
+     null,
+     "- \u2192 0.176",
+     "Beaker"
+    ]
+   ],
+   "note": "Step cost from flop_meter/actual_pflops; oracle arms charged for the routed pass only (best case). FTM log-linear along dense 488\u21927,808 rows/task; <= = below dense f488. Random controls matched on REALISED keep: 17.7% and 19.7% \u2194 oracle 0.90 (18.3%), 11.7% and 9.7% \u2194 oracle 0.80 (12.0%)."
+  },
+  {
+   "title": "Where the selected tokens sit (outlier task)",
+   "cols": [
+    "arm (keep)",
+    "zero-kept docs",
+    "kept in gold docs (gold body share)",
+    "first 8 tokens of each doc (uniform)"
+   ],
+   "rows": [
+    [
+     "oracle 0.95 (35%)",
+     "0.000",
+     "n/a",
+     "0.147 (0.054)"
+    ],
+    [
+     "oracle 0.90 (18%)",
+     "0.000",
+     "0.052 (0.052)",
+     "0.269 (0.054)"
+    ],
+    [
+     "oracle 0.85 (13%)",
+     "0.000",
+     "0.052 (0.052)",
+     "0.350 (0.054)"
+    ],
+    [
+     "oracle 0.80 (12%)",
+     "0.000",
+     "0.052 (0.052)",
+     "0.306 (0.054)"
+    ],
+    [
+     "oracle 0.70 (4.5%)",
+     "0.000",
+     "0.052 (0.052)",
+     "0.549 (0.054)"
+    ],
+    [
+     "oracle 0.60 (1.7%)",
+     "0.000",
+     "0.053 (0.052)",
+     "0.707 (0.054)"
+    ],
+    [
+     "row 0.90, oracle part (16%)",
+     "0.033",
+     "0.166 (0.052)",
+     "0.185 (0.055)"
+    ],
+    [
+     "random per doc (any keep)",
+     "0 (by construction)",
+     "= gold body share",
+     "uniform"
+    ]
+   ],
+   "note": "From oracle_meta/sel (every 2nd saved step), sel_stats.py. Random per-document controls are uniform within each document by construction."
+  }
+ ],
+ "chart": {
+  "title": "8k mean vs realised keep: per-document oracle vs per-document random (1 seed each)",
+  "unit": "8k 4-task mean",
+  "labels": [
+   "~10-12% keep",
+   "~18-20% keep"
+  ],
+  "series": [
+   {
+    "name": "oracle (0.80 @12.0% / 0.90 @18.3%)",
+    "values": [
+     0.721,
+     0.824
+    ]
+   },
+   {
+    "name": "random (11.7% / 17.7%)",
+    "values": [
+     0.796,
+     0.813
+    ]
+   },
+   {
+    "name": "random (9.7% / 19.7%)",
+    "values": [
+     0.769,
+     0.841
+    ]
+   }
+  ],
+  "refs": [
+   {
+    "name": "dense f1952",
+    "value": 0.843
+   },
+   {
+    "name": "recipe",
+    "value": 0.846
+   }
+  ],
+  "ymin": 0.6,
+  "ymax": 0.9
+ },
+ "figs": [
+  {
+   "src": "oracle_sweep/sweep_pareto.png",
+   "cap": "(a) 8k mean and (b) outlier@8k vs training FLOPs / dense f1952 (log), dense curve 488\u21927,808 rows/task, oracle per-document curve, random controls, recipe, per-row arm; (c) 8k mean vs realised keep. Source: research/token_routing/oracle_train/sweep_pareto.png on the branch."
+  }
+ ]
+}
