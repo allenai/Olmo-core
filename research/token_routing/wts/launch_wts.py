@@ -147,6 +147,12 @@ def do_local(a):
             extra = f"{extra} --ephemeral-save-interval {a.resume_every}"
         env = dict(os.environ, RUN=name, ARM_ARGS=extra, CODE=a.code, SEED=str(a.seed), LR=str(a.lr),
                    MAX_STEPS=str(a.steps or 0), MINUTES=str(a.minutes or 60), NGPU=str(a.ngpu))
+        # a full-length run must leave the final model in the run root (the eval reads it); never rely on the shell
+        env.setdefault("NOWANDB", "1")
+        if not a.steps:
+            env["SAVECK"] = "1"
+        elif not env.get("SAVECK"):
+            env.pop("SAVECK", None)
         cmd = ["sbatch", "-w", a.node, "-J", f"wts-{arm}", f"--gres=gpu:{a.ngpu}", f"{HERE}/run_wts_local.sbatch"]
         out = subprocess.run(cmd, env=env, capture_output=True, text=True)
         print(name, out.stdout.strip(), out.stderr.strip()[-300:])
