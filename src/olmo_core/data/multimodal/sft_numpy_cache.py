@@ -22,6 +22,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
@@ -39,7 +40,12 @@ from olmo_core.nn.vision.molmo2_tokens import N_PATCHES_SQ, PATCH_DIM, POOL_H, P
 
 from .pretraining_replay import MAX_DOCUMENT_SEGMENTS
 
-__all__ = ["SftNumpyCacheConfig", "SftNumpyCacheDataset"]
+__all__ = [
+    "SftNumpyCacheConfig",
+    "SftNumpyCacheDataset",
+    "check_extra_numpy_dir",
+    "check_row_aligned_cache",
+]
 
 TOKEN_IDS_NPY_GLOB = "token_ids_part_*.npy"
 LABELS_MASK_NPY_GLOB = "labels_mask_part_*.npy"
@@ -70,6 +76,69 @@ def check_row_aligned_cache(numpy_dir: str) -> None:
             f"{numpy_dir} has {num_lines:,} metadata lines for {num_rows:,} rows, so some row "
             "spans two parts"
         )
+
+
+_PART_INDEX_RE = re.compile(r"_part_(\d+)\.")
+
+
+def _part_files(numpy_dir: str, pattern: str) -> dict:
+    out = {}
+    for path in glob.glob(os.path.join(numpy_dir, pattern)):
+        match = _PART_INDEX_RE.search(os.path.basename(path))
+        if match is not None:
+            out[match.group(1)] = path
+    return out
+
+
+def check_extra_numpy_dir(
+    numpy_dir: str, *, token_dtype: Any, vocab_size: int, eos_token_id: int
+) -> dict:
+    """Validate one ``extra_numpy_dirs`` entry as open-instruct's ``_check_extra_numpy_dir`` does
+    with metadata boundaries on (the current text SFT recipe's long-context replay dir).
+
+    The dir must hold raw ``token_ids_part_*.npy`` in ``token_dtype``, a one-byte
+    ``labels_mask_part_*.npy`` and a ``token_ids_part_*.csv.gz`` metadata file for every part,
+    every id below ``vocab_size`` and every part ending with EOS.
+
+    :returns: ``{"parts", "tokens", "loss_tokens", "rows"}`` (rows from the metadata).
+
+    :raises OLMoConfigurationError: If any of that does not hold.
+    """
+    if not os.path.isdir(numpy_dir):
+        raise OLMoConfigurationError(f"extra numpy dir {numpy_dir} is not a directory")
+    tokens = _part_files(numpy_dir, TOKEN_IDS_NPY_GLOB)
+    masks = _part_files(numpy_dir, LABELS_MASK_NPY_GLOB)
+    metadata = _part_files(numpy_dir, TOKEN_IDS_METADATA_GLOB)
+    if not tokens or set(tokens) != set(masks) or set(metadata) != set(tokens):
+        raise OLMoConfigurationError(
+            f"{numpy_dir}: token parts {sorted(tokens)}, label masks {sorted(masks)} and "
+            f"metadata {sorted(metadata)} must name the same parts"
+        )
+    itemsize = np.dtype(token_dtype).itemsize
+    stats = {"parts": len(tokens), "tokens": 0, "loss_tokens": 0, "rows": 0}
+    for index in sorted(tokens):
+        n_bytes = os.path.getsize(tokens[index])
+        if n_bytes == 0 or n_bytes % itemsize:
+            raise OLMoConfigurationError(f"{tokens[index]} is not a {np.dtype(token_dtype)} array")
+        n = n_bytes // itemsize
+        if os.path.getsize(masks[index]) != n:
+            raise OLMoConfigurationError(f"{masks[index]} does not have one byte per token")
+        ids = np.memmap(tokens[index], mode="r", dtype=token_dtype, shape=(n,))
+        mask = np.memmap(masks[index], mode="r", dtype=np.uint8, shape=(n,))
+        for start in range(0, n, 1 << 26):
+            block = np.asarray(ids[start : start + (1 << 26)])
+            if int(block.max()) >= vocab_size:
+                raise OLMoConfigurationError(f"{tokens[index]} has an id >= {vocab_size}")
+            m = np.asarray(mask[start : start + (1 << 26)])
+            if int(m.max()) > 1:
+                raise OLMoConfigurationError(f"{masks[index]} is not a 0/1 mask")
+            stats["loss_tokens"] += int(np.count_nonzero(m))
+        if int(ids[-1]) != eos_token_id:
+            raise OLMoConfigurationError(f"{tokens[index]} does not end with EOS")
+        with gzip.open(metadata[index], "rt") as f:
+            stats["rows"] += sum(1 for _ in f)
+        stats["tokens"] += n
+    return stats
 
 
 @dataclass
@@ -111,7 +180,17 @@ class SftNumpyCacheConfig(Config):
         """Build and prepare the dataset (``tokenizer`` is accepted for the mixture interface)."""
         del tokenizer
         check_row_aligned_cache(self.numpy_dir)
-        dataset = self.dataset_config().build()
+        dataset_config = self.dataset_config()
+        if len(set(self.extra_numpy_dirs)) != len(self.extra_numpy_dirs):
+            raise OLMoConfigurationError("extra_numpy_dirs lists a directory more than once")
+        for numpy_dir in self.extra_numpy_dirs:
+            check_extra_numpy_dir(
+                numpy_dir,
+                token_dtype=dataset_config.get_dtype(),
+                vocab_size=self.tokenizer.vocab_size,
+                eos_token_id=self.tokenizer.eos_token_id,
+            )
+        dataset = dataset_config.build()
         assert isinstance(dataset, NumpyPackedFSLDataset)
         dataset.prepare()
         return SftNumpyCacheDataset(
