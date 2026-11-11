@@ -121,6 +121,8 @@ class OnlineRouterCallback(Callback):
                              "(%.0fM params), optimizer state released", self.trainer.global_step, want, n / 1e6)
 
         if torch.cuda.is_available():
+            # allocated memory carried into the step (params, optimizer state, anything persistent): a leak shows here
+            self._mem_start = torch.cuda.memory_allocated() / 2**30
             torch.cuda.reset_peak_memory_stats()
         router = self._router()
         for r in router.chain():  # every pyramid stage refits from its own targets
@@ -181,6 +183,8 @@ class OnlineRouterCallback(Callback):
             # the run's peak so far (the per-step value resets every step; warmup / first steps can set the peak)
             self._peak_run = max(float(getattr(self, "_peak_run", 0.0)), m["online_router/peak_mem_gib"])
             m["online_router/peak_mem_run_gib"] = self._peak_run
+            m["online_router/mem_start_gib"] = float(getattr(self, "_mem_start", 0.0))
+            m["online_router/mem_end_gib"] = torch.cuda.memory_allocated() / 2**30
         if getattr(self, "_diag_batch", None) is not None:
             dg = self._diag(router, self._diag_batch)
             self._diag_batch = None
