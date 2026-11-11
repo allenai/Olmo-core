@@ -4,13 +4,13 @@
  "track": "sft4",
  "who": "side session (weighted-token-sampling)",
  "title": "Weighted token sampling: sampled survival with weights w = 1/p in attention / DeltaNet, and a FLOP price rule, instead of the recipe's two-stage top-k",
- "result": "Seed 0, 1,952 rows/task, eval_size 500/cell, no-cot. Best: wtsS2aT5 (sampled at the recipe's cuts and budgets, attention log-w bias, score temp 0.5) 8k mean 0.840 (outlier 0.841) vs recipe 0.846/0.847, inside the ~0.008 SE, at 0.215x step cost and 24.2 GiB peak (recipe 0.221x, 26.9 GiB). At temp 1 sampling is too flat and loses outlier (S1 0.790, outlier 0.670); weights recover part (attention > both > DeltaNet), sharper scores the rest. The price rule trails (S3 0.795, S3aT5 0.820): it keeps less after block 16. FTM <=4.96x (below the lowest dense point; recipe 4.6-4.7x). Running: S2aT5 seed 1, top-k at block 16 (hard=1: S2aH, S2aT5H), S3aT2.",
+ "result": "1,952 rows/task, eval_size 500/cell, no-cot. Best arms sample at block 7 (attention log-w bias) and keep the recipe's top-k at block 16 (hard=1): 2-seed 8k means wtsS2aH 0.8365 (0.847/0.826), wtsS2aT5H 0.837 (0.810/0.864), wtsS2aT5 (sampled at both cuts, temp 0.5) 0.8385, vs recipe 0.846/0.847, at 0.215-0.218x step cost and 24.2 GiB peak (recipe 0.221x, 26.9 GiB). At 3,904 rows/task: S2aH 0.877, S2aT5 0.876 vs recipe 0.882/0.889. So about 0.009 under the recipe at both budgets, with \u00b10.05 seed swings on outlier that the recipe does not show. The routed-warmup recipe wtsS0wr (no dense step, as every wts arm) also scores 0.837, so the gap may be the dropped dense step 1; round 5 (S0wr seed 1, S0wr at 3,904, S1H, S2aT2H) tests that. Price rule best: S3aT2 0.832 at 0.203x. At temp 1 sampling is too flat (S1 0.790).",
  "match": "1,952 rows/task, recipe base, no dense step",
  "record": "records/weighted-token-sampling.md",
- "branch": "claude/weighted-token-sampling-041da9 (5dd252e3d)",
+ "branch": "claude/weighted-token-sampling-041da9 (48b18efe9)",
  "tables": [
   {
-   "title": "8k rung (primary), 1,952 rows/task, seed 0",
+   "title": "8k rung (primary), 1,952 rows/task (seed 0 unless noted)",
    "cols": [
     "arm",
     "8k mean",
@@ -161,9 +161,95 @@
      0.63,
      "0.211",
      "24.4"
+    ],
+    [
+     "wtsS2aT5 seed 1",
+     0.837,
+     0.944,
+     0.888,
+     0.852,
+     0.662,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS2aH (sampled at block 7, top-k at 16) s0 / sd1",
+     ".847 / .826",
+     ".956 / .941",
+     ".934 / .914",
+     ".851 / .815",
+     ".648 / .634",
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aT5H (as S2aH, temp 0.5) s0 / sd1",
+     ".810 / .864",
+     ".948 / .949",
+     ".910 / .918",
+     ".757 / .908",
+     ".626 / .680",
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS3aT2 (price, attention weights, temp 0.2)",
+     0.832,
+     0.963,
+     0.91,
+     0.815,
+     0.639,
+     "0.203",
+     "24.2"
     ]
    ],
    "note": "eval_size 500/cell, no-cot, f1 (oolong: score). SE of the 4-task mean ~0.008; outlier ~0.016-0.019. wts arms 1 seed; recipe 2 seeds. Recipe peak includes its dense step 1 (routed from step 1: 24.2)."
+  },
+  {
+   "title": "8k rung, 3,904 rows/task, seed 0",
+   "cols": [
+    "arm",
+    "8k mean",
+    "contra",
+    "nq",
+    "outlier",
+    "oolong",
+    "step cost (x dense)",
+    "peak GiB"
+   ],
+   "rows": [
+    [
+     "recipe (s0 / sd1)",
+     ".882 / .889",
+     ".977 / .973",
+     ".918 / .926",
+     ".970 / .967",
+     ".663 / .689",
+     "0.220",
+     "26.9 / 20.2"
+    ],
+    [
+     "wtsS2aH",
+     0.877,
+     0.967,
+     0.918,
+     0.945,
+     0.679,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aT5",
+     0.876,
+     0.971,
+     0.908,
+     0.966,
+     0.659,
+     "0.215",
+     "24.2"
+    ]
+   ],
+   "note": "eval_size 500/cell, no-cot. Local mt4f3904 shard (976 steps)."
   }
  ],
  "chart": {
@@ -182,7 +268,10 @@
    "wtsS2aT5 (attention weights, temp 0.5)",
    "wtsS2aT2 (attention weights, temp 0.2)",
    "wtsS1T2 (no weights, temp 0.2)",
-   "wtsS3aT5 (price, attention weights, temp 0.5)"
+   "wtsS3aT5 (price, attention weights, temp 0.5)",
+   "wtsS2aH (2-seed mean)",
+   "wtsS2aT5H (2-seed mean)",
+   "wtsS3aT2"
   ],
   "series": [
    {
@@ -200,7 +289,10 @@
      0.84,
      0.829,
      0.833,
-     0.82
+     0.82,
+     0.8365,
+     0.837,
+     0.832
     ]
    }
   ],
