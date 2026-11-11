@@ -1,5 +1,368 @@
 [
  {
+  "date": "2026-11-10",
+  "status": "done",
+  "track": "mechanism",
+  "who": "side session (context-fidelity probe)",
+  "title": "Context-fidelity probe: can cheap stand-ins for dropped tokens keep the kept tokens' gradients dense-like? (no training)",
+  "result": "Mostly no. One cut at block 7, keep 20% per document; eval_size 512 rows (128/task), no-cot, frozen ckpts. Dense f1952: plain drop keeps expected gradient cos (Adam) 0.06 / 0.08 / 0.02 (router / random / attribution); the exact forward with no gradient through the dropped tokens restores 0.99 / 0.96 / 1.00 and CE exactly, at 0.553 of a dense step (1.81x vs drop 2.70x): what the dropped tokens give is forward context only. Best cheap stand-in = their stale block-7 state fed to EVERY layer incl. DeltaNet: 0.42 / 0.19 / 0.39 and 63% / 45% / 74% of the CE gap at 0.426 (2.35x). The same state in attention layers only closes 23-39% of CE and little gradient (DeltaNet context is what matters); refresh at block 15, per-doc / per-64-span means with log-count bias (span1 check reproduces frozen) and ridge linear corrections close ~nothing (corrections cut hidden error 15-29% but make the gradient worse). Partial stale (Prasann): 20% / 50% of the dropped tokens give 30% / 49% of the router's CE gap but expected cos only 0.10 / 0.20. Recipe ckpt: plain drop already 0.88 / 0.16 / 0.91; stale context slightly hurts the router (0.81, CE +0.007); bound 0.98. None raises the per-step ceiling; worth a screen only as a way to make aggressive keeps (5-10%) or the early phase trainable — next cheap step is this probe at keep 5-10% on the early-phase checkpoints.",
+  "match": "same 512 unseen fresh-pool rows as the gradient-gap probe; dense f1952 and recipe lora64all32r20to7 f1952 checkpoints",
+  "record": "records/context-fidelity-probe.md",
+  "branch": "claude/gallant-robinson-adc54a",
+  "tables": [
+   {
+    "title": "Dense f1952 checkpoint (eval_size 512): expected gradient cos with dense and answer CE (dense 0.109)",
+    "cols": [
+     "variant",
+     "step cost (speedup)",
+     "router: exp cos Adam / raw",
+     "random: exp cos Adam / raw",
+     "attribution: exp cos Adam / raw",
+     "router: CE",
+     "random: CE",
+     "attribution: CE"
+    ],
+    "rows": [
+     [
+      "drop",
+      "0.371 (2.70x)",
+      "0.06 / 0.03",
+      "0.08 / 0.03",
+      "0.02 / 0.12",
+      "0.313",
+      "0.373",
+      "0.176"
+     ],
+     [
+      "stale, attention only",
+      "0.382 (2.62x)",
+      "0.14 / 0.25",
+      "0.20 / 0.17",
+      "0.45 / 0.66",
+      "0.266",
+      "0.298",
+      "0.150"
+     ],
+     [
+      "refresh at 15",
+      "0.389 (2.57x)",
+      "0.11 / 0.24",
+      "0.14 / 0.16",
+      "0.25 / 0.47",
+      "0.275",
+      "0.314",
+      "0.153"
+     ],
+     [
+      "mean per doc",
+      "0.371 (2.70x)",
+      "0.07 / 0.01",
+      "0.09 / 0.05",
+      "0.06 / 0.12",
+      "0.317",
+      "0.411",
+      "0.185"
+     ],
+     [
+      "mean per 64-span",
+      "0.371 (2.70x)",
+      "0.07 / 0.04",
+      "0.09 / 0.04",
+      "0.06 / 0.14",
+      "0.315",
+      "0.409",
+      "0.186"
+     ],
+     [
+      "linear corr. [h7]",
+      "0.371 (2.70x)",
+      "-0.07 / 0.03",
+      "-0.02 / 0.01",
+      "-0.11 / 0.09",
+      "0.320",
+      "0.416",
+      "0.203"
+     ],
+     [
+      "linear corr. [h7;h16]",
+      "0.371 (2.69x)",
+      "-0.06 / 0.03",
+      "-0.01 / 0.04",
+      "-0.12 / 0.10",
+      "0.317",
+      "0.435",
+      "0.204"
+     ],
+     [
+      "stale 20%, all layers",
+      "0.382 (2.62x)",
+      "0.10 / 0.14",
+      "0.08 / 0.08",
+      "-0.02 / 0.13",
+      "0.251",
+      "0.319",
+      "0.165"
+     ],
+     [
+      "stale 50%, all layers",
+      "0.399 (2.51x)",
+      "0.20 / 0.26",
+      "0.09 / 0.05",
+      "0.03 / 0.20",
+      "0.212",
+      "0.274",
+      "0.147"
+     ],
+     [
+      "stale, all layers",
+      "0.426 (2.35x)",
+      "0.42 / 0.46",
+      "0.19 / 0.09",
+      "0.39 / 0.49",
+      "0.184",
+      "0.253",
+      "0.126"
+     ],
+     [
+      "fresh K/V (diag.)",
+      "0.553 (1.81x)",
+      "0.31 / 0.13",
+      "0.85 / 0.44",
+      "0.59 / 0.55",
+      "0.160",
+      "0.116",
+      "0.135"
+     ],
+     [
+      "exact fwd, no grad (bound)",
+      "0.553 (1.81x)",
+      "0.99 / 0.95",
+      "0.96 / 0.62",
+      "1.00 / 0.96",
+      "0.109",
+      "0.109",
+      "0.109"
+     ]
+    ]
+   },
+   {
+    "title": "Recipe checkpoint (eval_size 512): expected gradient cos with dense and answer CE (dense 0.121)",
+    "cols": [
+     "variant",
+     "step cost (speedup)",
+     "router: exp cos Adam / raw",
+     "random: exp cos Adam / raw",
+     "attribution: exp cos Adam / raw",
+     "router: CE",
+     "random: CE",
+     "attribution: CE"
+    ],
+    "rows": [
+     [
+      "drop",
+      "0.371 (2.70x)",
+      "0.88 / 0.81",
+      "0.16 / 0.15",
+      "0.91 / 0.86",
+      "0.135",
+      "0.256",
+      "0.120"
+     ],
+     [
+      "stale, attention only",
+      "0.382 (2.62x)",
+      "0.81 / 0.75",
+      "0.19 / 0.22",
+      "0.82 / 0.76",
+      "0.136",
+      "0.225",
+      "0.121"
+     ],
+     [
+      "refresh at 15",
+      "0.389 (2.57x)",
+      "0.79 / 0.77",
+      "0.15 / 0.18",
+      "0.83 / 0.77",
+      "0.136",
+      "0.245",
+      "0.120"
+     ],
+     [
+      "mean per doc",
+      "0.371 (2.70x)",
+      "0.67 / 0.66",
+      "0.15 / 0.20",
+      "0.79 / 0.77",
+      "0.144",
+      "0.291",
+      "0.133"
+     ],
+     [
+      "mean per 64-span",
+      "0.371 (2.70x)",
+      "0.66 / 0.66",
+      "0.15 / 0.21",
+      "0.79 / 0.77",
+      "0.144",
+      "0.290",
+      "0.128"
+     ],
+     [
+      "linear corr. [h7]",
+      "0.371 (2.70x)",
+      "0.89 / 0.82",
+      "0.16 / 0.17",
+      "0.92 / 0.85",
+      "0.136",
+      "0.270",
+      "0.121"
+     ],
+     [
+      "linear corr. [h7;h16]",
+      "0.371 (2.69x)",
+      "0.86 / 0.80",
+      "0.14 / 0.18",
+      "0.91 / 0.84",
+      "0.137",
+      "0.272",
+      "0.122"
+     ],
+     [
+      "stale 20%, all layers",
+      "0.382 (2.62x)",
+      "0.90 / 0.81",
+      "0.24 / 0.24",
+      "0.92 / 0.88",
+      "0.136",
+      "0.236",
+      "0.124"
+     ],
+     [
+      "stale 50%, all layers",
+      "0.399 (2.51x)",
+      "0.86 / 0.77",
+      "0.24 / 0.25",
+      "0.90 / 0.91",
+      "0.138",
+      "0.238",
+      "0.125"
+     ],
+     [
+      "stale, all layers",
+      "0.426 (2.35x)",
+      "0.81 / 0.76",
+      "0.23 / 0.26",
+      "0.83 / 0.84",
+      "0.142",
+      "0.240",
+      "0.129"
+     ],
+     [
+      "fresh K/V (diag.)",
+      "0.553 (1.81x)",
+      "0.91 / 0.87",
+      "0.80 / 0.64",
+      "0.95 / 0.90",
+      "0.123",
+      "0.128",
+      "0.120"
+     ],
+     [
+      "exact fwd, no grad (bound)",
+      "0.553 (1.81x)",
+      "0.98 / 0.85",
+      "0.91 / 0.70",
+      "0.98 / 0.91",
+      "0.121",
+      "0.121",
+      "0.121"
+     ]
+    ]
+   }
+  ],
+  "chart": {
+   "title": "Expected gradient cos with dense (Adam), dense f1952 checkpoint, keep 20% after block 7",
+   "unit": "cos(E[R], E[D])",
+   "labels": [
+    "drop",
+    "stale, attention only",
+    "refresh at 15",
+    "mean per doc",
+    "mean per 64-span",
+    "linear corr. [h7]",
+    "linear corr. [h7;h16]",
+    "stale 20%, all layers",
+    "stale 50%, all layers",
+    "stale, all layers",
+    "fresh K/V (diag.)",
+    "exact fwd, no grad (bound)"
+   ],
+   "series": [
+    {
+     "name": "router",
+     "values": [
+      0.06,
+      0.14,
+      0.11,
+      0.07,
+      0.07,
+      -0.07,
+      -0.06,
+      0.1,
+      0.2,
+      0.42,
+      0.31,
+      0.99
+     ]
+    },
+    {
+     "name": "random",
+     "values": [
+      0.08,
+      0.2,
+      0.14,
+      0.09,
+      0.09,
+      -0.02,
+      -0.01,
+      0.08,
+      0.09,
+      0.19,
+      0.85,
+      0.96
+     ]
+    },
+    {
+     "name": "attribution",
+     "values": [
+      0.02,
+      0.45,
+      0.25,
+      0.06,
+      0.06,
+      -0.11,
+      -0.12,
+      -0.02,
+      0.03,
+      0.39,
+      0.59,
+      1.0
+     ]
+    }
+   ],
+   "refs": [],
+   "ymin": -0.2,
+   "ymax": 1.0
+  },
+  "figs": [
+   {
+    "src": "ctxfid/context_fidelity.png",
+    "cap": "Fidelity vs analytic step cost, both checkpoints (source: research/token_routing/context_fidelity/figs/context_fidelity.png)"
+   }
+  ]
+ },
+ {
   "date": "2026-11-04",
   "status": "done",
   "track": "sft4",
