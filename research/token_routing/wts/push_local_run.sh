@@ -11,7 +11,7 @@ REL=checkpoints/prasanns/_transfer/wts
 if [ "$MODE" = up ]; then
   RUN=$1; NODE=$2
   sbatch -p jsteinhardt --qos=preemptive_high -w "$NODE" -c 4 --mem 16G -t 180 -J "s3up-$RUN" \
-    -o /data/prasann/joblogs/s3up-$RUN-%j.out --wrap "cd $REPO/research/token_routing/olmo3_cptdrop && \
+    -o /data/prasann/joblogs/s3up-$RUN-%j.out --wrap "rm -rf /data/prasann/wts/runs/$RUN/step[0-9]* && cd $REPO/research/token_routing/olmo3_cptdrop && \
     /data/prasann/conda/envs/corpus-reasoning-olmo/bin/python -c \"import sys, s3_sync as s; s.ROOT='$REL'; \
     sys.argv=['s3_sync','up','/data/prasann/wts/runs/$RUN','runs/$RUN']; s.main()\" | tail -3 && echo S3UP_DONE"
   exit
@@ -32,8 +32,11 @@ mkdir -p ~/.aws && printf "%s" "$AWS_CREDS" > ~/.aws/credentials && printf "%s" 
 pip install -q awscli 2>&1 | tail -1
 for N in $NAMES; do
   AWS_PROFILE=S3 aws s3 sync s3://ai2-llm/checkpoints/prasanns/_transfer/wts/runs/$N/ $W/ctc_suite/ckpts/$N/ \
-    --only-show-errors --exclude ".s3_etags.json" && echo "DOWN $N $(du -sh $W/ctc_suite/ckpts/$N | cut -f1)" \
+    --only-show-errors --exclude ".s3_etags.json" --exclude "step[0-9]*" && echo "DOWN $N $(du -sh $W/ctc_suite/ckpts/$N | cut -f1)" \
     || echo "!!! FAILED $N"
+  rm -rf $W/ctc_suite/ckpts/$N/step[0-9]*   # resume points: evals read the run root (final model_and_optim)
+  AWS_PROFILE=S3 aws s3 rm --recursive --only-show-errors s3://ai2-llm/checkpoints/prasanns/_transfer/wts/runs/$N/ \
+    --exclude "*" --include "step[0-9]*"
   ls $W/ctc_suite/ckpts/$N
 done
 echo S3DOWN_DONE' 2>&1 | grep -E "beaker.org/ex|rror|xperiment" | head -5
