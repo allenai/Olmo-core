@@ -89,7 +89,7 @@ SE of the 4-task 8k mean is about 0.008; per task about 0.01-0.02 (outlier at 0.
 | arm | step cost (x dense) | peak GiB | contra | nq | outlier | oolong | 8k mean | 2k mean | outlier 8k: share with none right |
 |---|---|---|---|---|---|---|---|---|---|
 | recipe `lora64all32r20to7` (seed 0 / seed 1) | 0.221 / 0.220 | 26.9 / 27.2 | 0.960 / 0.956 | 0.912 / 0.922 | 0.860 / 0.861 | 0.650 / 0.649 | **0.846 / 0.847** | 0.921 / 0.919 | - |
-| dense (LR 5e-6, f488 point of the curve) | 1.0 | - | | | | | 0.843 | | - |
+| dense (LR 5e-6, same 1,952 rows) | 1.0 | - | | | | | 0.843 | | - |
 | wtsS0wr (recipe top-k, warmup routed) | 0.219 | 24.2 | 0.956 | 0.920 | 0.838 | 0.633 | 0.837 | 0.907 | 0.158 |
 | wtsS1 (sampled, no weights) | 0.215 | 24.1* | 0.942 | 0.930 | 0.670 | 0.620 | 0.790 | 0.895 | 0.326 |
 | wtsS2a (weights: attention) | 0.215 | 24.2 | 0.945 | 0.914 | 0.811 | 0.638 | 0.827 | 0.903 | 0.184 |
