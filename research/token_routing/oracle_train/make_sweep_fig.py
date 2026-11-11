@@ -50,6 +50,13 @@ def main():
             for r in rnd:
                 ax.annotate(f"{100 * r['keep']:.0f}%" if r.get("keep") else "", (r["step_cost"], val(r)),
                             textcoords="offset points", xytext=(0, -14), ha="center", fontsize=8, color=INK)
+        row = [r for r in T["arms"] if r["kind"] == "oracle_row" and r["step_cost"] and val(r) is not None]
+        if row:  # a different selection scope: its own marker, not joined to the per-document curve
+            ax.plot([r["step_cost"] for r in row], [val(r) for r in row], "^", color="white", ms=9, mec=ORACLE, mew=2,
+                    label="oracle per ROW 0.90 + random x1.15 (different scope)", zorder=4)
+            for r in row:
+                ax.annotate(f"row {100 * r['keep']:.0f}%" if r.get("keep") else "row", (r["step_cost"], val(r)),
+                            textcoords="offset points", xytext=(0, 9), ha="center", fontsize=8, color=INK)
         rec = [r for r in T["arms"] if r["kind"] == "recipe" and r["step_cost"] and val(r) is not None]
         if rec:
             ax.plot([r["step_cost"] for r in rec], [val(r) for r in rec], "D", color=RECIPE, ms=8, mec="white", mew=1.5,

@@ -4,7 +4,8 @@ Sources: scores from `ops result show --train-run` (8 cells per run); training P
 (`flop_meter/actual_pflops`, the hub's meter: routed pass only for oracle arms); oracle training metadata from
 `sweep_meta.jsonl` (METAJSON lines of dump_meta_beaker.sh; orc1doc from its mooney run folder); random arms' realised
 keep and routed train CE from the Beaker log (`[online-router] ... keep_frac=`, `train/CE loss`). Logs are cached in
-`sweep_cache.json` (only finished runs). FTM: dense PF needed for the arm's 8k mean, log-linear along the fresh dense
+`sweep_cache.json` (only finished runs). Local copies (Lambda `-lam`, cubbins `-cub`) contribute METAJSON / FLOPJSON /
+LOGJSON lines to sweep_meta.jsonl via local_meta.py; each arm uses whichever copy has the scores. FTM: dense PF needed for the arm's 8k mean, log-linear along the fresh dense
 curve (LR 5e-6, the hub's rule), divided by the arm's PF; below the lowest dense point it is an upper bound (<=).
 
     python research/token_routing/oracle_train/collect_sweep.py [--json sweep_table.json] [--md]
@@ -18,6 +19,10 @@ import os
 import re
 import statistics as st
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from local_meta import parse_log  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPS = "/accounts/projects/berkeleynlp/prasann/bin/ops"
@@ -35,7 +40,10 @@ ARMS = [
     ("orc1doc80", "f8k-mt4-orc1doc80-f1952-orc-lr1e-05", "oracle", 0.80),
     ("orc1doc70", "f8k-mt4-orc1doc70-f1952-orc-lr1e-05", "oracle", 0.70),
     ("orc1doc60", "f8k-mt4-orc1doc60-f1952-orc-lr1e-05", "oracle", 0.60),
+    ("per-row 0.90 + random x1.15 (row scope)", "f8k-mt4-orc1row90r115-f1952-orc-lr1e-05", "oracle_row", 0.90),
 ]
+#: an arm may have trained as a Beaker run or as a local copy (Lambda `-lam`, cubbins `-cub`); the copy with scores wins
+COPIES = ("", "-lam", "-cub")
 RECIPE = ("recipe lora64all32r20to7", "f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05", "recipe", None)
 DENSE = [f"f8k-mt4-dense-f{r}-tde-lr5e-06" for r in (488, 976, 1952, 3904, 5856, 7808)]
 
@@ -66,24 +74,41 @@ def ex_of(run):
     return exs[-1] if exs else None
 
 
+def meta_line(kind, run):
+    """the LAST `<kind> <run> {json}` line of sweep_meta.jsonl (a re-dump after more steps supersedes), or None"""
+    hit = None
+    if os.path.exists(META):
+        for line in open(META):
+            if line.startswith(f"{kind} {run} "):
+                hit = json.loads(line.split(" ", 2)[2])
+    return hit
+
+
+def resolve(base):
+    """the copy of an arm (Beaker / -lam / -cub) that was evaluated: most score cells, then a finished training log"""
+    best = None
+    for c in COPIES:
+        run = base + c
+        sc = scores(run)
+        key = (len(sc), bool(meta_line("LOGJSON", run)) or c == "")
+        if best is None or key > best[0]:
+            best = (key, run, sc)
+    return best[1], best[2]
+
+
 def train_log_stats(run, cache):
-    """PF, steps, routed keep (router log) and train CE from the Beaker training log; cached once finished"""
+    """PF, steps, routed keep (router log) and train CE: a local copy's LOGJSON line (local_meta.py), else the Beaker
+    training log; Beaker logs are cached once finished"""
+    lj = meta_line("LOGJSON", run)
+    if lj:
+        return lj
     if run in cache:
         return cache[run]
     ex = ex_of(run)
     if not ex:
         return None
     log = sh([BEAKER, "experiment", "logs", ex], timeout=600)
-    pf = re.findall(r"flop_meter/actual_pflops[ =]+([0-9.]+)", log)
-    over = re.findall(r"flop_meter/actual_over_dense[ =]+([0-9.]+)", log)
-    steps = [int(s) for s in re.findall(r"\[step=(\d+)/\d+", log)]
-    keep = [(int(s), float(k)) for s, k in re.findall(r"\[online-router\] step (\d+): dense=0 .*?keep_frac=([0-9.e-]+)", log)]
-    ce = [float(x) for x in re.findall(r"train/CE loss=([0-9.]+)", log)]
-    resumes = len(re.findall(r"Will resume training from step", log))
-    restarts = len(re.findall(r"No checkpoint found in save folder", log))
-    out = {"ex": ex, "pf": float(pf[-1]) if pf else None, "over_dense": float(over[-1]) if over else None,
-           "steps": max(steps) if steps else None, "keep": keep, "ce": ce, "resumes": resumes, "starts": restarts,
-           "done": "saved model-only checkpoint" in log}
+    out = {"ex": ex, **parse_log(log)}
     if out["done"] and out["pf"]:
         cache[run] = out
     return out
@@ -98,10 +123,9 @@ def quarters(vals):
 
 def meta_of(run):
     """oracle windows (summarize.py --oneline) for a run: sweep_meta.jsonl, or orc1doc's local folder"""
-    if os.path.exists(META):
-        for line in open(META):
-            if line.startswith("METAJSON " + run + " "):
-                return json.loads(line.split(" ", 2)[2])
+    hit = meta_line("METAJSON", run)
+    if hit:
+        return hit
     if run.endswith("orc1doc-f1952-orc-lr1e-05") and os.path.isdir(ORC1DOC_LOCAL):
         out = sh(["python3", os.path.join(HERE, "summarize.py"), ORC1DOC_LOCAL, "--every", "100000", "--oneline", run])
         for line in out.splitlines():
@@ -111,10 +135,9 @@ def meta_of(run):
 
 
 def flops_json_of(run):
-    if os.path.exists(META):
-        for line in open(META):
-            if line.startswith("FLOPJSON " + run + " "):
-                return json.loads(line.split(" ", 2)[2])
+    hit = meta_line("FLOPJSON", run)
+    if hit:
+        return hit
     if run.endswith("orc1doc-f1952-orc-lr1e-05"):
         p = os.path.join(ORC1DOC_LOCAL, "flops.json")
         return json.load(open(p)) if os.path.exists(p) else None
@@ -151,21 +174,21 @@ def main():
     arms = list(ARMS) + [(f"random {r[7:].replace('p', '.')}% ({r})", f"f8k-mt4-{r}-f1952-orc-lr1e-05", "random", None)
                          for r in a.random.split(",") if r] + [RECIPE]
     dense = []
-    for run in DENSE:
-        sc = scores(run)
+    for base in DENSE:
+        run, sc = resolve(base)
         lg = train_log_stats(run, cache) or {}
         dense.append({"run": run, "rows": int(re.search(r"-f(\d+)-", run).group(1)), "pf": lg.get("pf"),
                       "steps": lg.get("steps"), "y8": mean_rung(sc, "8k"), "y2": mean_rung(sc, "2k"),
                       "out8": sc.get(("outlier", "8k"), (None,))[0], "cells": len(sc)})
     d1952 = next(d for d in dense if d["rows"] == 1952)
     rows = []
-    for label, run, kind, target in arms:
-        sc = scores(run)
+    for label, base, kind, target in arms:
+        run, sc = resolve(base)
         lg = train_log_stats(run, cache) or {}
         fj = flops_json_of(run)
         pf = lg.get("pf") or (fj or {}).get("actual_pflops")
         over = (pf / d1952["pf"]) if (pf and d1952["pf"]) else (fj or {}).get("actual_over_dense")
-        m = meta_of(run) if kind == "oracle" else None
+        m = meta_of(run) if kind.startswith("oracle") else None
         r = {"label": label, "run": run, "kind": kind, "target": target, "cells": len(sc), "pf": pf,
              "step_cost": over, "speedup": (1 / over) if over else None, "steps": lg.get("steps"),
              "resumes": lg.get("resumes"), "starts": lg.get("starts"),
@@ -183,11 +206,15 @@ def main():
                       "ce_q_dense": [q["ce_dense"] for q in qs], "ce_q_routed": [q["ce_routed"] for q in qs],
                       "oracle_routed_over_dense": full["routed_over_dense"],
                       "gold_keep": full.get("gold_keep_frac"), "distr_keep": full.get("distractor_keep_frac"),
+                      "gold_orc_keep": full.get("gold_orc_keep_frac"),
+                      "distr_orc_keep": full.get("distractor_orc_keep_frac"), "orc_share": full.get("orc_frac_body"),
+                      "zero_docs": full.get("doc_zero_docs"), "zero_docs_orc": full.get("doc_zero_docs_orc"),
+                      "orc_keep_q": [q.get("orc_frac_body") for q in qs],
                       "meta_steps": m["steps"]})
         elif lg.get("keep"):
             ks = [k for _, k in sorted(lg["keep"])]
             r.update({"keep": st.fmean(ks), "keep_q": quarters(ks)})
-        if kind != "oracle" and lg.get("ce"):
+        if not kind.startswith("oracle") and lg.get("ce"):
             r["ce_routed"] = st.fmean(lg["ce"])
         r["ftm_txt"], r["ftm"] = ftm(r["y8"], pf, dense)
         rows.append(r)
