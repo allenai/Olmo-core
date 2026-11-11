@@ -118,6 +118,13 @@ TOKENIZER = TokenizerConfig(
 )
 TOKENIZER_REVISION = "8b9717061fae09d5be814373d189919a62a9a00d"
 TEXT_SOURCE = "text_sft"
+TEXT_INSTANCES = 294_560
+"""Text instances (C12 + replay) the text-only GPU run's seed 34521 consumed: 18,410 steps x 16
+(its offline loader replay, S_r)."""
+TEXT_MEAN_LOSS_WEIGHT = 17_090_511_368 / 294_560
+"""Measured mean loss weight per text instance (58,021): that replay's consumed loss tokens,
+15,546,575,242 C12 plus 1,543,936,126 replay, over its 294,560 instances."""
+RESERVED_SLOT_TOKENS = ["<think>", "</think>"]
 
 
 @dataclass
@@ -140,11 +147,14 @@ class Olmo35MultimodalSFTRecipeConfig(Config):
     """A key of :data:`BASES`, or a checkpoint directory."""
     text_cache: str = C12_CACHE
     replay_dirs: List[str] = field(default_factory=lambda: [REPLAY_DIR])
-    text_instances: Optional[int] = None
-    """Text instances (C12 + replay) to draw. Default: the half pass scaled to include the replay
+    text_instances: Optional[int] = TEXT_INSTANCES
+    """Text instances (C12 + replay) to draw. ``None``: the half pass scaled to include the replay
     in proportion, ``round(C12_HALF_PASS * (C12 + replay) / C12)``."""
-    text_mean_loss_weight: Optional[float] = None
-    """Mean loss weight per text instance. Default: from the cache totals."""
+    text_mean_loss_weight: Optional[float] = TEXT_MEAN_LOSS_WEIGHT
+    """Mean loss weight per text instance. ``None``: from the cache totals."""
+    image_data: str = "stage2_v1"
+    """``stage2_v1`` (:mod:`~olmo_core.data.multimodal.mixtures.olmo35_sft_mm_v1`) or
+    ``stand_in`` (stage-1 sources from the base checkpoint's config; mechanics only)."""
     text_order: str = "mixture"
     """``mixture`` (text and images drawn by the mixture loader) or ``open_instruct`` (text only,
     in the text SFT's order)."""
@@ -306,6 +316,25 @@ def stand_in_image_sources(raw: dict[str, Any], sequence_length: int) -> Dict[st
     return out
 
 
+def stage2_v1_image_sources(dose_tokens: float, sequence_length: int) -> Dict[str, ImageSourceConfig]:
+    """The stage-2 v1 mixture: each source's loss share is its expected examples at the dose
+    times its calibrated mean loss weight, so the mixture draws the expected examples."""
+    from olmo_core.data.multimodal.mixtures import olmo35_sft_mm_v1 as v1
+
+    if sequence_length != v1.SEQUENCE_LENGTH:
+        raise OLMoConfigurationError(f"stage2_v1 is calibrated at {v1.SEQUENCE_LENGTH} tokens")
+    examples = v1.expected_examples(dose_tokens)
+    return {
+        name: ImageSourceConfig(
+            source=config,
+            loss_share=examples[name] * v1.MEAN_LOSS_WEIGHTS[name],
+            mean_loss_weight=v1.MEAN_LOSS_WEIGHTS[name],
+            mean_tokens=v1.MEAN_TOKENS[name],
+        )
+        for name, config in v1.build_sources(max_sequence_length=sequence_length).items()
+    }
+
+
 def _measure_image_stats(
     dataset: MultimodalMixtureConfig, names: List[str], samples: int, seed: int = 0
 ) -> Dict[str, tuple[float, float]]:
@@ -401,7 +430,14 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
             pad_token_id=TOKENIZER.pad_token_id,
         )
     else:
-        image_sources = dict(recipe.image_sources) or stand_in_image_sources(raw, L)
+        if recipe.image_sources:
+            image_sources = dict(recipe.image_sources)
+        elif recipe.image_data == "stage2_v1":
+            image_sources = stage2_v1_image_sources(recipe.image_dose_tokens, L)
+        elif recipe.image_data == "stand_in":
+            image_sources = stand_in_image_sources(raw, L)
+        else:
+            raise OLMoConfigurationError(f"Unknown image_data {recipe.image_data!r}")
         dataset = MultimodalMixtureConfig(
             tokenizer=TOKENIZER,
             sources={TEXT_SOURCE: cache, **{n: s.source for n, s in image_sources.items()}},
@@ -409,6 +445,7 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
             tokenizer_cache_dir=recipe.hf_cache_dir,
             model_vocab_size=model.lm.vocab_size,
             tokenizer_json_split=True,
+            reserved_slot_tokens=list(RESERVED_SLOT_TOKENS),
         )
         missing = [
             n for n, s in image_sources.items() if s.mean_loss_weight is None or s.mean_tokens is None

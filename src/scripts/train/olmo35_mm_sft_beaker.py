@@ -81,6 +81,7 @@ exit $RC"""
         {"name": "NCCL_SOCKET_IFNAME", "value": "ib"},
         {"name": "NCCL_IB_HCA", "value": "^=mlx5_bond_0"},
         {"name": "S3_PROFILE", "value": "default"},
+        {"name": "HF_HUB_OFFLINE", "value": "1"},
     ]
     task = {
         "name": args.run_name,
