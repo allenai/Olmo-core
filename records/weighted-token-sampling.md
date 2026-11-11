@@ -92,6 +92,16 @@ Training-side, 1,952 rows/task, 488 steps, 2 H200 (mooney), seed 0:
 | wtsS1 (sampled, no weights) | 0.215 | 24.1 (memory probe, no diag) | 0.760 / 0.376 / 0.340 / 0.226 |
 | wtsS2b (weights attn + gdn) | 0.215 | (diag leak inflated; rerun pending) | 0.775 / 0.390 / 0.351 / 0.242 |
 | wtsS3 smoke (price rule, 60 steps) | 0.205 (target 0.216) | 24.25 | 0.758 / 0.386 / 0.330 / - |
+| wtsS3 (price, cuts 7 / 16, center=none) | 0.214 | 24.6 | 488 steps: 0.500 / 0.242 / 0.166 / 0.127 (steps 1-60 / 61-160 / 161-325 / 326-488) |
+| wtsS3d (as S3, alloc=doc) | 0.216 | 24.2 | 0.523 / 0.263 / 0.174 / 0.128 |
+| wtsS3m (price, cuts 7/11/15/19/23/27) | 0.213 | 25.8 | 0.537 / 0.219 / 0.160 / 0.123 |
+| (S1, S2b on the same windows) | | | S1 0.492 / 0.226 / 0.150 / 0.112; S2b 0.505 / 0.242 / 0.167 / 0.120 |
+
+Train CE is on survivors, so it is only a coarse screen across arms that keep different tokens; the 8k evals decide.
+S3 over the last 200 steps: expected keep 20% of the body after block 7 (recipe 20%) and 22% of the survivors after
+block 16 (about 4.5% of the body; recipe 7%), so the price spends less at block 16 than the recipe does. About 15% of
+documents have no survivor after block 7 with alloc=row; alloc=doc (S3d) brings that to 0.2%. Caps bind on about 1% of
+rows at block 16, never at block 7.
 
 S3 smoke: per-step ratio 0.19-0.22 after step 1 (0.266 at the uniform-score warmup), tau calibrated once at the
 uniform -> fitted switch; tau keeps falling (1.6e-3 -> 2.9e-4 over 60 steps) because the fitted score scale drifts
