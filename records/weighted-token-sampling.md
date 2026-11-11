@@ -82,11 +82,28 @@ not match the log; comparisons here use the measured values.
 
 ## Results
 
-(filled in as runs land)
+(scores filled in as evals land; Beaker evals for S1 / S2b queued since 11-10 afternoon)
+
+Training-side, 1,952 rows/task, 488 steps, 2 H200 (mooney), seed 0:
+
+| arm | step cost (x dense, cumulative) | peak alloc GiB/GPU | train CE steps 1-20 / 21-40 / 41-60 / 61-160 |
+|---|---|---|---|
+| recipe (Beaker H100) | 0.221 (step 1 dense) | 26.9 | - |
+| wtsS1 (sampled, no weights) | 0.215 | 24.1 (memory probe, no diag) | 0.760 / 0.376 / 0.340 / 0.226 |
+| wtsS2b (weights attn + gdn) | 0.215 | (diag leak inflated; rerun pending) | 0.775 / 0.390 / 0.351 / 0.242 |
+| wtsS3 smoke (price rule, 60 steps) | 0.205 (target 0.216) | 24.25 | 0.758 / 0.386 / 0.330 / - |
+
+S3 smoke: per-step ratio 0.19-0.22 after step 1 (0.266 at the uniform-score warmup), tau calibrated once at the
+uniform -> fitted switch; tau keeps falling (1.6e-3 -> 2.9e-4 over 60 steps) because the fitted score scale drifts
+down, and the controller tracks it with a lag (cumulative 0.205, slightly under target). Expected keep after block 7
+about 14% of body (recipe 20%), after block 16 about 13% of the survivors; per-row caps never bind after step 0. Up to
+15-20% of documents have no survivor after block 7 (alloc=row lets the price drop whole low-gradient documents; the
+alloc=doc arm wtsS3d keeps every document's share).
 
 ## Hypothesis log
 
 | date | hypothesis | outcome |
 |---|---|---|
 | 11-10 | `1 - (1-b)^w`, `w g` alone reproduce w writes | false with decay: value needs the rescale `c`; with it exact (tests) |
+| 11-10 | peak memory creeps 26.9 -> 30.5 GiB in S1/S2b | diag (`--st-otr-diag-every`) shallow-copied router links, leaking stale router copies each diag; fixed in the callback, probe without diag flat at 24.1 GiB |
 | 11-10 | row-centred targets let one price trade off two cuts | no: centring erases the gradient scale between cuts; added `center=none` and tau calibration |
