@@ -39,7 +39,7 @@ from olmo_core.nn.vision.molmo2_tokens import N_PATCHES_SQ, PATCH_DIM, POOL_H, P
 
 from .pretraining_replay import MAX_DOCUMENT_SEGMENTS
 
-__all__ = ["SftNumpyCacheConfig", "SftNumpyCacheDataset"]
+__all__ = ["SftNumpyCacheConfig", "SftNumpyCacheDataset", "instance_to_example"]
 
 TOKEN_IDS_NPY_GLOB = "token_ids_part_*.npy"
 LABELS_MASK_NPY_GLOB = "labels_mask_part_*.npy"
@@ -161,41 +161,67 @@ class SftNumpyCacheDataset:
             index += len(self)
         if not 0 <= index < len(self):
             raise IndexError(f"{index} is out of bounds for an SFT cache of {len(self)} instances")
-        instance = self.dataset[index]
-        tokens = instance["input_ids"].numpy().astype(np.int64)
-        is_target = instance["label_mask"].numpy().astype(np.bool_)
-        # Position t predicts token t + 1.
-        targets = is_target[1:]
-        labels = np.full(len(tokens), -100, dtype=np.int64)
-        labels[:-1] = np.where(targets, tokens[1:], -100)
-        loss_masks = np.zeros(len(tokens), dtype=np.float32)
-        loss_masks[:-1] = targets
-        valid_instance = bool(instance.get("instance_mask", True))
-        if not valid_instance:
-            # As ComposableTextReplayDataset: no loss, but the L - 1 denominator weight stays.
-            labels.fill(-100)
-            loss_masks[:-1] = 1.0
-        example: dict[str, Any] = {
-            "input_ids": tokens,
-            "labels": labels,
-            "loss_masks": loss_masks,
-            "position_ids": np.arange(len(tokens), dtype=np.int64),
-            "token_type_ids": np.zeros(len(tokens), dtype=np.int64),
-            "images": np.zeros((0, N_PATCHES_SQ, PATCH_DIM), dtype=np.float32),
-            "pooled_patches_idx": np.full((0, POOL_H * POOL_W), -1, dtype=np.int64),
-            "metadata": {"instance_filter_valid": valid_instance},
-        }
-        if self.document_masking:
-            doc_lens = instance["doc_lens"].numpy().astype(np.int64)
-            if int(doc_lens.sum()) != len(tokens):
-                raise RuntimeError(f"Instance {index}: doc_lens do not cover the instance")
-            if (
-                self.max_document_segments is not None
-                and len(doc_lens) > self.max_document_segments
-            ):
-                raise RuntimeError(
-                    f"Instance {index} has {len(doc_lens):_} documents, over the "
-                    f"{self.max_document_segments:_} the KDA kernel takes"
-                )
-            example["document_ids"] = np.repeat(np.arange(len(doc_lens), dtype=np.int64), doc_lens)
-        return example
+        return instance_to_example(
+            self.dataset[index],
+            index=index,
+            document_masking=self.document_masking,
+            max_document_segments=self.max_document_segments,
+        )
+
+
+def instance_to_example(
+    instance: dict[str, Any],
+    *,
+    index: int,
+    document_masking: bool = True,
+    max_document_segments: Optional[int] = MAX_DOCUMENT_SEGMENTS,
+) -> dict[str, Any]:
+    """
+    Turn one packed SFT instance (as :class:`~olmo_core.data.numpy_dataset.NumpyPackedFSLDataset`
+    returns it) into a text example of the multimodal mixture.
+
+    :param instance: The packed instance: ``input_ids``, ``label_mask``, ``doc_lens`` and
+        optionally ``instance_mask``.
+    :param index: Its index, for error messages.
+    :param document_masking: Give the example ``document_ids``, one per row.
+    :param max_document_segments: Refuse an instance with more documents than this.
+    """
+    tokens = _as_numpy(instance["input_ids"]).astype(np.int64)
+    is_target = _as_numpy(instance["label_mask"]).astype(np.bool_)
+    # Position t predicts token t + 1.
+    targets = is_target[1:]
+    labels = np.full(len(tokens), -100, dtype=np.int64)
+    labels[:-1] = np.where(targets, tokens[1:], -100)
+    loss_masks = np.zeros(len(tokens), dtype=np.float32)
+    loss_masks[:-1] = targets
+    valid_instance = bool(instance.get("instance_mask", True))
+    if not valid_instance:
+        # As ComposableTextReplayDataset: no loss, but the L - 1 denominator weight stays.
+        labels.fill(-100)
+        loss_masks[:-1] = 1.0
+    example: dict[str, Any] = {
+        "input_ids": tokens,
+        "labels": labels,
+        "loss_masks": loss_masks,
+        "position_ids": np.arange(len(tokens), dtype=np.int64),
+        "token_type_ids": np.zeros(len(tokens), dtype=np.int64),
+        "images": np.zeros((0, N_PATCHES_SQ, PATCH_DIM), dtype=np.float32),
+        "pooled_patches_idx": np.full((0, POOL_H * POOL_W), -1, dtype=np.int64),
+        "metadata": {"instance_filter_valid": valid_instance},
+    }
+    if document_masking:
+        doc_lens = _as_numpy(instance["doc_lens"]).astype(np.int64)
+        doc_lens = doc_lens[doc_lens > 0]
+        if int(doc_lens.sum()) != len(tokens):
+            raise RuntimeError(f"Instance {index}: doc_lens do not cover the instance")
+        if max_document_segments is not None and len(doc_lens) > max_document_segments:
+            raise RuntimeError(
+                f"Instance {index} has {len(doc_lens):_} documents, over the "
+                f"{max_document_segments:_} the KDA kernel takes"
+            )
+        example["document_ids"] = np.repeat(np.arange(len(doc_lens), dtype=np.int64), doc_lens)
+    return example
+
+
+def _as_numpy(value: Any) -> np.ndarray:
+    return value.numpy() if hasattr(value, "numpy") else np.asarray(value)
