@@ -11,8 +11,8 @@ from olmo_core.internal.vision_alignment_data import (
 from olmo_core.train import Duration
 
 BRIDGE_MEANS = {
-    "pixmo_caption": 28.829104933305643,
-    "pixmo_transcript": 29.77422616124386,
+    "pixmo_caption": 28.504544186405838,
+    "pixmo_transcript": 29.699449828243814,
 }
 
 

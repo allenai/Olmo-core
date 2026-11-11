@@ -24,6 +24,7 @@ from .vision_alignment import (
     AlignmentPhase,
     VisionAlignmentExperimentConfig,
     build_config,
+    keep_resumed_tokenizer_split,
     parse_cli_args,
     run,
     train,
@@ -136,6 +137,9 @@ def _train_stage(config: VisionAlignmentExperimentConfig) -> None:
     missing_config = None
     if _finalized(checkpoint):
         if not file_exists(f"{checkpoint}/config.json"):
+            # train() would recover a resumed run's tokenizer split only in the live config; do it
+            # first so the repaired config.json records the split the checkpoint trained with.
+            keep_resumed_tokenizer_split(config)
             missing_config = config.as_config_dict()
         _validate_endpoint(config, checkpoint, require_config=missing_config is None)
         # Resume a final checkpoint whose evaluation did not finish. Do not rewrite it.

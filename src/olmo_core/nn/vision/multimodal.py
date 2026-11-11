@@ -406,6 +406,7 @@ class MultimodalLM(nn.Module):
         # set it directly.
         self._document_mode: Optional[bool] = cfg.document_mode
         self._recurrent_mixers: Optional[bool] = None
+        self._emo_routers: Optional[bool] = None
         self.sync_vit_crops: bool = cfg.sync_vit_crops
         # Set by the train module through `set_crop_balance_group`.
         self._crop_balance_group: Optional[dist.ProcessGroup] = None
@@ -460,6 +461,17 @@ class MultimodalLM(nn.Module):
                 isinstance(module, KimiDeltaAttention) for module in self.lm.modules()
             )
         return self._recurrent_mixers
+
+    def _has_emo_routers(self) -> bool:
+        """Whether any LM block routes with EMO document pools, which need document ids."""
+        if self._emo_routers is None:
+            self._emo_routers = any(
+                getattr(
+                    getattr(block, "routed_experts_router", None), "requires_segment_ids", False
+                )
+                for block in self.lm.blocks.values()
+            )
+        return self._emo_routers
 
     # -- input-scale diagnostics ------------------------------------------------------------
 
@@ -929,30 +941,26 @@ class MultimodalLM(nn.Module):
 
         # Choose the mask representation from the LM's actual attention backend (not the
         # environment), so a mismatched OLMO2_FLEX_ATTN can never silently drop the masks.
-        # Document mode packs one document per example and uses varlen attention instead of
-        # dense masks, so none of this applies there.
         from olmo_core.nn.attention.backend import FlexAttentionBackend
 
         backends = [m.backend for m in self.lm.modules() if getattr(m, "backend", None) is not None]
-        use_flex_attn = (
-            any(isinstance(b, FlexAttentionBackend) for b in backends) and not document_mode
+        # Document mode (recurrent-mixer LMs) passes document lengths, never a flex mask.
+        use_flex_attn = not document_mode and any(
+            isinstance(b, FlexAttentionBackend) for b in backends
         )
-        if not document_mode:
-            if any(
-                isinstance(b, FlexAttentionBackend) and b.window_size != (-1, -1) for b in backends
-            ):
-                raise OLMoConfigurationError(
-                    "MultimodalLM builds one shared FlexAttention block mask without a sliding "
-                    "window, so LMs with sliding-window flex layers are not supported yet (those "
-                    "layers would silently attend over the full context)."
-                )
-            if use_flex_attn and not all(isinstance(b, FlexAttentionBackend) for b in backends):
-                raise OLMoConfigurationError(
-                    "MultimodalLM does not support mixing FlexAttention with other attention "
-                    "backends across blocks: the flex block mask and the dense or/and masks are "
-                    "mutually exclusive, so the non-flex blocks would silently lose packed-example "
-                    "isolation and bidirectional image attention."
-                )
+        if any(isinstance(b, FlexAttentionBackend) and b.window_size != (-1, -1) for b in backends):
+            raise OLMoConfigurationError(
+                "MultimodalLM builds one shared FlexAttention block mask without a sliding "
+                "window, so LMs with sliding-window flex layers are not supported yet (those "
+                "layers would silently attend over the full context)."
+            )
+        if use_flex_attn and not all(isinstance(b, FlexAttentionBackend) for b in backends):
+            raise OLMoConfigurationError(
+                "MultimodalLM does not support mixing FlexAttention with other attention "
+                "backends across blocks: the flex block mask and the dense or/and masks are "
+                "mutually exclusive, so the non-flex blocks would silently lose packed-example "
+                "isolation and bidirectional image attention."
+            )
         or_mask: Optional[torch.Tensor] = None
         and_mask: Optional[torch.Tensor] = None
         flex_attn_block_mask = None
@@ -1075,6 +1083,11 @@ class MultimodalLM(nn.Module):
         if position_ids is not None:
             position_ids = position_ids.to(device)
 
+        if example_ids is not None and self._has_emo_routers():
+            # EMO pools follow the attention documents (packed examples, or the text stage's
+            # EOS + chunk segments), not EOS alone: packed examples need not end in EOS.
+            kwargs["emo_segment_ids"] = segment_ids_from_example_ids(example_ids.to(device))
+
         out = self.lm(
             input_ids,
             input_embeddings=h,
@@ -1143,6 +1156,22 @@ def has_sibling_branches(
             if int((ids != ATTEND_ALL_SUBSEGMENT_ID).sum()) > 1:
                 return True
     return False
+
+
+def segment_ids_from_example_ids(example_ids: torch.Tensor) -> torch.Tensor:
+    """
+    Number each run of equal packed-example ids in a row ``0, 1, 2, ...``.
+
+    This is the document numbering :func:`document_lengths_from_example_ids` isolates, in the
+    nondecreasing form EMO routing takes; a trailing padding run (``-1``) is one more document.
+
+    :param example_ids: Integer tensor of shape ``(B, seq_len)``.
+
+    :returns: A ``long`` tensor of the same shape.
+    """
+    starts = torch.zeros_like(example_ids, dtype=torch.long)
+    starts[:, 1:] = (example_ids[:, 1:] != example_ids[:, :-1]).to(torch.long)
+    return starts.cumsum(dim=1)
 
 
 def document_lengths_from_example_ids(example_ids: torch.Tensor) -> Tuple[torch.Tensor, List[int]]:
