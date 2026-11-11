@@ -61,7 +61,7 @@ class BatchHashCallback(Callback):
     step1_reference: bool = False
 
     def pre_step(self, batch: Dict[str, Any]):
-        step = self.trainer.global_step + 1
+        step = self.trainer.global_step  # already advanced to this batch's step
         if not self.out_dir or step > self.max_step:
             return
         os.makedirs(self.out_dir, exist_ok=True)

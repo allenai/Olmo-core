@@ -29,14 +29,17 @@ python $OC/src/scripts/olmo35_mm_strip_vision.py $OUT/hf_mm $OUT/hf_text || exit
 python - "$OUT/hf_text" <<'EOF'
 import sys, torch, transformers
 d = sys.argv[1]
-tok = transformers.AutoTokenizer.from_pretrained(d)
+# PreTrainedTokenizerFast: AutoTokenizer builds GPT2Tokenizer, whose pre-tokenizer differs (#944).
+tok = transformers.PreTrainedTokenizerFast.from_pretrained(d)
 assert tok.encode("<think>", add_special_tokens=False) == [100256], tok.encode("<think>", add_special_tokens=False)
 assert tok.encode("</think>", add_special_tokens=False) == [100266]
 m = transformers.AutoModelForCausalLM.from_pretrained(d, dtype=torch.bfloat16, trust_remote_code=True).cuda().eval()
 for q in ("What is 17 * 23?", "Write one sentence about the ocean."):
-    ids = tok.apply_chat_template([{"role": "user", "content": q}], add_generation_prompt=True, return_tensors="pt").cuda()
+    text = tok.apply_chat_template([{"role": "user", "content": q}], add_generation_prompt=True, tokenize=False)
+    ids = torch.tensor([tok.encode(text, add_special_tokens=False)], device="cuda")
     out = m.generate(ids, max_new_tokens=48, do_sample=False)
     logits = m(ids).logits
+    print("PROMPT", repr(text[-80:]))
     print("SMOKE", repr(q), "finite", bool(torch.isfinite(logits).all()), repr(tok.decode(out[0, ids.shape[1]:])))
 EOF
 echo MMSFT-EXPORT-EXIT $? $(date -u +%FT%TZ)
