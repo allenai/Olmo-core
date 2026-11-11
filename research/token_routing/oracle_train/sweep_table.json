@@ -5,20 +5,20 @@
    "rows": 488,
    "pf": 379.18001,
    "steps": 122,
-   "y8": null,
-   "y2": null,
-   "out8": null,
-   "cells": 0
+   "y8": 0.66725,
+   "y2": 0.8055,
+   "out8": 0.344,
+   "cells": 8
   },
   {
    "run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
    "rows": 976,
    "pf": 762.41774,
    "steps": 244,
-   "y8": null,
-   "y2": null,
-   "out8": null,
-   "cells": 0
+   "y8": 0.7115,
+   "y2": 0.81575,
+   "out8": 0.38,
+   "cells": 8
   },
   {
    "run": "f8k-mt4-dense-f1952-tde-lr5e-06",
@@ -142,29 +142,33 @@
    "run": "f8k-mt4-orc1doc90-f1952-orc-lr1e-05-lam",
    "kind": "oracle",
    "target": 0.9,
-   "cells": 0,
+   "cells": 8,
    "pf": 404.0738,
    "step_cost": 0.2638845135670055,
    "speedup": 3.7895365153593232,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.8230229882240814,
+   "y2": 0.8835442419687907,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.9573333333333334,
+    "nq": 0.924,
+    "outlier": 0.7562666666666666,
+    "oolong": 0.6544919528963253
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.98,
+    "nq": 0.98,
+    "outlier": 0.7212666666666666,
+    "oolong": 0.8529103012084961
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.1828300751895821,
    "keep_q": [
     0.19073807434427031,
@@ -205,37 +209,41 @@
     0.15624576990569322
    ],
    "meta_steps": 488,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "3.42x",
+   "ftm": 3.416315345030381
   },
   {
    "label": "orc1doc85",
    "run": "f8k-mt4-orc1doc85-f1952-orc-lr1e-05-lam",
    "kind": "oracle",
    "target": 0.85,
-   "cells": 0,
+   "cells": 8,
    "pf": 357.81467,
    "step_cost": 0.23367451722949764,
    "speedup": 4.279456792534527,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.837045609585289,
+   "y2": 0.8708693204243978,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.9593333333333334,
+    "nq": 0.936,
+    "outlier": 0.8202666666666667,
+    "oolong": 0.6325824383411556
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.9686666666666667,
+    "nq": 0.976,
+    "outlier": 0.6794666666666667,
+    "oolong": 0.8593439483642578
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.13083501216917434,
    "keep_q": [
     0.10765101322349085,
@@ -276,37 +284,41 @@
     0.12970662664929797
    ],
    "meta_steps": 488,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "4.16x",
+   "ftm": 4.15698878881186
   },
   {
    "label": "orc1doc80",
    "run": "f8k-mt4-orc1doc80-f1952-orc-lr1e-05-lam",
    "kind": "oracle",
    "target": 0.8,
-   "cells": 0,
+   "cells": 8,
    "pf": 348.03621,
    "step_cost": 0.22728859426063797,
    "speedup": 4.399692836558587,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.7209834322706676,
+   "y2": 0.8084402854601542,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.9006666666666666,
+    "nq": 0.932,
+    "outlier": 0.4072,
+    "oolong": 0.6440670624160036
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.9493333333333334,
+    "nq": 0.98,
+    "outlier": 0.4567333333333333,
+    "oolong": 0.8476944751739502
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.11958127834526754,
    "keep_q": [
     0.06205162170147633,
@@ -347,37 +359,41 @@
     0.16085942110177792
    ],
    "meta_steps": 488,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "2.30x",
+   "ftm": 2.3040555192484584
   },
   {
    "label": "orc1doc70",
    "run": "f8k-mt4-orc1doc70-f1952-orc-lr1e-05-cub",
    "kind": "oracle",
    "target": 0.7,
-   "cells": 0,
+   "cells": 8,
    "pf": 281.9436,
    "step_cost": 0.1841261416586039,
    "speedup": 5.431059332433862,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.64775,
+   "y2": 0.77025,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.82,
+    "nq": 0.916,
+    "outlier": 0.254,
+    "oolong": 0.601
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.916,
+    "nq": 0.974,
+    "outlier": 0.366,
+    "oolong": 0.825
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.04455134841129846,
    "keep_q": [
     0.023722903850909593,
@@ -418,37 +434,41 @@
     0.055543420080001765
    ],
    "meta_steps": 488,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "<=1.34x",
+   "ftm": 1.3448789403270724
   },
   {
    "label": "orc1doc60",
    "run": "f8k-mt4-orc1doc60-f1952-orc-lr1e-05-cub",
    "kind": "oracle",
    "target": 0.6,
-   "cells": 0,
+   "cells": 8,
    "pf": 257.96893,
    "step_cost": 0.16846923905596178,
    "speedup": 5.935801726200128,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.6435,
+   "y2": 0.75,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.861,
+    "nq": 0.922,
+    "outlier": 0.21,
+    "oolong": 0.581
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.929,
+    "nq": 0.978,
+    "outlier": 0.26,
+    "oolong": 0.833
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.01709914079446902,
    "keep_q": [
     0.013971209966159548,
@@ -489,37 +509,41 @@
     0.0199876411672363
    ],
    "meta_steps": 488,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "<=1.47x",
+   "ftm": 1.4698669719644144
   },
   {
    "label": "per-row 0.90 + random x1.15 (row scope)",
    "run": "f8k-mt4-orc1row90r115-f1952-orc-lr1e-05-lam",
    "kind": "oracle_row",
    "target": 0.9,
-   "cells": 0,
+   "cells": 8,
    "pf": 553.83853,
    "step_cost": 0.36168989695376286,
    "speedup": 2.7647993721202457,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.7331271982567971,
+   "y2": 0.8257037963549296,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.9576,
+    "nq": 0.916,
+    "outlier": 0.408,
+    "oolong": 0.6509087930271881
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.9853333333333334,
+    "nq": 0.97,
+    "outlier": 0.5125333333333333,
+    "oolong": 0.8349485187530518
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.34763158380354864,
    "keep_q": [
     0.29463439633476407,
@@ -560,37 +584,41 @@
     0.229659792555112
    ],
    "meta_steps": 488,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "1.54x",
+   "ftm": 1.5445746539942309
   },
   {
    "label": "random 19% (rnd1doc19)",
    "run": "f8k-mt4-rnd1doc19-f1952-orc-lr1e-05-cub",
    "kind": "random",
    "target": null,
-   "cells": 0,
+   "cells": 8,
    "pf": 416.14356,
    "step_cost": 0.2717667933546841,
    "speedup": 3.679625415806026,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.8405,
+   "y2": 0.8855,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.945,
+    "nq": 0.926,
+    "outlier": 0.857,
+    "oolong": 0.634
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.974,
+    "nq": 0.97,
+    "outlier": 0.753,
+    "oolong": 0.845
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.196824,
    "keep_q": [
     0.196325,
@@ -599,99 +627,127 @@
     0.19656923076923077
    ],
    "ce_routed": 0.20217766393442624,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "3.64x",
+   "ftm": 3.6406580355981
   },
   {
    "label": "random 17% (rnd1doc17)",
-   "run": "f8k-mt4-rnd1doc17-f1952-orc-lr1e-05",
+   "run": "f8k-mt4-rnd1doc17-f1952-orc-lr1e-05-cub",
    "kind": "random",
    "target": null,
-   "cells": 0,
-   "pf": null,
-   "step_cost": null,
-   "speedup": null,
-   "steps": null,
-   "resumes": null,
-   "starts": null,
-   "y8": null,
-   "y2": null,
+   "cells": 8,
+   "pf": 398.26221,
+   "step_cost": 0.2600891954835245,
+   "speedup": 3.8448348388364546,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": 0.8130000000000001,
+   "y2": 0.911,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.928,
+    "nq": 0.904,
+    "outlier": 0.783,
+    "oolong": 0.637
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.967,
+    "nq": 0.976,
+    "outlier": 0.858,
+    "oolong": 0.843
    },
-   "eval_sizes": [],
-   "cot": [],
-   "ftm_txt": "-",
-   "ftm": null
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
+   "keep": 0.176648,
+   "keep_q": [
+    0.17608333333333334,
+    0.1769846153846154,
+    0.17701666666666668,
+    0.1764923076923077
+   ],
+   "ce_routed": 0.22579610655737706,
+   "ftm_txt": "3.29x",
+   "ftm": 3.286077397913265
   },
   {
    "label": "random 11% (rnd1doc11)",
-   "run": "f8k-mt4-rnd1doc11-f1952-orc-lr1e-05",
+   "run": "f8k-mt4-rnd1doc11-f1952-orc-lr1e-05-cub",
    "kind": "random",
    "target": null,
-   "cells": 0,
-   "pf": null,
-   "step_cost": null,
-   "speedup": null,
-   "steps": null,
-   "resumes": null,
-   "starts": null,
-   "y8": null,
-   "y2": null,
+   "cells": 8,
+   "pf": 345.2723,
+   "step_cost": 0.22548359466429446,
+   "speedup": 4.434912444467743,
+   "steps": 488,
+   "resumes": 0,
+   "starts": 2,
+   "y8": 0.7965,
+   "y2": 0.8955,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.931,
+    "nq": 0.878,
+    "outlier": 0.74,
+    "oolong": 0.637
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.966,
+    "nq": 0.976,
+    "outlier": 0.787,
+    "oolong": 0.853
    },
-   "eval_sizes": [],
-   "cot": [],
-   "ftm_txt": "-",
-   "ftm": null
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
+   "keep": 0.116818,
+   "keep_q": [
+    0.1163,
+    0.11713846153846154,
+    0.11722500000000001,
+    0.11660000000000001
+   ],
+   "ce_routed": 0.2282811475409836,
+   "ftm_txt": "3.47x",
+   "ftm": 3.4716780438972403
   },
   {
    "label": "random 9% (rnd1doc9)",
    "run": "f8k-mt4-rnd1doc9-f1952-orc-lr1e-05-cub",
    "kind": "random",
    "target": null,
-   "cells": 0,
+   "cells": 8,
    "pf": 327.66663,
    "step_cost": 0.21398603242697242,
    "speedup": 4.673202211650298,
    "steps": 488,
    "resumes": 0,
    "starts": 2,
-   "y8": null,
-   "y2": null,
+   "y8": 0.76875,
+   "y2": 0.86825,
    "t8": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.915,
+    "nq": 0.862,
+    "outlier": 0.689,
+    "oolong": 0.609
    },
    "t2": {
-    "contradiction": null,
-    "nq": null,
-    "outlier": null,
-    "oolong": null
+    "contradiction": 0.952,
+    "nq": 0.962,
+    "outlier": 0.727,
+    "oolong": 0.832
    },
-   "eval_sizes": [],
-   "cot": [],
+   "eval_sizes": [
+    500
+   ],
+   "cot": [
+    "no-cot"
+   ],
    "keep": 0.0967784,
    "keep_q": [
     0.09623166666666666,
@@ -700,8 +756,8 @@
     0.09650692307692307
    ],
    "ce_routed": 0.23178176229508196,
-   "ftm_txt": "-",
-   "ftm": null
+   "ftm_txt": "3.16x",
+   "ftm": 3.155838880734032
   },
   {
    "label": "recipe lora64all32r20to7",
