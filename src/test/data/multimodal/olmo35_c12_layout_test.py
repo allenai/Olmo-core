@@ -174,20 +174,34 @@ def test_message_weight_scales_the_loss(tokenizer):
     assert np.allclose(np.unique(example["loss_masks"]), [0.0, 0.2])
 
 
-def test_several_annotations_become_documents(tokenizer):
+def test_several_annotations_become_turns_of_one_conversation(tokenizer):
     branches = [[("Point to the cat.", "<point>1</point>")], [("Count the dogs.", "3")]]
     example = _encode(tokenizer, branches)
+    assert "document_ids" not in example and "subsegment_ids" not in example
+    image_ids = np.fromiter(OLMO35_TOKEN_IDS.image_token_ids, dtype=np.int64)
+    ids = example["input_ids"]
+    image = np.isin(ids, image_ids)
+    # The image once, then both annotations as sequential turns (in the shuffled order).
+    assert np.flatnonzero(np.diff(image.astype(int)) != 0).size == 2
+    head, segments = branch_segments(tokenizer, [b[0] for b in branches])
+    text = ids[~image].tolist()
+    assert text[: len(head)] == head
+    supervised = example["labels"][example["loss_masks"] > 0]
+    assert (supervised == END_THINK).sum() == 2
+    assert (supervised == EOS).sum() == 2  # the first turn's EOS label and the final target
+    assert set(np.unique(example["loss_masks"])) <= {0.0, 1.0}
+
+
+def test_annotations_as_documents_share_the_crops(tokenizer):
+    branches = [[("Point to the cat.", "<point>1</point>")], [("Count the dogs.", "3")]]
+    example = _encode(tokenizer, branches, branches_as_documents=True)
     documents = example["document_ids"]
     assert sorted(set(documents.tolist())) == [0, 1]
     image_ids = np.fromiter(OLMO35_TOKEN_IDS.image_token_ids, dtype=np.int64)
     for doc in (0, 1):
-        ids = example["input_ids"][documents == doc]
-        assert np.isin(ids, image_ids).any()  # each document repeats the image block
-        assert (example["labels"][documents == doc][example["loss_masks"][documents == doc] > 0])[
-            -1
-        ] == EOS
-    # The documents share one set of crops: each pools the same rows.
+        in_doc = documents == doc
+        assert np.isin(example["input_ids"][in_doc], image_ids).any()
+        assert example["labels"][in_doc][example["loss_masks"][in_doc] > 0][-1] == EOS
     pooled = example["pooled_patches_idx"]
     assert len(pooled) % 2 == 0
     np.testing.assert_array_equal(pooled[: len(pooled) // 2], pooled[len(pooled) // 2 :])
-    assert set(np.unique(example["loss_masks"])) <= {0.0, 1.0}

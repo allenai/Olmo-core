@@ -157,6 +157,7 @@ def encode_sft_example(
             branch_turns,
             token_ids=resolved_token_ids,
             message_weight=message_weight,
+            branches_as_documents=branches_as_documents,
             document_token_budget=(
                 OLMO35_DOCUMENT_TOKEN_BUDGET
                 if document_token_budget is None
@@ -273,6 +274,7 @@ def _encode_olmo35(
     *,
     token_ids: Molmo2TokenIds,
     message_weight: Union[None, float, MessageWeight],
+    branches_as_documents: bool,
     document_token_budget: Optional[int],
 ) -> Tuple[Dict[str, np.ndarray], int]:
     """The ``olmo35`` serializer: each branch is a conversation in the Olmo 3.5 chat template of
@@ -281,13 +283,19 @@ def _encode_olmo35(
 
     Olmo 3.5's language model isolates packed examples only by document boundaries (its KDA
     layers have no attention mask), so sibling branches over a shared prefix would see each
-    other. Several annotations of one image therefore become one document each, sharing the
-    image's crops, and every response token weighs 1 (times ``message_weight``), as in the text
-    SFT rows: the per-source balance is set by the mixture's loss-mass sampling instead.
+    other. Several annotations of one image (already shuffled) therefore become later turns of
+    one conversation about the image, the image once at its start; with
+    ``branches_as_documents`` each annotation is instead its own document sharing the image's
+    crops, which repeats the image's tokens once per annotation (about 9x the tokens of the
+    single conversation for PixMo-Points). Every response token weighs 1 (times
+    ``message_weight``), as in the text SFT rows: the per-source balance is set by the mixture's
+    loss-mass sampling instead.
     """
     from .olmo35_layout import branch_segments, require_promoted_think
 
     require_promoted_think(tokenizer)
+    if not branches_as_documents and len(branch_turns) > 1:
+        branch_turns = [[turn for branch in branch_turns for turn in branch]]
     head: Optional[List[int]] = None
     branches = []
     for turns in branch_turns:
