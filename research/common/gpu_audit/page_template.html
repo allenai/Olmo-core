@@ -114,6 +114,24 @@ ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 80
 </section>
 
 <section>
+  <h2>Follow-on: fast8k evals on local slurm</h2>
+  <p class="prose">Following #4 and #5, the fast8k 4-task eval (contradiction, nq, outlier, oolong at 8k and 2k, 500 rows per cell) now runs as one jsteinhardt job per checkpoint at <code>--qos=preemptive</code>. It uses the same Beaker on-node runner, resumes cell by cell after a preemption, and registers under <code>tokdrop_lr</code>. On the recipe checkpoint every cell matches the Beaker score within 0.002, and a checkpoint takes about 30 minutes on 2 H200s with no queue. On 11-10 the Beaker eval queue was over 4 hours. Code: <code>research/token_routing/ds64_fast8k/local_eval/</code>. Record: <code>records/f8k-local-slurm-eval.md</code>.</p>
+  <div class="tbl"><table>
+    <tr><th>task</th><th>rung</th><th>Beaker</th><th>local</th><th>diff</th><th>SE (eval_size 500)</th></tr>
+    <tr><td>contradiction f1</td><td>8k</td><td>0.959</td><td>0.960</td><td>+0.001</td><td>0.009</td></tr>
+    <tr><td>nq f1</td><td>8k</td><td>0.912</td><td>0.912</td><td>0.000</td><td>0.013</td></tr>
+    <tr><td>outlier f1</td><td>8k</td><td>0.862</td><td>0.860</td><td>−0.002</td><td>0.016</td></tr>
+    <tr><td>oolong score</td><td>8k</td><td>0.648</td><td>0.650</td><td>+0.002</td><td>0.021</td></tr>
+    <tr><td>contradiction f1</td><td>2k</td><td>0.977</td><td>0.978</td><td>+0.001</td><td>0.007</td></tr>
+    <tr><td>nq f1</td><td>2k</td><td>0.970</td><td>0.972</td><td>+0.002</td><td>0.007</td></tr>
+    <tr><td>outlier f1</td><td>2k</td><td>0.880</td><td>0.879</td><td>−0.001</td><td>0.015</td></tr>
+    <tr><td>oolong score</td><td>2k</td><td>0.856</td><td>0.857</td><td>+0.001</td><td>0.016</td></tr>
+    <tr><td><b>8k mean</b></td><td></td><td><b>0.845</b></td><td><b>0.846</b></td><td></td><td></td></tr>
+  </table></div>
+  <p class="note prose">Checkpoint <code>f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05</code>, code commit <code>099491837</code> (the Beaker evals' own). Local jobs 4432702 and 4432790 on mooney. The local copy has the LoRA adapters merged into the base weights; the unmerged-export path was smoke-tested separately (job 4432918). The jsteinhardt cap is 8 GPUs at <code>preemptive_high</code> only. More may run at <code>preemptive</code>, and the spill rule and <code>ops capacity</code> now show both.</p>
+</section>
+
+<section>
   <div class="row"><h2>Usage over time</h2>
     <div class="seg" role="group" aria-label="Group daily GPU-hours by">
       <button id="by-pool" aria-pressed="true">By pool</button><button id="by-exp" aria-pressed="false">By experiment</button><button id="by-kind" aria-pressed="false">By job kind</button>
