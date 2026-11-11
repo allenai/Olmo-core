@@ -53,7 +53,10 @@ if [ -n "$KEY" ]; then export LADDER_CTC_GRADE="$TASK"; else case "$TASK" in
   *) echo "unknown TASK=$TASK"; exit 2 ;;
 esac; fi
 RUN_DIR=$ROOT/ckpts/$RUN
-CKPT=$(for d in $(find "$RUN_DIR" -name .metadata -path '*model_and_optim*' 2>/dev/null); do dirname "$(dirname "$d")"; done | sort -V | tail -1)
+# a loadable checkpoint = config.json + model_and_optim/.metadata; --ephemeral-save-interval leaves stepN resume points
+# (model_and_optim only, no config.json) that sort after the run root's model-only checkpoint and cannot be loaded
+CKPT=$(for d in $(find "$RUN_DIR" -name .metadata -path '*model_and_optim*' 2>/dev/null); do c=$(dirname "$(dirname "$d")"); \
+  [ -f "$c/config.json" ] && echo "$c"; done | sort -V | tail -1)
 [ -n "$CKPT" ] || { echo "FATAL: no complete model_and_optim under $RUN_DIR"; exit 3; }
 ENV=/accounts/projects/sewonm/prasann/olmo_test/env
 source "$ENV/bin/activate"; conda-unpack 2>/dev/null || true
