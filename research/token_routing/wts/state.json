@@ -75,13 +75,13 @@
    "steps": 160
   },
   "f8k-mt4-wtsS3-f1952-wts-lr1e-05-smoke-loc": {
-   "ex": "4431936",
+   "ex": "4431942",
    "arm": "wtsS3",
    "budget": "f1952",
    "lr": 1e-05,
    "seed": 0,
    "cluster": "slurm:mooney",
-   "git": "9ab3933ae57d3e741f04bad753b13cc2d0e94511",
+   "git": "0b77620b93c6c536c69ccfe915c4ee18afa85e5b",
    "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,16:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both,price=0.216,center=none --st-otr-diag-every 20",
    "steps": 60
   }
