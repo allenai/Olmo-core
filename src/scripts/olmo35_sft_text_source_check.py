@@ -28,6 +28,7 @@ REPLAY = "/weka/olmo-3p5-post-checkpoints/abhishekr/h182/replay-b1c12r"
 EXPECTED_CACHE_INSTANCES = 449_487
 EXPECTED_WITH_REPLAY = 507_967
 EOS = 100257
+PAD = 100277
 
 
 def main() -> None:
@@ -68,19 +69,28 @@ def main() -> None:
     for i in rng.choice(np.arange(len(a), len(b)), 16, replace=False).tolist():
         ex = b[i]
         docs = ex["document_ids"]
-        trained = []
+        trained, padding = [], []
         for d in np.unique(docs):
             m = docs == d
             ids = ex["input_ids"][m]
+            if (ids == PAD).all():
+                # The instance's padding run: its own segment, never trained.
+                padding.append(bool((ex["loss_masks"][m] == 0).all()))
+                continue
             # A replay document trains every position but its last (whose target is outside).
             trained.append(bool(ids[-1] == EOS and (ex["loss_masks"][m][:-1] > 0).all()))
-        replay_checks.append({"instance": i, "documents": len(trained), "all_trained": trained})
+        replay_checks.append(
+            {"instance": i, "documents": trained, "padding_segments_untrained": padding}
+        )
     receipt["replay_instances_spot_check"] = replay_checks
     receipt["passes"] = {
         "cache_instances": len(a) == EXPECTED_CACHE_INSTANCES,
         "with_replay_instances": len(b) == EXPECTED_WITH_REPLAY,
         "cache_unchanged": bool(same),
-        "replay_documents_fully_trained": all(all(c["all_trained"]) for c in replay_checks),
+        "replay_documents_fully_trained": all(
+            c["documents"] and all(c["documents"]) for c in replay_checks
+        ),
+        "padding_untrained": all(all(c["padding_segments_untrained"]) for c in replay_checks),
     }
     receipt["seconds"] = round(time.time() - t0, 1)
     (out / "receipt.json").write_text(json.dumps(receipt, indent=1))
