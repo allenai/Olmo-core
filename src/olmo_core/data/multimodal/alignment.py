@@ -159,6 +159,17 @@ class MultimodalDatasetMixture:
     token_ids: Molmo2TokenIds
 
 
+def saved_tokenizer_json_split(dataset: Any) -> bool:
+    """The tokenizer split a run used, from the ``dataset`` section of its saved config.
+
+    A config saved before :attr:`MultimodalMixtureConfig.tokenizer_json_split` existed used the
+    ``GPT2Tokenizer`` split, so a missing value means ``False``.
+
+    :param dataset: The saved ``dataset`` config as a dict, or ``None``.
+    """
+    return isinstance(dataset, dict) and dataset.get("tokenizer_json_split") is True
+
+
 @dataclass
 class MultimodalMixtureConfig(Config):
     """Build named map-style sources and calibrate their supervised-loss allocation.
@@ -178,6 +189,17 @@ class MultimodalMixtureConfig(Config):
     """Embedding-table size, including any reserved rows for image tokens."""
     tokenizer_revision: str | None = None
     tokenizer_cache_dir: str | None = None
+    tokenizer_json_split: bool = True
+    """Load the tokenizer exactly as its ``tokenizer.json`` defines it
+    (:func:`~olmo_core.nn.hf.tokenizer.load_tokenizer_losslessly`), the encoding the text
+    mixtures were tokenized with.
+
+    ``False`` reproduces the ``AutoTokenizer`` load that multimodal runs used before this setting
+    existed. For Dolma2 that builds ``GPT2Tokenizer``, which splits text with GPT-2's regex and
+    ignores the split in ``tokenizer.json``: the same vocabulary and IDs, but different tokens
+    (``".\\n\\n"`` becomes three tokens instead of one, ``" 2024"`` becomes ``" 20" "24"`` instead
+    of ``" 202" "4"``). Use ``False`` only to resume or reproduce such a run. Evaluation follows
+    the value saved in a checkpoint's config, and a saved config without it means ``False``."""
 
     def validate(self):
         """Validate source names and loss targets without opening datasets."""
@@ -197,11 +219,30 @@ class MultimodalMixtureConfig(Config):
 
     def build_tokenizer(self) -> tuple[Any, Molmo2TokenIds]:
         """Load the configured tokenizer and add image tokens within the model vocabulary."""
-        from transformers import AutoTokenizer, PreTrainedConfig
-        from transformers.models.auto.tokenization_auto import get_tokenizer_config
+        from olmo_core.nn.hf.tokenizer import load_tokenizer_losslessly
 
         if self.tokenizer.identifier is None:
             raise ValueError("Multimodal data requires a tokenizer identifier")
+        if self.tokenizer_json_split:
+            tokenizer, _, _ = load_tokenizer_losslessly(
+                self.tokenizer.identifier,
+                revision=self.tokenizer_revision,
+                cache_dir=self.tokenizer_cache_dir,
+            )
+        else:
+            tokenizer = self._legacy_auto_tokenizer()
+        for name in ("eos_token_id", "pad_token_id"):
+            if getattr(tokenizer, name) != getattr(self.tokenizer, name):
+                raise ValueError(f"Loaded tokenizer {name} differs from the configured tokenizer")
+        token_ids = prepare_molmo2_tokenizer(tokenizer, model_vocab_size=self.model_vocab_size)
+        return tokenizer, token_ids
+
+    def _legacy_auto_tokenizer(self) -> Any:
+        """The pre-fix load (``tokenizer_json_split=False``); see :attr:`tokenizer_json_split`."""
+        from transformers import AutoTokenizer, PreTrainedConfig
+        from transformers.models.auto.tokenization_auto import get_tokenizer_config
+
+        assert self.tokenizer.identifier is not None
         metadata = get_tokenizer_config(
             self.tokenizer.identifier,
             revision=self.tokenizer_revision,
@@ -209,18 +250,13 @@ class MultimodalMixtureConfig(Config):
         )
         # Self-describing tokenizer repositories need not include a model config.json.
         config = PreTrainedConfig() if metadata.get("tokenizer_class") else None
-        tokenizer = AutoTokenizer.from_pretrained(
+        return AutoTokenizer.from_pretrained(
             self.tokenizer.identifier,
             config=config,
             revision=self.tokenizer_revision,
             cache_dir=self.tokenizer_cache_dir,
             use_fast=False,
         )
-        for name in ("eos_token_id", "pad_token_id"):
-            if getattr(tokenizer, name) != getattr(self.tokenizer, name):
-                raise ValueError(f"Loaded tokenizer {name} differs from the configured tokenizer")
-        token_ids = prepare_molmo2_tokenizer(tokenizer, model_vocab_size=self.model_vocab_size)
-        return tokenizer, token_ids
 
     def build_sources(self, tokenizer: Any, token_ids: Molmo2TokenIds) -> dict[str, Any]:
         """Build sources for calibration or training without changing their saved configs."""

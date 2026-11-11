@@ -103,6 +103,21 @@ def test_checkpoint_adapter_preserves_weights_architecture_and_freeze_surface(sa
     assert manifest["execution_overrides"]["destination_capacity_factor"] == 8
 
 
+@pytest.mark.parametrize("saved_split, expected", [(None, False), (False, False), (True, True)])
+def test_evaluation_follows_the_checkpoint_tokenizer_split(saved, saved_split, expected):
+    """The frozen panel's split is replaced by the one the checkpoint trained on."""
+    metadata = deepcopy(saved.data)
+    if saved_split is None:
+        metadata["dataset"].pop("tokenizer_json_split", None)
+    else:
+        metadata["dataset"]["tokenizer_json_split"] = saved_split
+    (saved.checkpoint / "config.json").write_text(json.dumps(metadata))
+    saved.evaluator.eval_dataset.tokenizer_json_split = not expected
+    _, _, manifest = runner.checkpoint_configs(saved.checkpoint, saved.evaluator, saved.panel, 16)
+    assert saved.evaluator.eval_dataset.tokenizer_json_split is expected
+    assert manifest["tokenizer_json_split"] is expected
+
+
 @pytest.mark.parametrize("field,value", [("max_sequence_length", 128), ("cp_config", object())])
 def test_unsupported_checkpoint_execution_is_rejected(saved, field, value):
     setattr(saved.module, field, value)

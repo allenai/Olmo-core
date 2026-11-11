@@ -44,6 +44,7 @@ from .mmfinereason import (
     MMFineReasonDatasetConfig,
     extract_answer_text,
 )
+from .nemotron_image import NemotronImageDataset, NemotronImageDatasetConfig
 from .ocr_caption_tars import (
     OcrCaptionTarsDataset,
     OcrCaptionTarsDatasetConfig,
@@ -151,6 +152,8 @@ __all__ = [
     "NvidiaSynthOcrDatasetConfig",
     "SyntheticReceiptsDataset",
     "SyntheticReceiptsDatasetConfig",
+    "NemotronImageDataset",
+    "NemotronImageDatasetConfig",
     "TarShardIndex",
     "Tulu4Dataset",
     "Tulu4DatasetConfig",

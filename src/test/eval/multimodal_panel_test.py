@@ -124,6 +124,22 @@ def test_frozen_panel_loads_without_archive_imports_or_dataset_reads(
     )
 
 
+@pytest.mark.parametrize("saved_split, expected", [(None, False), (False, False), (True, True)])
+def test_frozen_panel_keeps_the_tokenizer_split_it_was_built_with(
+    frozen_panel, saved_split, expected
+):
+    """Panels saved before ``tokenizer_json_split`` existed were built with the earlier split."""
+    path, payload, _ = frozen_panel
+    dataset = payload["evaluator"]["eval_dataset"]
+    if saved_split is None:
+        dataset.pop("tokenizer_json_split", None)
+    else:
+        dataset["tokenizer_json_split"] = saved_split
+    path.write_text(json.dumps(payload))
+    evaluator, _ = panel.load_frozen_evaluator(path)
+    assert evaluator.eval_dataset.tokenizer_json_split is expected
+
+
 @pytest.mark.parametrize("corruption", ["version", "count", "duplicate", "component", "indices"])
 def test_frozen_panel_rejects_inconsistent_definitions(frozen_panel, corruption):
     path, payload, _ = frozen_panel

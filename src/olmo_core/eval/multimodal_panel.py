@@ -82,6 +82,10 @@ def load_frozen_evaluator(
             "configs.vision_moe.vision_alignment.decoded_comparison.panel.SavedPanelSourceConfig"
         ):
             source["_CLASS_"] = "olmo_core.eval.multimodal_panel.SavedPanelSourceConfig"
+    # Panels saved before ``tokenizer_json_split`` existed were built with the GPT2Tokenizer split;
+    # the new default must not apply to them. Evaluation then follows the checkpoint's own split
+    # (:func:`olmo_core.eval.vision_decoded.checkpoint_configs`).
+    config["eval_dataset"].setdefault("tokenizer_json_split", False)
     evaluator = MultimodalEvaluatorCallbackConfig.from_dict(config)
     manifest = payload["manifest"]
     examples = manifest["examples_per_source"]
