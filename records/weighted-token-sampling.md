@@ -95,6 +95,9 @@ Training-side, 1,952 rows/task, 488 steps, 2 H200 (mooney), seed 0:
 | wtsS3 (price, cuts 7 / 16, center=none) | 0.214 | 24.6 | 488 steps: 0.500 / 0.242 / 0.166 / 0.127 (steps 1-60 / 61-160 / 161-325 / 326-488) |
 | wtsS3d (as S3, alloc=doc) | 0.216 | 24.2 | 0.523 / 0.263 / 0.174 / 0.128 |
 | wtsS3m (price, cuts 7/11/15/19/23/27) | 0.213 | 25.8 | 0.537 / 0.219 / 0.160 / 0.123 |
+| wtsS2a (weights attn only) | 0.215 | 24.2 | 0.511 / 0.259 / 0.160 / 0.112 |
+| wtsS2g (weights gdn only) | 0.215 | 24.2 | 0.490 / 0.243 / 0.164 / 0.118 |
+| wtsS0wr (recipe top-k, warmup routed) | 0.219 | 24.2 | 0.420 / 0.206 / 0.148 / 0.104 |
 | (S1, S2b on the same windows) | | | S1 0.492 / 0.226 / 0.150 / 0.112; S2b 0.505 / 0.242 / 0.167 / 0.120 |
 
 Train CE is on survivors, so it is only a coarse screen across arms that keep different tokens; the 8k evals decide.
