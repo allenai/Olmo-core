@@ -135,6 +135,7 @@ MULTIMODAL_OVERRIDES: dict[str, str] = {
     "train_module.optim.lr": "phase learning rate",
     "train_module.optim.group_overrides": "connector / vision / embedding groups and rates",
     "train_module.optim.foreach_chunk_size": "optimizer memory with the vision tower resident",
+    "train_module.optim.skip_nonfinite_grad_steps": "opt-in skip of steps with a non-finite gradient norm (mixed mid-training)",
     "train_module.optim.clip_grad_norm_by_scheduler_group": (
         "connector and vision gradients are on different scales"
     ),
