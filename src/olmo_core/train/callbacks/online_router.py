@@ -142,7 +142,9 @@ class OnlineRouterCallback(Callback):
         sub = {k: (v[:n] if torch.is_tensor(v) and v.dim() > 0 and v.shape[0] == B else v) for k, v in batch.items()}
         saved_r = []
         for r in router.chain():
-            d = {k: copy.copy(v) for k, v in r.__dict__.items()}
+            # router-object links (_root / _next) stay as they are: copying them left stale router copies (and their
+            # ridge statistics) alive after every diag and pointed later stages at a stale root (price-rule tau)
+            d = {k: (v if isinstance(v, type(r)) else copy.copy(v)) for k, v in r.__dict__.items()}
             d["_stats"] = {k: list(v) for k, v in r._stats.items()}
             saved_r.append(d)
         saved_m = {k: copy.deepcopy(getattr(model, k)) for k in ("_flop_extra_actual", "_flop_example_lens",
