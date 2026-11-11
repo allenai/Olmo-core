@@ -40,8 +40,25 @@ class SpillTest(unittest.TestCase):
     def test_no_spill_when_beaker_is_quick(self):
         self.assertIsNone(CA.spill(self.beaker_pick(600), res()))
 
-    def test_no_spill_when_cap_full(self):
+    def test_no_spill_when_cap_full_and_no_preemptive_fit(self):
         self.assertIsNone(CA.spill(self.beaker_pick(3600), res(jst_used=7)))
+
+    def test_cap_full_spills_at_preemptive_on_free_gpus(self):
+        r = res(jst_used=7)
+        r["slurm"]["options"].append(dict(r["slurm"]["options"][0], qos="preemptive", status="free",
+                                          how="preempt normal-QOS jobs (always fine)"))
+        got = CA.spill(self.beaker_pick(3600), r)
+        self.assertTrue(got["where"].startswith("jsteinhardt --qos=preemptive -w"))
+        self.assertIn("restartable work only", got["why"])
+
+    def test_preemptive_never_used_to_bump_preemptive_holders(self):
+        r = res(jst_used=7)
+        r["slurm"]["options"].append(dict(r["slurm"]["options"][0], qos="preemptive", status="preempt"))
+        self.assertIsNone(CA.spill(self.beaker_pick(3600), r))
+
+    def test_overflow_line_has_no_cap(self):
+        self.assertEqual(CA.fmt_cap({"gpus": 10, "cap": None, "by_experiment": {"tokdrop_lr": 10}}),
+                         "10 [tokdrop_lr 10]")
 
     def test_no_spill_for_big_or_long_jobs(self):
         big = dict(self.beaker_pick(3600), gpus=4)

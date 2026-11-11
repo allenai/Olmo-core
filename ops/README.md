@@ -76,8 +76,8 @@ Writers hold an `flock`, so concurrent sessions can register safely.
   with `runtime_minutes` for finished runs (the history the launchers' minRuntime default uses).
 - `ops capacity [--cluster all|berkeley|lambda] [--json]` — everyone's GPUs per node on
   jsteinhardt / berkeleynlp and Lambda (`ops status` shows only ours), GPU type, free GPUs, and our
-  use of the per-user caps (8 at `preemptive_high` on jsteinhardt; 8 + 8 on Lambda) split by
-  experiment. `--would-preempt --gpus N --qos Q [--partition P] [--node X]` says whether a new
+  use of the per-user caps (jsteinhardt: 8 at `preemptive_high` only, plus whatever runs uncapped at
+  `preemptive` when GPUs are free or held at `normal`; Lambda: 8 + 8) split by experiment. `--would-preempt --gpus N --qos Q [--partition P] [--node X]` says whether a new
   single-node job fits in free GPUs or whose jobs it would preempt (exit 3 = another user's).
   Placement skips GPUs below A100 unless `--any-gpu`. About 3 s.
 - `ops stall JOB_OR_RUN_ID` — one job in depth: log freshness and tail, last progress line,

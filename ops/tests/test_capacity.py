@@ -67,6 +67,18 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(caps["preemptive_high"], {"gpus": 3, "cap": 8,
                                                    "by_experiment": {"tokdrop_lr": 2, "unregistered": 1}})
 
+    def test_berkeley_preemptive_shown_uncapped(self):
+        # jsteinhardt: 8 at preemptive_high only; preemptive runs beyond it when capacity is free (2026-11-10)
+        snap = capacity.parse(BERKELEY.replace("105|bob|", "105|prasann|"))
+        caps = capacity.our_cap_use(snap, "berkeley", {}, me="prasann")
+        self.assertEqual(caps["preemptive"], {"gpus": 1, "cap": None, "by_experiment": {"unregistered": 1}})
+        text = capacity.render("berkeley", snap, caps)
+        self.assertIn("preemptive_high 3/8", text)
+        self.assertIn("preemptive 1 (no cap", text)
+        args = SimpleNamespace(gpus=4, qos="preemptive", partition="jsteinhardt")
+        wp = capacity.would_preempt(snap, 4, "preemptive", partition="jsteinhardt", me="prasann")
+        self.assertNotIn("OVER CAP", capacity.render_preempt("berkeley", args, caps, wp))
+
 
 class WouldPreemptTest(unittest.TestCase):
     def setUp(self):

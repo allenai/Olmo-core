@@ -23,8 +23,10 @@ from . import jobs
 ME = jobs.USER
 BERKELEY_PARTITIONS = ("jsteinhardt", "berkeleynlp")
 SQ_FMT = "%i|%u|%P|%q|%b|%N|%D|%M|%j"
-# per-user GPU caps we promised to keep (CLAUDE.md); slurm also enforces MaxTRESPU on preemptive_high
-CAPS = {"berkeley": {"preemptive_high": 8}, "lambda": {"preemptive_high": 8, "preemptive": 8}}
+# per-user GPU caps we promised to keep (CLAUDE.md); slurm also enforces MaxTRESPU on preemptive_high.
+# None = shown, not capped: on jsteinhardt the cap is 8 GPUs at preemptive_high ONLY, and more may run at
+# preemptive when capacity is available (it bumps normal and is bumped by preemptive_high; Prasann, 2026-11-10).
+CAPS = {"berkeley": {"preemptive_high": 8, "preemptive": None}, "lambda": {"preemptive_high": 8, "preemptive": 8}}
 # fallback when sacctmgr is unreadable: which QOS each QOS may preempt
 DEFAULT_PREEMPTS = {"preemptive_high": {"normal", "preemptive"}, "preemptive": {"normal"},
                     "normal": {"preemptible"}}
@@ -225,9 +227,12 @@ def _abbr(qos):
 
 def render(cluster: str, snap: dict, caps: dict) -> str:
     L = []
-    cap_txt = ", ".join(f"{q} {v['gpus']}/{v['cap']}" + (" [" + ", ".join(f"{e} {n}" for e, n in sorted(v["by_experiment"].items())) + "]" if v["by_experiment"] else "")
-                        for q, v in caps.items())
-    L.append(f"{cluster.upper()}  our capped use: {cap_txt}")
+    def _one(q, v):
+        lim = f"/{v['cap']}" if v["cap"] is not None else " (no cap: runs when GPUs are free or held at normal)"
+        exp = (" [" + ", ".join(f"{e} {n}" for e, n in sorted(v["by_experiment"].items())) + "]") if v["by_experiment"] else ""
+        return f"{q} {v['gpus']}{lim}{exp}"
+
+    L.append(f"{cluster.upper()}  our use: " + ", ".join(_one(q, v) for q, v in caps.items()))
     L.append(f"  {'node':<20} {'part':<12} {'type':<6} {'gpus':>4} {'free':>4} {'ours':<14} others (user gpus qos)")
     for r in node_view(snap):
         if not r["gpus"] and not r["used"]:
@@ -272,7 +277,7 @@ def cmd_capacity(args) -> int:
 def render_preempt(cluster, args, caps, wp) -> str:
     L = [f"  NEW JOB {args.gpus} GPU @ {args.qos}" + (f" on {args.partition}" if args.partition else "") + ":"]
     cap = caps.get(args.qos)
-    if cap and cap["gpus"] + args.gpus > cap["cap"]:
+    if cap and cap["cap"] is not None and cap["gpus"] + args.gpus > cap["cap"]:
         L.append(f"    OVER CAP: we already hold {cap['gpus']}/{cap['cap']} at {args.qos}; it will pend (or use a lower QOS)")
     if wp.get("fits_free"):
         L.append(f"    fits in free GPUs on {wp['node']} ({wp['free']} free): preempts nobody")

@@ -19,8 +19,9 @@ were one skipped box.
   (`ops/experiments/INDEX.md` lists all). Has this already run, is a checkpoint/shard/serving copy
   already built, is a twin still live (`$OPS status --experiment E`)? Don't redo recorded work.
 - [ ] **Where:** run the `where-to-run` skill (`python3 ~/.claude/skills/where-to-run/compute_avail.py`).
-  No A100 without asking Prasann. Local jsteinhardt: preemptive_high, 8-GPU/user cap, never evict
-  `rhys_gould`. Lambda: ≤8 GPUs preemptive_high + ≤8 preemptive, the rest at `normal`; use /tmp, not /data.
+  No A100 without asking Prasann. Local jsteinhardt: 8 GPUs/user at preemptive_high (the cap), more at
+  `preemptive` when GPUs are free or held at `normal` (restartable work only: preemptive_high bumps it);
+  preempt `rhys_gould` only up to 8 GPUs without asking. Lambda: ≤8 GPUs preemptive_high + ≤8 preemptive, the rest at `normal`; use /tmp, not /data.
 - [ ] **Preemption check (slurm / Lambda):** `$OPS capacity --cluster lambda|berkeley --would-preempt
   --gpus N --qos Q [--partition jsteinhardt] [--node X]`. `ops status` shows only our jobs, so a node
   that looks idle may be full. Exit 3 = this start would preempt another user's job; the output names
