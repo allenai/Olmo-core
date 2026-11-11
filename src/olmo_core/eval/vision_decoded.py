@@ -9,6 +9,7 @@ from typing import Any, Sequence, cast
 
 import torch.distributed as dist
 
+from olmo_core.data.multimodal.alignment import saved_tokenizer_json_split
 from olmo_core.data.multimodal.data_loader import MultimodalDataLoader
 from olmo_core.distributed.utils import get_rank, get_world_size, is_distributed
 from olmo_core.eval.multimodal_decoding import (
@@ -44,7 +45,11 @@ TOKEN_LIMITS = {
 
 
 def checkpoint_configs(checkpoint, evaluator, panel_checkpoint, world_size):
-    """Load current or historical metadata with identical evaluation-only execution settings."""
+    """Load current or historical metadata with identical evaluation-only execution settings.
+
+    Sets ``evaluator.eval_dataset.tokenizer_json_split`` to the checkpoint's own split, so a panel
+    frozen before that setting existed still tokenizes each checkpoint as it trained.
+    """
     for path in (checkpoint, panel_checkpoint):
         if not (path / ".metadata.json").is_file():
             raise ValueError(f"Expected a completed checkpoint: {path}")
@@ -62,6 +67,9 @@ def checkpoint_configs(checkpoint, evaluator, panel_checkpoint, world_size):
     )
     if identity != expected:
         raise ValueError("Checkpoint and evaluation tokenizer identifier/revision differ")
+    # Tokenize as the checkpoint trained, whichever split the frozen panel was built with.
+    tokenizer_json_split = saved_tokenizer_json_split(saved.get("dataset"))
+    evaluator.eval_dataset.tokenizer_json_split = tokenizer_json_split
     ancestry = saved.get("pretraining_checkpoint", artifacts.get("base_checkpoint"))
     if ancestry != panel.get("pretraining_checkpoint"):
         raise ValueError("Checkpoint and evaluation panel pretraining ancestry differ")
@@ -96,6 +104,7 @@ def checkpoint_configs(checkpoint, evaluator, panel_checkpoint, world_size):
             "evaluation_model": model.as_config_dict(),
             "evaluation_train_module": module.as_config_dict(),
             "init_seed": saved.get("init_seed", 12536),
+            "tokenizer_json_split": tokenizer_json_split,
             "model_load": "model_only_preserving_saved_trainability_and_architecture",
             "execution_overrides": {
                 "rank_microbatch_size": module.rank_microbatch_size,

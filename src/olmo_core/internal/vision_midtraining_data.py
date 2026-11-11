@@ -40,21 +40,24 @@ DEFAULT_VISUAL_LOSS_SHARES: dict[str, float] = {}
 """Optional reserved visual loss shares; default sources are all example-weighted."""
 
 DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS = {
-    "audited_alignment": 104.0703125,
-    "cosyn_point": 100.984375,
-    "ocr_document": 4.65625,
-    "pixmo_cap": 443.8046875,
+    "audited_alignment": 101.34375,
+    "cosyn_point": 100.84375,
+    "ocr_document": 4.6015625,
+    "pixmo_cap": 437.453125,
     "pixmo_count": 37.4609375,
     "pixmo_count_scalar": 3.0,
-    "pixmo_points_basic": 342.359375,
-    "pixmo_points_high_frequency": 250.4921875,
+    "pixmo_points_basic": 342.328125,
+    "pixmo_points_high_frequency": 250.4609375,
 }
 """128-example estimates (seed 6198), documented in ``visual_calibration_v1.json``.
 
 Valid for the default selected 8K/eight-crop document sources, explicit grounding prompts,
 separate scalar counting and unweighted response loss with Dolma2 revision
 ``5292e5d6c0f40b67cc765fe41bec991cf4345b5c``. These are bounded estimates, not corpus-exact
-means; recalibrate after changing the tokenizer or source serialization.
+means; recalibrate after changing the tokenizer or source serialization. Recalibrated 2026-11-02
+for ``tokenizer.json``'s split
+(:attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`),
+up to 2.6% lower than with the earlier GPT2Tokenizer split.
 """
 
 

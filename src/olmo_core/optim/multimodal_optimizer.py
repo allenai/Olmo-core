@@ -46,6 +46,11 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
     :param foreach_chunk_size: Maximum number of local parameter elements updated by one foreach
         AdamW call. A smaller value reduces transient optimizer memory at the cost of launching
         more kernels.
+    :param skip_nonfinite_grad_steps: Skip a step whose total gradient norm is non-finite instead
+        of aborting on it: the non-finite gradient values are zeroed, the AdamW update (weights,
+        moments and step count) is not applied, and the step's loss and gradient norm are kept out
+        of the skip-step rolling statistics. A non-finite loss still aborts when
+        ``check_nan_inf_grad`` is set.
     """
 
     DEFAULT_CLIP_GROUP_NAME = _DEFAULT_CLIP_GROUP
@@ -55,6 +60,7 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
         *args,
         clip_grad_norm_by_scheduler_group: bool = False,
         foreach_chunk_size: int = 600_000_000,
+        skip_nonfinite_grad_steps: bool = False,
         **kwargs,
     ):
         if foreach_chunk_size <= 0:
@@ -68,7 +74,12 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
             raise OLMoConfigurationError(
                 "Scheduler-group gradient clipping does not yet support pipeline parallelism"
             )
+        if skip_nonfinite_grad_steps and not clip_grad_norm_by_scheduler_group:
+            raise OLMoConfigurationError(
+                "skip_nonfinite_grad_steps requires clip_grad_norm_by_scheduler_group"
+            )
         self.clip_grad_norm_by_scheduler_group = clip_grad_norm_by_scheduler_group
+        self.skip_nonfinite_grad_steps = skip_nonfinite_grad_steps
         # Read by ``OLMoDDPOptimizer._step_foreach`` when flushing foreach chunks.
         self._foreach_chunk_threshold = foreach_chunk_size
         self.latest_component_grad_norms: Dict[str, torch.Tensor] = {}
@@ -196,7 +207,7 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
         )
 
         self._maybe_debug_nan_inf_grad_norm(total_grad_norm, *self._partition_main_grads())
-        if self.check_nan_inf_grad:
+        if self.check_nan_inf_grad and not self.skip_nonfinite_grad_steps:
             _assert_finite_async(total_grad_norm, "total grad norm")
 
         for group_name, names in logical_groups.items():
@@ -204,9 +215,36 @@ class MultimodalOLMoDDPOptimizer(OLMoDDPOptimizer):
             clip_coefficient = torch.clamp(self.max_grad_norm / (group_norm + 1e-6), max=1.0).to(
                 group_norm.device
             )
-            torch._foreach_mul_([self.main_grad[name] for name in names], clip_coefficient)
+            grads = [self.main_grad[name] for name in names]
+            torch._foreach_mul_(grads, clip_coefficient)
+            if self.skip_nonfinite_grad_steps:
+                # A non-finite group norm gives a zero coefficient, but inf * 0 is NaN and the
+                # skipped AdamW update still forms grad * grad; zero what is not finite.
+                for grad in grads:
+                    torch.nan_to_num_(grad, nan=0.0, posinf=0.0, neginf=0.0)
             self.latest_clip_group_coefficients[group_name] = clip_coefficient
         return total_grad_norm
+
+    def get_step_factor(self) -> torch.Tensor:
+        """
+        The skip-step factor of :class:`~olmo_core.optim.moe_optimizer.OLMoDDPOptimizer`, and, with
+        ``skip_nonfinite_grad_steps``, ``0.0`` for a step with a non-finite loss or gradient norm.
+        That step's values are replaced in the rolling history by the mean of the earlier ones,
+        so they do not affect the statistics later steps are compared against.
+        """
+        if not self.skip_nonfinite_grad_steps or not self._losses:
+            return super().get_step_factor()
+        finite = torch.isfinite(self._losses[-1])
+        for history in (self._losses, self._grad_norms):
+            if not history:
+                continue
+            latest = history[-1]
+            finite = torch.logical_and(finite, torch.isfinite(latest))
+            replacement = (
+                torch.stack(history[:-1]).mean() if len(history) > 1 else torch.zeros_like(latest)
+            )
+            history[-1] = torch.where(torch.isfinite(latest), latest, replacement)
+        return super().get_step_factor() * finite.float()
 
     @torch.no_grad()
     def _copy_model_params_to_main_params(  # type: ignore[override]
@@ -342,6 +380,12 @@ class MultimodalOLMoDDPOptimizerConfig(OLMoDDPOptimizerConfig):
     """
     Maximum number of local parameter elements updated by one foreach AdamW call. A smaller
     value reduces transient optimizer memory at the cost of launching more foreach kernels.
+    """
+
+    skip_nonfinite_grad_steps: bool = False
+    """
+    Skip, instead of aborting on, a step whose total gradient norm is non-finite; see
+    :class:`MultimodalOLMoDDPOptimizer`.
     """
 
     @classmethod

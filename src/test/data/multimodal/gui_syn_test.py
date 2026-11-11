@@ -293,3 +293,39 @@ def test_gui_syn_get_builds_per_epoch_without_the_shared_epoch(tmp_path):
     np.testing.assert_array_equal(ds.get(0, 2)["input_ids"], by_epoch[2]["input_ids"])
     ds.set_epoch(2)
     np.testing.assert_array_equal(ds[0]["input_ids"], by_epoch[2]["input_ids"])
+
+
+def test_documents_mode_builds_one_document_per_element(tmp_path):
+    from .stage1_document_mode_test import DOLMA2_IDS, _assert_document_example, _Tok
+
+    elements = [_el(f"Button {k}", [f"Press button {k}"], x=4 + 6 * k, y=10) for k in range(5)]
+    cache = _cache(tmp_path, train=[elements])
+    common = dict(
+        token_ids=DOLMA2_IDS,
+        message_format="document",
+        loss_token_weighting="none",
+        max_sequence_length=65536,
+        max_elements=3,
+    )
+    docs = _cfg(cache, annotation_sampling="documents", **common).build(_Tok())
+    one = _cfg(cache, annotation_sampling="one", **common).build(_Tok())
+    example = docs.get(0, 0)
+    ids = example["document_ids"]
+    assert int(ids.max()) + 1 == 3  # max_elements documents
+    assert len(example["images"]) == len(one.get(0, 0)["images"])  # crops once
+    assert DOLMA2_IDS.im_patch_id in example["input_ids"]
+    for d in range(3):
+        sel = ids == d
+        _assert_document_example(
+            {
+                key: example[key][sel]
+                for key in ("input_ids", "labels", "loss_masks", "position_ids", "token_type_ids")
+            }
+        )
+    # A new epoch draws a new element sample.
+    assert not np.array_equal(docs.get(0, 0)["input_ids"], docs.get(0, 1)["input_ids"])
+
+
+def test_documents_mode_rejects_unknown_sampling(tmp_path):
+    with pytest.raises(ValueError, match="annotation_sampling"):
+        GuiSynDatasetConfig(dataset_path=str(tmp_path), annotation_sampling="some").build(None)  # type: ignore[arg-type]

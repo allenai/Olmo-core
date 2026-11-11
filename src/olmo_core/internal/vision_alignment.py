@@ -12,13 +12,16 @@ from typing import Any, Dict, List, Optional, Protocol, cast
 
 from olmo_core.config import Config, DType, StrEnum, _clean_opts
 from olmo_core.data import TokenizerConfig
-from olmo_core.data.multimodal.alignment import MultimodalMixtureConfig
+from olmo_core.data.multimodal.alignment import (
+    MultimodalMixtureConfig,
+    saved_tokenizer_json_split,
+)
 from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoaderConfig
 from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.distributed.utils import barrier, get_local_rank
 from olmo_core.exceptions import OLMoConfigurationError
-from olmo_core.io import is_url, normalize_path, resource_path
+from olmo_core.io import file_exists, is_url, normalize_path, resource_path
 from olmo_core.launch.beaker import (
     BeakerEnvSecret,
     BeakerEnvVar,
@@ -1482,10 +1485,97 @@ def parse_cli_args() -> CliContext:
     return CliContext(script, SubCmd(cmd), run_name, cluster, overrides)
 
 
+def _restore_earlier_split_calibration(config: Any, saved: dict, checkpoint: str) -> None:
+    """Put back the loss calibration a run on the earlier tokenizer split trained with.
+
+    The means in code are calibrated for the new split, and the recipes derive the loss targets
+    (and the train module's copy of them) from those means, so all three come from the checkpoint.
+    """
+    dataset = config.dataset
+    module: Any = getattr(config, "train_module", None)
+    current = {
+        "mean_loss_weight": dataset.mean_loss_weight,
+        "target_loss_mass": dataset.target_loss_mass,
+    }
+    restored = {name: saved["dataset"].get(name) for name in current}
+    if getattr(module, "source_loss_mass_targets", None):
+        current["source_loss_mass_targets"] = module.source_loss_mass_targets
+        restored["source_loss_mass_targets"] = (saved.get("train_module") or {}).get(
+            "source_loss_mass_targets"
+        )
+    for name, value in restored.items():
+        if not isinstance(value, dict) or set(value) != set(current[name]):
+            raise OLMoConfigurationError(
+                f"{checkpoint} trained with tokenizer_json_split=False, and its saved {name} does "
+                "not cover this mixture's sources; set dataset.tokenizer_json_split and the run's "
+                "loss calibration explicitly"
+            )
+    restored = {
+        name: {key: float(weight) for key, weight in value.items()}
+        for name, value in restored.items()
+    }
+    if dataset.tokenizer_json_split or any(restored[name] != current[name] for name in restored):
+        log.warning(
+            "Resuming %s with the tokenizer split it trained with (tokenizer_json_split=False) and "
+            "its saved loss calibration",
+            checkpoint,
+        )
+    dataset.tokenizer_json_split = False
+    dataset.mean_loss_weight = restored["mean_loss_weight"]
+    dataset.target_loss_mass = restored["target_loss_mass"]
+    if "source_loss_mass_targets" in restored:
+        module.source_loss_mass_targets = restored["source_loss_mass_targets"]
+
+
+def keep_resumed_tokenizer_split(config: Any) -> None:
+    """Resume a run with the tokenizer split and loss calibration it trained with.
+
+    The recipes rebuild the mixture from code, so a run saved before
+    :attr:`~olmo_core.data.multimodal.alignment.MultimodalMixtureConfig.tokenizer_json_split`
+    existed would otherwise resume with the new default split and the calibration measured for it.
+    When the save folder holds a checkpoint, the run keeps that checkpoint's split (a saved config
+    without it means the earlier GPT2Tokenizer split). A checkpoint on the earlier split also keeps
+    the calibration it trained with (mean loss weights, loss targets, and the train module's loss
+    targets), even when the config already sets ``tokenizer_json_split=False``. Checkpoints whose
+    config was not saved yet are skipped in favor of the newest one that has it. The in-loop
+    evaluator always tokenizes as training does.
+
+    :raises OLMoConfigurationError: If the checkpoint is on the earlier split and its saved
+        calibration does not cover exactly this mixture's sources.
+    """
+    from olmo_core.train.checkpoint import Checkpointer
+
+    dataset = config.dataset
+    try:
+        checkpoints = sorted(
+            Checkpointer.find_checkpoints(config.trainer.save_folder), reverse=True
+        )
+    except FileNotFoundError:
+        checkpoints = []
+    # A save can finish before its config callback (the alignment pipeline recovers that
+    # metadata after resuming), so read the newest checkpoint that has a config.
+    latest = next((path for _, path in checkpoints if file_exists(f"{path}/config.json")), None)
+    if checkpoints and latest is None:
+        log.warning("No checkpoint config to recover the tokenizer split from; using the config's")
+    saved = _read_checkpoint_config(latest) if latest is not None else {}
+    if isinstance(saved.get("dataset"), dict):
+        if not saved_tokenizer_json_split(saved["dataset"]):
+            _restore_earlier_split_calibration(config, saved, cast(str, latest))
+        elif not dataset.tokenizer_json_split:
+            log.warning(
+                "Resuming %s with the split it trained with (tokenizer_json_split=True)", latest
+            )
+            dataset.tokenizer_json_split = True
+    evaluator = config.trainer.callbacks.get("multimodal_evaluator")
+    if evaluator is not None:
+        evaluator.eval_dataset.tokenizer_json_split = dataset.tokenizer_json_split
+
+
 def train(config: VisionAlignmentExperimentConfig) -> Trainer:
     """Build the model, train module, data loader and trainer, train, and return the trainer."""
     # Before the data sources import ``datasets``; the launch environment normally has it.
     export_hf_datasets_cache(config.recipe.hf_datasets_cache_dir)
+    keep_resumed_tokenizer_split(config)
     seed_all(config.init_seed)
     model = config.model.build(init_device="meta")
     train_module = config.train_module.build(model)
