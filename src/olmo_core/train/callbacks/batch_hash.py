@@ -98,7 +98,13 @@ class BatchHashCallback(Callback):
         )
         if is_distributed():
             dist.all_reduce(sums)
-        train_module._set_model_mode("train")  # type: ignore[attr-defined]
+        # eval_batch left the model in eval mode; the step's train_batch needs it training.
+        set_mode = getattr(train_module, "_set_model_mode", None)
+        if callable(set_mode):
+            set_mode("train")
+        else:
+            for part in train_module.model_parts:  # type: ignore[attr-defined]
+                part.train()
         if rank == 0:
             result = {
                 "eval_mode_ce": float(sums[0] / sums[1]),
