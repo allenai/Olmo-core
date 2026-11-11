@@ -42,6 +42,12 @@ def main() -> None:
     parser.add_argument("--post", default="", help="Shell run on replica 0 after training.")
     parser.add_argument("--timeout", default="3h")
     parser.add_argument("--description", default="")
+    parser.add_argument(
+        "--auto-resume",
+        action="store_true",
+        help="Let Beaker restart the job after a node failure; it resumes from the run's latest checkpoint.",
+    )
+    parser.add_argument("--min-runtime", default=None, help="Beaker minRuntime, e.g. 1h.")
     argv = sys.argv[1:]
     split = argv.index("--") if "--" in argv else len(argv)
     args = parser.parse_args(argv[:split])
@@ -92,7 +98,12 @@ exit $RC"""
         "datasets": [{"mountPath": f"/weka/{b}", "source": {"weka": b}} for b in BUCKETS],
         "result": {"path": "/output"},
         "resources": {"gpuCount": 8, "sharedMemory": "128GiB"},
-        "context": {"priority": "urgent", "preemptible": False},
+        "context": {
+            "priority": "urgent",
+            "preemptible": False,
+            **({"autoResume": True} if args.auto_resume else {}),
+            **({"minRuntime": args.min_runtime} if args.min_runtime else {}),
+        },
         "constraints": {"cluster": ["ai2/holmes"]},
         "timeout": args.timeout,
     }
