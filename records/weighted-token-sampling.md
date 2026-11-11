@@ -5,7 +5,7 @@ updated: 2026-11-11
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (round 4: every arm with top-k at block 16 averages 0.837 over 2 seeds at 1,952 rows and ~0.877 at 3,904, about 0.009 under the recipe at both; the routed-warmup recipe S0wr scores the same 0.837, so round 5 tests whether the gap is the missing dense step 1)
+status: in progress (round 5: the recipe without its dense step (S0wr) matches the recipe at both budgets, so the ~0.01 gap of the best wts arms is the sampling itself; weights are required (S1H 0.773); round 6 trims the weight tail and the uniform share)
 superseded_by: 
 artifact: 
 summary: Replaces the recipe's fixed top-k token drop (20% after block 7, 7% after 16) with sampled survival (exact inclusion probabilities), token weights w = 1/p carried into attention (log w key bias) and Gated DeltaNet (exact w-fold write), an IPW router fit, and a price rule p = clip(s / (tau sqrt(c)), pmin, 1) with tau set by a FLOP controller. Staged S0-S5; results tables below.
@@ -111,6 +111,10 @@ SE of the 4-task 8k mean is about 0.008; per task about 0.01-0.02 (outlier at 0.
 | *round 4: seed 1* | | | | | | | | | |
 | wtsS2aH seed 1 | 0.218 | 24.2 | 0.941 | 0.914 | 0.815 | 0.634 | 0.826 | 0.898 | 0.178 |
 | wtsS2aT5H seed 1 | 0.218 | 24.2 | 0.949 | 0.918 | 0.908 | 0.680 | 0.864 | 0.917 | 0.088 |
+| *round 5* | | | | | | | | | |
+| wtsS0wr seed 1 | 0.219 | 24.2 | 0.943 | 0.940 | 0.897 | 0.656 | 0.859 | 0.923 | 0.100 |
+| wtsS1H (sampled at block 7, no weights, top-k at 16) | 0.218 | 24.2 | 0.932 | 0.936 | 0.625 | 0.599 | 0.773 | 0.843 | 0.368 |
+| wtsS2aT2H (as S2aH, temp 0.2) | 0.218 | 24.2 | 0.945 | 0.902 | 0.782 | 0.664 | 0.823 | 0.922 | 0.214 |
 
 3,904 rows/task (976 steps, local `mt4f3904` shard), seed 0, eval_size 500 per cell:
 
@@ -119,6 +123,7 @@ SE of the 4-task 8k mean is about 0.008; per task about 0.01-0.02 (outlier at 0.
 | recipe (seed 0 / seed 1) | 0.220 / 0.220 | 26.9 / 20.2 | 0.977 / 0.973 | 0.918 / 0.926 | 0.970 / 0.967 | 0.663 / 0.689 | **0.882 / 0.889** | 0.949 / 0.945 | - | 3.61x / 3.94x |
 | wtsS2aH | 0.218 | 24.2 | 0.967 | 0.918 | 0.945 | 0.679 | 0.877 | 0.939 | 0.054 | 3.55x |
 | wtsS2aT5 | 0.215 | 24.2 | 0.971 | 0.908 | 0.966 | 0.659 | 0.876 | 0.937 | 0.028 | 3.54x |
+| wtsS0wr (recipe, no dense step) | 0.219 | 24.2 | 0.972 | 0.936 | 0.973 | 0.655 | 0.884 | 0.945 | 0.024 | 3.82x |
 
 \* S1 / S2b logged 30.4 GiB because of the diag leak; the same config without diag (memory probe) peaks at 24.1.
 The recipe's 26.9 includes its dense step 1: routed from step 1 (S0wr) it peaks at 24.2. FTM vs the dense curve is an
@@ -161,6 +166,14 @@ size: S2aH 0.877, S2aT5 0.876 vs recipe 0.882 / 0.889, at 0.215-0.218x and 24.2 
 dropping the dense step and not from sampling. Round 5 runs S0wr seed 1 and S0wr at 3,904 rows to test that, plus S1H
 (no weights, `hard=1`) and S2aT2H (temp 0.2, `hard=1`).
 
+Round 5 (11-11). The dense-step hypothesis is refuted: S0wr seed 1 scores 0.859 (2-seed mean 0.848 vs recipe
+0.8465) and 0.884 at 3,904 rows (recipe 0.882 / 0.889), at 0.219x and 24.2 GiB. So the recipe needs no dense step,
+and the best wts arms' gap (S2aH 2-seed 0.8365, 0.877 at 3,904) is the sampling itself: -0.012 and -0.007 against
+S0wr. S0wr also swings on outlier across seeds (0.838 / 0.897), so the recipe's 0.001 seed agreement is partly luck.
+Weights are required: without them (S1H) outlier falls to 0.625. Sharper scores at block 7 do not help (S2aT2H
+0.823). Logged weights in S2aH: mean log w ~1.1 (w ~3), per-step max ~2.9 (w ~18). Round 6 trims the tail (clip
+log w at 1.6 or 0.7) and the uniform share (mix 0.02), all with `hard=1`.
+
 Training-side detail:
 
 Training-side, 1,952 rows/task, 488 steps, 2 H200 (mooney), seed 0:
@@ -202,6 +215,8 @@ alloc=doc arm wtsS3d keeps every document's share).
 | 11-11 | soft selection costs outlier; sharper scores (temp 0.5, 0.2) close the gap | yes: S2aT5 0.840 (outlier 0.841), S1T2 0.833 (0.843); temp 1 was too flat. Price rule gains (0.795 -> 0.820) but trails |
 | 11-11 | the remaining gap is the soft deep cut; top-k there (`hard=1`) matches the recipe | yes on seed 0: S2aH 0.847 (recipe 0.846 / 0.847); seed 1 and 3,904 rows running. With temp 0.5 (S2aT5H) 0.810: seed 1 running |
 | 11-11 | S2aH matches the recipe over 2 seeds and at 3,904 rows | no: 2-seed 0.8365 (seed 1 0.826); 3,904 rows 0.877 vs 0.882 / 0.889. S2aT5H seed 1 0.864, so its 0.810 was seed noise (2-seed 0.837). Sampled arms swing ±0.05 on outlier across seeds; the recipe does not |
-| 11-11 | the ~0.009 gap is the missing dense step 1, not the sampling (S0wr = 0.837 too) | testing (round 5: S0wr seed 1, S0wr at 3,904) |
+| 11-11 | the ~0.009 gap is the missing dense step 1, not the sampling (S0wr = 0.837 too) | no: S0wr seed 1 0.859 (2-seed 0.848), 0.884 at 3,904 rows; the routed warmup matches the recipe |
+| 11-11 | weights matter once the deep cut is top-k | yes: S1H (no weights) 0.773, outlier 0.625 vs S2aH 0.8365 |
+| 11-11 | the gap is the high-weight tail / uniform share (low-p random survivors with large w) | testing (round 6: clip 1.6, clip 0.7, mix 0.02, both) |
 | 11-10 | peak memory creeps 26.9 -> 30.5 GiB in S1/S2b | diag (`--st-otr-diag-every`) shallow-copied router links, leaking stale router copies each diag; fixed in the callback, probe without diag flat at 24.1 GiB |
 | 11-10 | row-centred targets let one price trade off two cuts | no: centring erases the gradient scale between cuts; added `center=none` and tau calibration |
