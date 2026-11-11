@@ -52,6 +52,10 @@ class AcademicDatasetConfig(Config):
     max_crops: int = 8
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: float | None = None
+    token_ids: Optional[Molmo2TokenIds] = None
+    """Image token IDs of the language model; the mixture sets them (``None``: Molmo2's)."""
+    message_format: SftMessageFormat = "qwen3"
+    """``qwen3`` (released Molmo2) or ``olmo35`` (the Olmo 3.5 text SFT chat template)."""
     seed: int = 0
 
     def build(self, tokenizer) -> "AcademicDataset":
@@ -89,6 +93,8 @@ class AcademicDataset:
             loss_token_weighting=self.config.loss_token_weighting,
             message_weight=message_weight,
             shuffle_rng=rng,
+            token_ids=self.config.token_ids,
+            message_format=self.config.message_format,
         )
 
 

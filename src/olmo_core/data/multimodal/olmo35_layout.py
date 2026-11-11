@@ -23,6 +23,8 @@ The example has the layout of the other multimodal sources: position ``t`` predi
 from __future__ import annotations
 
 import json
+import re
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -33,11 +35,18 @@ __all__ = [
     "OLMO35_TOKENIZER",
     "OLMO35_TOKENIZER_REVISION",
     "OLMO35_TOKEN_IDS",
+    "OLMO35_THINK_TAGS",
+    "OLMO35_PROMOTED_THINK_IDS",
+    "PromotedToken",
+    "branch_segments",
     "encode_conversation",
     "image_block_ids",
+    "load_olmo35_sft_tokenizer",
     "load_olmo35_tokenizer",
     "normalize_messages",
     "normalize_tools",
+    "promote_tokens_into_reserved_slots",
+    "require_promoted_think",
     "tokenize_conversation",
 ]
 
@@ -59,6 +68,131 @@ OLMO35_TOKEN_IDS = Molmo2TokenIds(
 """Image token rows of the Olmo 3.5 multimodal checkpoints, as in mixed mid-training."""
 
 _USER_HEADER = "<|im_start|>user\n"
+
+OLMO35_THINK_TAGS: Tuple[str, str] = ("<think>", "</think>")
+"""The tags the current text SFT recipe makes single tokens (open-instruct #1911,
+``--reserved_slot_tokens '<think>' '</think>'``)."""
+
+OLMO35_PROMOTED_THINK_IDS: Dict[str, int] = {"<think>": 100256, "</think>": 100266}
+"""Their ids: the two lowest unused ``<|extra_id_N|>`` slots of :data:`OLMO35_TOKENIZER` at
+:data:`OLMO35_TOKENIZER_REVISION` (``<|extra_id_0|>`` and ``<|extra_id_1|>``), as recorded in the
+tokenizer saved beside the frozen text SFT cache (``bf82a8fab8-6068a350-rowaligned/tokenizer``)."""
+
+_RESERVED_SLOT_RE = re.compile(r"<\|extra_id_\d+\|>")
+
+
+@dataclass(frozen=True)
+class PromotedToken:
+    """A string made a single token by renaming an unused reserved vocabulary slot."""
+
+    content: str
+    token_id: int
+    source_ids: Tuple[int, ...]
+    """The ids ``content`` tokenized into before promotion; open-instruct seeds the promoted
+    embedding row (and output row, when untied) from the mean of these rows before the first
+    training step, never on resume."""
+
+
+def promote_tokens_into_reserved_slots(tokenizer, tokens: Sequence[str]) -> List[PromotedToken]:
+    """Make each of ``tokens`` a single token by renaming an unused reserved slot in place.
+
+    A port of open-instruct's ``promote_tokens_into_reserved_slots`` (``dataset_transformation``,
+    #1911), so the image rows tokenize ``<think>``/``</think>`` with exactly the ids of the text
+    SFT cache. Slots are taken lowest id first among the ``<|extra_id_N|>`` added tokens that are
+    neither special tokens nor referenced by the chat template. The promoted tokens are not marked
+    special. Tokens that already encode to one id are skipped, so this is idempotent. The
+    vocabulary size does not change.
+
+    :param tokenizer: A fast tokenizer; its backend is replaced.
+    :param tokens: Strings to promote, in slot order.
+
+    :returns: What was promoted, lowest slot first.
+
+    :raises ValueError: If too few unused slots remain.
+    """
+    from tokenizers import Tokenizer
+
+    pending = [t for t in tokens if len(tokenizer.encode(t, add_special_tokens=False)) != 1]
+    if not pending:
+        return []
+    source_ids = {t: tuple(tokenizer.encode(t, add_special_tokens=False)) for t in pending}
+    spec = json.loads(tokenizer.backend_tokenizer.to_str())
+    vocab = spec["model"]["vocab"]
+    template = str(tokenizer.chat_template or "")
+    in_use = set(tokenizer.all_special_tokens) | set(_RESERVED_SLOT_RE.findall(template))
+    free = [
+        entry
+        for entry in sorted(spec["added_tokens"], key=lambda entry: entry["id"])
+        if _RESERVED_SLOT_RE.fullmatch(entry["content"]) and entry["content"] not in in_use
+    ]
+    if len(free) < len(pending):
+        raise ValueError(f"{len(free)} unused reserved slots, {len(pending)} needed for {pending}")
+    sizes = (tokenizer.vocab_size, len(tokenizer))
+    promoted = []
+    for entry, content in zip(free, pending):
+        slot_id = vocab.pop(entry["content"], None)
+        if slot_id is not None:
+            vocab[content] = slot_id
+        entry.update(
+            content=content,
+            special=False,
+            normalized=False,
+            lstrip=False,
+            rstrip=False,
+            single_word=False,
+        )
+        promoted.append(PromotedToken(content, int(entry["id"]), source_ids[content]))
+    tokenizer._tokenizer = Tokenizer.from_str(json.dumps(spec))
+    if (tokenizer.vocab_size, len(tokenizer)) != sizes:
+        raise RuntimeError(f"Promoting {pending} changed the vocabulary size")
+    for token in promoted:
+        if tokenizer.encode(token.content, add_special_tokens=False) != [token.token_id]:
+            raise RuntimeError(f"{token.content!r} does not encode to slot {token.token_id}")
+    return promoted
+
+
+def require_promoted_think(tokenizer) -> None:
+    """Raise unless ``<think>`` and ``</think>`` are the single tokens of the text SFT cache.
+
+    :raises ValueError: If either tag is several tokens or has another id.
+    """
+    for tag, token_id in OLMO35_PROMOTED_THINK_IDS.items():
+        ids = tokenizer.encode(tag, add_special_tokens=False)
+        if ids != [token_id]:
+            raise ValueError(
+                f"{tag!r} encodes to {ids}, not [{token_id}]: load the tokenizer with "
+                "load_olmo35_sft_tokenizer (think tags promoted, as the text SFT cache)"
+            )
+
+
+def load_olmo35_sft_tokenizer(
+    name_or_path: str = OLMO35_TOKENIZER,
+    *,
+    revision: Optional[str] = None,
+    cache_dir: Optional[str] = None,
+):
+    """The tokenizer of the current text SFT recipe: ``tokenizer.json`` loaded losslessly (its
+    ``Split`` pre-tokenizer kept, as
+    :func:`~olmo_core.nn.hf.tokenizer.load_tokenizer_losslessly` does for every multimodal
+    mixture) with ``<think>`` and ``</think>`` promoted into reserved slots.
+
+    :param name_or_path: Hub id or local directory.
+    :param revision: Hub revision; defaults to :data:`OLMO35_TOKENIZER_REVISION` for the hub id.
+    :param cache_dir: Hugging Face Hub cache.
+
+    :returns: ``(tokenizer, promoted)``; ``promoted`` is empty when the source already holds the
+        promoted tags (the tokenizer saved beside the text SFT cache).
+    """
+    from olmo_core.nn.hf.tokenizer import load_tokenizer_losslessly
+
+    if revision is None and name_or_path == OLMO35_TOKENIZER:
+        revision = OLMO35_TOKENIZER_REVISION
+    tokenizer, _, _ = load_tokenizer_losslessly(
+        name_or_path, revision=revision, cache_dir=cache_dir
+    )
+    promoted = promote_tokens_into_reserved_slots(tokenizer, OLMO35_THINK_TAGS)
+    require_promoted_think(tokenizer)
+    return tokenizer, promoted
 
 
 def load_olmo35_tokenizer(name_or_path: str = OLMO35_TOKENIZER, *, revision: Optional[str] = None):
@@ -300,6 +434,78 @@ def _image_char_offset(tokenizer, messages, tools, rendered: str) -> int:
     return start + len(_USER_HEADER)
 
 
+def _image_token_index(tokenizer, messages, tools, rendered, input_ids, offsets) -> int:
+    """Token index where the image blocks go (the start of the first user turn's content),
+    checking that the text on either side keeps its tokens when the blocks split it."""
+    cut = _image_char_offset(tokenizer, messages, tools, rendered)
+    at = next((i for i, (start, _) in enumerate(offsets) if start >= cut), len(offsets))
+    if (at > 0 and offsets[at - 1][1] != cut) or (at < len(offsets) and offsets[at][0] != cut):
+        raise ValueError("no token boundary at the start of the first user turn")
+    left = tokenizer(rendered[:cut], add_special_tokens=False)["input_ids"]
+    right = tokenizer(rendered[cut:], add_special_tokens=False)["input_ids"]
+    if left + right != np.asarray(input_ids).tolist():
+        raise ValueError("the text around the image blocks tokenizes differently on its own")
+    return at
+
+
+def branch_segments(
+    tokenizer, turns: Sequence[Tuple[str, str]]
+) -> Tuple[List[int], List[Tuple[List[int], List[int]]]]:
+    """One (question, answer) conversation in the olmo35 layout, cut into the pieces
+    :func:`~olmo_core.data.multimodal.sequence_builder.build_branched_sequence` takes.
+
+    The conversation is rendered by the chat template and tokenized once, with
+    :func:`tokenize_conversation`'s labels (open-instruct's rule), then cut where the image blocks
+    go: the head (the default system turn and ``<|im_start|>user\\n``) comes back separately so
+    the caller can put the image blocks after it, and the rest alternates non-label context and
+    label response runs. With no reasoning, every assistant turn renders as
+    ``<|im_start|>assistant\\n<think></think>{answer}<|endoftext|>``: ``<think>`` closes the
+    generation prompt and is context, ``</think>``, the answer and the EOS are labels, exactly
+    as in the text SFT rows. The final EOS is dropped from the last response, because the
+    builder makes EOS the target of the branch's last token itself; an earlier turn keeps its EOS
+    as a label, as open-instruct trains it.
+
+    :param tokenizer: The tokenizer from :func:`load_olmo35_sft_tokenizer`.
+    :param turns: ``(question, answer)`` pairs of one sequential conversation.
+
+    :returns: ``(head_ids, [(context_ids, response_ids), ...])``; ``head_ids`` concatenated with
+        every segment, plus the final EOS, is the text-only rendering's token sequence.
+
+    :raises ValueError: If the conversation cannot be cut as described.
+    """
+    messages: List[Dict[str, Any]] = []
+    for question, answer in turns:
+        messages.append({"role": "user", "content": question})
+        messages.append({"role": "assistant", "content": answer})
+    input_ids, label_mask, offsets, (messages, tools, rendered) = _tokenize(
+        tokenizer, messages, None
+    )
+    at = _image_token_index(tokenizer, messages, tools, rendered, input_ids, offsets)
+    if label_mask[:at].any():
+        raise ValueError("a label precedes the first user turn")
+    ids = input_ids.tolist()
+    head, rest, mask = ids[:at], ids[at:], label_mask[at:].tolist()
+    segments: List[Tuple[List[int], List[int]]] = []
+    i = 0
+    while i < len(rest):
+        j = i
+        while j < len(rest) and not mask[j]:
+            j += 1
+        k = j
+        while k < len(rest) and mask[k]:
+            k += 1
+        if j == i or k == j:
+            raise ValueError("expected alternating context and response runs")
+        segments.append((rest[i:j], rest[j:k]))
+        i = k
+    eos = tokenizer.eos_token_id
+    last_context, last_response = segments[-1]
+    if last_response[-1] != eos or len(last_response) < 2:
+        raise ValueError("the last assistant turn does not end with EOS")
+    segments[-1] = (last_context, last_response[:-1])
+    return head, segments
+
+
 def encode_conversation(
     tokenizer,
     messages: Sequence[Dict[str, Any]],
@@ -327,14 +533,7 @@ def encode_conversation(
         tokenizer, messages, tools
     )
     if len(image_ids):
-        cut = _image_char_offset(tokenizer, messages, tools, rendered)
-        at = next((i for i, (start, _) in enumerate(offsets) if start >= cut), len(offsets))
-        if (at > 0 and offsets[at - 1][1] != cut) or (at < len(offsets) and offsets[at][0] != cut):
-            raise ValueError("no token boundary at the start of the first user turn")
-        left = tokenizer(rendered[:cut], add_special_tokens=False)["input_ids"]
-        right = tokenizer(rendered[cut:], add_special_tokens=False)["input_ids"]
-        if left + right != input_ids.tolist():
-            raise ValueError("the text around the image blocks tokenizes differently on its own")
+        at = _image_token_index(tokenizer, messages, tools, rendered, input_ids, offsets)
         image = np.asarray(image_ids, dtype=np.int64)
         input_ids = np.concatenate([input_ids[:at], image, input_ids[at:]])
         label_mask = np.concatenate(

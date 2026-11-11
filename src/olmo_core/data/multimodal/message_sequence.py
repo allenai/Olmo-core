@@ -150,6 +150,21 @@ def encode_sft_example(
         rng.shuffle(order)
         branch_turns = [branch_turns[i] for i in order]
 
+    if message_format == "olmo35":
+        seq, n_documents = _encode_olmo35(
+            tokenizer,
+            grids,
+            branch_turns,
+            token_ids=resolved_token_ids,
+            message_weight=message_weight,
+            document_token_budget=(
+                OLMO35_DOCUMENT_TOKEN_BUDGET
+                if document_token_budget is None
+                else document_token_budget
+            ),
+        )
+        return _attach_images(seq, crops_list, pooling_list, n_documents)
+
     prefix = _multi_image_prefix_ids(
         tokenizer,
         grids,
@@ -218,6 +233,15 @@ def encode_sft_example(
             mw,
             branch_scaling_already_applied=True,
         )
+    return _attach_images(seq, crops_list, pooling_list, n_documents)
+
+
+def _attach_images(
+    seq: Dict[str, np.ndarray],
+    crops_list: List[np.ndarray],
+    pooling_list: List[np.ndarray],
+    n_documents: int,
+) -> Dict[str, np.ndarray]:
     if not crops_list:
         # Text-only example: zero crops / pooled rows (same shape convention as Tulu).
         from olmo_core.nn.vision.molmo2_tokens import (
@@ -235,6 +259,77 @@ def encode_sft_example(
     # Each document's image block pools the same crops.
     seq["pooled_patches_idx"] = np.tile(pooled, (n_documents, 1)) if n_documents > 1 else pooled
     return seq
+
+
+OLMO35_DOCUMENT_TOKEN_BUDGET = 16384
+"""Default token budget of one ``olmo35`` example whose annotations become documents: the
+sequence length of Molmo2's stage-2 recipe. Documents past it are dropped (the first is kept)."""
+
+
+def _encode_olmo35(
+    tokenizer,
+    grids: Sequence[np.ndarray],
+    branch_turns: List[List[Tuple[str, str]]],
+    *,
+    token_ids: Molmo2TokenIds,
+    message_weight: Union[None, float, MessageWeight],
+    document_token_budget: Optional[int],
+) -> Tuple[Dict[str, np.ndarray], int]:
+    """The ``olmo35`` serializer: each branch is a conversation in the Olmo 3.5 chat template of
+    the text SFT recipe, labelled as open-instruct labels it, with the image blocks at the start
+    of the first user turn (:func:`~olmo_core.data.multimodal.olmo35_layout.branch_segments`).
+
+    Olmo 3.5's language model isolates packed examples only by document boundaries (its KDA
+    layers have no attention mask), so sibling branches over a shared prefix would see each
+    other. Several annotations of one image therefore become one document each, sharing the
+    image's crops, and every response token weighs 1 (times ``message_weight``), as in the text
+    SFT rows: the per-source balance is set by the mixture's loss-mass sampling instead.
+    """
+    from .olmo35_layout import branch_segments, require_promoted_think
+
+    require_promoted_think(tokenizer)
+    head: Optional[List[int]] = None
+    branches = []
+    for turns in branch_turns:
+        branch_head, segments = branch_segments(tokenizer, turns)
+        if head is None:
+            head = branch_head
+        elif branch_head != head:
+            raise ValueError("olmo35 branches render different heads")
+        branches.append(segments)
+    assert head is not None
+    prefix = list(head)
+    multi_image = len(grids) > 1
+    for image_index, grid in enumerate(grids):
+        if multi_image:
+            prefix.extend(tokenizer.encode(f"Image {image_index + 1}", add_special_tokens=False))
+        resized_h, resized_w, height, width = (int(grid[i]) for i in range(4))
+        prefix.extend(
+            build_image_token_ids(resized_h, resized_w, height, width, token_ids=token_ids)
+        )
+    # Only the scale of an override applies: the root-length and root-subsegment schemes do not.
+    weight = MessageWeight.from_string("none").with_overrides(message_weight).weight
+    mw = MessageWeight(weight=weight)
+    if len(branches) > 1:
+        return _build_documents(
+            prefix,
+            branches,
+            mw,
+            eos_id=tokenizer.eos_token_id,
+            image_token_ids=token_ids.image_token_ids,
+            token_budget=document_token_budget,
+        )
+    seq = build_branched_sequence(
+        prefix,
+        branches,
+        eos_id=tokenizer.eos_token_id,
+        image_token_ids=token_ids.image_token_ids,
+        loss_token_weighting="none",
+    )
+    seq["loss_masks"] = apply_message_weight_to_loss_masks(
+        seq["loss_masks"], None, mw, branch_scaling_already_applied=True
+    )
+    return seq, 1
 
 
 def _build_documents(

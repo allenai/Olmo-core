@@ -150,6 +150,8 @@ class PixMoCapDataset:
         if config.mode not in _MODES:
             raise ValueError(f"Unknown mode {config.mode!r}; expected one of {_MODES}")
         validate_sft_message_format(config.message_format)
+        if config.message_format == "olmo35" and config.mode != "sft_demo":
+            raise ValueError("message_format='olmo35' is supported in mode='sft_demo' only")
         self.config = config
         self.tokenizer = tokenizer
         self._rows: Optional[List[Dict[str, Any]]] = None
