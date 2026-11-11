@@ -207,3 +207,65 @@ def test_pixmo_multi_points_dataset_smoke(tokenizer):
     assert len(ds) > 0
     seq = ds[1]
     assert (seq["loss_masks"] >= 0).all()
+
+
+class _FormatsNothing:
+    def format_branches(self, formatted, index, rng):
+        return []
+
+
+def _bare_multi_image_dataset(monkeypatch, seq, max_sequence_length, loss_token_weighting="none"):
+    """A multi-image dataset whose encoder returns ``seq``, to test its length handling alone."""
+    from types import SimpleNamespace
+
+    from olmo_core.data.multimodal import multi_image_datasets as mid
+
+    class _Dataset(mid._MultiImageSftDataset):
+        def _format_row(self, row, rng):
+            return {"image": []}
+
+    monkeypatch.setattr(mid, "_open_images", lambda image: [])
+    monkeypatch.setattr(mid, "encode_sft_example", lambda *args, **kwargs: dict(seq))
+    ds = _Dataset()
+    ds.config = SimpleNamespace(
+        seed=0,
+        max_crops=1,
+        max_images=5,
+        p_high_res=0.0,
+        loss_token_weighting=loss_token_weighting,
+        message_weight=None,
+        max_sequence_length=max_sequence_length,
+    )
+    ds.tokenizer = None
+    ds._formatter = _FormatsNothing()  # type: ignore[assignment]
+    ds._rows = [None]
+    return ds
+
+
+def _long_multi_image_seq(n=20):
+    from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID
+
+    input_ids = np.full(n, 7, dtype=np.int64)
+    input_ids[2:6] = IM_PATCH_ID  # the image block sits at the front
+    loss_masks = np.zeros(n, dtype=np.float32)
+    loss_masks[8:] = 1.0
+    return {"input_ids": input_ids, "loss_masks": loss_masks, "labels": input_ids.copy()}
+
+
+def test_multi_image_example_longer_than_the_recipe_is_tail_truncated(monkeypatch):
+    ds = _bare_multi_image_dataset(monkeypatch, _long_multi_image_seq(), max_sequence_length=12)
+    out = ds[0]
+    assert len(out["input_ids"]) == len(out["loss_masks"]) == len(out["labels"]) == 12
+
+
+def test_multi_image_example_whose_image_block_does_not_fit_is_rejected(monkeypatch):
+    """A ``ValueError`` here is what lets the loader skip the row; in the collator it would stop
+    the run."""
+    ds = _bare_multi_image_dataset(monkeypatch, _long_multi_image_seq(), max_sequence_length=4)
+    with pytest.raises(ValueError, match="image"):
+        ds[0]
+
+
+def test_multi_image_length_is_left_alone_without_a_limit(monkeypatch):
+    ds = _bare_multi_image_dataset(monkeypatch, _long_multi_image_seq(), max_sequence_length=None)
+    assert len(ds[0]["input_ids"]) == 20
