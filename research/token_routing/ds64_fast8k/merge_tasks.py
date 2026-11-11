@@ -82,6 +82,9 @@ def main() -> None:
     ap.add_argument("--sample-seed", type=int, default=0,
                     help="with --rows-per-src: sample the rows uniformly (this seed) instead of taking the first N "
                     "(a CTC shard is ordered by rung, so the first N are all the shortest rung)")
+    ap.add_argument("--allow-no-gold", action="store_true",
+                    help="sources without gold_fingerprints.json count as empty (node-local *_fresh copies); "
+                    "the merged shard then has no sidecar, like /data/prasann/oracle/shards/mt4f1952")
     ap.add_argument("--max-row-len", type=int, default=0,
                     help="drop rows longer than this many tokens (e.g. 32768 for a 32k window; the "
                     "trainer refuses a --seq-len below a shard's max_example_len)")
@@ -110,7 +113,8 @@ def main() -> None:
                 shutil.copy2(t, dt.replace("_000.npy", f"_{k:03d}.npy"))
                 shutil.copy2(m, dm.replace("_000.npy", f"_{k:03d}.npy"))
         metas[-1] = meta
-        side = json.load(open(os.path.join(src, "gold_fingerprints.json")))
+        gpath = os.path.join(src, "gold_fingerprints.json")
+        side = {} if (a.allow_no_gold and not os.path.exists(gpath)) else json.load(open(gpath))
         clash = [k for k in side if k in gold and gold[k] != side[k]]
         if clash:
             raise SystemExit(f"{src}: {len(clash)} fingerprints with conflicting gold, e.g. {clash[0]}")
@@ -130,7 +134,8 @@ def main() -> None:
     merged["task"] = a.name
     merged["merged_from"] = [{"src": s, "task": m.get("task"), "num_instances": m.get("num_instances")}
                              for s, m in zip(a.src, metas)]
-    json.dump(gold, open(os.path.join(a.out, "gold_fingerprints.json"), "w"))
+    if gold or not a.allow_no_gold:
+        json.dump(gold, open(os.path.join(a.out, "gold_fingerprints.json"), "w"))
     json.dump(merged, open(os.path.join(a.out, "metadata.json"), "w"), indent=1)
     print(f"[merge] wrote {a.out}: {merged.get('num_instances')} rows, {len(gold)} gold rows, "
           f"max_example_len {merged['max_example_len']}")
