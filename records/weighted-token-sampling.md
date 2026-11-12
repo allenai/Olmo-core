@@ -5,7 +5,7 @@ updated: 2026-11-11
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (round 5: the recipe without its dense step (S0wr) matches the recipe at both budgets, so the ~0.01 gap of the best wts arms is the sampling itself; weights are required (S1H 0.773); round 6 trims the weight tail and the uniform share)
+status: in progress (round 6: no variant of sampled-at-block-7 closes the gap; 9 single-seed hard=1 runs average 0.828 vs 0.847 for 4 top-k runs, and seed noise (~0.02 on the mean) now exceeds the differences screened; S4 tests top-k vs sampling at half the recipe's keeps, 2 seeds)
 superseded_by: 
 artifact: 
 summary: Replaces the recipe's fixed top-k token drop (20% after block 7, 7% after 16) with sampled survival (exact inclusion probabilities), token weights w = 1/p carried into attention (log w key bias) and Gated DeltaNet (exact w-fold write), an IPW router fit, and a price rule p = clip(s / (tau sqrt(c)), pmin, 1) with tau set by a FLOP controller. Staged S0-S5; results tables below.
@@ -115,6 +115,11 @@ SE of the 4-task 8k mean is about 0.008; per task about 0.01-0.02 (outlier at 0.
 | wtsS0wr seed 1 | 0.219 | 24.2 | 0.943 | 0.940 | 0.897 | 0.656 | 0.859 | 0.923 | 0.100 |
 | wtsS1H (sampled at block 7, no weights, top-k at 16) | 0.218 | 24.2 | 0.932 | 0.936 | 0.625 | 0.599 | 0.773 | 0.843 | 0.368 |
 | wtsS2aT2H (as S2aH, temp 0.2) | 0.218 | 24.2 | 0.945 | 0.902 | 0.782 | 0.664 | 0.823 | 0.922 | 0.214 |
+| *round 6 (all `hard=1`)* | | | | | | | | | |
+| wtsS2aHc16 (clip log w 1.6) | 0.218 | 24.2 | 0.943 | 0.926 | 0.800 | 0.597 | 0.817 | 0.919 | 0.196 |
+| wtsS2aHc07 (clip log w 0.7) | 0.218 | 24.2 | 0.949 | 0.906 | 0.774 | 0.646 | 0.819 | 0.910 | 0.220 |
+| wtsS2aHm02 (uniform share 0.02) | 0.218 | 24.2 | 0.950 | 0.924 | 0.734 | 0.617 | 0.806 | 0.913 | 0.262 |
+| wtsS2aHm02c16 (both) | 0.218 | 24.2 | 0.948 | 0.934 | 0.825 | 0.657 | 0.841 | 0.913 | 0.172 |
 
 3,904 rows/task (976 steps, local `mt4f3904` shard), seed 0, eval_size 500 per cell:
 
@@ -174,6 +179,14 @@ Weights are required: without them (S1H) outlier falls to 0.625. Sharper scores 
 0.823). Logged weights in S2aH: mean log w ~1.1 (w ~3), per-step max ~2.9 (w ~18). Round 6 trims the tail (clip
 log w at 1.6 or 0.7) and the uniform share (mix 0.02), all with `hard=1`.
 
+Round 6 (11-11). Trimming the weight tail or the uniform share does not close the gap: clip 1.6 0.817, clip 0.7
+0.819, mix 0.02 0.806, both 0.841 (one seed each). The screens are now noise-limited. Across seeds the 8k mean moves
+by ~0.02 (S2aH 0.847 / 0.826, S2aT5H 0.810 / 0.864, S0wr 0.837 / 0.859), so single-seed differences under ~0.03 mean
+little. Pooled, the 9 single-seed runs that sample at block 7 with top-k at block 16 average 0.828 (sd 0.019); the 4
+top-k runs (recipe x2, S0wr x2) average 0.847 (sd 0.009). At the recipe's operating point sampling at block 7 costs
+about 0.02 at 1,952 rows and 0.007 at 3,904, and no variant tried removes it. S4 asks whether sampling wins once the
+budget binds: half the recipe's keeps (7:0.1, 16:0.035, ~0.18x), top-k (S4k) vs S2aH-style (S4aH), 2 seeds each.
+
 Training-side detail:
 
 Training-side, 1,952 rows/task, 488 steps, 2 H200 (mooney), seed 0:
@@ -217,6 +230,7 @@ alloc=doc arm wtsS3d keeps every document's share).
 | 11-11 | S2aH matches the recipe over 2 seeds and at 3,904 rows | no: 2-seed 0.8365 (seed 1 0.826); 3,904 rows 0.877 vs 0.882 / 0.889. S2aT5H seed 1 0.864, so its 0.810 was seed noise (2-seed 0.837). Sampled arms swing ±0.05 on outlier across seeds; the recipe does not |
 | 11-11 | the ~0.009 gap is the missing dense step 1, not the sampling (S0wr = 0.837 too) | no: S0wr seed 1 0.859 (2-seed 0.848), 0.884 at 3,904 rows; the routed warmup matches the recipe |
 | 11-11 | weights matter once the deep cut is top-k | yes: S1H (no weights) 0.773, outlier 0.625 vs S2aH 0.8365 |
-| 11-11 | the gap is the high-weight tail / uniform share (low-p random survivors with large w) | testing (round 6: clip 1.6, clip 0.7, mix 0.02, both) |
+| 11-11 | the gap is the high-weight tail / uniform share (low-p random survivors with large w) | no: clip 1.6 0.817, clip 0.7 0.819, mix 0.02 0.806, both 0.841 (one seed each, inside seed noise) |
+| 11-11 | sampling beats top-k once the budget binds (half the recipe's keeps) | testing (S4k vs S4aH, 2 seeds) |
 | 11-10 | peak memory creeps 26.9 -> 30.5 GiB in S1/S2b | diag (`--st-otr-diag-every`) shallow-copied router links, leaking stale router copies each diag; fixed in the callback, probe without diag flat at 24.1 GiB |
 | 11-10 | row-centred targets let one price trade off two cuts | no: centring erases the gradient scale between cuts; added `center=none` and tau calibration |
