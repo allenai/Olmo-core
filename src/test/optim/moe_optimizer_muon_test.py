@@ -7,7 +7,7 @@ covering both orthogonalization paths: local (shard holds whole matrices) and al
 """
 
 import math
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import pytest
 import torch
@@ -196,8 +196,13 @@ def _reference_step(
     grads: Dict[str, torch.Tensor],
     muon_momentum: Dict[str, torch.Tensor],
     adam_state: Dict[str, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+    ns: Callable[..., torch.Tensor] = newton_schulz,
 ) -> None:
-    """One step of the dion Muon / AdamW math on full tensors, in place."""
+    """
+    One step of the dion Muon / AdamW math on full tensors, in place. ``ns`` is the
+    orthogonalization kernel; the compiled variant rounds bf16 intermediates differently from
+    eager, so the reference must use the same kernel as the optimizer under test.
+    """
     total_norm = torch.sqrt(sum(g.float().norm() ** 2 for g in grads.values()))
     clip = torch.clamp(MAX_GRAD_NORM / (total_norm + 1e-6), max=1.0)
     grads = {name: g * clip for name, g in grads.items()}
@@ -209,7 +214,7 @@ def _reference_step(
             m = muon_momentum[name]
             m.mul_(MU).add_(g)
             u = g + MU * m  # nesterov
-            o = newton_schulz(u.view(-1, p.shape[-2], p.shape[-1])).view_as(p)
+            o = ns(u.view(-1, p.shape[-2], p.shape[-1])).view_as(p)
             p.mul_(1 - LR * wd)
             p.sub_(muon_adjusted_lr(LR, p.shape, MuonAdjustLRStrategy.rms_norm) * o)
         else:
@@ -228,10 +233,12 @@ def _reference_step(
             )
 
 
-def _run_steps(sharded: bool, num_steps: int = 2):
+def _run_steps(sharded: bool, compiled: bool, num_steps: int = 2):
     mesh = init_device_mesh("cpu", (2,), mesh_dim_names=("dp",))
     params = _make_params(seed=1)
     optim = _build_optimizer(params, mesh, sharded=sharded)
+    if compiled:
+        optim.compile_muon_kernels()
 
     # Muon params carry a momentum buffer and no AdamW moments; everything else is AdamW.
     for name, _, _ in PARAM_SPECS:
@@ -252,7 +259,7 @@ def _run_steps(sharded: bool, num_steps: int = 2):
             param.grad = grads[name].clone()
         optim.latest_loss = torch.tensor(1.0)
         optim.step()
-        _reference_step(ref_params, grads, ref_momentum, ref_adam)
+        _reference_step(ref_params, grads, ref_momentum, ref_adam, ns=optim._muon_newton_schulz)
 
         for name, param in params.items():
             torch.testing.assert_close(param.detach(), ref_params[name], rtol=1e-5, atol=1e-6)
@@ -262,10 +269,14 @@ def _run_steps(sharded: bool, num_steps: int = 2):
             assert optim.states[f"{name}.step"].full_tensor().item() == step_idx + 1
 
 
-@pytest.mark.parametrize("sharded", [False, True])
-def test_muon_step_matches_reference(sharded: bool):
+@pytest.mark.parametrize("sharded, compiled", [(False, False), (True, False), (True, True)])
+def test_muon_step_matches_reference(sharded: bool, compiled: bool):
     run_distributed_test(
-        _run_steps, world_size=2, backend="gloo", start_method="spawn", func_args=(sharded,)
+        _run_steps,
+        world_size=2,
+        backend="gloo",
+        start_method="spawn",
+        func_args=(sharded, compiled),
     )
 
 

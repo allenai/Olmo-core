@@ -6,13 +6,19 @@ their own and reused by any optimizer that needs an orthogonalized momentum upda
 """
 
 import math
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 import torch
 
 from .muon import MuonAdjustLRStrategy
 
-__all__ = ["newton_schulz", "is_muon_matrix_shape", "muon_adjusted_lr"]
+__all__ = [
+    "newton_schulz",
+    "is_muon_matrix_shape",
+    "muon_adjusted_lr",
+    "muon_momentum_update",
+    "muon_apply_update",
+]
 
 NS_COEFFICIENTS = (3.4445, -4.7750, 2.0315)
 """Quintic Newton-Schulz coefficients from the original Muon implementation."""
@@ -48,6 +54,40 @@ def muon_adjusted_lr(
     if strategy == MuonAdjustLRStrategy.spectral_norm:
         return lr * math.sqrt(fan_out / fan_in)
     raise ValueError(f"Unknown Muon LR adjustment strategy: {strategy}")
+
+
+def muon_momentum_update(
+    momentum: torch.Tensor,
+    grad: torch.Tensor,
+    step_factor: torch.Tensor,
+    mu: float,
+    nesterov: bool,
+) -> torch.Tensor:
+    """
+    In place ``M <- mu * M + g`` on the momentum buffer, gated by ``step_factor`` (0 or 1) so a
+    skipped step leaves it untouched, and return the tensor to orthogonalize (``mu * M + g`` with
+    Nesterov, otherwise ``M``). Both inputs are flat fp32 local shards.
+    """
+    momentum.mul_(1.0 - step_factor * (1.0 - mu)).add_(grad * step_factor)
+    return torch.add(grad, momentum, alpha=mu) if nesterov else momentum
+
+
+def muon_apply_update(
+    main: torch.Tensor,
+    orth: torch.Tensor,
+    step: torch.Tensor,
+    step_factor: torch.Tensor,
+    lr: Union[float, torch.Tensor],
+    weight_decay: Union[float, torch.Tensor],
+    adjusted_lr: Union[float, torch.Tensor],
+) -> None:
+    """
+    In place decoupled weight decay at the base ``lr`` followed by the orthogonalized update at
+    ``adjusted_lr`` (dion's conventions), both gated by ``step_factor``; bumps ``step``.
+    """
+    main.mul_(1.0 - step_factor * (lr * weight_decay))
+    main.sub_(orth * (step_factor * adjusted_lr))
+    step.add_(step_factor)
 
 
 def newton_schulz(G: torch.Tensor, steps: int = 5, eps: float = 1e-7) -> torch.Tensor:

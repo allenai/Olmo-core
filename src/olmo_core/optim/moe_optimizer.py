@@ -46,7 +46,13 @@ from .adamw import foreach_adamw_step
 from .config import INITIAL_LR_FIELD, LR_FIELD, OptimGroupOverride
 from .grad_debug import debug_nan_inf_grad_norm
 from .muon import MuonAdjustLRStrategy
-from .muon_update import is_muon_matrix_shape, muon_adjusted_lr, newton_schulz
+from .muon_update import (
+    is_muon_matrix_shape,
+    muon_adjusted_lr,
+    muon_apply_update,
+    muon_momentum_update,
+    newton_schulz,
+)
 
 log = logging.getLogger(__name__)
 
@@ -459,6 +465,7 @@ class OLMoDDPOptimizerConfig(Config):
             # avoids Dynamo/Inductor capturing giant all_gather graphs that can OOM.
             log.info("Compiling optimizer update path (_step_foreach)...")
             optim._step_foreach = torch.compile(optim._step_foreach)
+            optim.compile_muon_kernels()
 
         # Register hook to reset fixed fields after loading a checkpoint.
 
@@ -571,6 +578,10 @@ class OLMoDDPOptimizer:
         self.muon_adjust_lr = (
             None if muon_adjust_lr is None else MuonAdjustLRStrategy(muon_adjust_lr)
         )
+        # Eager Muon kernels; `compile_muon_kernels()` swaps in compiled versions.
+        self._muon_momentum_update = muon_momentum_update
+        self._muon_newton_schulz = newton_schulz
+        self._muon_apply_update = muon_apply_update
 
         def _add_defaults_to_param_group(pg: Dict[str, Any]) -> Dict[str, Any]:
             for k, v in defaults.items():
@@ -2273,7 +2284,6 @@ class OLMoDDPOptimizer:
             return
 
         step_factor = self.get_step_factor()  # 1.0, or 0.0 when the skip-step logic skips
-        mu = self.muon_momentum
 
         for group in self.param_groups:
             lr = group["lr"]
@@ -2288,29 +2298,43 @@ class OLMoDDPOptimizer:
                 step = self.states[f"{name}.step"].to_local()
                 grad = _to_local_tensor(self.main_grad[name]).float()
 
-                # M <- mu * M + g, gated so a skipped step leaves the buffer untouched.
-                momentum.mul_(1.0 - step_factor * (1.0 - mu)).add_(grad * step_factor)
-                update = momentum * mu + grad if self.muon_nesterov else momentum
+                update = self._muon_momentum_update(
+                    momentum, grad, step_factor, self.muon_momentum, self.muon_nesterov
+                )
 
+                # Both paths hand the kernel a (batch, out, in) view so the compiled graphs match.
                 shape = tuple(param.shape)
-                matrix_numel = shape[-2] * shape[-1]
-                if update.numel() % matrix_numel == 0:
-                    orth = newton_schulz(
-                        update.view(-1, shape[-2], shape[-1]), steps=self.muon_ns_steps
+                matrix_shape = (-1, shape[-2], shape[-1])
+                if update.numel() % (shape[-2] * shape[-1]) == 0:
+                    orth = self._muon_newton_schulz(
+                        update.view(matrix_shape), self.muon_ns_steps
                     ).reshape(-1)
                 else:
                     full_update = self._gather_sharded_flat_tensor(update, main_dt)
-                    orth = newton_schulz(full_update.view(shape), steps=self.muon_ns_steps)
+                    orth = self._muon_newton_schulz(
+                        full_update.view(matrix_shape), self.muon_ns_steps
+                    )
                     orth = self.narrow_tensor(
                         orth.reshape(-1), main_dt.device_mesh, list(main_dt.placements)
                     )
 
-                # Decoupled weight decay at the base LR, then the orthogonalized update at the
-                # shape-adjusted LR (same conventions as dion's Muon).
-                main.mul_(1.0 - step_factor * (lr * weight_decay))
                 adjusted_lr = muon_adjusted_lr(lr, shape, self.muon_adjust_lr)
-                main.sub_(orth * (step_factor * adjusted_lr))
-                step.add_(step_factor)
+                self._muon_apply_update(
+                    main, orth, step, step_factor, lr, weight_decay, adjusted_lr
+                )
+
+    def compile_muon_kernels(self) -> None:
+        """
+        Compile the three Muon kernels (momentum update, Newton-Schulz, weight update) with
+        static shapes. The collective between them stays eager. A model has only a handful of
+        distinct matrix shapes, so the recompile limit is raised as in :mod:`olmo_core.optim.muon`.
+        """
+        if not self._muon_param_names:
+            return
+        torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, 16)
+        self._muon_momentum_update = torch.compile(muon_momentum_update, dynamic=False)
+        self._muon_newton_schulz = torch.compile(newton_schulz, dynamic=False)
+        self._muon_apply_update = torch.compile(muon_apply_update, dynamic=False)
 
     def zero_grad(self, set_to_none=True):
         raise RuntimeError(
