@@ -45,6 +45,8 @@ from ..exceptions import OLMoConfigurationError
 from .adamw import foreach_adamw_step
 from .config import INITIAL_LR_FIELD, LR_FIELD, OptimGroupOverride
 from .grad_debug import debug_nan_inf_grad_norm
+from .muon import MuonAdjustLRStrategy
+from .muon_update import is_muon_matrix_shape, muon_adjusted_lr, newton_schulz
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +126,10 @@ class OLMoDDPOptimizerConfig(Config):
     (:data:`lr`, :data:`betas`, :data:`eps`, :data:`weight_decay`) and skip-step spike-detection
     settings (:data:`rolling_interval_length`,
     :data:`sigma_factor`, :data:`max_grad_norm`), plus optional per-parameter-group overrides.
+
+    Setting :data:`use_muon` (globally, or per group through an override option of the same
+    name) switches the matrix-shaped parameters of those groups to Muon, see
+    :class:`OLMoDDPOptimizer` for the exact parameter selection rule.
     """
 
     group_overrides: Optional[List[OptimGroupOverride]] = None
@@ -183,6 +189,28 @@ class OLMoDDPOptimizerConfig(Config):
     When ``True``, device-side assert (without a host sync) that the loss and the total grad norm
     are finite each step, aborting the run on a non-finite value; note this aborts rather than
     skipping the step, so it interacts with the skip-step spike detection.
+    """
+
+    use_muon: bool = False
+    """
+    Optimize matrix-shaped parameters with Muon instead of AdamW. This is the default for every
+    param group; an override can set ``use_muon`` per group (e.g. to keep embeddings and the LM
+    head on AdamW). Parameters that are not matrix-shaped stay on AdamW with the group's settings.
+    """
+
+    muon_momentum: float = 0.95
+    """Momentum coefficient for Muon's SGD-momentum buffer."""
+
+    muon_nesterov: bool = True
+    """Use Nesterov momentum for Muon."""
+
+    muon_ns_steps: int = 5
+    """Number of Newton-Schulz iterations used to orthogonalize each Muon update."""
+
+    muon_adjust_lr: Optional[MuonAdjustLRStrategy] = MuonAdjustLRStrategy.rms_norm
+    """
+    How to scale the group LR for Muon updates. ``rms_norm`` keeps per-element update RMS
+    comparable to AdamW so the same LR can be used; ``spectral_norm`` is the muP-style scaling.
     """
 
     @property
@@ -484,12 +512,21 @@ class OLMoDDPOptimizer:
     parameters across the data-parallel and expert-parallel data-parallel process groups (DTensor-
     and expert-parallel-aware), and applies a fused per-group **AdamW** step with **skip-step**
     loss-spike detection. Built via :class:`OLMoDDPOptimizerConfig`.
+
+    **Muon.** A param group with ``use_muon=True`` optimizes its matrix-shaped parameters
+    (see :func:`~olmo_core.optim.muon_update.is_muon_matrix_shape`; leading dims such as the
+    expert dim of ``(E, out, in)`` weights are a batch of independent matrices) with Muon:
+    SGD momentum, orthogonalized per matrix by Newton-Schulz, with decoupled weight decay at the
+    group's base LR and the update scaled per :data:`OLMoDDPOptimizerConfig.muon_adjust_lr`. The
+    momentum lives in a ``<name>.muon_momentum`` state sharded like the AdamW moments; a Muon
+    parameter has no ``exp_avg`` / ``exp_avg_sq``. All other parameters of the group use AdamW.
     """
 
     LOSSES_STATE_DICT_KEY = "__moe_skip_step_losses"
     GRAD_NORMS_STATE_DICT_KEY = "__moe_skip_step_grad_norms"
     ADAM_MOMENT_STATE_SUFFIXES = ("exp_avg", "exp_avg_sq")
-    MOMENT_STATE_SUFFIXES = ADAM_MOMENT_STATE_SUFFIXES
+    MUON_MOMENT_STATE_SUFFIXES = ("muon_momentum",)
+    MOMENT_STATE_SUFFIXES = ADAM_MOMENT_STATE_SUFFIXES + MUON_MOMENT_STATE_SUFFIXES
 
     def __init__(
         self,
@@ -513,14 +550,27 @@ class OLMoDDPOptimizer:
         use_distributed: bool = True,
         check_nan_inf_grad: bool = True,
         reset_optimizer_moments_on_load: bool = False,
+        use_muon: bool = False,
+        muon_momentum: float = 0.95,
+        muon_nesterov: bool = True,
+        muon_ns_steps: int = 5,
+        muon_adjust_lr: Optional[MuonAdjustLRStrategy] = MuonAdjustLRStrategy.rms_norm,
     ) -> None:
         assert lr > 0.0
         assert all([0.0 <= beta <= 1.0 for beta in betas])
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
+        assert 0.0 <= muon_momentum < 1.0
+        assert muon_ns_steps > 0
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, use_muon=use_muon)
 
         self.model_has_grad_accum_fp32_buffer = model_has_grad_accum_fp32_buffer
         self.use_distributed = use_distributed
         self.reset_optimizer_moments_on_load = reset_optimizer_moments_on_load
+        self.muon_momentum = muon_momentum
+        self.muon_nesterov = muon_nesterov
+        self.muon_ns_steps = muon_ns_steps
+        self.muon_adjust_lr = (
+            None if muon_adjust_lr is None else MuonAdjustLRStrategy(muon_adjust_lr)
+        )
 
         def _add_defaults_to_param_group(pg: Dict[str, Any]) -> Dict[str, Any]:
             for k, v in defaults.items():
@@ -622,6 +672,7 @@ class OLMoDDPOptimizer:
                     param.accumulate_wgrad_in_fp32 = self.model_has_grad_accum_fp32_buffer
 
         self.states: Dict[str, DTensor] = OrderedDict()
+        self._muon_param_names: Set[str] = self._select_muon_params(param_groups)
 
         for param_group in param_groups:
             # configure the device mesh to shard the group
@@ -632,6 +683,7 @@ class OLMoDDPOptimizer:
             for name, param in param_group["named_params"].items():
                 # flat in fp32
                 num_elements = param.numel()
+                is_muon = name in self._muon_param_names
 
                 # main param
                 if self.should_maintain_fp32_main_param:
@@ -647,15 +699,13 @@ class OLMoDDPOptimizer:
                         param.data.view(-1), device_mesh=device_mesh, placements=[Replicate()]
                     )
 
-                # exp avg
-                exp_avg = torch.zeros(num_elements, dtype=self.states_dtype, device=device)
-                exp_avg = self._distribute_tensor(exp_avg, device_mesh)
-                self.states[f"{name}.exp_avg"] = exp_avg
-
-                # exp avg sq
-                exp_avg_sq = torch.zeros(num_elements, dtype=self.states_dtype, device=device)
-                exp_avg_sq = self._distribute_tensor(exp_avg_sq, device_mesh)
-                self.states[f"{name}.exp_avg_sq"] = exp_avg_sq
+                # moments: one momentum buffer for Muon, two for AdamW
+                moment_suffixes = (
+                    self.MUON_MOMENT_STATE_SUFFIXES if is_muon else self.ADAM_MOMENT_STATE_SUFFIXES
+                )
+                for suffix in moment_suffixes:
+                    moment = torch.zeros(num_elements, dtype=self.states_dtype, device=device)
+                    self.states[f"{name}.{suffix}"] = self._distribute_tensor(moment, device_mesh)
 
                 # step
                 step_tensor = torch.zeros((), dtype=torch.float32, device=device)
@@ -681,6 +731,33 @@ class OLMoDDPOptimizer:
         self.print_memory_summary()
 
         return
+
+    @staticmethod
+    def _select_muon_params(param_groups: List[Dict[str, Any]]) -> Set[str]:
+        """
+        Names of the parameters optimized with Muon: those in a ``use_muon`` group whose shape is a
+        matrix or a batch of matrices. Other parameters of such groups fall back to AdamW; a
+        fallback for a >=2D parameter is logged since it usually means a group override is missing.
+        """
+        muon_names: Set[str] = set()
+        for param_group in param_groups:
+            if not param_group["use_muon"]:
+                continue
+            for name, param in param_group["named_params"].items():
+                if not param.requires_grad:
+                    continue
+                if _is_fp8_weight_store(param):
+                    raise OLMoConfigurationError(
+                        f"Muon is not supported for FP8 weight stores, got '{name}'"
+                    )
+                if is_muon_matrix_shape(param.shape):
+                    muon_names.add(name)
+                elif param.ndim >= 2:
+                    log.warning(
+                        f"[OLMoDDPOptimizer] '{name}' with shape {tuple(param.shape)} is in a Muon "
+                        "group but is not matrix-shaped; using AdamW for it."
+                    )
+        return muon_names
 
     def print_memory_summary(self):
         total_params = 0
@@ -741,6 +818,7 @@ class OLMoDDPOptimizer:
         main_stat = count_numel("main")
         exp_avg_stat = count_numel("exp_avg")
         exp_avg_sq_stat = count_numel("exp_avg_sq")
+        muon_momentum_stat = count_numel("muon_momentum")
 
         print_str = ""
 
@@ -749,18 +827,19 @@ class OLMoDDPOptimizer:
             print_str += info_str("Exp avg", exp_avg_stat)
         if exp_avg_sq_stat[0] > 0:
             print_str += info_str("Exp avg sq", exp_avg_sq_stat)
+        if muon_momentum_stat[0] > 0:
+            print_str += info_str("Muon momentum", muon_momentum_stat)
 
         BYTES_IN_GB = 1024**3
 
+        global_moment_numel = exp_avg_stat[0] + exp_avg_sq_stat[0] + muon_momentum_stat[0]
+        local_moment_numel = exp_avg_stat[1] + exp_avg_sq_stat[1] + muon_momentum_stat[1]
+
         total_global_optim_gb = main_stat[0] * self.main_grad_dtype.itemsize / BYTES_IN_GB
-        total_global_optim_gb += (
-            (exp_avg_stat[0] + exp_avg_sq_stat[0]) * self.states_dtype.itemsize / BYTES_IN_GB
-        )
+        total_global_optim_gb += global_moment_numel * self.states_dtype.itemsize / BYTES_IN_GB
 
         total_local_optim_gb = main_stat[1] * self.main_grad_dtype.itemsize / BYTES_IN_GB
-        total_local_optim_gb += (
-            (exp_avg_stat[1] + exp_avg_sq_stat[1]) * self.states_dtype.itemsize / BYTES_IN_GB
-        )
+        total_local_optim_gb += local_moment_numel * self.states_dtype.itemsize / BYTES_IN_GB
 
         normal_model_param_gb = (self._model_param_sz - self._mxfp8_logical_param_sz) / BYTES_IN_GB
         total_model_gb = normal_model_param_gb
@@ -1242,6 +1321,7 @@ class OLMoDDPOptimizer:
         self.latest_grad_norm = total_grad_norm
 
         self._step_foreach(closure)
+        self._step_muon()
 
         self._dealloc_main_grad()
 
@@ -1271,7 +1351,9 @@ class OLMoDDPOptimizer:
         return dist.get_world_size(pg), dist.get_rank(pg)
 
     def _state_suffixes_for_param(self, name: str) -> Tuple[str, ...]:
-        return ("main", "exp_avg", "exp_avg_sq", "step")
+        if name in self._muon_param_names:
+            return ("main",) + self.MUON_MOMENT_STATE_SUFFIXES + ("step",)
+        return ("main",) + self.ADAM_MOMENT_STATE_SUFFIXES + ("step",)
 
     def _gather_sharded_flat_tensor(
         self,
@@ -2142,7 +2224,7 @@ class OLMoDDPOptimizer:
                         exp_avg_sqs_original[i].copy_(exp_avg_sqs[i])
 
             for name, model_p in group["named_params"].items():
-                if not model_p.requires_grad:
+                if not model_p.requires_grad or name in self._muon_param_names:
                     continue
 
                 # in adam step(), make everything local and fp32
@@ -2174,6 +2256,61 @@ class OLMoDDPOptimizer:
             flush_chunk()
             maybe_copy_back_16bit_states()
             reset_chunk_buffers()
+
+    @maybe_nvtx_annotate("OLMoDDPOptimizer._step_muon")
+    def _step_muon(self) -> None:
+        """
+        Apply the Muon update to every Muon parameter (see the class docstring). Runs eagerly
+        after :meth:`_step_foreach`, which handles the AdamW parameters of the same groups.
+
+        The momentum buffer is updated on the local shard. The orthogonalization needs whole
+        matrices: when the local shard holds a whole number of matrices (always true for
+        replicated tensors, and for expert weights whenever the local expert count divides evenly
+        across the shard) it runs locally, otherwise the update is all-gathered first and the
+        local shard of the orthogonalized result is sliced back out.
+        """
+        if not self._muon_param_names:
+            return
+
+        step_factor = self.get_step_factor()  # 1.0, or 0.0 when the skip-step logic skips
+        mu = self.muon_momentum
+
+        for group in self.param_groups:
+            lr = group["lr"]
+            weight_decay = group["weight_decay"]
+            for name, param in group["named_params"].items():
+                if name not in self._muon_param_names or not param.requires_grad:
+                    continue
+
+                main_dt = self.states[f"{name}.main"]
+                main = main_dt.to_local()
+                momentum = self.states[f"{name}.muon_momentum"].to_local()
+                step = self.states[f"{name}.step"].to_local()
+                grad = _to_local_tensor(self.main_grad[name]).float()
+
+                # M <- mu * M + g, gated so a skipped step leaves the buffer untouched.
+                momentum.mul_(1.0 - step_factor * (1.0 - mu)).add_(grad * step_factor)
+                update = momentum * mu + grad if self.muon_nesterov else momentum
+
+                shape = tuple(param.shape)
+                matrix_numel = shape[-2] * shape[-1]
+                if update.numel() % matrix_numel == 0:
+                    orth = newton_schulz(
+                        update.view(-1, shape[-2], shape[-1]), steps=self.muon_ns_steps
+                    ).reshape(-1)
+                else:
+                    full_update = self._gather_sharded_flat_tensor(update, main_dt)
+                    orth = newton_schulz(full_update.view(shape), steps=self.muon_ns_steps)
+                    orth = self.narrow_tensor(
+                        orth.reshape(-1), main_dt.device_mesh, list(main_dt.placements)
+                    )
+
+                # Decoupled weight decay at the base LR, then the orthogonalized update at the
+                # shape-adjusted LR (same conventions as dion's Muon).
+                main.mul_(1.0 - step_factor * (lr * weight_decay))
+                adjusted_lr = muon_adjusted_lr(lr, shape, self.muon_adjust_lr)
+                main.sub_(orth * (step_factor * adjusted_lr))
+                step.add_(step_factor)
 
     def zero_grad(self, set_to_none=True):
         raise RuntimeError(

@@ -1259,12 +1259,27 @@ class OLMoDDPTrainModule(TrainModule):
                                 device=optim.device,
                             )
 
+                moment_suffixes = tuple(f".{s}" for s in optim.MOMENT_STATE_SUFFIXES)
                 if reset_optimizer_moments_on_load:
-                    log.info(
-                        "Resetting optimizer exp_avg and exp_avg_sq buffers during checkpoint load"
-                    )
+                    log.info("Resetting optimizer moment buffers during checkpoint load")
                     for key in list(sd_to_load.keys()):
-                        if key.endswith(".exp_avg") or key.endswith(".exp_avg_sq"):
+                        if key.endswith(moment_suffixes):
+                            sd_to_load.pop(key)
+                else:
+                    # A checkpoint written by a different update rule (e.g. an AdamW trunk
+                    # resumed with Muon) lacks this optimizer's moment keys; those moments start
+                    # from zero (see OLMoDDPOptimizer.load_state_dict) instead of failing the load.
+                    missing_moments = [
+                        key
+                        for key in sd_to_load
+                        if key.endswith(moment_suffixes) and key not in checkpoint_keys
+                    ]
+                    if missing_moments:
+                        log.warning(
+                            f"{len(missing_moments)} optimizer moment buffer(s) are missing from "
+                            f"the checkpoint and will be zero-initialized, e.g. '{missing_moments[0]}'"
+                        )
+                        for key in missing_moments:
                             sd_to_load.pop(key)
 
             if not loaded_model_directly:
