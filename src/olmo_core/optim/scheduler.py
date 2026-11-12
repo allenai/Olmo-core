@@ -448,6 +448,10 @@ class InvSqrtWithWarmup(Scheduler):
         if current < warmup:
             return _linear_warmup(initial_lr, current, warmup, self.warmup_min_lr)
 
+        if current <= 0:
+            # Only reachable when there is no warmup, avoid dividing by zero.
+            return initial_lr
+
         eta_min = initial_lr * self.alpha_f
         return eta_min + (initial_lr - eta_min) * sqrt(warmup / current)
 

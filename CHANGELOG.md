@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed int32 pointer-offset overflow in the valid-prefix SwiGLU Triton kernels (forward, dynamic-row forward, and backward). Row and column indices are widened to int64 before stride multiplication, so no-gradient MoE activation buffers with 2^31 or more elements (for example 1,048,576 rows by 2,048 BF16 columns) no longer read or write wrapped addresses.
+- Fixed a `ZeroDivisionError` in `InvSqrtWithWarmup.get_lr()` at step 0 when `warmup=0`.
 - Activation checkpointing now preserves the RNG state across recomputation whenever dropout is active (including `ResidualStream.masked_dropout`), so the recomputed forward replays the same dropout masks as the original forward instead of drawing new ones. Previously this was done only for EMO routing.
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
