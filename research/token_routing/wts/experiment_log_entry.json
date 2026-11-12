@@ -1,13 +1,13 @@
 {
  "date": "2026-11-11",
- "status": "running",
+ "status": "done (negative)",
  "track": "sft4",
  "who": "side session (weighted-token-sampling)",
  "title": "Weighted token sampling: sampled survival with weights w = 1/p in attention / DeltaNet, and a FLOP price rule, instead of the recipe's two-stage top-k",
- "result": "1,952 rows/task, eval_size 500/cell, no-cot. Best arms sample at block 7 (attention log-w bias) and keep the recipe's top-k at block 16 (hard=1): 2-seed 8k means wtsS2aH 0.8365 (0.847/0.826), wtsS2aT5H 0.837 (0.810/0.864), wtsS2aT5 (sampled at both cuts, temp 0.5) 0.8385, vs recipe 0.846/0.847, at 0.215-0.218x step cost and 24.2 GiB peak (recipe 0.221x, 26.9 GiB). At 3,904 rows/task: S2aH 0.877, S2aT5 0.876 vs recipe 0.882/0.889. So about 0.009 under the recipe at both budgets, with \u00b10.05 seed swings on outlier that the recipe does not show. The routed-warmup recipe wtsS0wr (no dense step, as every wts arm) also scores 0.837, so the gap may be the dropped dense step 1; round 5 (S0wr seed 1, S0wr at 3,904, S1H, S2aT2H) tests that. Price rule best: S3aT2 0.832 at 0.203x. At temp 1 sampling is too flat (S1 0.790).",
+ "result": "Negative. 1,952 rows/task, eval_size 500/cell, no-cot. Sampled survival with w = 1/p weights never matched the recipe's top-k: 9 single-seed variants that sample at block 7 (top-k at block 16) average 0.828 (sd 0.019) vs 0.847 for 4 top-k runs; best 2-seed arm wtsS2aH 0.8365 (recipe 0.846/0.847). At 3,904 rows S2aH 0.877 vs recipe 0.882/0.889. At half the keeps (0.19x) top-k 0.821 vs sampled 0.805 (2 seeds each). Weights are required (no weights: outlier 0.63); clipping weights or cutting the uniform share does not help; the price rule trails (best 0.832 at 0.203x). Side result: the recipe with a routed warmup instead of its dense step 1 (wtsS0wr) matches it (2-seed 0.848; 0.884 at 3,904 rows) at 24.2 GiB instead of 26.9. Seed noise on the 8k mean is ~0.02 for routed runs.",
  "match": "1,952 rows/task, recipe base, no dense step",
  "record": "records/weighted-token-sampling.md",
- "branch": "claude/weighted-token-sampling-041da9 (48b18efe9)",
+ "branch": "claude/weighted-token-sampling-041da9",
  "tables": [
   {
    "title": "8k rung (primary), 1,952 rows/task (seed 0 unless noted)",
@@ -201,6 +201,76 @@
      0.639,
      "0.203",
      "24.2"
+    ],
+    [
+     "wtsS0wr seed 1",
+     0.859,
+     0.943,
+     0.94,
+     0.897,
+     0.656,
+     "0.219",
+     "24.2"
+    ],
+    [
+     "wtsS1H (sampled at 7, no weights, top-k at 16)",
+     0.773,
+     0.932,
+     0.936,
+     0.625,
+     0.599,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aT2H (S2aH, temp 0.2)",
+     0.823,
+     0.945,
+     0.902,
+     0.782,
+     0.664,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHc16 (clip log w 1.6)",
+     0.817,
+     0.943,
+     0.926,
+     0.8,
+     0.597,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHc07 (clip log w 0.7)",
+     0.819,
+     0.949,
+     0.906,
+     0.774,
+     0.646,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHm02 (uniform share 0.02)",
+     0.806,
+     0.95,
+     0.924,
+     0.734,
+     0.617,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHm02c16 (both)",
+     0.841,
+     0.948,
+     0.934,
+     0.825,
+     0.657,
+     "0.218",
+     "24.2"
     ]
    ],
    "note": "eval_size 500/cell, no-cot, f1 (oolong: score). SE of the 4-task mean ~0.008; outlier ~0.016-0.019. wts arms 1 seed; recipe 2 seeds. Recipe peak includes its dense step 1 (routed from step 1: 24.2)."
@@ -247,9 +317,55 @@
      0.659,
      "0.215",
      "24.2"
+    ],
+    [
+     "wtsS0wr (recipe, no dense step)",
+     0.884,
+     0.972,
+     0.936,
+     0.973,
+     0.655,
+     "0.219",
+     "24.2"
     ]
    ],
    "note": "eval_size 500/cell, no-cot. Local mt4f3904 shard (976 steps)."
+  },
+  {
+   "title": "S4: half the recipe's keeps (7:0.1,16:0.035), 1,952 rows/task",
+   "cols": [
+    "arm",
+    "8k mean",
+    "contra",
+    "nq",
+    "outlier",
+    "oolong",
+    "step cost (x dense)",
+    "peak GiB"
+   ],
+   "rows": [
+    [
+     "wtsS4k (top-k) s0 / sd1",
+     ".819 / .823",
+     ".942 / .936",
+     ".930 / .902",
+     ".777 / .784",
+     ".626 / .668",
+     "0.189",
+     "23.9"
+    ],
+    [
+     "wtsS4aH (sampled at 7) s0 / sd1",
+     ".814 / .796",
+     ".922 / .924",
+     ".876 / .886",
+     ".818 / .743",
+     ".638 / .633",
+     "0.188",
+     "23.9"
+    ]
+   ],
+   "note": "eval_size 500/cell, no-cot."
   }
  ],
  "chart": {
@@ -271,7 +387,11 @@
    "wtsS3aT5 (price, attention weights, temp 0.5)",
    "wtsS2aH (2-seed mean)",
    "wtsS2aT5H (2-seed mean)",
-   "wtsS3aT2"
+   "wtsS3aT2",
+   "wtsS0wr (2-seed mean)",
+   "wtsS2aHm02c16",
+   "wtsS4k (2-seed, 0.19x)",
+   "wtsS4aH (2-seed, 0.19x)"
   ],
   "series": [
    {
@@ -292,7 +412,11 @@
      0.82,
      0.8365,
      0.837,
-     0.832
+     0.832,
+     0.848,
+     0.841,
+     0.821,
+     0.805
     ]
    }
   ],

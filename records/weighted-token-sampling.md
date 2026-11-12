@@ -5,7 +5,7 @@ updated: 2026-11-11
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: in progress (round 6: no variant of sampled-at-block-7 closes the gap; 9 single-seed hard=1 runs average 0.828 vs 0.847 for 4 top-k runs, and seed noise (~0.02 on the mean) now exceeds the differences screened; S4 tests top-k vs sampling at half the recipe's keeps, 2 seeds)
+status: negative (11-11): sampled survival with 1/p weights never matched top-k: about -0.02 at the recipe's budget (1,952 rows), -0.007 at 3,904 rows, -0.016 at half the keeps (S4, 2 seeds). Side result: the recipe without its dense step 1 (S0wr) matches the recipe at 24.2 GiB instead of 26.9
 superseded_by: 
 artifact: 
 summary: Replaces the recipe's fixed top-k token drop (20% after block 7, 7% after 16) with sampled survival (exact inclusion probabilities), token weights w = 1/p carried into attention (log w key bias) and Gated DeltaNet (exact w-fold write), an IPW router fit, and a price rule p = clip(s / (tau sqrt(c)), pmin, 1) with tau set by a FLOP controller. Staged S0-S5; results tables below.
@@ -120,6 +120,9 @@ SE of the 4-task 8k mean is about 0.008; per task about 0.01-0.02 (outlier at 0.
 | wtsS2aHc07 (clip log w 0.7) | 0.218 | 24.2 | 0.949 | 0.906 | 0.774 | 0.646 | 0.819 | 0.910 | 0.220 |
 | wtsS2aHm02 (uniform share 0.02) | 0.218 | 24.2 | 0.950 | 0.924 | 0.734 | 0.617 | 0.806 | 0.913 | 0.262 |
 | wtsS2aHm02c16 (both) | 0.218 | 24.2 | 0.948 | 0.934 | 0.825 | 0.657 | 0.841 | 0.913 | 0.172 |
+| *S4: half the recipe's keeps (7:0.1, 16:0.035), seed 0 / seed 1* | | | | | | | | | |
+| wtsS4k (top-k, no dense step) | 0.189 | 23.9 | 0.942 / 0.936 | 0.930 / 0.902 | 0.777 / 0.784 | 0.626 / 0.668 | **0.819 / 0.823** | 0.877 / 0.895 | 0.218 / 0.210 |
+| wtsS4aH (sampled at block 7, top-k at 16) | 0.188 | 23.9 | 0.922 / 0.924 | 0.876 / 0.886 | 0.818 / 0.743 | 0.638 / 0.633 | 0.814 / 0.796 | 0.913 / 0.885 | 0.174 / 0.250 |
 
 3,904 rows/task (976 steps, local `mt4f3904` shard), seed 0, eval_size 500 per cell:
 
@@ -187,6 +190,19 @@ top-k runs (recipe x2, S0wr x2) average 0.847 (sd 0.009). At the recipe's operat
 about 0.02 at 1,952 rows and 0.007 at 3,904, and no variant tried removes it. S4 asks whether sampling wins once the
 budget binds: half the recipe's keeps (7:0.1, 16:0.035, ~0.18x), top-k (S4k) vs S2aH-style (S4aH), 2 seeds each.
 
+S4 (11-11). At half the recipe's keeps (0.189x per step, 23.9 GiB), top-k scores 0.819 / 0.823 (mean 0.821) and
+sampling 0.814 / 0.796 (0.805): sampling loses here too (-0.016), so a tighter budget does not turn it into a win.
+Halving the keeps costs top-k 0.026 for 14% fewer step FLOPs; both arms are below the lowest dense point, so their
+FTM is only an upper bound (<= 5.6x).
+
+**Verdict.** Sampled survival with w = 1/p weights does not match the recipe's top-k at any budget tried: about -0.02
+at 1,952 rows (pooled over 9 single-seed variants), -0.007 at 3,904 rows, -0.016 at half the keeps (2 seeds each).
+Weights are necessary for sampling to work at all (without them outlier falls to 0.63-0.67), and sharper scores help
+at temp 1 -> 0.5. But no variant beats keeping the highest-scored tokens. The price rule (S3) trails further (best
+0.832 at 0.203x, one seed). S5 (row-level sampling) was not run. Side result: the recipe with its dense step 1
+replaced by a routed uniform warmup (S0wr) matches the recipe (2-seed 0.848 vs 0.8465; 0.884 at 3,904 vs 0.882 /
+0.889) at 24.2 GiB peak instead of 26.9, with no dense step.
+
 Training-side detail:
 
 Training-side, 1,952 rows/task, 488 steps, 2 H200 (mooney), seed 0:
@@ -231,6 +247,6 @@ alloc=doc arm wtsS3d keeps every document's share).
 | 11-11 | the ~0.009 gap is the missing dense step 1, not the sampling (S0wr = 0.837 too) | no: S0wr seed 1 0.859 (2-seed 0.848), 0.884 at 3,904 rows; the routed warmup matches the recipe |
 | 11-11 | weights matter once the deep cut is top-k | yes: S1H (no weights) 0.773, outlier 0.625 vs S2aH 0.8365 |
 | 11-11 | the gap is the high-weight tail / uniform share (low-p random survivors with large w) | no: clip 1.6 0.817, clip 0.7 0.819, mix 0.02 0.806, both 0.841 (one seed each, inside seed noise) |
-| 11-11 | sampling beats top-k once the budget binds (half the recipe's keeps) | testing (S4k vs S4aH, 2 seeds) |
+| 11-11 | sampling beats top-k once the budget binds (half the recipe's keeps) | no: top-k 0.819 / 0.823 vs sampled 0.814 / 0.796 at 0.19x |
 | 11-10 | peak memory creeps 26.9 -> 30.5 GiB in S1/S2b | diag (`--st-otr-diag-every`) shallow-copied router links, leaking stale router copies each diag; fixed in the callback, probe without diag flat at 24.1 GiB |
 | 11-10 | row-centred targets let one price trade off two cuts | no: centring erases the gradient scale between cuts; added `center=none` and tau calibration |
