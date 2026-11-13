@@ -100,7 +100,9 @@ exit $RC"""
         "resources": {"gpuCount": 8, "sharedMemory": "128GiB"},
         "context": {
             "priority": "urgent",
-            "preemptible": False,
+            # Beaker refuses an explicit preemptible with autoResume/minRuntime; leaving it out
+            # keeps the job non-preemptible (as open-instruct's text SFT spec does).
+            **({} if (args.auto_resume or args.min_runtime) else {"preemptible": False}),
             **({"autoResume": True} if args.auto_resume else {}),
             **({"minRuntime": args.min_runtime} if args.min_runtime else {}),
         },
