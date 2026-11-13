@@ -19,8 +19,8 @@ task (:data:`PDFA_TASKS`):
 ``missing_page``
     The same run with one page left out; the answer is that page's text.
 ``find_page``
-    The same run and a line quoted from one page, found on no other page of the run; the answer
-    is the page number.
+    The same run and a line quoted from one page, found on no other page of the run (checked
+    against the other pages' transcripts and their PDF text layer); the answer is the page number.
 ``page_order``
     A run of consecutive pages in shuffled order, labelled ``"Image k"``; the answer lists the
     image numbers in reading order.
@@ -271,7 +271,7 @@ class PdfaPagesDataset(EpochSeededExamples):
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"{index_path} not found; see v7-recipe/long-docs/README.md")
         columns = ["key", "shard", "pages", "pdf_off", "pdf_size", "split"]
-        columns += ["lo_bucket", "lo_off", "lo_size", "lo_pages"]
+        columns += ["lo_bucket", "lo_off", "lo_size", "lo_pages", "lines_off", "lines_size"]
         table = pq.read_table(index_path, columns=columns).to_pydict()
         pages = np.asarray(table["pages"], dtype=np.int64)
         lo_pages = np.asarray(table["lo_pages"], dtype=np.int64)
@@ -283,7 +283,17 @@ class PdfaPagesDataset(EpochSeededExamples):
         rows = np.flatnonzero(keep)
         self._docs = {
             name: np.asarray(table[name])[rows]
-            for name in ("shard", "pages", "pdf_off", "pdf_size", "lo_bucket", "lo_off", "lo_size")
+            for name in (
+                "shard",
+                "pages",
+                "pdf_off",
+                "pdf_size",
+                "lo_bucket",
+                "lo_off",
+                "lo_size",
+                "lines_off",
+                "lines_size",
+            )
         }
         self._keys = [table["key"][i] for i in rows]
         self._page_ends = np.cumsum(lo_pages[rows])  # page_ocr: example -> document
@@ -318,6 +328,15 @@ class PdfaPagesDataset(EpochSeededExamples):
             self.config.dataset_path, "pdfa", f"pdfa-{int(d['shard'][doc]):04d}.tar"
         )
         return self._pread(path, int(d["pdf_off"][doc]), int(d["pdf_size"][doc]))
+
+    def text_layer(self, doc: int) -> List[str]:
+        """The PDF text layer of document ``doc``: one string per page (empty for scans)."""
+        d = self._docs
+        path = os.path.join(
+            self.config.dataset_path, "pdfa", f"pdfa-{int(d['shard'][doc]):04d}.tar"
+        )
+        record = json.loads(self._pread(path, int(d["lines_off"][doc]), int(d["lines_size"][doc])))
+        return ["\n".join(lines) for lines in record["lines"]]
 
     def transcripts(self, doc: int) -> Dict[int, str]:
         """Zero-based page index -> raw LightOn transcript, for the transcribed pages."""
@@ -409,8 +428,11 @@ class PdfaPagesDataset(EpochSeededExamples):
 
         if cfg.task == "find_page":
             rng.shuffle(candidates)
+            layer = self.text_layer(doc)
             for target in candidates:
-                lines = quotable_lines(texts[target], [t for p, t in texts.items() if p != target])
+                others = [t for p, t in texts.items() if p != target]
+                others += [layer[p] for p in window if p != target and p < len(layer)]
+                lines = quotable_lines(texts[target], others)
                 if lines:
                     line = lines[rng.randint(len(lines))]
                     return dict(

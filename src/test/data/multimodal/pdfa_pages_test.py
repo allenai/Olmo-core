@@ -51,6 +51,14 @@ def _build(tmp_path):
             tar.write(b"\0" * 512)  # stands in for a tar header
             pdf_off = tar.tell()
             tar.write(pdf)
+            # Text layer: every page repeats one footer; the untranscribed page of document 0 also
+            # holds the body line of its page 5, which must then not be quoted for page 5.
+            layer = [[f"Footer of document {doc}, all rights reserved"] for _ in range(n_pages)]
+            if doc == 0:
+                layer[5].append("Document 0 page 5 discusses item number 4 at length here.")
+            lines = json.dumps({"lines": layer}).encode()
+            lines_off = tar.tell()
+            tar.write(lines)
             pages = [
                 [p, _page_text(doc, p), 20, 0, 0, 0, "train"]
                 for p in range(n_pages)
@@ -71,6 +79,8 @@ def _build(tmp_path):
                     lo_off=lo_off,
                     lo_size=len(record),
                     lo_pages=len(pages),
+                    lines_off=lines_off,
+                    lines_size=len(lines),
                 )
             )
     pq.write_table(pa.table({k: [r[k] for r in rows] for k in rows[0]}), tmp_path / "index.parquet")
@@ -179,6 +189,18 @@ def test_find_page_quotes_a_line_only_its_page_has(tmp_path):
     np.testing.assert_array_equal(
         _answer(ds.get(1, 0)), _TOK.encode(" " + answer) + [_TOK.eos_token_id]
     )
+
+
+def test_find_page_checks_untranscribed_pages_through_the_text_layer(tmp_path):
+    ds = _dataset(tmp_path, "find_page", window_pages=(12, 12))
+    quoted = set()
+    for epoch in range(40):
+        rng = ds.epoch_rng(0, epoch)
+        ds.target_dim_for(rng)
+        quoted.add(ds._plan(0, rng)["target"])
+    # Page 5 (index 4): its only distinctive line is also in the text layer of the untranscribed
+    # page 6, so it is never the answer. Page 6 itself has no transcript to quote.
+    assert quoted == set(range(12)) - {4, 5}
 
 
 def test_page_order_answer_puts_the_shuffled_images_back(tmp_path):
