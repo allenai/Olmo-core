@@ -588,9 +588,14 @@ def segment_documents_into_instances(
     total_og_docs = len(indices) // 2
 
     if sample is not None:
-        max_instances, seed = sample
-        rng = get_rng(seed)
-        indices = rng.choice(indices.reshape(-1, 2), size=max_instances).reshape(-1)
+        try:
+            max_instances, seed = sample
+            rng = get_rng(seed)
+            indices = rng.choice(indices.reshape(-1, 2), size=max_instances).reshape(-1)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to sample {sample[0]} instances from '{path}' with seed {sample[1]}"
+            ) from e
 
     if indices.size == 0:
         raise RuntimeError(f"Failed to produce any documents from '{path}'")
