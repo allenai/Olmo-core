@@ -696,6 +696,44 @@ def test_get_optimizer_state_dict_restores_group_steps_and_copied_state(
         assert list(_iter_steps(optim_state_dict)) == [0, 0]
 
 
+def run_get_optimizer_state_dict_full_state_dict(flatten_optim_state: bool):
+    torch.manual_seed(0)
+    model = nn.Linear(16, 16)
+    optim = torch.optim.AdamW(model.parameters(), lr=1e-2)
+
+    optim_state_dict = get_optimizer_state_dict(
+        model,
+        optim,
+        options=dist_cp_sd.StateDictOptions(
+            full_state_dict=True,
+            cpu_offload=True,
+            flatten_optimizer_state_dict=flatten_optim_state,
+        ),
+    )
+
+    for param_state in optim.state.values():
+        assert float(param_state["step"]) == 0
+    if dist.get_rank() == 0:
+        steps = list(_iter_steps(optim_state_dict))
+        assert len(steps) == 2
+        assert all(float(step) == 0 for step in steps)
+    else:
+        # Torch only gathers the full state dict on rank 0.
+        assert optim_state_dict == {}
+
+
+@pytest.mark.parametrize(
+    "flatten_optim_state",
+    [pytest.param(True, id="flat-optim"), pytest.param(False, id="nested-optim")],
+)
+def test_get_optimizer_state_dict_full_state_dict(flatten_optim_state):
+    run_distributed_test(
+        run_get_optimizer_state_dict_full_state_dict,
+        backend="gloo",
+        func_args=(flatten_optim_state,),
+    )
+
+
 def run_resume_from_step_zero_checkpoint(dir):
     torch.manual_seed(0)
     model1 = nn.Linear(16, 16)

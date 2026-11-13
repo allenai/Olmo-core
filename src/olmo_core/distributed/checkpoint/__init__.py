@@ -752,14 +752,17 @@ def get_optimizer_state_dict(
         options = replace(options, flatten_optimizer_state_dict=False)
 
     optim_state_dict = dist_cp_sd.get_optimizer_state_dict(model, optim, options=options)
-    for state in [*optim.state.values(), *optim_state_dict["state"].values()]:
+    # With a full state dict and CPU offload, torch returns an empty dict on every rank but 0.
+    saved_states = optim_state_dict.get("state", {})
+    saved_groups = optim_state_dict.get("param_groups", [])
+    for state in [*optim.state.values(), *saved_states.values()]:
         _set_step(state, 0)
-    assert len(optim_state_dict["param_groups"]) == len(optim.param_groups)
-    for groups in (optim.param_groups, optim_state_dict["param_groups"]):
+    assert len(saved_groups) in (0, len(optim.param_groups))
+    for groups in (optim.param_groups, saved_groups):
         for group, step in zip(groups, group_steps):
             _set_step(group, 0 if step is None else step)
 
-    if flatten:
+    if flatten and optim_state_dict:
         optim_state_dict = dist_cp_sd._flatten_optim_state_dict(optim_state_dict)
     return optim_state_dict
 
