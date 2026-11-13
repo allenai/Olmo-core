@@ -30,8 +30,14 @@ def _multi_image_prefix_ids(
     *,
     message_format: SftMessageFormat,
     token_ids: Molmo2TokenIds,
+    image_labels: Optional[Sequence[str]] = None,
 ) -> List[int]:
-    """Build a format-specific prefix with model-specific image structural IDs."""
+    """Build a format-specific prefix with model-specific image structural IDs.
+
+    Each image is preceded by its label: ``image_labels[i]`` when given (for example
+    ``"Page 12:"`` for the pages of a document), else ``"Image {i + 1}"`` when there is more than
+    one image and nothing for a single image.
+    """
     if message_format == "qwen3":
         from .qwen3_layout import user_header_ids
 
@@ -42,8 +48,12 @@ def _multi_image_prefix_ids(
         ids = [int(tokenizer.eos_token_id)]
 
     multi = len(image_grids) > 1
+    if image_labels is not None and len(image_labels) != len(image_grids):
+        raise ValueError(f"{len(image_labels)} image labels for {len(image_grids)} images")
     for image_index, grid in enumerate(image_grids):
-        if multi:
+        if image_labels is not None:
+            ids.extend(tokenizer.encode(image_labels[image_index], add_special_tokens=False))
+        elif multi:
             ids.extend(tokenizer.encode(f"Image {image_index + 1}", add_special_tokens=False))
         resized_h, resized_w, height, width = (int(grid[i]) for i in range(4))
         ids.extend(
@@ -65,6 +75,8 @@ def encode_sft_example(
     *,
     max_crops: int = 8,
     max_images: int = 5,
+    image_labels: Optional[Sequence[str]] = None,
+    per_image_max_crops: Optional[Sequence[int]] = None,
     p_high_res: float = 0.0,
     high_res_max_crops: int = 24,
     loss_token_weighting: str = "root_subsegments_root_tokens",
@@ -86,6 +98,11 @@ def encode_sft_example(
     image, crops concatenated along the crop axis, and each image's pooled patch
     indices offset by the running crop-patch count.
 
+    :param image_labels: Text written before each image in place of ``"Image {i+1}"``, one per
+        image (for example the page numbers of a document's pages). Must not be longer than
+        ``max_images``.
+    :param per_image_max_crops: Crop budget of each image in place of ``max_crops``, one per
+        image, so that context pages can be read at a lower resolution than a target page.
     :param branches_as_documents: Serialize each branch as its own document (prefix + that
         branch, exactly the single-branch example) instead of sibling branches of one shared
         prefix, with a per-token ``document_ids`` array numbering them. The documents share the
@@ -114,17 +131,25 @@ def encode_sft_example(
 
     pil_images = pil_image if isinstance(pil_image, (list, tuple)) else [pil_image]
     pil_images = list(pil_images)[:max_images]
+    for name, values in (
+        ("image_labels", image_labels),
+        ("per_image_max_crops", per_image_max_crops),
+    ):
+        if values is not None and len(values) != len(pil_images):
+            raise ValueError(f"{name} has {len(values)} entries for {len(pil_images)} images")
 
     grids = []
     crops_list = []
     pooling_list = []
     pooled_offset = 0
-    for img in pil_images:
+    for image_index, img in enumerate(pil_images):
         images_t, pooling_t, image_grid = preprocess_image_molmo2(
             img,
             dtype=torch.float32,
             device=torch.device("cpu"),
-            max_crops=max_crops,
+            max_crops=(
+                max_crops if per_image_max_crops is None else per_image_max_crops[image_index]
+            ),
             p_high_res=p_high_res,
             high_res_max_crops=high_res_max_crops,
             is_training=True,
@@ -164,6 +189,7 @@ def encode_sft_example(
         grids,
         message_format=message_format,
         token_ids=resolved_token_ids,
+        image_labels=image_labels,
     )
     multi_branch = len(branch_turns) > 1
 
