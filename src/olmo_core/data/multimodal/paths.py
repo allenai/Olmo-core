@@ -55,7 +55,15 @@ NEMOTRON_IMAGE = os.environ.get(
     "NEMOTRON_IMAGE_DIR", "/weka/oe-training-default/jasonr/dataset/nemotron-image"
 )
 
+# HARDCODED personal dataset (rustins' build of pixparse/pdfa-eng-wds PDFs with the
+# lightonai/LightOnOCR-mix-0126 page transcripts; v7-recipe/long-docs/README.md has the layout),
+# read by :mod:`.pdfa_pages`. Override with the env var or per source (``dataset_path``).
+PDFA_PAGES = os.environ.get(
+    "PDFA_PAGES_DIR", "/weka/oe-training-default/rustin/v7-recipe/long-docs/data"
+)
+
 __all__ = [
+    "PDFA_PAGES",
     "MOLMO_DATA_DIR",
     "TORCH_DATASETS",
     "PIXMO_DATASETS",
