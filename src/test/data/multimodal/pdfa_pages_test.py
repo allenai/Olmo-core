@@ -272,3 +272,14 @@ def test_page_sources_take_their_loss_shares_from_the_others():
         with_pdfa_loss_shares({"a": 1.0}, {"pdfa_nope": 0.1})
     with pytest.raises(ValueError, match="less than one"):
         with_pdfa_loss_shares({"a": 1.0}, {"pdfa_page_ocr": 1.0})
+
+
+def test_scaling_visual_shares_drops_and_renormalizes():
+    from olmo_core.internal.vision_alignment_data import scale_visual_loss_shares
+
+    shares = scale_visual_loss_shares({"a": 0.5, "b": 0.3, "c": 0.2}, {"b": 0.0, "c": 0.5})
+    assert shares == pytest.approx({"a": 0.5 / 0.6, "c": 0.1 / 0.6})
+    with pytest.raises(ValueError, match="not in the recipe"):
+        scale_visual_loss_shares({"a": 1.0}, {"z": 0.5})
+    with pytest.raises(ValueError, match="every visual source"):
+        scale_visual_loss_shares({"a": 1.0}, {"a": 0.0})

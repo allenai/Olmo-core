@@ -1218,3 +1218,31 @@ def with_pdfa_loss_shares(
         **{name: share * (1.0 - total) for name, share in visual_loss_shares.items()},
         **pdfa_loss_shares,
     }
+
+
+def scale_visual_loss_shares(
+    visual_loss_shares: dict[str, float], scale: dict[str, float]
+) -> dict[str, float]:
+    """Multiply named sources' shares of the visual loss and renormalize to one.
+
+    A scale of zero removes the source. The mass a scaled-down source gives up goes to every
+    remaining source in proportion to its share.
+
+    :param visual_loss_shares: A recipe's shares of the visual loss, summing to one.
+    :param scale: Multiplier per source name; sources not named keep their relative share.
+
+    :returns: Shares of the remaining sources, summing to one.
+
+    :raises ValueError: For an unknown source, a negative scale, or nothing left.
+    """
+    unknown = sorted(set(scale) - set(visual_loss_shares))
+    if unknown:
+        raise ValueError(f"Cannot scale visual sources that are not in the recipe: {unknown}")
+    if any(value < 0 for value in scale.values()):
+        raise ValueError("Visual loss share scales must not be negative")
+    scaled = {name: share * scale.get(name, 1.0) for name, share in visual_loss_shares.items()}
+    scaled = {name: share for name, share in scaled.items() if share > 0}
+    total = sum(scaled.values())
+    if total <= 0:
+        raise ValueError("Scaling removed every visual source")
+    return {name: share / total for name, share in scaled.items()}
