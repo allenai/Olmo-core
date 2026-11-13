@@ -190,7 +190,7 @@ class Olmo35MultimodalSFTRecipeConfig(Config):
     """Write each step's per-rank batch hashes (and instance indices) here (gates)."""
     step1_reference: bool = False
     """Also dump step 1's batch for an HF reference and score it in eval mode (gate a)."""
-    prefetch_workers: int = 8
+    prefetch_workers: int = 16
 
 
 @dataclass
@@ -490,7 +490,16 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
             batch_metadata=True,
             image_dtype=DType.bfloat16,
             compact_images=True,
+            # Mixed mid-training's loader throughput settings (the checkpoint's own run): image
+            # examples load in forked processes (a Weka page fault on a loading thread holds the
+            # GIL and stalls the rank), finished batches are built in a child process, and packed
+            # image copies are deferred. Same batches and checkpoints as the thread-only loader.
             prefetch_workers=recipe.prefetch_workers,
+            prefetch_max_in_flight=saved_loader.get("prefetch_max_in_flight", 512),
+            prefetch_processes=saved_loader.get("prefetch_processes", True),
+            defer_packed_image_copy=saved_loader.get("defer_packed_image_copy", True),
+            batch_prefetch_depth=saved_loader.get("batch_prefetch_depth", 2),
+            batch_prefetch_process=saved_loader.get("batch_prefetch_process", True),
             max_consecutive_data_errors=0,
             max_total_data_errors=0,
         )
