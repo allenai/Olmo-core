@@ -1142,3 +1142,79 @@ example, normalized, so the mixture samples each source in proportion to passes 
 (:meth:`MultimodalMixtureConfig.sampling_weights` divides a source's share by its mean). By
 group: caption 34.9%, OCR 60.5%, pointing and counting 2.2%, academic QA 2.3%, clocks 0.1%
 (v3: 39.2 / 39.5 / 12.6 / 8.6 / 0.1)."""
+
+
+STAGE1_PDFA_SOURCES: dict[str, dict[str, Any]] = {
+    "pdfa_page_ocr": {"task": "page_ocr"},
+    "pdfa_transcribe_page": {"task": "transcribe_page", "window_pages": (4, 19)},
+    "pdfa_transcribe_page_long": {
+        "task": "transcribe_page",
+        "window_pages": (20, 64),
+        "min_doc_pages": 20,
+    },
+    "pdfa_missing_page": {"task": "missing_page", "window_pages": (4, 19)},
+    "pdfa_missing_page_long": {
+        "task": "missing_page",
+        "window_pages": (20, 64),
+        "min_doc_pages": 20,
+    },
+    "pdfa_find_page": {"task": "find_page", "window_pages": (4, 19)},
+    "pdfa_find_page_long": {"task": "find_page", "window_pages": (20, 64), "min_doc_pages": 20},
+    "pdfa_page_order": {"task": "page_order", "window_pages": (4, 20)},
+}
+"""The PDFA page sources (:mod:`olmo_core.data.multimodal.pdfa_pages`): single-page transcription,
+and the whole-document tasks over a short run of pages (4 to 19, any document with 4 pages or more)
+and a long one (20 to 64 pages of a document with at least 20). A recipe adds the ones it gives a
+loss share (``recipe.pdfa_loss_shares``)."""
+
+
+def build_stage1_pdfa_sources(
+    sequence_length: int, dataset_path: str | None = None
+) -> dict[str, Config]:
+    """Configure the PDFA page sources, in :data:`STAGE1_PDFA_SOURCES` order.
+
+    :param sequence_length: Maximum serialized example length.
+    :param dataset_path: Root of the PDFA pages build; the module default when ``None``.
+    """
+    from olmo_core.data.multimodal.paths import PDFA_PAGES
+    from olmo_core.data.multimodal.pdfa_pages import PdfaPagesDatasetConfig
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    return {
+        name: PdfaPagesDatasetConfig(
+            max_crops=8,
+            max_sequence_length=sequence_length,
+            loss_token_weighting="none",
+            message_format="document",
+            dataset_path=PDFA_PAGES if dataset_path is None else dataset_path,
+            **settings,
+        )
+        for name, settings in STAGE1_PDFA_SOURCES.items()
+    }
+
+
+def with_pdfa_loss_shares(
+    visual_loss_shares: dict[str, float], pdfa_loss_shares: dict[str, float]
+) -> dict[str, float]:
+    """Give PDFA page sources their shares of the visual loss, scaling the others to make room.
+
+    :param visual_loss_shares: A recipe's shares of the visual loss, summing to one.
+    :param pdfa_loss_shares: Shares of the visual loss for sources of :data:`STAGE1_PDFA_SOURCES`.
+
+    :returns: Shares summing to one: the PDFA sources at theirs, every other source scaled by
+        one minus their sum.
+
+    :raises ValueError: For an unknown source, a non-positive share, or shares summing to one
+        or more.
+    """
+    unknown = sorted(set(pdfa_loss_shares) - set(STAGE1_PDFA_SOURCES))
+    if unknown:
+        raise ValueError(f"Unknown PDFA page sources {unknown}; known: {list(STAGE1_PDFA_SOURCES)}")
+    total = sum(pdfa_loss_shares.values())
+    if any(share <= 0 for share in pdfa_loss_shares.values()) or total >= 1:
+        raise ValueError("PDFA loss shares must be positive and sum to less than one")
+    return {
+        **{name: share * (1.0 - total) for name, share in visual_loss_shares.items()},
+        **pdfa_loss_shares,
+    }

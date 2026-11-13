@@ -242,3 +242,33 @@ def test_sequence_length_limits_the_run(tmp_path):
         example = ds.get(0, epoch)
         assert _image_blocks(example) <= 4
         assert len(example["input_ids"]) <= ds.config.max_sequence_length
+
+
+def test_stage1_builder_configures_every_page_source():
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_PDFA_SOURCES,
+        build_stage1_pdfa_sources,
+    )
+
+    sources = build_stage1_pdfa_sources(262144, dataset_path="/nowhere")
+    assert list(sources) == list(STAGE1_PDFA_SOURCES)
+    for name, config in sources.items():
+        config.validate()
+        assert config.message_format == "document" and config.max_sequence_length == 262144
+        assert config.min_doc_pages == (20 if name.endswith("_long") else 1)
+
+
+def test_page_sources_take_their_loss_shares_from_the_others():
+    from olmo_core.internal.vision_alignment_data import with_pdfa_loss_shares
+
+    shares = with_pdfa_loss_shares(
+        {"a": 0.75, "b": 0.25}, {"pdfa_page_ocr": 0.1, "pdfa_find_page": 0.1}
+    )
+    assert shares == pytest.approx(
+        {"a": 0.6, "b": 0.2, "pdfa_page_ocr": 0.1, "pdfa_find_page": 0.1}
+    )
+    assert sum(shares.values()) == pytest.approx(1.0)
+    with pytest.raises(ValueError, match="Unknown PDFA"):
+        with_pdfa_loss_shares({"a": 1.0}, {"pdfa_nope": 0.1})
+    with pytest.raises(ValueError, match="less than one"):
+        with_pdfa_loss_shares({"a": 1.0}, {"pdfa_page_ocr": 1.0})

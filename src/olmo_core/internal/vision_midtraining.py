@@ -85,7 +85,9 @@ from .vision_alignment_data import (
     STAGE1_V7_TEXT_LOSS_SHARE,
     build_stage1_gui_syn_source,
     build_stage1_nemotron_sources,
+    build_stage1_pdfa_sources,
     build_stage1_v3_sources,
+    with_pdfa_loss_shares,
 )
 from .vision_midtraining_data import (
     DEFAULT_MIDTRAINING_ARTIFACT_ROOT,
@@ -285,6 +287,14 @@ class MixedMidtrainingRecipeConfig(Config):
     token (``annotation_sampling="sequence"``). Both give every annotation the same loss
     weight, so the calibrated means and loss shares hold; ``"sequence"`` takes far fewer
     positions per image, and later annotations also see the earlier ones."""
+    pdfa_loss_shares: dict[str, float] = field(default_factory=dict)
+    """Shares of the visual loss for PDFA page sources (names of
+    :data:`~olmo_core.internal.vision_alignment_data.STAGE1_PDFA_SOURCES`), with stage1_v3 to
+    stage1_v7 visual data. Each named source is added to the mixture; the recipe's other visual
+    shares are scaled by one minus their sum. Needs :attr:`pdfa_mean_loss_weights`."""
+    pdfa_mean_loss_weights: dict[str, float] = field(default_factory=dict)
+    """Calibrated mean loss weight per example of every source in :attr:`pdfa_loss_shares`
+    (``MultimodalMixtureConfig.estimate_mean_loss_weights``)."""
 
 
 @dataclass
@@ -327,6 +337,8 @@ def _build_recipe(
     numeric_maps = {
         "recipe.visual_example_weights",
         "recipe.visual_loss_shares",
+        "recipe.pdfa_loss_shares",
+        "recipe.pdfa_mean_loss_weights",
         "dataset.mean_loss_weight",
     }
     for name, parsed in overrides:
@@ -1244,6 +1256,16 @@ def build_config(
         if nemotron:
             means.update(STAGE1_V7_NEMOTRON_MEAN_LOSS_WEIGHTS)
             means["gui_syn"] = STAGE1_V7_GUI_SYN_MEAN_LOSS_WEIGHT
+        if recipe.pdfa_loss_shares:
+            missing = sorted(set(recipe.pdfa_loss_shares) - set(recipe.pdfa_mean_loss_weights))
+            if missing:
+                raise OLMoConfigurationError(f"recipe.pdfa_mean_loss_weights is missing {missing}")
+            recipe.visual_loss_shares = with_pdfa_loss_shares(
+                recipe.visual_loss_shares, recipe.pdfa_loss_shares
+            )
+            means.update(
+                {name: recipe.pdfa_mean_loss_weights[name] for name in recipe.pdfa_loss_shares}
+            )
     else:
         means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if _text_loss_share(recipe) < 1.0 else {}
     if not masked_text:
@@ -1261,6 +1283,9 @@ def build_config(
         if nemotron:
             visual_sources.update(build_stage1_nemotron_sources(recipe.sequence_length))
             visual_sources["gui_syn"] = build_stage1_gui_syn_source(recipe.sequence_length)
+        if recipe.pdfa_loss_shares:
+            pdfa = build_stage1_pdfa_sources(recipe.sequence_length)
+            visual_sources.update({name: pdfa[name] for name in recipe.pdfa_loss_shares})
         if documents and recipe.annotation_layout == "sequence":
             for source in visual_sources.values():
                 config = getattr(source, "dataset", source)
