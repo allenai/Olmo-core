@@ -961,6 +961,11 @@ class NemotronImageDatasetConfig(Config):
     """Source name in :data:`NEMOTRON_SUBSETS` (``nemotron_ecd``, ...)."""
     dataset_path: str = NEMOTRON_IMAGE
     """Root of the prepared subsets (:func:`prepare_nemotron_subset`)."""
+    keep_rows_path: Optional[str] = None
+    """Train on a subset of the prepared rows: a JSON file ``{"prepared_rows": N, "rows": [...]}``
+    listing the row indices to keep (for example, the rows left after an audit's drop list).
+    ``prepared_rows`` must equal the prepared subset's length, so a list made for another
+    preparation is refused."""
 
     max_crops: int = 8
     max_sequence_length: Optional[int] = None
@@ -1013,10 +1018,23 @@ class NemotronImageDataset(EpochSeededExamples):
             self._data: Any = _IndexedArrow(prepared)
         else:
             self._data = load_from_disk_compat(prepared)
-        log.info("%s: %d rows", config.subset, len(self._data))
+        self._keep: Optional[np.ndarray] = None
+        if config.keep_rows_path is not None:
+            with open(config.keep_rows_path) as f:
+                keep = json.load(f)
+            rows = np.asarray(keep["rows"], dtype=np.int64)
+            if keep["prepared_rows"] != len(self._data):
+                raise OLMoConfigurationError(
+                    f"{config.keep_rows_path!r} was made for {keep['prepared_rows']} rows, "
+                    f"{prepared!r} has {len(self._data)}"
+                )
+            if len(rows) == 0 or rows.min() < 0 or rows.max() >= len(self._data):
+                raise OLMoConfigurationError(f"{config.keep_rows_path!r} lists no valid rows")
+            self._keep = rows
+        log.info("%s: %d of %d rows", config.subset, len(self), len(self._data))
 
     def __len__(self) -> int:
-        return len(self._data)
+        return len(self._data) if self._keep is None else len(self._keep)
 
     def __getitem__(self, index: int) -> Dict[str, np.ndarray]:
         """Build row ``index``, deterministically skipping unusable rows; see
@@ -1026,7 +1044,7 @@ class NemotronImageDataset(EpochSeededExamples):
     def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         from PIL import Image
 
-        row = self._data[i]
+        row = self._data[i if self._keep is None else int(self._keep[i])]
         image = Image.open(io.BytesIO(row["image"])).convert("RGB")
         prompts = list(row["prompts"])
         prompts[0] = f"{self.style}: {prompts[0]}"

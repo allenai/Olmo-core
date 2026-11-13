@@ -345,3 +345,39 @@ def test_batch_index_spans_shards_and_batches(tmp_path):
         "1000",
         "2999",
     ]
+
+
+def test_keep_rows_trains_on_the_listed_rows_only(tmp_path, monkeypatch):
+    rows = [
+        _row(name, "1.png", [(f"Question {name}?", f"<think>t</think>{name}")]) for name in "abc"
+    ]
+    root, _ = _prepare(tmp_path, monkeypatch, rows, {"1.png": _png()})
+    keep = tmp_path / "keep.json"
+    keep.write_text(json.dumps({"prepared_rows": 3, "rows": [2, 0]}))
+    tok = _PromptTok()
+    ds = NemotronImageDatasetConfig(
+        subset="nemotron_ecd", dataset_path=str(root), max_crops=1, keep_rows_path=str(keep)
+    ).build(tok)
+    assert len(ds) == 2
+    ds[0], ds[1]
+    asked = [p for p in tok.prompts if p]
+    assert asked == ["chart_reasoning: Question c?", "chart_reasoning: Question a?"]
+
+
+@pytest.mark.parametrize(
+    "keep",
+    [
+        {"prepared_rows": 4, "rows": [0]},
+        {"prepared_rows": 3, "rows": [3]},
+        {"prepared_rows": 3, "rows": []},
+    ],
+)
+def test_keep_rows_made_for_another_preparation_is_refused(tmp_path, monkeypatch, keep):
+    rows = [_row(name, "1.png", [("Q?", "<think>t</think>A")]) for name in "abc"]
+    root, _ = _prepare(tmp_path, monkeypatch, rows, {"1.png": _png()})
+    path = tmp_path / "keep.json"
+    path.write_text(json.dumps(keep))
+    with pytest.raises(OLMoConfigurationError):
+        NemotronImageDatasetConfig(
+            subset="nemotron_ecd", dataset_path=str(root), keep_rows_path=str(path)
+        ).build(_PromptTok())
