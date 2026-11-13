@@ -23,15 +23,25 @@ log = logging.getLogger(__name__)
 
 
 def _import_dion():
-    """Import and return Dion from dion, raising a helpful error if not installed."""
+    """Import and return Dion and Dion3 from dion, raising a helpful error if not installed."""
     try:
-        from dion import Dion  # type: ignore
-    except ImportError as e:
+        import dion
+        
+        # Extract classes dynamically to bypass namespace shadowing
+        Dion = getattr(dion, "Dion")
+        
+        # The package aliases NorDion2 as Dion3; safely grab whichever is exposed
+        Dion3 = getattr(dion, "Dion3", getattr(dion, "NorDion2", None))
+        
+        if Dion3 is None:
+            raise ImportError("dion package found, but NorDion2/Dion3 is missing.")
+            
+        return Dion, Dion3
+    except Exception as e:
         raise ImportError(
             "The 'dion' package is required for the Dion optimizer. "
             "Install it with: pip install git+https://github.com/microsoft/dion.git"
         ) from e
-    return Dion
 
 
 @OptimConfig.register("dion")
@@ -73,7 +83,8 @@ class DionConfig(MatrixAwareOptimConfig):
 
     @classmethod
     def optimizer(cls) -> type:
-        return _import_dion()
+        Dion, _ = _import_dion()
+        return Dion
 
     def default_group_overrides(self, model: torch.nn.Module) -> list[OptimGroupOverride]:
         """
@@ -95,8 +106,8 @@ class DionConfig(MatrixAwareOptimConfig):
         vector_override = OptimGroupOverride(params=params["vector"], opts=dict(algorithm="adamw"))
         lm_head_override = OptimGroupOverride(
             params=params["lm_head"],
-            # lr scaled by sqrt(model_dim) for lm_head as suggested in the paper
-            opts=dict(algorithm="adamw", lr=self.lr / math.sqrt(model_dim)),
+            # lr scaled by sqrt(model_dim) for lm_head is only for lion backup; see Dion paper App. D.2 and Fig. 14 for the Lion-specific 1 / sqrt(d_in) scale.
+            opts=dict(algorithm="adamw", lr=self.lr ),
         )
 
         return [matrix_override, vector_override, embed_override, lm_head_override]
@@ -174,3 +185,76 @@ class DionConfig(MatrixAwareOptimConfig):
             **kwargs,
         )
         return optim
+
+@OptimConfig.register("dion3")
+@OptimConfig.register("nordion2")
+@dataclass
+class Dion3Config(DionConfig):
+    """
+    Configuration class for building a :class:`Dion3` optimizer (NorDion2).
+
+    Dion3 applies fractional orthogonal updates and Gram Newton-Schulz with CuteDSL kernels.
+    Supports: DDP, FSDP, HSDP.
+    Does NOT support: TP, PP, EP, or CP.
+
+    Paper: https://arxiv.org/abs/2608.11612
+    """
+    lr: float = 0.01 
+    fraction: float = 0.25
+    mu: float = 0.95
+    muon_beta2: float = 0.95
+    betas: Tuple[float, float] = (0.9, 0.95)
+    weight_decay: float = 0.01
+    epsilon: float = 1e-8
+    adjust_lr: str = "rms_norm"
+    flatten: bool = False
+
+    @classmethod
+    def optimizer(cls) -> type:
+        _, Dion3 = _import_dion()
+        return Dion3
+
+    def default_group_overrides(self, model: torch.nn.Module) -> list[OptimGroupOverride]:
+        assert isinstance(model, Transformer)
+        params = self.categorize_parameters(model)
+
+        # NorDion2 requires group["algorithm"] == "nordion2"
+        matrix_override = OptimGroupOverride(params=params["matrix"], opts=dict(algorithm="nordion2"))
+        embed_override = OptimGroupOverride(
+            params=params["embed"], opts=dict(algorithm="adamw", weight_decay=0.0)
+        )
+        vector_override = OptimGroupOverride(params=params["vector"], opts=dict(algorithm="adamw"))
+        lm_head_override = OptimGroupOverride(
+            params=params["lm_head"],
+            opts=dict(algorithm="adamw", lr=self.lr),
+        )
+        return [matrix_override, vector_override, embed_override, lm_head_override]    
+
+
+    def create_optimizer(self, model: torch.nn.Module, strict: bool = True, **kwargs):
+        torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, 16)
+
+        # Dion3 doesn't use Dion1's rank-based low-rank approximation params.
+        kwargs.pop("rank_fraction", None)
+        kwargs.pop("rank_multiple_of", None)
+
+        meshes = self.build_parallelism_config()
+        inner_shard_mesh = meshes.get("inner_shard_mesh")
+        outer_shard_mesh = meshes.get("outer_shard_mesh")
+        replicate_mesh = meshes.get("replicate_mesh")
+
+        if inner_shard_mesh is not None and inner_shard_mesh.size() > 1:
+            raise ValueError("Tensor parallel is not supported by Dion3.")
+
+        if outer_shard_mesh is not None and outer_shard_mesh.size() > 1:
+            dist_mesh = outer_shard_mesh
+        elif replicate_mesh is not None and replicate_mesh.size() > 1:
+            dist_mesh = replicate_mesh
+        else:
+            dist_mesh = None
+
+        return self.optimizer()(
+            self.build_groups(model, strict=strict),
+            distributed_mesh=dist_mesh,
+            **kwargs,
+        )

@@ -364,7 +364,7 @@ class MatrixAwareOptimConfig(OptimConfig, Generic[Opt]):
                     group[LR_FIELD] = move_to_device(torch.tensor(lr), self.device)
                 else:
                     group[LR_FIELD] = lr
-                group.setdefault(INITIAL_LR_FIELD, lr)
+                group.setdefault(INITIAL_LR_FIELD, float(lr))
 
             for k in self.fixed_fields:
                 if k in group:
