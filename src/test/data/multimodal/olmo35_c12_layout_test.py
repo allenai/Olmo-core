@@ -205,3 +205,16 @@ def test_annotations_as_documents_share_the_crops(tokenizer):
     pooled = example["pooled_patches_idx"]
     assert len(pooled) % 2 == 0
     np.testing.assert_array_equal(pooled[: len(pooled) // 2], pooled[len(pooled) // 2 :])
+
+
+@pytest.mark.parametrize("lead", ["\n", "\n\n", " ", "\t "])
+def test_leading_whitespace_in_the_first_question_is_dropped(tokenizer, lead):
+    # 24% of correction QA rows open their first question with "\n", which merged with the user
+    # header into one token and left no boundary for the image blocks (the first full run stopped
+    # on correction_qa_multi_only_max5[30777]).
+    turns = [(lead + TURNS[0][0], TURNS[0][1]), (" " + TURNS[1][0], TURNS[1][1])]
+    head, segments = branch_segments(tokenizer, turns)
+    stripped = [(TURNS[0][0], TURNS[0][1]), (" " + TURNS[1][0], TURNS[1][1])]
+    assert (head, segments) == branch_segments(tokenizer, stripped)
+    example = _encode(tokenizer, [turns])
+    assert int(example["token_type_ids"].sum()) > 0

@@ -500,8 +500,11 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
             defer_packed_image_copy=saved_loader.get("defer_packed_image_copy", True),
             batch_prefetch_depth=saved_loader.get("batch_prefetch_depth", 2),
             batch_prefetch_process=saved_loader.get("batch_prefetch_process", True),
-            max_consecutive_data_errors=0,
-            max_total_data_errors=0,
+            # Mixed mid-training's tolerance: a rare unrenderable image example is skipped and
+            # logged (deterministically, so resumes see the same stream) instead of stopping the
+            # run, which auto-resume would then replay into the same failure.
+            max_consecutive_data_errors=10,
+            max_total_data_errors=1000,
         )
 
     steps = recipe.schedule_steps or schedule["steps"]

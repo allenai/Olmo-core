@@ -434,6 +434,25 @@ def _image_char_offset(tokenizer, messages, tools, rendered: str) -> int:
     return start + len(_USER_HEADER)
 
 
+def _strip_first_user_leading_whitespace(
+    messages: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Copy of ``messages`` with the first user turn's leading whitespace removed: the image
+    blocks go at the start of that turn, and leading whitespace would merge with the user header
+    into one token, leaving no token boundary for them."""
+    out = [dict(m) for m in messages]
+    for m in out:
+        if m["role"] == "user":
+            if isinstance(m["content"], str):
+                m["content"] = m["content"].lstrip()
+            elif m["content"]:
+                parts = [dict(part) for part in m["content"]]
+                parts[0]["text"] = parts[0]["text"].lstrip()
+                m["content"] = parts
+            break
+    return out
+
+
 def _image_token_index(tokenizer, messages, tools, rendered, input_ids, offsets) -> int:
     """Token index where the image blocks go (the start of the first user turn's content),
     checking that the text on either side keeps its tokens when the blocks split it."""
@@ -474,7 +493,12 @@ def branch_segments(
     :raises ValueError: If the conversation cannot be cut as described.
     """
     messages: List[Dict[str, Any]] = []
-    for question, answer in turns:
+    for index, (question, answer) in enumerate(turns):
+        if index == 0:
+            # The image blocks go at the start of the first question, so leading whitespace there
+            # would merge with the user header into one token and leave no boundary to cut at
+            # (24% of correction QA rows open with "\n"). Molmo2's layout drops it too.
+            question = question.lstrip()
         messages.append({"role": "user", "content": question})
         messages.append({"role": "assistant", "content": answer})
     input_ids, label_mask, offsets, (messages, tools, rendered) = _tokenize(
@@ -529,6 +553,8 @@ def encode_conversation(
     :raises ValueError: If the text around the image blocks would tokenize differently from the
         text-only rendering.
     """
+    if len(image_ids):
+        messages = _strip_first_user_leading_whitespace(messages)
     input_ids, label_mask, offsets, (messages, tools, rendered) = _tokenize(
         tokenizer, messages, tools
     )
