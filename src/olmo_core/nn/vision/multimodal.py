@@ -10,6 +10,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributed.tensor import DTensor
+from torch.utils.checkpoint import checkpoint
 
 from olmo_core.config import Config, DType
 from olmo_core.distributed.utils import barrier, is_distributed
@@ -606,6 +607,41 @@ class MultimodalLM(nn.Module):
         raw = os.environ.get("VIT_CROP_MICROBATCH", "0")
         return int(raw)
 
+    def _vit_checkpoint_chunks(self) -> bool:
+        """
+        Whether each ViT forward is checkpointed as a whole while training (off by default). Env:
+        ``VIT_CHECKPOINT_CHUNKS``.
+
+        Per-block activation checkpointing keeps every block's input for all of a forward's crops
+        until the backward pass, so through the language model's forward and backward: one
+        ``(n_patches, dim)`` tensor per block and crop, about 42 MB per crop for a 25-block tower
+        in bfloat16. Checkpointing each forward as a whole keeps only its crops and its output
+        features, and rebuilds the block inputs one chunk (``VIT_CROP_MICROBATCH``) at a time
+        during the backward pass, at the cost of one more encoder forward. The gradients are the
+        same.
+        """
+        return os.environ.get("VIT_CHECKPOINT_CHUNKS", "0") not in ("", "0")
+
+    def _vit_chunk_features(self, images: torch.Tensor) -> torch.Tensor:
+        """:meth:`_vit_forward_features`, checkpointed as a whole when that is switched on."""
+        if not (self._vit_checkpoint_chunks() and self.training and torch.is_grad_enabled()):
+            return self._vit_forward_features(images)
+        vision_cfg = getattr(self.vision, "cfg", None)
+        # Replay dropout masks on recompute only when the ViT actually uses dropout.
+        uses_dropout = (
+            getattr(vision_cfg, "attention_dropout", 1.0) != 0.0
+            or getattr(vision_cfg, "residual_dropout", 1.0) != 0.0
+        )
+        return cast(
+            torch.Tensor,
+            checkpoint(
+                self._vit_forward_features,
+                images,
+                use_reentrant=False,
+                preserve_rng_state=uses_dropout,
+            ),
+        )
+
     def _vit_forward_features(self, images: torch.Tensor) -> torch.Tensor:
         """Run ViT on ``images`` ``(B*T, N, patch_dim)`` and return ``(B*T, n_patches, dim)``."""
         hidden_states: List[torch.Tensor] = self.vision(images)
@@ -699,10 +735,10 @@ class MultimodalLM(nn.Module):
 
         def encode(crops: torch.Tensor) -> torch.Tensor:
             if chunk <= 0 or crops.shape[0] <= chunk:
-                return self._vit_forward_features(crops)
+                return self._vit_chunk_features(crops)
             return torch.cat(
                 [
-                    self._vit_forward_features(crops[start : start + chunk])
+                    self._vit_chunk_features(crops[start : start + chunk])
                     for start in range(0, crops.shape[0], chunk)
                 ]
             )

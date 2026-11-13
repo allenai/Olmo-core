@@ -611,6 +611,35 @@ class TestCropCompaction:
             compact, _padded_reference(self.model, images, idx), rtol=1e-5, atol=1e-6
         )
 
+    def test_checkpointed_chunks_give_the_same_gradients(self, monkeypatch):
+        monkeypatch.setenv("VIT_CROP_MICROBATCH", "1")
+        counts = [3, 2]
+        _, images, idx = _ragged_inputs(counts)
+        self.model.train()
+        self.model.vision.apply_activation_checkpointing()
+        parameters = list(self.model.vision.parameters())
+        expected_out = self.model._encode_images(images, idx)
+        expected = torch.autograd.grad(expected_out.sum(), parameters)
+
+        monkeypatch.setenv("VIT_CHECKPOINT_CHUNKS", "1")
+        seen = self._encoder_crop_counts(monkeypatch)
+        out = self.model._encode_images(images, idx)
+        assert seen == [2, 2, 1]
+        torch.testing.assert_close(out, expected_out)
+        grads = torch.autograd.grad(out.sum(), parameters)
+        # The backward pass ran every chunk's forward once more, last chunk first.
+        assert seen == [2, 2, 1, 1, 2, 2]
+        for actual, reference in zip(grads, expected):
+            torch.testing.assert_close(actual, reference)
+
+    def test_chunks_are_not_checkpointed_outside_training(self, monkeypatch):
+        monkeypatch.setenv("VIT_CHECKPOINT_CHUNKS", "1")
+        _, images, idx = _ragged_inputs([2, 1])
+        parameters = list(self.model.vision.parameters())
+        seen = self._encoder_crop_counts(monkeypatch)
+        torch.autograd.grad(self.model._encode_images(images, idx).sum(), parameters)
+        assert seen == [3]  # eval mode: one forward, nothing recomputed
+
     def test_index_beyond_the_crop_axis_is_rejected(self):
         _, images, idx = _ragged_inputs([1, 1])
         idx[0, 0, 0] = images.shape[1] * images.shape[2]
