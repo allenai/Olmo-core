@@ -544,6 +544,7 @@ OPTIM_FACTORIES = [
         lambda params: SkipStepAdamW(params, lr=1e-2, foreach=True), id="skip-step-adamw-foreach"
     ),
     pytest.param(lambda params: torch.optim.NAdam(params, lr=1e-2), id="nadam"),
+    pytest.param(lambda params: torch.optim.Adam(params, lr=1e-2, weight_decay=0.1), id="adam-l2"),
 ]
 
 
@@ -589,8 +590,10 @@ def test_get_optimizer_state_dict_does_not_advance_fresh_optimizer(
     steps = list(_iter_steps(optim_state_dict))
     assert len(steps) == 2
     assert all(float(step) == 0 for step in steps)
+    weight_decay = optim.param_groups[0]["weight_decay"]
     if flatten_optim_state:
         assert optim_state_dict["param_groups.weight.lr"] == 3e-3
+        assert optim_state_dict["param_groups.weight.weight_decay"] == weight_decay
         # Same keys as torch's own flattened form.
         model2 = deepcopy(model)
         expected = dist_cp_sd.get_optimizer_state_dict(
@@ -601,6 +604,7 @@ def test_get_optimizer_state_dict_does_not_advance_fresh_optimizer(
         assert optim_state_dict.keys() == expected.keys()
     else:
         assert optim_state_dict["param_groups"][0]["lr"] == 3e-3
+        assert optim_state_dict["param_groups"][0]["weight_decay"] == weight_decay
 
 
 @pytest.mark.parametrize("optim_factory", OPTIM_FACTORIES)
@@ -633,6 +637,20 @@ def test_get_optimizer_state_dict_leaves_initialized_optimizer_alone(optim_facto
     torch.testing.assert_close(optim_state_dict["state"], expected["state"], rtol=0, atol=0)
     assert optim_state_dict["param_groups"] == expected["param_groups"]
     assert all(float(step) == 1 for step in _iter_steps(optim_state_dict))
+
+
+def test_get_optimizer_state_dict_keeps_params_of_compiled_adamw():
+    # A compiled step takes Adam's capturable path, where lr=0 divides 0 by 0.
+    torch._dynamo.reset()
+    torch.manual_seed(0)
+    model = nn.Linear(16, 16)
+    optim = torch.optim.AdamW(model.parameters(), lr=torch.tensor(1e-2))
+    optim.step = torch.compile(optim.step)  # type: ignore[method-assign]
+    params = deepcopy(model.state_dict())
+
+    get_optimizer_state_dict(model, optim)
+
+    torch.testing.assert_close(model.state_dict(), params, rtol=0, atol=0)
 
 
 class _GroupStepSGD(torch.optim.Optimizer):

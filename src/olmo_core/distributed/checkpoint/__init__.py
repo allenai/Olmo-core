@@ -45,7 +45,7 @@ from olmo_core.config import StrEnum
 from olmo_core.io import clear_directory, dir_is_empty, is_url, normalize_path
 from olmo_core.utils import gc_cuda, get_element_size, wait_for
 
-from ..utils import barrier, get_fs_local_rank, is_distributed
+from ..utils import barrier, get_fs_local_rank, get_local_tensor, is_distributed
 from .filesystem import RemoteFileSystemReader, RemoteFileSystemWriter
 
 __all__ = [
@@ -736,22 +736,46 @@ def get_optimizer_state_dict(
     options: Optional[dist_cp_sd.StateDictOptions] = None,
 ) -> Dict[str, Any]:
     """
-    Like :func:`torch.distributed.checkpoint.state_dict.get_optimizer_state_dict`, but if the
-    optimizer has no state yet, step counts are put back afterwards, in the live optimizer and in
-    the returned state dict: per-parameter steps to 0, param-group steps to their value before the
-    call. Torch initializes empty state with a zero-gradient step, which would otherwise count as
-    a real step (https://github.com/pytorch/pytorch/issues/164929).
+    Like :func:`torch.distributed.checkpoint.state_dict.get_optimizer_state_dict`, but safe to call
+    on an optimizer that has no state yet. Torch initializes empty state by running a step with
+    zero gradients and ``lr=0`` (https://github.com/pytorch/pytorch/issues/164929), which would
+    otherwise count as a real step. So for an empty optimizer:
+
+    - weight decay is set to 0 during that step, so coupled (L2) decay doesn't feed into the
+      moments, and the parameters are restored afterwards, since some steps (e.g. a compiled
+      Adam with a tensor ``lr``) don't leave them alone at ``lr=0``;
+    - per-parameter steps go back to 0 (and NAdam's ``mu_product`` to 1), and param-group steps
+      and weight decay to their values before the call, in the live optimizer and the returned
+      state dict.
+
+    State that other optimizers derive from ``lr`` or the first gradient at initialization isn't
+    restored, e.g. Rprop's ``step_size``, ASGD's ``eta`` and ``ax``, the momentum buffer of SGD
+    with dampening, or Dion's random ``Q``.
     """
     if len(optim.state) > 0:
         return dist_cp_sd.get_optimizer_state_dict(model, optim, options=options)
 
     group_steps = [_copy_step(group.get("step")) for group in optim.param_groups]
+    weight_decays = [_copy_step(group.get("weight_decay")) for group in optim.param_groups]
     flatten = options is not None and options.flatten_optimizer_state_dict
     if options is not None and flatten:
         # Param groups are matched by index, so fix the nested form and flatten it afterwards.
         options = replace(options, flatten_optimizer_state_dict=False)
 
-    optim_state_dict = dist_cp_sd.get_optimizer_state_dict(model, optim, options=options)
+    params = [p for group in optim.param_groups for p in group["params"]]
+    with torch.no_grad():
+        param_data = [get_local_tensor(p).clone() for p in params]
+    for group in optim.param_groups:
+        _set_value(group, "weight_decay", 0.0)
+    try:
+        optim_state_dict = dist_cp_sd.get_optimizer_state_dict(model, optim, options=options)
+    finally:
+        with torch.no_grad():
+            for p, data in zip(params, param_data):
+                get_local_tensor(p).copy_(data)
+        del param_data
+        for group, weight_decay in zip(optim.param_groups, weight_decays):
+            _set_value(group, "weight_decay", weight_decay)
     # With a full state dict and CPU offload, torch returns an empty dict on every rank but 0.
     saved_states = optim_state_dict.get("state", {})
     saved_groups = optim_state_dict.get("param_groups", [])
@@ -763,6 +787,8 @@ def get_optimizer_state_dict(
     for groups in (optim.param_groups, saved_groups):
         for group, step in zip(groups, group_steps):
             _set_step(group, 0 if step is None else step)
+    for group, weight_decay in zip(saved_groups, weight_decays):
+        _set_value(group, "weight_decay", weight_decay)
 
     if flatten and optim_state_dict:
         optim_state_dict = dist_cp_sd._flatten_optim_state_dict(optim_state_dict)
