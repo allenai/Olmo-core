@@ -543,6 +543,7 @@ OPTIM_FACTORIES = [
     pytest.param(
         lambda params: SkipStepAdamW(params, lr=1e-2, foreach=True), id="skip-step-adamw-foreach"
     ),
+    pytest.param(lambda params: torch.optim.NAdam(params, lr=1e-2), id="nadam"),
 ]
 
 

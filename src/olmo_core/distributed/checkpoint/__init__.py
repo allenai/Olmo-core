@@ -757,6 +757,8 @@ def get_optimizer_state_dict(
     saved_groups = optim_state_dict.get("param_groups", [])
     for state in [*optim.state.values(), *saved_states.values()]:
         _set_step(state, 0)
+        # NAdam advances its momentum product together with the step.
+        _set_value(state, "mu_product", 1.0)
     assert len(saved_groups) in (0, len(optim.param_groups))
     for groups in (optim.param_groups, saved_groups):
         for group, step in zip(groups, group_steps):
@@ -772,11 +774,15 @@ def _copy_step(step: Any) -> Any:
 
 
 def _set_step(state: Dict[str, Any], value: Any):
-    step = state.get("step")
-    if isinstance(step, torch.Tensor):
-        step.copy_(value)
-    elif isinstance(step, (int, float)) and not isinstance(step, bool):
-        state["step"] = _copy_step(value)
+    _set_value(state, "step", value)
+
+
+def _set_value(state: Dict[str, Any], key: str, value: Any):
+    current = state.get(key)
+    if isinstance(current, torch.Tensor):
+        current.copy_(value)
+    elif isinstance(current, (int, float)) and not isinstance(current, bool):
+        state[key] = _copy_step(value)
 
 
 def _prepare_state_dict(
