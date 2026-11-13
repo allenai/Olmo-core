@@ -20,9 +20,10 @@ except ImportError:
 import requests
 import torch
 from cached_path import cached_path
-from cached_path.schemes import S3Client, SchemeClient, add_scheme_client
+from cached_path.schemes import HttpClient, S3Client, SchemeClient, add_scheme_client
 from requests.adapters import HTTPAdapter
 from rich.progress import track
+from urllib3.util.retry import Retry as Urllib3Retry
 
 from .aliases import PathOrStr
 from .exceptions import (
@@ -91,7 +92,8 @@ def resource_path(folder: PathOrStr, fname: str, local_cache: Optional[PathOrStr
         log.info(f"Found local cache of {fname} at {local_path}")
         return local_path
     else:
-        return cached_path(f"{folder}/{fname}", quiet=True)
+        url = f"{folder}/{fname}"
+        return cached_path(url, quiet=True, headers=_http_auth_headers(url))
 
 
 def is_url(path: PathOrStr) -> bool:
@@ -608,24 +610,95 @@ def retriable(
 ######################
 
 
-@cache
-def _get_http_session() -> requests.Session:
+HTTP_RETRY_STATUS_CODES = (429, 502, 503, 504)
+"""
+HTTP status codes that are worth retrying: rate limiting (429) and transient server errors.
+"""
+
+HTTP_MAX_RETRIES = 5
+"""
+The maximum number of adapter-level retries for sessions built with a retry policy.
+"""
+
+
+def _build_http_session(
+    headers: Optional[dict] = None,
+    retry_status_codes: Optional[Tuple[int, ...]] = None,
+) -> requests.Session:
     """
-    Get a shared HTTP session with connection pooling.
-    This prevents resource exhaustion when making many HTTP requests.
+    Build an HTTP session with connection pooling, which prevents resource exhaustion when making
+    many HTTP requests.
+
+    :param headers: Default headers to send with every request from the session.
+    :param retry_status_codes: If set, responses with these status codes are retried with
+        exponential backoff, honoring the ``Retry-After`` header. Leave unset when the caller
+        handles retries itself (see :func:`retriable`).
     """
     session = requests.Session()
-    # Configure connection pooling to reuse connections
-    adapter = HTTPAdapter(pool_maxsize=50)
+    max_retries: Union[int, Urllib3Retry] = 0
+    if retry_status_codes:
+        max_retries = Urllib3Retry(
+            total=HTTP_MAX_RETRIES,
+            backoff_factor=1,
+            status_forcelist=retry_status_codes,
+            respect_retry_after_header=True,
+        )
+    adapter = HTTPAdapter(pool_maxsize=50, max_retries=max_retries)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
+    if headers:
+        session.headers.update(headers)
     return session
 
 
-@retriable()
+@cache
+def _get_http_session() -> requests.Session:
+    """
+    Get the shared HTTP session used by the ``_http_*`` helpers below. Those helpers retry through
+    the :func:`retriable` decorator (see :func:`_http_retry_condition`), so the session itself
+    doesn't set a retry policy.
+    """
+    return _build_http_session()
+
+
+# Hosts that receive a bearer token on outgoing HTTP requests, mapped to the env var that holds the
+# token. Authenticating typically raises the host's rate limit (e.g. HuggingFace resolver reads).
+# See https://huggingface.co/docs/hub/rate-limits.
+_HTTP_BEARER_TOKEN_ENV_VARS = {
+    "huggingface.co": "HF_TOKEN",
+    "hf.co": "HF_TOKEN",
+}
+
+
+def _http_auth_headers(url: str) -> dict:
+    """
+    ``Authorization: Bearer`` header for hosts registered in :data:`_HTTP_BEARER_TOKEN_ENV_VARS` when
+    the corresponding env var is set, otherwise an empty dict. The token is only attached to its own
+    host, and ``requests`` strips the header on cross-host redirects (e.g. to a CDN).
+    """
+    from urllib.parse import urlparse
+
+    env_var = _HTTP_BEARER_TOKEN_ENV_VARS.get(urlparse(url).hostname or "")
+    token = os.environ.get(env_var) if env_var is not None else None
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def _http_retry_condition(exc: Exception) -> bool:
+    return (
+        isinstance(exc, requests.exceptions.HTTPError)
+        and exc.response is not None
+        and exc.response.status_code in HTTP_RETRY_STATUS_CODES
+    )
+
+
+@retriable(retry_condition=_http_retry_condition)
 def _http_file_size(url: str) -> int:
     session = _get_http_session()
-    response = session.head(url, allow_redirects=True)
+    response = session.head(url, allow_redirects=True, headers=_http_auth_headers(url))
+    if response.status_code == 404:
+        raise FileNotFoundError(url)
+
+    response.raise_for_status()
     content_length = response.headers.get("content-length")
     if content_length is None:
         raise OLMoNetworkError(
@@ -636,17 +709,15 @@ def _http_file_size(url: str) -> int:
     return int(content_length)
 
 
-@retriable(
-    retry_condition=lambda exc: (
-        isinstance(exc, requests.exceptions.HTTPError)
-        and exc.response is not None
-        and exc.response.status_code == 502
-    ),
-)
+@retriable(retry_condition=_http_retry_condition)
 def _http_get_bytes_range(url: str, bytes_start: int, num_bytes: int) -> bytes:
     session = _get_http_session()
     response = session.get(
-        url, headers={"Range": f"bytes={bytes_start}-{bytes_start + num_bytes - 1}"}
+        url,
+        headers={
+            "Range": f"bytes={bytes_start}-{bytes_start + num_bytes - 1}",
+            **_http_auth_headers(url),
+        },
     )
 
     if response.status_code == 404:
@@ -661,10 +732,10 @@ def _http_get_bytes_range(url: str, bytes_start: int, num_bytes: int) -> bytes:
     return result
 
 
-@retriable()
+@retriable(retry_condition=_http_retry_condition)
 def _http_file_exists(url: str) -> bool:
     session = _get_http_session()
-    response = session.head(url)
+    response = session.head(url, headers=_http_auth_headers(url))
     if response.status_code == 404:
         return False
 
@@ -1076,9 +1147,9 @@ def _s3_list_directory(
                 )
 
 
-#############################################
-## Custom cached path client for 'weka://' ##
-#############################################
+################################
+## Custom cached-path clients ##
+################################
 
 
 def add_cached_path_clients():
@@ -1086,6 +1157,49 @@ def add_cached_path_clients():
     Add additional cached-path clients.
     """
     add_scheme_client(_WekaClient)
+    add_scheme_client(_RetryableHttpClient)
+
+
+class _RetryableHttpClient(HttpClient):
+    """
+    A cached-path client for ``http(s)://`` URLs that retries every status code in
+    :data:`HTTP_RETRY_STATUS_CODES`, whereas cached-path's built-in client only retries server
+    errors. Retrying rate-limited (429) responses matters when many ranks download checkpoint
+    files from the same host concurrently.
+
+    .. note::
+        This subclasses cached-path's ``HttpClient`` because ``cached_path()`` only forwards custom
+        headers, such as the auth headers from :func:`_http_auth_headers`, to clients derived from
+        it.
+    """
+
+    scheme = ("http", "https")
+
+    recoverable_errors = HttpClient.recoverable_errors + (requests.exceptions.RetryError,)
+    """
+    Treat exhausted retries like the other recoverable errors, so ``cached_path()`` can fall back to
+    a previously cached version of the resource instead of failing.
+    """
+
+    def _session(self) -> requests.Session:
+        return _build_http_session(self.headers, retry_status_codes=HTTP_RETRY_STATUS_CODES)
+
+    @property
+    def head_response(self):
+        if self._head_response is None:
+            with self._session() as session:
+                response = session.head(self.resource, allow_redirects=True)
+            self.validate_response(response)
+            self._head_response = response
+        return self._head_response
+
+    def get_resource(self, temp_file: io.BufferedWriter) -> None:
+        with self._session() as session:
+            response = session.get(self.resource, stream=True)
+            self.validate_response(response)
+            for chunk in response.iter_content(chunk_size=1024):
+                if chunk:  # filter out keep-alive chunks
+                    temp_file.write(chunk)
 
 
 class _WekaClient(SchemeClient):
