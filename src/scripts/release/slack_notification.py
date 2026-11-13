@@ -16,8 +16,8 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
     text = (
-        f"OLMo-core *v{VERSION}* is now out. See "
-        f"https://github.com/allenai/OLMo-core/releases/tag/v{VERSION} for release notes."
+        f"Olmo-core *v{VERSION}* is now out. See "
+        f"https://github.com/allenai/Olmo-core/releases/tag/v{VERSION} for release notes."
     )
     requests.post(args.webhook_url, json={"text": text})
 

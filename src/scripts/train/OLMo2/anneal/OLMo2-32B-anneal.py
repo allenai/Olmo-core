@@ -97,7 +97,7 @@ class AnnealingConfig(Config):
     """
     Custom config class for the annealing run.
 
-    Making config classes isn't strictly necessary for OLMo-core, but it gives us a nice way to
+    Making config classes isn't strictly necessary for Olmo-core, but it gives us a nice way to
     capture all of the hyperparameters for a run and an easy way to override those options from
     the command line without configuring a complicated command line parser.
     """

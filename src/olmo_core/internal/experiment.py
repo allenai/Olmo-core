@@ -1,6 +1,7 @@
 import logging
 import sys
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Callable, Dict, List, Optional, cast
 
 import torch
@@ -103,6 +104,7 @@ class ExperimentConfig(Config):
     trainer: TrainerConfig
     init_seed: int = 12536
     backend: Optional[str] = "cpu:gloo,cuda:nccl"
+    process_group_timeout_seconds: float = 15 * 60
 
 
 class SubCmd(StrEnum):
@@ -124,11 +126,17 @@ class SubCmd(StrEnum):
         if self in (SubCmd.launch, SubCmd.dry_run, SubCmd.prep, SubCmd.launch_prep):
             prepare_cli_environment()
         elif self == SubCmd.train:
-            prepare_training_environment(backend=config.backend)
+            prepare_training_environment(
+                backend=config.backend,
+                timeout=timedelta(seconds=config.process_group_timeout_seconds),
+            )
         elif self == SubCmd.train_single:
             prepare_training_environment(backend=None)
         elif self == SubCmd.eval_checkpoints:
-            prepare_training_environment(backend=config.backend)
+            prepare_training_environment(
+                backend=config.backend,
+                timeout=timedelta(seconds=config.process_group_timeout_seconds),
+            )
         else:
             raise NotImplementedError(self)
 
@@ -315,6 +323,7 @@ def build_config(
     flight_recorder: bool = False,
     num_execution_units: Optional[int] = None,
     include_default_evals: bool = False,
+    process_group_timeout_seconds: float = 15 * 60,
     **data_kwargs,
 ) -> ExperimentConfig:
     """
@@ -344,6 +353,8 @@ def build_config(
     :param beaker_workspace: The Beaker workspace to use.
     :param num_execution_units: Number of execution units for Beaker.
     :param include_default_evals: Whether to include default evaluation callbacks.
+    :param process_group_timeout_seconds: Distributed collective timeout, including the wait
+        for rank-zero dataset preparation. Increase this for cold caches or run ``prep`` first.
     :param data_kwargs: Additional keyword arguments to pass to the data config builder.
     :returns: The complete ``ExperimentConfig``.
     """
@@ -384,6 +395,7 @@ def build_config(
         data_loader=data.data_loader,
         train_module=train_module,
         trainer=trainer,
+        process_group_timeout_seconds=process_group_timeout_seconds,
     )
 
     config = config.merge(cli_context.overrides)

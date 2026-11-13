@@ -47,7 +47,7 @@ def build_experiment_config(cli_context: CliContext) -> ExperimentConfig:
         num_nodes=64,
         nccl_debug=False,
         # Preserve the original training environment. Run this historical script from its
-        # corresponding OLMo-core revision, whose dependencies match this image.
+        # corresponding Olmo-core revision, whose dependencies match this image.
         beaker_image=OLMoCoreBeakerImage.tch270_cu128,
         # override priority from the CLI eg `--launch.priority=high`
     )

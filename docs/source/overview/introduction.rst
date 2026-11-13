@@ -1,7 +1,7 @@
 Introduction
 ============
 
-OLMo-core represents a major rewrite of the original training and modeling code from `OLMo <https://github.com/allenai/OLMo>`_
+Olmo-core represents a major rewrite of the original training and modeling code from `OLMo <https://github.com/allenai/OLMo>`_
 with a focus on performance and API stability.
 It aims to provide a standard set of robust tools that can be used by LLM researchers at `AI2 <https://allenai.org>`_ and other organizations
 to build their research projects on.

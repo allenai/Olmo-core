@@ -239,3 +239,127 @@ def test_multi_layer_vit():
     input_ids, images, idx = _make_inputs(batch=2, seq_len=16)
     out = model(input_ids, images=images, pooled_patches_idx=idx)
     assert out.shape == (2, 16, _LM_VOCAB)
+
+
+@pytest.mark.parametrize("flex_env", [False, True])
+def test_masks_follow_the_actual_backend_not_the_environment(monkeypatch, flex_env):
+    """A torch-backend LM must get dense masks even if OLMO2_FLEX_ATTN=1 is set."""
+    from olmo_core.nn.attention import AttentionBackendName
+
+    if flex_env:
+        monkeypatch.setenv("OLMO2_FLEX_ATTN", "1")
+    else:
+        monkeypatch.delenv("OLMO2_FLEX_ATTN", raising=False)
+    torch.manual_seed(0)
+    cfg = _tiny_multimodal_cfg()
+    cfg.lm = TransformerConfig.olmo2_1M(
+        vocab_size=_LM_VOCAB, attn_backend=AttentionBackendName.torch
+    )
+    model = cfg.build(init_device="cpu").eval()
+    input_ids, images, idx = _make_inputs(batch=2, seq_len=16)
+    # Two examples packed per row: the second must not see the first.
+    example_ids = torch.tensor([[0] * 8 + [1] * 8] * 2)
+    with torch.no_grad():
+        masked = model(input_ids, images=images, pooled_patches_idx=idx, example_ids=example_ids)
+        unmasked = model(input_ids, images=images, pooled_patches_idx=idx)
+    assert not torch.allclose(masked, unmasked)
+
+
+def test_vision_sdpa_cpu_dropout():
+    from olmo_core.nn.vision.sdpa import vision_scaled_dot_product_attention
+
+    q = torch.randn(1, 2, 4, 8)
+    out = vision_scaled_dot_product_attention(q, q, q, dropout_p=0.1)
+    assert out.shape == q.shape
+
+
+def test_mixed_flex_and_torch_backends_are_rejected():
+    from olmo_core.exceptions import OLMoConfigurationError
+    from olmo_core.nn.attention.backend import FlexAttentionBackend
+
+    model = _tiny_multimodal_cfg().build(init_device="cpu").eval()
+    blocks = list(model.lm.blocks.values())
+    assert len(blocks) >= 2
+    blocks[0].attention.backend = FlexAttentionBackend(head_dim=8, n_heads=4)  # type: ignore[assignment]
+    input_ids, images, idx = _make_inputs(batch=1, seq_len=16)
+    with pytest.raises(OLMoConfigurationError, match="mixing FlexAttention"):
+        model(input_ids, images=images, pooled_patches_idx=idx)
+
+
+def test_sliding_window_flex_blocks_are_rejected():
+    from olmo_core.exceptions import OLMoConfigurationError
+    from olmo_core.nn.attention.backend import FlexAttentionBackend
+
+    model = _tiny_multimodal_cfg().build(init_device="cpu").eval()
+    for block in model.lm.blocks.values():
+        block.attention.backend = FlexAttentionBackend(  # type: ignore[assignment]
+            head_dim=8, n_heads=4, window_size=(4, 0)
+        )
+    input_ids, images, idx = _make_inputs(batch=1, seq_len=16)
+    with pytest.raises(OLMoConfigurationError, match="sliding"):
+        model(input_ids, images=images, pooled_patches_idx=idx)
+
+
+# ---------------------------------------------------------------------------
+# Sequence packing: a packed example must be isolated (its logits unchanged vs
+# running it standalone), for both the dense and FlexAttention backends.
+# ---------------------------------------------------------------------------
+
+
+def _packing_example(seed: int, n_text: int, n_crops: int):
+    import numpy as np
+
+    rng = np.random.RandomState(seed)
+    L = n_crops + n_text
+    return dict(
+        input_ids=np.array(
+            [_IMAGE_PATCH_TOKEN] * n_crops + list(rng.randint(2, _LM_VOCAB, n_text))
+        ),
+        labels=np.full(L, 2, dtype=np.int64),
+        loss_masks=np.ones(L, dtype=np.float32),
+        position_ids=np.arange(L, dtype=np.int64),
+        token_type_ids=np.array([1] * n_crops + [0] * n_text, dtype=np.int64),
+        images=rng.randn(n_crops, 4, 14 * 14 * 3).astype("float32"),
+        pooled_patches_idx=np.arange(n_crops * 4).reshape(n_crops, 4).astype("int64"),
+    )
+
+
+@pytest.mark.parametrize("backend", ["torch", "flex"])
+def test_packed_examples_are_isolated(backend):
+    from olmo_core.data.multimodal.collator import MultimodalCollatorConfig
+    from olmo_core.data.multimodal.packing import pack_examples
+    from olmo_core.nn.attention import AttentionBackendName
+
+    torch.manual_seed(0)
+    lm_cfg = _tiny_lm_cfg()
+    # set the attention backend
+    lm_cfg = TransformerConfig.olmo2_1M(
+        vocab_size=_LM_VOCAB, attn_backend=AttentionBackendName(backend)
+    )
+    vis_cfg = _tiny_vision_cfg()
+    conn_cfg = VisionConnectorConfig.from_vision_encoder(
+        vis_cfg, output_dim=_LM_D_MODEL, mlp_hidden_size=32
+    )
+    cfg = MultimodalLMConfig(
+        lm=lm_cfg,
+        vision=vis_cfg,
+        connector=conn_cfg,
+        image_patch_token_id=_IMAGE_PATCH_TOKEN,
+        vit_layers=(-1,),
+    )
+    model = cfg.build(init_device="cpu").eval()
+    coll = MultimodalCollatorConfig(pad_token_id=0).build()
+
+    a = _packing_example(1, n_text=6, n_crops=1)
+    b = _packing_example(2, n_text=4, n_crops=2)
+
+    def run(example_list):
+        batch = coll(example_list)
+        kw = {k: v for k, v in batch.items() if k not in ("input_ids", "labels", "loss_masks")}
+        with torch.no_grad():
+            return model(batch["input_ids"], **kw)[0]
+
+    la, lb, lp = run([a]), run([b]), run([pack_examples([a, b])])
+    na, nb = len(a["input_ids"]), len(b["input_ids"])
+    torch.testing.assert_close(lp[:na], la, atol=1e-4, rtol=1e-4)
+    torch.testing.assert_close(lp[na : na + nb], lb, atol=1e-4, rtol=1e-4)

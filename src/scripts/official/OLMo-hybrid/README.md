@@ -36,9 +36,9 @@ The base model was trained using a staged approach, followed by SFT for both Thi
 
 | Stage | Data |
 |-------|------|
-| stage 1 (pretraining) | dolma3 -> [OLMo-mix-0925.txt](https://github.com/allenai/OLMo-core/blob/main/src/olmo_core/data/mixes/OLMo-mix-0925.txt) |
-| stage 2 (midtraining) | dolma3-dolmino -> [OLMo3-32B-midtraining-modelnamefilter.yaml](https://github.com/allenai/OLMo-core/blob/main/src/olmo_core/data/source_mixtures/OLMo3-32B-midtraining-modelnamefilter.yaml) |
-| stage 3 (long-context) | dolma3-longmino -> [OLMo-longmino-mix-0925.txt](https://github.com/allenai/OLMo-core/blob/main/src/olmo_core/data/mixes/OLMo-longmino-mix-0925.txt) |
+| stage 1 (pretraining) | dolma3 -> [OLMo-mix-0925.txt](https://github.com/allenai/Olmo-core/blob/main/src/olmo_core/data/mixes/OLMo-mix-0925.txt) |
+| stage 2 (midtraining) | dolma3-dolmino -> [OLMo3-32B-midtraining-modelnamefilter.yaml](https://github.com/allenai/Olmo-core/blob/main/src/olmo_core/data/source_mixtures/OLMo3-32B-midtraining-modelnamefilter.yaml) |
+| stage 3 (long-context) | dolma3-longmino -> [OLMo-longmino-mix-0925.txt](https://github.com/allenai/Olmo-core/blob/main/src/olmo_core/data/mixes/OLMo-longmino-mix-0925.txt) |
 
 Multiple midtraining runs (ingredient 1 and 2) were performed and the final checkpoints were souped. The long-context stage extends to 65k sequence length by dropping RoPE (DroPE) and using context parallelism with Ulysses (degree=2).
 
@@ -53,7 +53,7 @@ Both SFT scripts use FSDP, context parallelism (Ulysses degree=2), activation ch
 
 ## Checkpoints
 
-A full list of OLMo-core format checkpoints can be found in [OLMo-hybrid-0326-7B.csv](OLMo-hybrid-0326-7B.csv). See [CHECKPOINTS.md](CHECKPOINTS.md) for details.
+A full list of Olmo-core format checkpoints can be found in [OLMo-hybrid-0326-7B.csv](OLMo-hybrid-0326-7B.csv). See [CHECKPOINTS.md](CHECKPOINTS.md) for details.
 
 ## Running
 

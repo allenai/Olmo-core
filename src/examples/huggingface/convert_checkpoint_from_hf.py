@@ -1,6 +1,6 @@
 """
 Example script showing how you could convert model weights on HuggingFace for an OLMo2
-model into a format that can be loaded by OLMo-core for fine-tuning.
+model into a format that can be loaded by Olmo-core for fine-tuning.
 
 Note that this script is architecture-dependent. Some models may work out-of-the-box. Support for
 other models can be added by updating the constants in :mod:`olmo_core.nn.hf.convert`.

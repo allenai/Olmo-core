@@ -2,7 +2,7 @@
 Forward/parity test for the ``olmo3moe`` HF model + its conversion.
 
 Builds a small ``Olmo3MoeForCausalLM`` in memory, runs its forward, then does a full
-``HF -> OLMo-core -> HF`` conversion roundtrip and checks the reloaded model produces the same
+``HF -> Olmo-core -> HF`` conversion roundtrip and checks the reloaded model produces the same
 logprobs. This exercises the ``modeling_olmo3moe`` forward and validates the conversion against the
 model's real parameter set (strict ``load_state_dict``). Requires ``transformers``.
 """

@@ -974,7 +974,7 @@ class Trainer:
                 self._single_thread_pool = None
 
         # NOTE: '.close' must be called after shutting down thread pools to ensure bookkeeping ops
-        # have finished first. See https://github.com/allenai/OLMo-core/pull/546.
+        # have finished first. See https://github.com/allenai/Olmo-core/pull/546.
         for callback in self._iter_callbacks():
             callback.close()
 

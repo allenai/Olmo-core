@@ -266,8 +266,8 @@ def save_hf_hybrid_model(
     on a specific ``transformers`` version.
 
     :param save_dir: Directory in which to save the model.
-    :param model_state_dict: The OLMo-core model state dict.
-    :param model: The OLMo-core hybrid transformer model.
+    :param model_state_dict: The Olmo-core model state dict.
+    :param model: The Olmo-core hybrid transformer model.
     :param dtype: Optional dtype to cast weights to.
     :param vocab_size: If set, truncate embeddings/lm_head to this size.
     :param max_sequence_length: Maximum sequence length for ``max_position_embeddings``.

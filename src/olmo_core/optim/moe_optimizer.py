@@ -816,6 +816,10 @@ class OLMoDDPOptimizer:
                 continue
 
             group_dtype = named_params[0][1].dtype
+            # Preserve the 16-byte alignment used by compiled kernels when
+            # they are reused across blocks. Small BF16 parameters (e.g. KDA
+            # gates) can otherwise misalign the next parameter in this buffer.
+            alignment_numel = 16 // named_params[0][1].element_size()
             total_numel = 0
             total_sharded_local_numel = 0
             for name, param in named_params:
@@ -827,7 +831,9 @@ class OLMoDDPOptimizer:
                     raise RuntimeError(
                         f"Mixed dtypes are not supported in flat model buffer group '{tag}'"
                     )
-                total_numel += param.numel()
+                total_numel += (
+                    (param.numel() + alignment_numel - 1) // alignment_numel * alignment_numel
+                )
 
                 main_param = self.states[f"{name}.main"]
                 if any(isinstance(p, Shard) for p in main_param.placements):
@@ -871,7 +877,7 @@ class OLMoDDPOptimizer:
                 else:
                     replicated_entries.append(entry)
 
-                global_offset += numel
+                global_offset += (numel + alignment_numel - 1) // alignment_numel * alignment_numel
 
             self._flat_model_sync_groups[tag] = _FlatModelParamSyncGroup(
                 tag=tag,

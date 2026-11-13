@@ -4,7 +4,7 @@ This file provides guidance to agents like Claude Code (claude.ai/code) and Code
 
 ## Overview
 
-OLMo-core is AI2's training library for the Open Language Model (OLMo) series. It provides modular components for transformer architectures, distributed training, data loading, and evaluation.
+Olmo-core is AI2's training library for the Open Language Model (OLMo) series. It provides modular components for transformer architectures, distributed training, data loading, and evaluation.
 
 ## Commands
 
@@ -129,7 +129,7 @@ python src/scripts/train/OLMo2-1B.py launch olmo2-1b-test ai2/jupiter-cirrascale
 
 ## Docker and Beaker Launch
 
-The Docker image (`src/Dockerfile`) is a two-stage build: a `build` stage compiles GPU-specific dependencies (flash-attn, TransformerEngine, grouped_gemm, ring-flash-attn, etc.) on an NVIDIA CUDA devel image, and a `release` stage copies the conda environment into a lighter Ubuntu base with AWS CLI, Google Cloud SDK, and MLNX OFED drivers. The image contains all dependencies but *not* the OLMo-core package itself — source code is cloned at runtime.
+The Docker image (`src/Dockerfile`) is a two-stage build: a `build` stage compiles GPU-specific dependencies (flash-attn, TransformerEngine, grouped_gemm, ring-flash-attn, etc.) on an NVIDIA CUDA devel image, and a `release` stage copies the conda environment into a lighter Ubuntu base with AWS CLI, Google Cloud SDK, and MLNX OFED drivers. The image contains all dependencies but *not* the Olmo-core package itself — source code is cloned at runtime.
 
 ```bash
 # Build locally (versions configured in Makefile)

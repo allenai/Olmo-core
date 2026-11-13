@@ -125,7 +125,7 @@ def _worker_process(
         output_path: Output checkpoint path
         skip_optimizer_state: If True, skip loading and saving optimizer state
     """
-    # Set required environment variables for OLMo-core distributed utilities
+    # Set required environment variables for Olmo-core distributed utilities
     os.environ.setdefault(OLMO_NUM_NODES_ENV_VAR, "1")
     os.environ.setdefault(OLMO_LOCAL_WORLD_SIZE_ENV_VAR, str(world_size))
     os.environ.setdefault(OLMO_LOCAL_RANK_ENV_VAR, str(process_rank))
@@ -244,7 +244,7 @@ def _worker_process(
 )
 def main(input_path: str, output_path: str, num_processes: int, skip_optimizer_state: bool) -> None:
     """
-    Reshard an OLMo-core checkpoint across different process group configurations.
+    Reshard an Olmo-core checkpoint across different process group configurations.
 
     This script can run in single-process mode (default) or establish a Gloo process group
     with multiple processes to perform checkpoint resharding operations.

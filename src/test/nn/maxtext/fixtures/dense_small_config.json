@@ -1,0 +1,86 @@
+{
+ "model": {
+  "d_model": 64,
+  "vocab_size": 128,
+  "n_layers": 8,
+  "block": {
+   "sequence_mixer": {
+    "name": "default",
+    "n_heads": 4,
+    "bias": false,
+    "rope": {
+     "name": "default",
+     "theta": 500000,
+     "full_precision": true,
+     "no_global_rope": false,
+     "partial_rotary_factor": 1.0,
+     "_CLASS_": "olmo_core.nn.rope.RoPEConfig"
+    },
+    "qk_norm": {
+     "name": "rms",
+     "eps": 1e-06,
+     "bias": false,
+     "dtype": "float32",
+     "_CLASS_": "olmo_core.nn.layer_norm.LayerNormConfig"
+    },
+    "backend": "torch",
+    "dtype": "float32",
+    "sliding_window": {
+     "pattern": [
+      8,
+      8,
+      8,
+      -1
+     ],
+     "force_full_attention_on_first_layer": false,
+     "force_full_attention_on_last_layer": true,
+     "_CLASS_": "olmo_core.nn.attention.SlidingWindowAttentionConfig"
+    },
+    "use_head_qk_norm": false,
+    "scalable_softmax": false,
+    "attention_sinks": false,
+    "_CLASS_": "olmo_core.nn.attention.AttentionConfig",
+    "type": "attention",
+    "n_kv_heads": 2
+   },
+   "layer_norm": {
+    "name": "rms",
+    "eps": 1e-06,
+    "bias": false,
+    "dtype": "float32",
+    "_CLASS_": "olmo_core.nn.layer_norm.LayerNormConfig"
+   },
+   "feed_forward": {
+    "hidden_size": 96,
+    "name": "default",
+    "bias": false,
+    "dtype": "float32",
+    "activation": "silu",
+    "_CLASS_": "olmo_core.nn.feed_forward.FeedForwardConfig"
+   },
+   "name": "reordered_norm",
+   "_CLASS_": "olmo_core.nn.transformer.config.TransformerBlockConfig"
+  },
+  "lm_head": {
+   "name": "default",
+   "layer_norm": {
+    "name": "rms",
+    "eps": 1e-06,
+    "bias": false,
+    "dtype": "float32",
+    "_CLASS_": "olmo_core.nn.layer_norm.LayerNormConfig"
+   },
+   "bias": false,
+   "dtype": "float32",
+   "loss_implementation": "default",
+   "_CLASS_": "olmo_core.nn.lm_head.LMHeadConfig"
+  },
+  "name": "default",
+  "dtype": "float32",
+  "init_method": "normal",
+  "init_seed": 0,
+  "init_std": 0.02,
+  "tie_word_embeddings": false,
+  "_CLASS_": "olmo_core.nn.transformer.config.TransformerConfig"
+ }
+}

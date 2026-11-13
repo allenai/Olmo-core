@@ -40,7 +40,7 @@ This API consists of a series of simple, composable, elements, including:
    * :class:`MixingInstanceSource`: An instance source that mixes other instance sources together.
    * :class:`RandomInstanceSource`: An instance source for generating random instances.
 
-3. :class:`ComposableDataLoader`: A data loader for OLMo-core's :class:`~olmo_core.train.Trainer` that takes
+3. :class:`ComposableDataLoader`: A data loader for Olmo-core's :class:`~olmo_core.train.Trainer` that takes
    one or more instance sources.
 
 .. tip::

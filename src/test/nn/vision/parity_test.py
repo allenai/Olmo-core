@@ -19,6 +19,7 @@ from olmo_core.nn.vision import (
     VisionEncoderConfig,
     VisionEncoderType,
     VisionTransformer,
+    siglip_state_dict_to_vision_encoder,
 )
 
 transformers = pytest.importorskip("transformers")
@@ -67,45 +68,6 @@ def _convert_clip_state_dict(hf_sd: Dict[str, torch.Tensor]) -> Dict[str, torch.
     out["pre_ln.bias"] = hf_sd["pre_layrnorm.bias"]
 
     # Per-layer projections.
-    n_layers = (
-        max(int(k.split(".")[2]) for k in hf_sd.keys() if k.startswith("encoder.layers.")) + 1
-    )
-    for i in range(n_layers):
-        src = f"encoder.layers.{i}"
-        dst = f"blocks.{i}"
-        for hf_name, our_name in (
-            ("layer_norm1", "attn_norm"),
-            ("layer_norm2", "ffn_norm"),
-        ):
-            out[f"{dst}.{our_name}.weight"] = hf_sd[f"{src}.{hf_name}.weight"]
-            out[f"{dst}.{our_name}.bias"] = hf_sd[f"{src}.{hf_name}.bias"]
-        for hf_name, our_name in (
-            ("q_proj", "wq"),
-            ("k_proj", "wk"),
-            ("v_proj", "wv"),
-            ("out_proj", "wo"),
-        ):
-            out[f"{dst}.attn.{our_name}.weight"] = hf_sd[f"{src}.self_attn.{hf_name}.weight"]
-            out[f"{dst}.attn.{our_name}.bias"] = hf_sd[f"{src}.self_attn.{hf_name}.bias"]
-        for hf_name, our_name in (("fc1", "w1"), ("fc2", "w2")):
-            out[f"{dst}.ffn.{our_name}.weight"] = hf_sd[f"{src}.mlp.{hf_name}.weight"]
-            out[f"{dst}.ffn.{our_name}.bias"] = hf_sd[f"{src}.mlp.{hf_name}.bias"]
-    return out
-
-
-def _convert_siglip_state_dict(hf_sd: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    """Map a HuggingFace ``SiglipVisionTransformer`` state dict to ours.
-
-    Skips ``post_layernorm`` and ``head.*`` since we compare at the
-    pre-``post_layernorm`` boundary and don't model the pooling head.
-    """
-    out: Dict[str, torch.Tensor] = {}
-    out["patch_embedding.weight"] = hf_sd["embeddings.patch_embedding.weight"].reshape(
-        hf_sd["embeddings.patch_embedding.weight"].shape[0], -1
-    )
-    out["patch_embedding.bias"] = hf_sd["embeddings.patch_embedding.bias"]
-    out["positional_embedding"] = hf_sd["embeddings.position_embedding.weight"]
-
     n_layers = (
         max(int(k.split(".")[2]) for k in hf_sd.keys() if k.startswith("encoder.layers.")) + 1
     )
@@ -207,7 +169,7 @@ def test_siglip_parity():
 
     cfg = VisionEncoderConfig.siglip_so400m()
     ours = VisionTransformer(cfg, init_device="cpu").eval()
-    ours.load_state_dict(_convert_siglip_state_dict(hf.state_dict()))
+    ours.load_state_dict(siglip_state_dict_to_vision_encoder(hf.state_dict()))
 
     torch.manual_seed(0)
     # 378 = 27×14: both HF and our model produce a 27×27 patch grid.
@@ -244,7 +206,7 @@ def test_siglip2_parity():
 
     cfg = VisionEncoderConfig.siglip2_so400m_patch14_378()
     ours = VisionTransformer(cfg, init_device="cpu").eval()
-    ours.load_state_dict(_convert_siglip_state_dict(hf.state_dict()))
+    ours.load_state_dict(siglip_state_dict_to_vision_encoder(hf.state_dict()))
 
     torch.manual_seed(0)
     # 378 = 27×14: both HF and our model produce a 27×27 = 729 patch grid.

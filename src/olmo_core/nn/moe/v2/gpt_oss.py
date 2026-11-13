@@ -1,8 +1,8 @@
 """
-Config builders for GPT-OSS (fused-MoE) models on the OLMo-core fused-MoE-v2 stack.
+Config builders for GPT-OSS (fused-MoE) models on the Olmo-core fused-MoE-v2 stack.
 
 .. warning::
-    These builders map GPT-OSS architecture hyperparameters onto OLMo-core configs. There is no
+    These builders map GPT-OSS architecture hyperparameters onto Olmo-core configs. There is no
     GPT-OSS checkpoint conversion path in :mod:`olmo_core.nn.hf.convert` yet, so a config produced
     here cannot load a HuggingFace GPT-OSS checkpoint.
     :func:`build_gpt_oss_20b_config_from_hf_config` maps HF *config* hyperparameters only.

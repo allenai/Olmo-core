@@ -2,9 +2,9 @@
 
 ## Available Checkpoints
 
-A full list of OLMo-core format checkpoints can be found in [OLMo-hybrid-0326-7B.csv](OLMo-hybrid-0326-7B.csv).
+A full list of Olmo-core format checkpoints can be found in [OLMo-hybrid-0326-7B.csv](OLMo-hybrid-0326-7B.csv).
 
-## Loading with OLMo-core
+## Loading with Olmo-core
 
 ```python
 import json

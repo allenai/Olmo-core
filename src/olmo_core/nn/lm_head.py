@@ -21,6 +21,7 @@ from olmo_core.doc_utils import beta_feature
 from olmo_core.exceptions import OLMoConfigurationError
 
 from .config import ModuleConfig
+from .fp32_linear import FP32OutputLinear
 from .functional import (
     cross_entropy_loss,
     fused_linear_cross_entropy_loss,
@@ -39,6 +40,45 @@ __all__ = [
 
 
 log = logging.getLogger(__name__)
+
+
+def _select_hidden_for_logits(
+    h: torch.Tensor,
+    labels: Optional[torch.Tensor],
+    *,
+    logits_to_keep: Union[int, torch.Tensor],
+    response_logits_only: bool,
+    response_mask: Optional[torch.Tensor],
+    ignore_index: int,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """Narrow hidden states (and optional labels) before the LM output projection."""
+    if response_logits_only:
+        if isinstance(logits_to_keep, int) and logits_to_keep != 0:
+            raise ValueError("response_logits_only and logits_to_keep are mutually exclusive")
+        if not isinstance(logits_to_keep, int):
+            raise ValueError("response_logits_only and logits_to_keep are mutually exclusive")
+
+    if isinstance(logits_to_keep, int):
+        if logits_to_keep != 0:
+            h = h[:, -logits_to_keep:, :]
+            if labels is not None:
+                labels = labels[:, -logits_to_keep:]
+    else:
+        h = h.gather(1, logits_to_keep.unsqueeze(-1).expand(-1, -1, h.size(-1)))
+        if labels is not None:
+            labels = labels.gather(1, logits_to_keep)
+
+    if response_logits_only:
+        if response_mask is None:
+            if labels is None:
+                raise ValueError("response_logits_only requires response_mask or labels")
+            response_mask = labels != ignore_index
+        flat_mask = response_mask.view(-1)
+        h = h.view(-1, h.shape[-1])[flat_mask]
+        if labels is not None:
+            labels = labels.view(-1)[flat_mask]
+
+    return h, labels
 
 
 class LMHeadType(StrEnum):
@@ -90,6 +130,11 @@ class LMHeadConfig(ModuleConfig):
     bias: Optional[bool] = None
     dtype: DType = DType.float32
     loss_implementation: LMLossImplementation = LMLossImplementation.default
+    fp32_output: bool = False
+    """Retain FP32 logits with low-precision projection operands. Default head and
+    default loss only; tensor parallelism is not supported. See
+    :class:`~olmo_core.nn.fp32_linear.FP32OutputLinear` for backward semantics.
+    """
 
     def num_params(self, d_model: int, vocab_size: int) -> int:
         """
@@ -120,6 +165,10 @@ class LMHeadConfig(ModuleConfig):
         """
         kwargs = self.as_dict(exclude_none=True, recurse=False)
         kwargs.pop("name")
+        if self.fp32_output and self.name != LMHeadType.default:
+            raise OLMoConfigurationError("fp32_output requires the default LM head")
+        if self.name != LMHeadType.default:
+            kwargs.pop("fp32_output")
         kwargs.update(
             d_model=d_model,
             vocab_size=vocab_size,
@@ -166,12 +215,17 @@ class LMHead(nn.Module):
         bias: bool = True,
         init_device: str = "cpu",
         loss_implementation: LMLossImplementation = LMLossImplementation.default,
+        fp32_output: bool = False,
     ):
         super().__init__()
+        if fp32_output and loss_implementation != LMLossImplementation.default:
+            raise OLMoConfigurationError("fp32_output requires the default LM loss implementation")
+        self.fp32_output = fp32_output
         self.norm = (
             None if layer_norm is None else layer_norm.build(d_model, init_device=init_device)
         )
-        self.w_out = nn.Linear(d_model, vocab_size, bias=bias, dtype=dtype, device=init_device)
+        linear = FP32OutputLinear if fp32_output else nn.Linear
+        self.w_out = linear(d_model, vocab_size, bias=bias, dtype=dtype, device=init_device)
         self._d_model = d_model
         self._vocab_size = vocab_size
         self._loss_implementation = loss_implementation
@@ -209,6 +263,8 @@ class LMHead(nn.Module):
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
         return_logits: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        response_logits_only: bool = False,
+        response_mask: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
         """
         Applies the language modeling (LM) head to the input hidden states.
@@ -221,24 +277,30 @@ class LMHead(nn.Module):
         :param loss_div_factor: (Optional) Divisor for the loss, can be a scalar or tensor.
         :param return_logits: If True, returns logits along with the loss when labels are provided.
         :param logits_to_keep: If nonzero, restricts computation to the last N positions (if int) or to specific positions (if tensor).
+        :param response_logits_only: If True, only compute logits at positions selected by
+            ``response_mask`` (or ``labels != ignore_index`` when labels are provided).
+        :param response_mask: Boolean mask ``(batch_size, seq_len)`` for ``response_logits_only``.
 
-        :returns: If ``labels`` is ``None``, returns the logits tensor of shape ``(batch_size, seq_len, vocab_size)``.
+        :returns: If ``labels`` is ``None``, returns the logits tensor of shape ``(batch_size, seq_len, vocab_size)``,
+                  or ``(N_response, vocab_size)`` when ``response_logits_only`` is True.
                   If ``labels`` is provided, returns an ``LMOutputWithLoss`` named tuple containing the loss and optionally the logits.
         """
         B = x.shape[0]
+        if response_logits_only and labels is not None and loss_reduction == "none":
+            raise ValueError(
+                "loss_reduction='none' is not supported with response_logits_only: the selected "
+                "positions are flattened across the batch, so there is no (B, S) loss layout"
+            )
 
         h = self.norm(x) if self.norm is not None else x
-
-        if isinstance(logits_to_keep, int):
-            if logits_to_keep != 0:
-                # Keep only the last logits_to_keep positions
-                h = h[:, -logits_to_keep:, :]
-                if labels is not None:
-                    labels = labels[:, -logits_to_keep:]
-        else:  # logits_to_keep is a tensor specifying positions to keep
-            h = h.gather(1, logits_to_keep.unsqueeze(-1).expand(-1, -1, h.size(-1)))
-            if labels is not None:
-                labels = labels.gather(1, logits_to_keep)
+        h, labels = _select_hidden_for_logits(
+            h,
+            labels,
+            logits_to_keep=logits_to_keep,
+            response_logits_only=response_logits_only,
+            response_mask=response_mask,
+            ignore_index=ignore_index,
+        )
 
         if labels is None:
             if return_logits is False:
@@ -368,6 +430,8 @@ class LMHead(nn.Module):
         tp_mesh: DeviceMesh,
         input_layouts: Optional[Tuple[Placement, Placement]] = None,
     ):
+        if self.fp32_output:
+            raise OLMoConfigurationError("fp32_output does not yet support tensor parallelism")
         # NOTE: there's a few cases to consider...
         # 1. If we're not using 'fused_linear' loss and we have a norm, then we do sequence-parallel through
         #    the norm, colwise-parallel through 'w_out', then back to sequence-parallel for the loss.
@@ -473,19 +537,24 @@ class NormalizedLMHead(LMHead):
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
         return_logits: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        response_logits_only: bool = False,
+        response_mask: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
         B = x.shape[0]
+        if response_logits_only and labels is not None and loss_reduction == "none":
+            raise ValueError(
+                "loss_reduction='none' is not supported with response_logits_only: the selected "
+                "positions are flattened across the batch, so there is no (B, S) loss layout"
+            )
 
-        if isinstance(logits_to_keep, int):
-            if logits_to_keep != 0:
-                # Keep only the last logits_to_keep positions
-                x = x[:, -logits_to_keep:, :]
-                if labels is not None:
-                    labels = labels[:, -logits_to_keep:]
-        else:  # logits_to_keep is a tensor specifying positions to keep
-            x = x.gather(1, logits_to_keep.unsqueeze(-1).expand(-1, -1, x.size(-1)))
-            if labels is not None:
-                labels = labels.gather(1, logits_to_keep)
+        x, labels = _select_hidden_for_logits(
+            x,
+            labels,
+            logits_to_keep=logits_to_keep,
+            response_logits_only=response_logits_only,
+            response_mask=response_mask,
+            ignore_index=ignore_index,
+        )
 
         sz = self.sz * (self.sz_init_value / self.sz_init_scaling)
         logits = sz * self.w_out(x)

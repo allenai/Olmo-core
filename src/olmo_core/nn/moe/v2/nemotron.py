@@ -6,7 +6,7 @@ Provides a Mamba2 SSM sequence mixer (:class:`NemotronMamba2Mixer`), a fused-MoE
 ``block_pattern``, and config builders for the Nemotron-3 Nano architecture.
 
 .. warning::
-    The builders map architecture hyperparameters onto OLMo-core configs. There is no Nemotron
+    The builders map architecture hyperparameters onto Olmo-core configs. There is no Nemotron
     checkpoint conversion path in :mod:`olmo_core.nn.hf.convert` yet, so a config produced here
     cannot load a HuggingFace Nemotron checkpoint;
     :func:`build_nemotron3_nano_config_from_hf_config` maps HF *config* hyperparameters only.

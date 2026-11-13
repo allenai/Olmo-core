@@ -1,7 +1,7 @@
 Native Generation and Chat
 ==========================
 
-OLMo-core includes a native generation module for autoregressive text generation with transformer models.
+Olmo-core includes a native generation module for autoregressive text generation with transformer models.
 This guide covers how to load a model from a checkpoint, generate text programmatically, and use the
 built-in interactive chat interface.
 
@@ -180,7 +180,7 @@ multiple checkpoints before creating the generation module:
 Interactive chat interface
 --------------------------
 
-OLMo-core ships with a CLI chatbot that wraps the generation module in an interactive loop
+Olmo-core ships with a CLI chatbot that wraps the generation module in an interactive loop
 with conversation history and chat template support.
 
 Basic usage

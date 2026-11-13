@@ -2,7 +2,7 @@
 
 set -e
 
-repo_url=https://github.com/allenai/OLMo-core
+repo_url=https://github.com/allenai/Olmo-core
 
 tags=$(git tag -l --sort=-version:refname 'v*' | head -n 2)
 current_tag=$(echo "$tags" | head -n 1)

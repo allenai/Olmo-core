@@ -1,6 +1,6 @@
 # All-in-one for researchers
 
-This guide is intended for researchers who are new to OLMo-core and would like to experiment with OLMo models or ablate new architectures or data recipes.
+This guide is intended for researchers who are new to Olmo-core and would like to experiment with OLMo models or ablate new architectures or data recipes.
 We will show you:
 
 - How to launch your first experiment with a small transformer model on Beaker, or locally with `torchrun`.
@@ -10,25 +10,25 @@ We will show you:
 - How to troubleshoot common issues.
 
 If you're looking to reproduce an official OLMo training run we still recommend starting with this tutorial to get familiar with the library.
-Then you can look in [`src/scripts/official/`](https://github.com/allenai/OLMo-core/tree/main/src/scripts/official) to find public versions of the training scripts,
-or [`src/scripts/train/`](https://github.com/allenai/OLMo-core/tree/main/src/scripts/train) for the original Ai2 internal versions (Beaker access required to run them).
+Then you can look in [`src/scripts/official/`](https://github.com/allenai/Olmo-core/tree/main/src/scripts/official) to find public versions of the training scripts,
+or [`src/scripts/train/`](https://github.com/allenai/Olmo-core/tree/main/src/scripts/train) for the original Ai2 internal versions (Beaker access required to run them).
 
 ```{attention}
-If you run into any issues with tutorial, don't hesitate to [open an issue on GitHub](https://github.com/allenai/OLMo-core/issues/new/choose) or reach out on Slack in the [#olmo-core-users](https://allenai.slack.com/archives/C08AU86NMCM) channel.
+If you run into any issues with tutorial, don't hesitate to [open an issue on GitHub](https://github.com/allenai/Olmo-core/issues/new/choose) or reach out on Slack in the [#olmo-core-users](https://allenai.slack.com/archives/C08AU86NMCM) channel.
 ```
 
 ## Setup
 
 ### Fork, clone, install
 
-For rapid experimentation we recommend forking OLMo-core for your project instead of installing it as a dependency.
-So start by [creating a fork](https://github.com/allenai/OLMo-core/fork) if you haven't already, and then cloning your fork to the computer where you'll be doing the development.
+For rapid experimentation we recommend forking Olmo-core for your project instead of installing it as a dependency.
+So start by [creating a fork](https://github.com/allenai/Olmo-core/fork) if you haven't already, and then cloning your fork to the computer where you'll be doing the development.
 
 Next you should create or activate a Python virtual environment with a Python version of at least 3.10.
 We recommend using [uv](https://docs.astral.sh/uv/) for that, but any other virtual environment system will suffice as well, including conda.
 
-Now once you've `cd`-ed into the root directory of your clone of OLMo-core *and* activated your virtual environment, install [PyTorch](https://pytorch.org) according the directions specific to your operating system and hardware (a CPU-only distribution is fine for local development).
-And finally, install OLMo-core in editable mode by running
+Now once you've `cd`-ed into the root directory of your clone of Olmo-core *and* activated your virtual environment, install [PyTorch](https://pytorch.org) according the directions specific to your operating system and hardware (a CPU-only distribution is fine for local development).
+And finally, install Olmo-core in editable mode by running
 
 ```
 pip install -e '.[all]'
@@ -39,7 +39,7 @@ or an equivalent `uv` command, such as `uv pip install -e '.[all]'` or `uv sync 
 ### Beaker
 
 If you'll be using [Beaker](https://beaker.allen.ai) to run experiments you should also [install and configure the Beaker CLI](https://beaker-docs.apps.allenai.org/start/install.html),
-which will allow the OLMo-core launch module ({mod}`olmo_core.launch.beaker`) to authenticate with Beaker on your behalf.
+which will allow the Olmo-core launch module ({mod}`olmo_core.launch.beaker`) to authenticate with Beaker on your behalf.
 
 It's also a good idea to create a dedicated Beaker workspace at this point for your project.
 You can do that by running:
@@ -60,24 +60,24 @@ We also recommend making this new workspace your default for now to avoid accide
 beaker config set default_workspace ai2/WORKSPACE_NAME
 ```
 
-We have official Beaker images for OLMo-core that include all dependencies.
+We have official Beaker images for Olmo-core that include all dependencies.
 The most up-to-date versions are defined in the {class}`~olmo_core.launch.beaker.OLMoCoreBeakerImage` enum,
-and a complete list can be found in the [OLMo-core workspace](https://beaker.allen.ai/orgs/ai2/workspaces/OLMo-core/images).
+and a complete list can be found in the [Olmo-core workspace](https://beaker.allen.ai/orgs/ai2/workspaces/OLMo-core/images).
 
 If you need to build a custom image, see the instructions below.
 
 ### Docker
 
-We maintain a [Dockerfile](https://github.com/allenai/OLMo-core/blob/main/src/Dockerfile) for building official images with all of OLMo-core's dependencies.
+We maintain a [Dockerfile](https://github.com/allenai/Olmo-core/blob/main/src/Dockerfile) for building official images with all of Olmo-core's dependencies.
 You can build one yourself by running `make docker-image` from the repository root.
-See the [Makefile](https://github.com/allenai/OLMo-core/blob/main/Makefile) for all the different build arguments that you can modify.
+See the [Makefile](https://github.com/allenai/Olmo-core/blob/main/Makefile) for all the different build arguments that you can modify.
 
 ## Run your first experiment
 
 We'll start by launching a short language model pretraining run with a small transformer (271M params) on a subset of c4.
 This will only take a few minutes on as little as 2 NVIDIA 40GB A100s.
 
-We'll be using the script [`src/examples/llm/train.py`](https://github.com/allenai/OLMo-core/blob/main/src/examples/llm/train.py),
+We'll be using the script [`src/examples/llm/train.py`](https://github.com/allenai/Olmo-core/blob/main/src/examples/llm/train.py),
 which is intended to be run with `torchrun`, either directly or indirectly through Beaker or something like Slurm.
 But before we actually launch the training run, let's look at how the key components/hyperparameters of the run are defined.
 
@@ -92,8 +92,8 @@ Near the top of the script you'll find a custom config dataclass:
 :end-before: '    # docs: end-define-config'
 ```
 
-*The structure of the config class is arbitrary*, and creating one isn't strictly necessary to use OLMo-core, but it has several benefits:
-1. First, it gives us a good way to keep track of all the hyperparameters of each experiment. Since the config inherits from OLMo-core's {class}`~olmo_core.config.Config` baseclass, it comes with useful methods to serialize it to JSON which, for example, could be uploaded to Weights & Biases or saved to the run's checkpoint directory.
+*The structure of the config class is arbitrary*, and creating one isn't strictly necessary to use Olmo-core, but it has several benefits:
+1. First, it gives us a good way to keep track of all the hyperparameters of each experiment. Since the config inherits from Olmo-core's {class}`~olmo_core.config.Config` baseclass, it comes with useful methods to serialize it to JSON which, for example, could be uploaded to Weights & Biases or saved to the run's checkpoint directory.
 2. Second, it gives us a command-line argument parser that maps args directly to fields in the config for free due to the use of the {meth}`Config.merge() <olmo_core.config.Config.merge>` method on this line:
 
    ```{literalinclude} ../../../src/examples/llm/train.py
@@ -155,7 +155,7 @@ Notice the value we set for `--trainer.hard_stop` is a JSON/YAML mapping. This w
 
 #### Launching on Beaker
 
-For Beaker users, you can either use [beaker-gantry](https://github.com/allenai/beaker-gantry) or OLMo-core's own lightweight, gantry-like CLI.
+For Beaker users, you can either use [beaker-gantry](https://github.com/allenai/beaker-gantry) or Olmo-core's own lightweight, gantry-like CLI.
 In this case we'll use the latter, which is in the module `olmo_core.launch.beaker`.
 Try running
 ```fish
@@ -185,7 +185,7 @@ If the launch is successful it will print a link to the Beaker workload and then
 Some things to note:
 - We tell the launch module to request 2 GPUs and mount the weka bucket `oe-training-default` to the container at `/weka/oe-training-default`.
   This allows us to save checkpoints to weka and also gives us access to a copy of the data on weka, which will be much faster to read than streaming over HTTP.
-- We also add the flag `--shared-filesystem` since we'll be using weka for the `--save-folder` and `--work-dir`, which tells OLMo-core that each rank has access to the same filesystem that these directories are in.
+- We also add the flag `--shared-filesystem` since we'll be using weka for the `--save-folder` and `--work-dir`, which tells Olmo-core that each rank has access to the same filesystem that these directories are in.
 - Everything after the bare double dashes (`--`) is the command that the launch module will actually run on Beaker (if you've used gantry this should look familiar).
 - We set the `--save-folder` and `--work-dir` options to paths on weka, using our username as part of each path to avoid collisions.
 
@@ -269,7 +269,7 @@ Otherwise you should look at the source code for the {class}`~olmo_core.train.tr
 The behavior of the training loop can also be customized through the trainer's rich callback API.
 A callback is just a subclass of the base {class}`~olmo_core.train.callbacks.Callback` class, and you can add any number of callbacks to the trainer via the {data}`~olmo_core.train.Trainer.callbacks` argument (a mapping of callback name to callback instance), or by using the {meth}`Trainer.add_callback() <olmo_core.train.Trainer.add_callback>` method.
 
-OLMo-core comes with a number of helpful callbacks that you can find in the {mod}`olmo_core.train.callbacks` module, such as the {class}`~olmo_core.train.callbacks.WandBCallback` for logging training metrics to Weights & Biases.
+Olmo-core comes with a number of helpful callbacks that you can find in the {mod}`olmo_core.train.callbacks` module, such as the {class}`~olmo_core.train.callbacks.WandBCallback` for logging training metrics to Weights & Biases.
 
 Several of these callbacks are considered mandatory and are automatically added to the trainer unless you provide them on your own. These include:
 - a {class}`~olmo_core.train.callbacks.ConsoleLoggerCallback` for logging progress to the terminal,

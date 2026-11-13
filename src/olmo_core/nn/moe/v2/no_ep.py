@@ -7,7 +7,11 @@ import torch
 
 from olmo_core._nvtx import nvtx
 
-from ...moe.utils import async_copy_to_cpu, wait_stream_no_compile
+from ...moe.utils import (
+    async_copy_to_cpu,
+    run_on_stream_no_compile,
+    wait_stream_no_compile,
+)
 from ..utils import moe_permute_no_compile, moe_unpermute_no_compile
 from .fp8 import shared_experts_forward_rowwise_fp8
 from .routed_experts import requires_host_side_split_sizes
@@ -23,6 +27,25 @@ def _debug_tensors_enabled() -> bool:
         "yes",
         "on",
     }
+
+
+def _shared_experts_forward(
+    block: OLMoDDPTransformerBlock,
+    moe_inp: torch.Tensor,
+    shared_weights: Optional[torch.Tensor],
+    output_shape: torch.Size,
+    *,
+    use_rowwise_fp8: bool,
+) -> torch.Tensor:
+    assert block.shared_experts is not None
+    if use_rowwise_fp8:
+        assert block.rowwise_fp8 is not None
+        shared_out = shared_experts_forward_rowwise_fp8(
+            block, moe_inp, use_fast_accum=block.rowwise_fp8.use_fast_accum
+        )
+    else:
+        shared_out = block.shared_experts(moe_inp)
+    return block._mix_shared_out(shared_out, shared_weights, output_shape)
 
 
 def combined_forward_no_ep(
@@ -110,21 +133,15 @@ def combined_forward_no_ep(
             other_stream=torch.cuda.current_stream(),
         )
 
-        with torch.cuda.stream(self.get_dense_stream()):
-            if use_shared_rowwise_fp8:
-                assert shared_rowwise_fp8_cfg is not None
-                shared_out = shared_experts_forward_rowwise_fp8(
-                    self,
-                    moe_inp,
-                    use_fast_accum=shared_rowwise_fp8_cfg.use_fast_accum,
-                )
-            else:
-                shared_out = self.shared_experts(moe_inp)
-            mixed_shared_out = self._mix_shared_out(
-                shared_out,
-                local_x_global_shared_expert_weights,
-                attn_res_out.shape,
-            )
+        mixed_shared_out = run_on_stream_no_compile(
+            self.get_dense_stream(),
+            _shared_experts_forward,
+            self,
+            moe_inp,
+            local_x_global_shared_expert_weights,
+            attn_res_out.shape,
+            use_rowwise_fp8=use_shared_rowwise_fp8,
+        )
 
     routed_moe_inp = routed_moe_inp.view(-1, routed_in_shape[-1])
 

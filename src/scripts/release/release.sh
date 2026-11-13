@@ -10,7 +10,7 @@ git fetch -t > /dev/null
 TAG=$(python -c 'from olmo_core.version import VERSION; print("v" + VERSION)')
 
 # Make sure tag/release doesn't already exist.
-STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://github.com/allenai/OLMo-core/releases/tag/${TAG}")
+STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://github.com/allenai/Olmo-core/releases/tag/${TAG}")
 if [[ $STATUS_CODE == "200" ]]; then
     echo "Release tag ${TAG} already exists"
     exit 1

@@ -25,6 +25,7 @@ from olmo_core.nn.attention import (
     AttentionBackendName,
     AttentionConfig,
     GatedDeltaNetConfig,
+    KimiDeltaAttentionConfig,
     RingAttentionLoadBalancerType,
     SlidingWindowAttentionConfig,
 )
@@ -34,7 +35,7 @@ from olmo_core.nn.attention.ring import (
 )
 from olmo_core.nn.feed_forward import ActivationFunction, FeedForwardConfig
 from olmo_core.nn.layer_norm import LayerNorm, LayerNormConfig, LayerNormType
-from olmo_core.nn.lm_head import LMHeadConfig
+from olmo_core.nn.lm_head import LMHeadConfig, LMOutputWithLoss
 from olmo_core.nn.moe import LatentMoEConfig, MoEConfig, MoERouterConfig, MoEType
 from olmo_core.nn.rope import RoPEConfig
 from olmo_core.nn.transformer import (
@@ -218,6 +219,27 @@ def get_transformer_config(
             ),
             lm_head=LMHeadConfig(layer_norm=layer_norm, bias=False),
         )
+    elif architecture == "kda":
+        assert has_fla, "KDA requires FLA"
+        assert attn_backend is None, "KDA does not support attention backends"
+        layer_norm = LayerNormConfig(name=LayerNormType.rms, bias=False)
+        config = TransformerConfig(
+            d_model=256,
+            vocab_size=16_000,
+            n_layers=2,
+            block=TransformerBlockConfig(
+                name=TransformerBlockType.reordered_norm,
+                sequence_mixer=KimiDeltaAttentionConfig(
+                    n_heads=8, allow_neg_eigval=True, dtype=DType.from_pt(dtype)
+                ),
+                layer_norm=layer_norm,
+                feed_forward=FeedForwardConfig(
+                    hidden_size=512, bias=False, dtype=DType.from_pt(dtype)
+                ),
+            ),
+            lm_head=LMHeadConfig(layer_norm=layer_norm, bias=False, dtype=DType.from_pt(dtype)),
+            dtype=DType.from_pt(dtype),
+        )
     else:
         raise NotImplementedError(architecture)
 
@@ -394,6 +416,7 @@ def run_context_parallel_transformer_ulysses(
             ),
         ),
         pytest.param("gdn", None, id="gdn", marks=FLA_MARKS),
+        pytest.param("kda", None, id="kda", marks=FLA_MARKS),
     ],
 )
 def test_context_parallel_transformer_ulysses(
@@ -424,6 +447,91 @@ def test_context_parallel_transformer_ulysses(
             architecture,
             backend_name,
         ),
+    )
+
+
+def run_context_parallel_transformer_ulysses_backward(checkpoint_dir, ref_path, architecture: str):
+    """
+    Each rank passes the full batch; the model shards ``input_ids``/``labels`` on the sequence
+    dimension itself. With ``loss_reduction="sum"`` the per-rank losses and gradients summed over
+    the CP group must match the single-process full-sequence run.
+    """
+    device = get_default_device()
+    config = get_transformer_config(architecture, dtype=torch.bfloat16)
+    mesh = init_device_mesh(device.type, (get_world_size(),), mesh_dim_names=("cp",))
+    cp_group = mesh["cp"].get_group()
+
+    model = config.build()
+    model.apply_cp(mesh["cp"], uly=UlyssesContextParallelStyle())
+    model.init_weights(device=device, max_seq_len=512)
+    load_model_and_optim_state(checkpoint_dir, model)
+
+    ref = torch.load(ref_path, map_location=device)
+    output = model(
+        input_ids=ref["input_ids"], labels=ref["labels"], loss_reduction="sum", return_logits=False
+    )
+    assert isinstance(output, LMOutputWithLoss)
+    output.loss.backward()
+
+    loss = output.loss.detach().float().clone()
+    dist.all_reduce(loss, op=dist.ReduceOp.SUM, group=cp_group)
+    torch.testing.assert_close(loss, ref["loss"], rtol=2e-2, atol=1e-2 * ref["loss"].abs().item())
+
+    failures = []
+    for name, param in model.named_parameters():
+        assert param.grad is not None, f"no gradient for {name}"
+        grad = param.grad.detach().float().clone()
+        dist.all_reduce(grad, op=dist.ReduceOp.SUM, group=cp_group)
+        expected = ref["grads"][name]
+        rel_err = ((grad - expected).norm() / expected.norm().clamp_min(1e-6)).item()
+        if rel_err > 5e-2:
+            failures.append(f"{name}: rel_err={rel_err:.3e}")
+    assert not failures, "gradient mismatch under Ulysses CP:\n" + "\n".join(failures)
+
+
+@requires_multi_gpu
+@pytest.mark.parametrize(
+    "architecture",
+    [
+        pytest.param("gdn", id="gdn", marks=FLA_MARKS),
+        pytest.param("kda", id="kda", marks=FLA_MARKS),
+    ],
+)
+def test_context_parallel_transformer_ulysses_backward(architecture: str, tmp_path):
+    seed_all(0)
+    device = torch.device("cuda")
+    config = get_transformer_config(architecture, dtype=torch.bfloat16)
+
+    model = config.build()
+    model.init_weights(device=device, max_seq_len=512)
+    input_ids = get_transformer_inputs().to(device)
+    # Labels are the inputs shifted left with the final position ignored.
+    labels = torch.cat([input_ids[:, 1:], input_ids.new_full((input_ids.size(0), 1), -100)], dim=1)
+
+    output = model(input_ids=input_ids, labels=labels, loss_reduction="sum", return_logits=False)
+    assert isinstance(output, LMOutputWithLoss)
+    output.loss.backward()
+
+    ref_path = tmp_path / "reference.pt"
+    torch.save(
+        {
+            "input_ids": input_ids.cpu(),
+            "labels": labels.cpu(),
+            "loss": output.loss.detach().float().cpu(),
+            "grads": {
+                name: param.grad.detach().float().cpu() for name, param in model.named_parameters()
+            },
+        },
+        ref_path,
+    )
+    checkpoint_dir = tmp_path / "checkpoint"
+    save_model_and_optim_state(checkpoint_dir, model)
+
+    run_distributed_test(
+        run_context_parallel_transformer_ulysses_backward,
+        backend="nccl",
+        start_method="spawn",
+        func_args=(checkpoint_dir, ref_path, architecture),
     )
 
 

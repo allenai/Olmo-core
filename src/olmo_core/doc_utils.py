@@ -14,7 +14,7 @@ def beta_feature(f: T) -> T:
 
     .. warning::
         This is a beta feature! The API is subject to change even with minor and patch releases.
-        If you choose to use this feature please read the `CHANGELOG <https://github.com/allenai/OLMo-core/blob/main/CHANGELOG.md>`_
+        If you choose to use this feature please read the `CHANGELOG <https://github.com/allenai/Olmo-core/blob/main/CHANGELOG.md>`_
         before upgrading your version of this library.
 
     """

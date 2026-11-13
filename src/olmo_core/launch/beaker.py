@@ -131,11 +131,11 @@ def get_beaker_client(
 
 class OLMoCoreBeakerImage(StrEnum):
     """
-    Official Beaker images that work well for OLMo-core.
+    Official Beaker images that work well for Olmo-core.
 
     You can find the full list at
     `beaker.org/orgs/ai2/workspaces/olmo-core/images <https://beaker.org/orgs/ai2/workspaces/olmo-core/images>`_, which
-    includes *versioned* images that are published with each release of the OLMo-core package.
+    includes *versioned* images that are published with each release of the Olmo-core package.
     """
 
     # NOTE: when updating default images here, should also update images used in tests at .github/workflows/main.yml

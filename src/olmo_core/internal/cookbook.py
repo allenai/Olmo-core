@@ -1,7 +1,7 @@
 """
 Configuration helpers for LLM cooking.
 
-Indended to aid those migrating from olmo-cookbook to OLMo-core. Implements the same
+Indended to aid those migrating from olmo-cookbook to Olmo-core. Implements the same
 defaults as olmo-cookbook where possible, and even includes some QOL improvements.
 """
 

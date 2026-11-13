@@ -236,6 +236,12 @@ class OLMoDDPTransformerBlockConfig(TransformerBlockConfig):
         kwargs.pop("name")
         kwargs.pop("feed_forward")  # from parent config
         kwargs.pop("feed_forward_moe")  # from parent config
+        # `masked_dropout` (from parent config) is only implemented by the default block.
+        if kwargs.pop("masked_dropout"):
+            raise OLMoConfigurationError(
+                f"'masked_dropout' is only supported by the '{TransformerBlockType.default}' "
+                f"block type, got '{self.name}'"
+            )
         # The block constructor takes the split attention/feed-forward norms; build both from
         # the single inherited `layer_norm` field (two identical norm modules).
         layer_norm = kwargs.pop("layer_norm")

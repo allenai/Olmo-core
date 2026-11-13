@@ -74,9 +74,9 @@ def render_tokenizer_info(
     tokenizer_config: TokenizerConfig, tokenizer, chat_template: str
 ) -> Panel:
     """Render tokenizer configuration details."""
-    # OLMo-core TokenizerConfig info
+    # Olmo-core TokenizerConfig info
     left_lines = []
-    left_lines.append("OLMo-core TokenizerConfig:")
+    left_lines.append("Olmo-core TokenizerConfig:")
     left_lines.append(f"  • Identifier: {tokenizer_config.identifier or 'N/A'}")
     left_lines.append(f"  • Vocab size: {tokenizer_config.vocab_size:,}")
     left_lines.append(f"  • EOS token ID: {tokenizer_config.eos_token_id}")

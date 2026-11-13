@@ -116,6 +116,7 @@ class TransformerBlock(TransformerBlockBase):
         feed_forward: FeedForwardConfig,
         layer_norm: LayerNormConfig,
         dropout: float = 0.0,
+        masked_dropout: float = 0.0,
         attention_residual_alpha: float = 1.0,
         feed_forward_residual_alpha: float = 1.0,
         init_device: str = "cpu",
@@ -133,12 +134,12 @@ class TransformerBlock(TransformerBlockBase):
         )
         self.attention_norm = layer_norm.build(d_model, init_device=init_device)
         self.attention_residual_stream = ResidualStream(
-            alpha=attention_residual_alpha, dropout=dropout
+            alpha=attention_residual_alpha, dropout=dropout, masked_dropout=masked_dropout
         )
         self.feed_forward = feed_forward.build(d_model=d_model, init_device=init_device)
         self.feed_forward_norm = layer_norm.build(d_model, init_device=init_device)
         self.feed_forward_residual_stream = ResidualStream(
-            alpha=feed_forward_residual_alpha, dropout=dropout
+            alpha=feed_forward_residual_alpha, dropout=dropout, masked_dropout=masked_dropout
         )
 
     def forward(
@@ -146,11 +147,22 @@ class TransformerBlock(TransformerBlockBase):
         x: torch.Tensor,
         *,
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
+        drop_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.Tensor:
+        """
+        :param drop_mask: Optional ``(batch_size, seq_len)`` 0/1 tensor selecting the tokens
+            that receive :data:`ResidualStream.masked_dropout`. Consumed here rather than
+            forwarded into the sequence mixer. Ignored unless a residual stream was built
+            with ``masked_dropout > 0``.
+        """
         del loss_div_factor
-        h = self.attention_residual_stream(x, self.attention(self.attention_norm(x), **kwargs))
-        return self.feed_forward_residual_stream(h, self.feed_forward(self.feed_forward_norm(h)))
+        h = self.attention_residual_stream(
+            x, self.attention(self.attention_norm(x), **kwargs), drop_mask=drop_mask
+        )
+        return self.feed_forward_residual_stream(
+            h, self.feed_forward(self.feed_forward_norm(h)), drop_mask=drop_mask
+        )
 
     def apply_tp(
         self, tp_mesh: DeviceMesh, *, input_layout: Placement, float8_enabled: bool = False

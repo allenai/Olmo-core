@@ -4,7 +4,7 @@
 
 The scripts in this folder use an internal module (`olmo_core.internal`), which is subject to breaking changes without notice,
 and reference data paths that are only accessible to Ai2 employees, so they won't work out-of-the-box for external users.
-Instead, see [`src/scripts/official/`](https://github.com/allenai/OLMo-core/tree/main/src/scripts/official) for public versions.
+Instead, see [`src/scripts/official/`](https://github.com/allenai/Olmo-core/tree/main/src/scripts/official) for public versions.
 
 ## Usage
 

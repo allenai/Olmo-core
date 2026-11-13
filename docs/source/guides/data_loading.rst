@@ -6,13 +6,13 @@ Datasets and Data loading
    used with other modalities as well by creating a custom data loader subclass of
    :class:`~olmo_core.data.data_loader.DataLoaderBase` (see `Using a custom data loader`_ below).
 
-Using OLMo-core's builtin data loading
+Using Olmo-core's builtin data loading
 --------------------------------------
 
 Data preparation
 ~~~~~~~~~~~~~~~~
 
-OLMo-core's builtin data loading functionality requires you to pre-tokenize your data into 1D numpy arrays of token IDs. These arrays should include all special tokens already -- such as "end of sentence" (EOS) tokens -- except for padding tokens.
+Olmo-core's builtin data loading functionality requires you to pre-tokenize your data into 1D numpy arrays of token IDs. These arrays should include all special tokens already -- such as "end of sentence" (EOS) tokens -- except for padding tokens.
 
 For example::
 

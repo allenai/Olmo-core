@@ -2,20 +2,20 @@
   <!-- <img src="https://github.com/allenai/OLMo/assets/8812459/774ac485-a535-4768-8f7c-db7be20f5cc3" width="300"/> -->
   <img src="https://huggingface.co/datasets/allenai/blog-images/resolve/main/olmo2/olmo.png" alt="OLMo Logo" width="280" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
   <br>
-  <h1>OLMo-core</h1>
+  <h1>Olmo-core</h1>
   <h4>Building blocks for OLMo modeling and training</h4>
 </div>
 <p align="center">
   <a href="https://olmo-core.readthedocs.io/en/latest/">
     <img alt="Docs" src="https://img.shields.io/badge/API-docs-red">
   </a>
-  <a href="https://github.com/allenai/OLMo-core/tree/main/src/examples">
+  <a href="https://github.com/allenai/Olmo-core/tree/main/src/examples">
     <img alt="Examples" src="https://img.shields.io/badge/API-examples-994B00">
   </a>
-  <a href="https://github.com/allenai/OLMo-core/releases/tag/v1.9.0">
+  <a href="https://github.com/allenai/Olmo-core/releases/tag/v1.9.0">
     <img alt="Pypi" src="https://img.shields.io/pypi/v/ai2-olmo-core.svg">
   </a>
-  <a href="https://github.com/allenai/OLMo-core/blob/main/LICENSE">
+  <a href="https://github.com/allenai/Olmo-core/blob/main/LICENSE">
     <img alt="GitHub License" src="https://img.shields.io/github/license/allenai/OLMo">
   </a>
   <a href="https://arxiv.org/pdf/2501.00656.pdf">
@@ -36,8 +36,8 @@ First install [PyTorch](https://pytorch.org) according to the instructions speci
 For development, we recommend installing from source:
 
 ```bash
-git clone https://github.com/allenai/OLMo-core.git
-cd OLMo-core
+git clone https://github.com/allenai/Olmo-core.git
+cd Olmo-core
 pip install -e .[all]
 ```
 Or you can install from PyPI with:
@@ -54,19 +54,19 @@ There are a number of optional dependencies that must be installed to use certai
 - [grouped_gemm](https://github.com/tgale96/grouped_gemm) for dropless mixture-of-experts (MoE) models. You may need to compile from source until [PR #21](https://github.com/tgale96/grouped_gemm/pull/21) is released (post v0.1.6).
 - [QuACK](https://github.com/Dao-AILab/quack) for some CuTe-based kernels.
 
-The published [Docker images](https://github.com/orgs/allenai/packages?repo_name=OLMo-core) contain all core and optional dependencies, and are regularly tested on our in-house H100 clusters.
+The published [Docker images](https://github.com/orgs/allenai/packages?repo_name=Olmo-core) contain all core and optional dependencies, and are regularly tested on our in-house H100 clusters.
 But there are several things to keep in mind if you intend to use these images:
 
-- They do not come with the OLMo-core package installed, only its dependencies, to accommodate for regular code changes.
+- They do not come with the Olmo-core package installed, only its dependencies, to accommodate for regular code changes.
 - They may not work on your own cluster if you have different hardware or driver/CUDA versions.
 
-If the published images do not work for your use-case for any of the above reasons, you could adapt our [Dockerfile](https://github.com/allenai/OLMo-core/blob/main/src/Dockerfile) to build your own images.
+If the published images do not work for your use-case for any of the above reasons, you could adapt our [Dockerfile](https://github.com/allenai/Olmo-core/blob/main/src/Dockerfile) to build your own images.
 
 ## Official training scripts
 
-Official training scripts for released models can be found in [`src/scripts/official/`](https://github.com/allenai/OLMo-core/tree/main/src/scripts/official).
+Official training scripts for released models can be found in [`src/scripts/official/`](https://github.com/allenai/Olmo-core/tree/main/src/scripts/official).
 
-These scripts are meant to be launched with ``torchrun``, or with OLMo-core's Beaker launch CLI if you have access to Beaker.
+These scripts are meant to be launched with ``torchrun``, or with Olmo-core's Beaker launch CLI if you have access to Beaker.
 
 For example:
 
@@ -95,8 +95,8 @@ torchrun --nproc-per-node=8 src/scripts/official/OLMo2/OLMo-2-0325-32B-anneal.py
 
 | Model Family | Directory | Description |
 |--------------|-----------|-------------|
-| **OLMo-2** | [`src/scripts/official/OLMo2/`](https://github.com/allenai/OLMo-core/tree/main/src/scripts/official/OLMo2) | Training scripts and model card for OLMo-2 32B models |
-| **OLMo-3** | [`src/scripts/official/OLMo3/`](https://github.com/allenai/OLMo-core/tree/main/src/scripts/official/OLMo3) | Training scripts and model cards for OLMo-3 7B and 32B models |
+| **OLMo-2** | [`src/scripts/official/OLMo2/`](https://github.com/allenai/Olmo-core/tree/main/src/scripts/official/OLMo2) | Training scripts and model card for OLMo-2 32B models |
+| **OLMo-3** | [`src/scripts/official/OLMo3/`](https://github.com/allenai/Olmo-core/tree/main/src/scripts/official/OLMo3) | Training scripts and model cards for OLMo-3 7B and 32B models |
 
 ## Inference
 

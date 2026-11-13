@@ -200,7 +200,7 @@ def merge_checkpoints(
 )
 def main(model_paths: tuple, output_path: str, skip_optimizer_state: bool):
     """
-    Merge OLMo-core model checkpoints by averaging their weights.
+    Merge Olmo-core model checkpoints by averaging their weights.
 
     Weights are accumulated in float32 for numerical stability, then converted
     back to the original dtype of the checkpoints.

@@ -12,6 +12,10 @@ from .config import (
     TransformerTrainModuleConfig,
 )
 from .ddp_train_module import OLMoDDPTrainModule
+from .multimodal_train_module import (
+    MultimodalTransformerTrainModule,
+    MultimodalTransformerTrainModuleConfig,
+)
 from .pipeline.pipeline_schedule import (
     CustomPipelineStage,
     CustomSchedule1F1BV,
@@ -23,6 +27,8 @@ from .train_module import TransformerTrainModule
 __all__ = [
     "TransformerTrainModule",
     "TransformerTrainModuleConfig",
+    "MultimodalTransformerTrainModule",
+    "MultimodalTransformerTrainModuleConfig",
     "TransformerPipelineTrainModule",
     "TransformerPipelineTrainModuleConfig",
     "OLMoDDPTrainModule",

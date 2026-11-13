@@ -114,7 +114,7 @@ def test_get_hybrid_layer_types(hybrid_model: Transformer):
 
 @requires_fla
 def test_convert_hybrid_state_no_missing_keys(hybrid_model: Transformer):
-    """Every key in the OLMo-core state dict should be mapped to an HF key."""
+    """Every key in the Olmo-core state dict should be mapped to an HF key."""
     state_dict = {k: v for k, v in hybrid_model.named_parameters()}
     layer_types = get_hybrid_layer_types(hybrid_model)
 
@@ -257,7 +257,7 @@ def test_convert_checkpoint_to_hf_produces_valid_output(
     tokenizer_config: TokenizerConfig,
 ):
     """
-    Full end-to-end test: save an OLMo-core hybrid checkpoint, convert it to HF format,
+    Full end-to-end test: save an Olmo-core hybrid checkpoint, convert it to HF format,
     and verify the output files and config are correct.
     """
     output_dir = tmp_path / "hf-output-hybrid"
@@ -322,7 +322,7 @@ def test_convert_checkpoint_to_hf_weights_match_original(
 ):
     """
     Verify that the converted HF weights are numerically identical to the original
-    OLMo-core weights (after key remapping and dtype cast).
+    Olmo-core weights (after key remapping and dtype cast).
     """
     output_dir = tmp_path / "hf-output-hybrid-match"
 
@@ -434,7 +434,7 @@ def test_convert_hybrid_state_with_mock_data():
 
 
 def test_hybrid_key_maps_are_consistent():
-    """The GDN and attention key maps should map the same OLMo-core MLP suffixes identically."""
+    """The GDN and attention key maps should map the same Olmo-core MLP suffixes identically."""
     # MLP suffixes appear in both maps and should map to the same HF suffix.
     gdn_mlp = {k: v for k, v in HYBRID_GDN_LAYER_KEY_MAP.items() if k.startswith("feed_forward.")}
     attn_mlp = {k: v for k, v in HYBRID_ATTN_LAYER_KEY_MAP.items() if k.startswith("feed_forward.")}

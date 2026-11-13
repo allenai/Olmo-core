@@ -29,9 +29,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/allenai/OLMo-core"
+Homepage = "https://github.com/allenai/Olmo-core"
 Documentation = "https://olmo-core.readthedocs.io/en/latest/"
-Changelog = "https://github.com/allenai/OLMo-core/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/allenai/Olmo-core/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -101,6 +101,7 @@ environments = [
 
 [tool.setuptools]
 include-package-data = true
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 
 [tool.setuptools.package-data]
 olmo_core = [

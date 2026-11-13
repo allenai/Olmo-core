@@ -265,5 +265,5 @@ ENV UV_SYSTEM_PYTHON=1
 ENV UV_BREAK_SYSTEM_PACKAGES=1
 ENV PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:/root/.local/bin:/root/.cargo/bin:/opt/conda/bin:$PATH
 
-LABEL org.opencontainers.image.source=https://github.com/allenai/OLMo-core
+LABEL org.opencontainers.image.source=https://github.com/allenai/Olmo-core
 WORKDIR /app/olmo-core

@@ -34,7 +34,7 @@ We all log in as the same user, so we need to be careful to use unique repo dire
 ```bash
 # Clone repo to unique directory.
 cd "/data/ai2/$USERNAME"
-git clone https://github.com/allenai/OLMo-core.git
+git clone https://github.com/allenai/Olmo-core.git OLMo-core
 cd OLMo-core
 
 # Create unique virtual environment.

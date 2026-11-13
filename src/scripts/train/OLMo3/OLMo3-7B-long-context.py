@@ -38,7 +38,7 @@ def build_experiment_config(cli_context: CliContext) -> ExperimentConfig:
         cluster=cli_context.cluster,
         root_dir=root_dir,
         # Preserve the original training environment. Run this historical script from its
-        # corresponding OLMo-core revision, whose dependencies match this image.
+        # corresponding Olmo-core revision, whose dependencies match this image.
         beaker_image="petew/olmo-core-tch270cu128",
         workspace="ai2/long-contexts",
         num_nodes=32,

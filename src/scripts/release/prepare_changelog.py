@@ -27,7 +27,7 @@ def main() -> None:
     lines.insert(insert_index, "\n")
     lines.insert(
         insert_index + 1,
-        f"## [v{VERSION}](https://github.com/allenai/OLMo-core/releases/tag/v{VERSION}) - "
+        f"## [v{VERSION}](https://github.com/allenai/Olmo-core/releases/tag/v{VERSION}) - "
         f"{datetime.now().strftime('%Y-%m-%d')}\n",
     )
 
