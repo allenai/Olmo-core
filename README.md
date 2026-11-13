@@ -1,9 +1,8 @@
 <div align="center">
-  <!-- <img src="https://github.com/allenai/OLMo/assets/8812459/774ac485-a535-4768-8f7c-db7be20f5cc3" width="300"/> -->
-  <img src="https://huggingface.co/datasets/allenai/blog-images/resolve/main/olmo2/olmo.png" alt="OLMo Logo" width="280" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
+  <img src=".github/OlmoLogo.png" alt="Olmo logo" width="280"/>
   <br>
   <h1>Olmo-core</h1>
-  <h4>Building blocks for OLMo modeling and training</h4>
+  <h4>Building blocks for Olmo modeling and training</h4>
 </div>
 <p align="center">
   <a href="https://olmo-core.readthedocs.io/en/latest/">
