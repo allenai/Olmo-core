@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, Generator, Iterable, List, Optional, Set, Tuple
 
@@ -64,6 +64,7 @@ __all__ = [
     "swap_param_keys",
     "prune_state_dict",
     "merge_state_dicts",
+    "get_optimizer_state_dict",
 ]
 
 log = logging.getLogger(__name__)
@@ -729,6 +730,55 @@ def _prepare_env_for_save(
     return dir
 
 
+def get_optimizer_state_dict(
+    model: nn.Module,
+    optim: torch.optim.Optimizer,
+    options: Optional[dist_cp_sd.StateDictOptions] = None,
+) -> Dict[str, Any]:
+    """
+    Like :func:`torch.distributed.checkpoint.state_dict.get_optimizer_state_dict`, but if the
+    optimizer has no state yet, step counts are put back afterwards, in the live optimizer and in
+    the returned state dict: per-parameter steps to 0, param-group steps to their value before the
+    call. Torch initializes empty state with a zero-gradient step, which would otherwise count as
+    a real step (https://github.com/pytorch/pytorch/issues/164929).
+    """
+    if len(optim.state) > 0:
+        return dist_cp_sd.get_optimizer_state_dict(model, optim, options=options)
+
+    group_steps = [_copy_step(group.get("step")) for group in optim.param_groups]
+    flatten = options is not None and options.flatten_optimizer_state_dict
+    if options is not None and flatten:
+        # Param groups are matched by index, so fix the nested form and flatten it afterwards.
+        options = replace(options, flatten_optimizer_state_dict=False)
+
+    optim_state_dict = dist_cp_sd.get_optimizer_state_dict(model, optim, options=options)
+    # With a full state dict and CPU offload, torch returns an empty dict on every rank but 0.
+    saved_states = optim_state_dict.get("state", {})
+    saved_groups = optim_state_dict.get("param_groups", [])
+    for state in [*optim.state.values(), *saved_states.values()]:
+        _set_step(state, 0)
+    assert len(saved_groups) in (0, len(optim.param_groups))
+    for groups in (optim.param_groups, saved_groups):
+        for group, step in zip(groups, group_steps):
+            _set_step(group, 0 if step is None else step)
+
+    if flatten and optim_state_dict:
+        optim_state_dict = dist_cp_sd._flatten_optim_state_dict(optim_state_dict)
+    return optim_state_dict
+
+
+def _copy_step(step: Any) -> Any:
+    return step.clone() if isinstance(step, torch.Tensor) else step
+
+
+def _set_step(state: Dict[str, Any], value: Any):
+    step = state.get("step")
+    if isinstance(step, torch.Tensor):
+        step.copy_(value)
+    elif isinstance(step, (int, float)) and not isinstance(step, bool):
+        state["step"] = _copy_step(value)
+
+
 def _prepare_state_dict(
     model: nn.Module,
     optim: Optional[torch.optim.Optimizer] = None,
@@ -746,7 +796,7 @@ def _prepare_state_dict(
         "model": dist_cp_sd.get_model_state_dict(model, options=sd_options)
     }
     if optim is not None:
-        state_dict["optim"] = dist_cp_sd.get_optimizer_state_dict(model, optim, options=sd_options)
+        state_dict["optim"] = get_optimizer_state_dict(model, optim, options=sd_options)
 
     return state_dict
 
