@@ -18,12 +18,12 @@ uv sync --extra beaker --extra transformers
 
 1. Check out [open-instruct](https://github.com/allenai/open-instruct) and run a command such as:
 
-    Launching with `mason.py` is the recommended way to run scripts in open-instruct. See [this example script](https://github.com/allenai/open-instruct/blob/main/scripts/train/olmo3/7b-hybrid-sft-tokenization.sh).
+    Launching with `mason.py` is the recommended way to run scripts in open-instruct. See [this example script](https://github.com/allenai/open-instruct/blob/main/scripts/train/olmo-hybrid/7b_think_sft_tokenization.sh).
 
     ```bash
     #!/bin/bash
     #
-    # Usage: ./scripts/train/build_image_and_launch.sh scripts/train/olmo3/7b-hybrid-sft-tokenization.sh
+    # Usage: ./scripts/train/build_image_and_launch.sh scripts/train/olmo-hybrid/7b_think_sft_tokenization.sh
     #
     set -euo pipefail
     # Get the Beaker username to construct the image name

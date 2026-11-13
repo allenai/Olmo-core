@@ -16,6 +16,6 @@ The table below lists the checkpoints for Stage 1 and Stage 2 of OLMo-2, along w
 
 | Variant | OLMo Format (Stage 1) | OLMo Format (Stage 2) | Hugging Face Format |
 |---------|-----------------------|-----------------------|---------------------|
-| **OLMo-2 32B**  | [OLMo-2 32B](https://github.com/allenai/Olmo-core/blob/main/src/scripts/official/OLMo-2-0325-32B.csv)     | [OLMo-2 32B](https://github.com/allenai/Olmo-core/blob/main/src/scripts/official/OLMo-2-0325-32B-stage2.csv)      | [Hugging Face for the 32B variant](https://huggingface.co/allenai/OLMo-2-0325-32B)  |
+| **OLMo-2 32B**  | [OLMo-2 32B](https://github.com/allenai/Olmo-core/blob/main/src/scripts/official/OLMo2/OLMo-2-0325-32B.csv)     | [OLMo-2 32B](https://github.com/allenai/Olmo-core/blob/main/src/scripts/official/OLMo2/OLMo-2-0325-32B-stage2.csv)      | [Hugging Face for the 32B variant](https://huggingface.co/allenai/OLMo-2-0325-32B)  |
 
 > Note: OLMo-2 7B and 13B models were trained using [the old OLMo trainer](https://github.com/allenai/OLMo). All related checkpoints, configs, and scripts for these models can be found there. While you can train 7B and 13B models with this trainer, please note that the configs and script in the old training codebase are not compatible with this repo.
