@@ -680,6 +680,82 @@ def test_activation_checkpointing_keeps_base_block_matching(make_base, make_conf
         assert torch.equal(param.detach(), plain_tensors[_strip_wrappers(name)].detach()), name
 
 
+def _dense_kda_config(**kwargs) -> TransformerConfig:
+    config = _dense_config(**kwargs)
+    _block(config).sequence_mixer = KimiDeltaAttentionConfig(n_heads=2, head_dim=64)
+    return config
+
+
+@pytest.mark.parametrize(
+    "make_config, base_d_model, fixed_kv_width, roles",
+    [
+        pytest.param(
+            lambda **kw: _dense_config(n_kv_heads=1, **kw),
+            BASE_WIDTH,
+            True,
+            {
+                "attention.w_k": CompletedPRole.hidden_readout_matrix,
+                "attention.w_v": CompletedPRole.hidden_readout_matrix,
+            },
+            id="fixed-kv-width",
+        ),
+        pytest.param(
+            _ddp_model_config,
+            64,
+            False,
+            {
+                "attention.q_norm": CompletedPRole.hidden_head_shared_vector,
+                "attention.k_norm": CompletedPRole.hidden_head_shared_vector,
+                "routed_experts_router": CompletedPRole.hidden_readout_matrix,
+            },
+            id="ddp",
+        ),
+        pytest.param(
+            _dense_kda_config,
+            BASE_WIDTH,
+            False,
+            {
+                "attention.f_proj_1": CompletedPRole.hidden_readout_matrix,
+                "attention.g_proj_1": CompletedPRole.hidden_readout_matrix,
+                "attention.o_norm": CompletedPRole.hidden_head_shared_vector,
+            },
+            id="kda",
+            marks=pytest.mark.skipif(not _has_fla(), reason="fla not installed"),
+        ),
+    ],
+)
+def test_activation_checkpointing_individual_modules_keep_roles(
+    make_config, base_d_model: int, fixed_kv_width: bool, roles: Dict[str, CompletedPRole]
+):
+    """Checkpointing a readout projection or a head-wise norm on its own keeps its role."""
+    completedp = CompletedPConfig.from_base_model(
+        make_config(d_model=base_d_model, n_layers=BASE_DEPTH), fixed_kv_width=fixed_kv_width
+    )
+    plain = make_config(d_model=2 * base_d_model, completedp=completedp).build(init_device="cpu")
+    plain.init_weights(device=torch.device("cpu"))
+    wrapped = make_config(d_model=2 * base_d_model, completedp=completedp).build(init_device="cpu")
+    wrapped.apply_activation_checkpointing(
+        TransformerActivationCheckpointingMode.selected_modules,
+        modules=[f"blocks.*.{name}" for name in roles],
+    )
+    wrapped.init_weights(device=torch.device("cpu"))
+
+    wrapped_params = named_completedp_params(wrapped)
+    for name, role in roles.items():
+        assert wrapped_params[f"blocks.1.{name}._checkpoint_wrapped_module.weight"].role == role
+    plain_params = named_completedp_params(plain)
+    assert {_strip_wrappers(name): p for name, p in wrapped_params.items()} == plain_params
+
+    plain_multipliers = completedp_multipliers(plain, CompletedPOptimConfig())
+    wrapped_multipliers = completedp_multipliers(wrapped, CompletedPOptimConfig())
+    assert {
+        _strip_wrappers(name): m for name, m in wrapped_multipliers.items()
+    } == plain_multipliers
+    plain_tensors = dict(plain.named_parameters())
+    for name, param in wrapped.named_parameters():
+        assert torch.equal(param.detach(), plain_tensors[_strip_wrappers(name)].detach()), name
+
+
 @pytest.mark.parametrize(
     "mode, kwargs",
     [

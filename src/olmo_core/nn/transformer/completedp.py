@@ -386,6 +386,11 @@ def find_completedp_model(model: nn.Module) -> Optional["Transformer"]:
 
 
 def _head_shared_param_names(transformer: "Transformer", prefix: str) -> Set[str]:
+    """
+    The names of the head-shared vectors, without activation-checkpointing or ``torch.compile``
+    wrapper segments, since those can also wrap the norms themselves and a checkpoint wrapper's
+    ``named_parameters()`` drops its own segment.
+    """
     from ..attention import Attention
     from ..attention.kda import KimiDeltaAttention
     from ..attention.recurrent import GatedDeltaNet
@@ -406,10 +411,14 @@ def _head_shared_param_names(transformer: "Transformer", prefix: str) -> Set[str
             # The output norm normalizes each head with one [head_v_dim] gain.
             for param_name, _ in module.o_norm.named_parameters():
                 names.add(f"{prefix}{module_name}.o_norm.{param_name}")
-    return names
+    return {_strip_wrappers(name) for name in names}
 
 
 def _readout_param_names(transformer: "Transformer", prefix: str) -> Set[str]:
+    """
+    The names of the readout matrices, without activation-checkpointing or ``torch.compile``
+    wrapper segments, since those can also wrap the projections themselves.
+    """
     from ..attention import Attention, FusedAttentionV2
     from ..attention.kda import KimiDeltaAttention
     from ..moe import MoERouter
@@ -433,7 +442,7 @@ def _readout_param_names(transformer: "Transformer", prefix: str) -> Set[str]:
                 )
             for linear in ("w_k", "w_v"):
                 names.add(f"{prefix}{module_name}.{linear}.weight")
-    return names
+    return {_strip_wrappers(name) for name in names}
 
 
 def named_completedp_params(model: nn.Module) -> Dict[str, CompletedPParam]:
@@ -545,14 +554,14 @@ def _classify_params(model: nn.Module) -> Tuple["Transformer", str, Dict[str, Co
         elif location == "blocks" and is_matrix:
             role = (
                 CompletedPRole.hidden_readout_matrix
-                if name in readouts
+                if _strip_wrappers(name) in readouts
                 else CompletedPRole.hidden_matrix
             )
             param = CompletedPParam(role, shape.fan_in)
         elif location == "blocks" and shape.kind == ParamKind.vector:
             role = (
                 CompletedPRole.hidden_head_shared_vector
-                if name in head_shared
+                if _strip_wrappers(name) in head_shared
                 else CompletedPRole.hidden_vector
             )
             param = CompletedPParam(role)
