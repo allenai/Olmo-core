@@ -1,3 +1,4 @@
+import importlib.metadata
 import logging
 from typing import Optional, Tuple
 
@@ -6,10 +7,16 @@ import torch.distributed as dist
 
 from .ring import RingAttentionLoadBalancerType
 
+_flash_attn_pkgs = importlib.metadata.packages_distributions().get("flash_attn", [])
+
+flash_attn_2 = None
 try:
-    import flash_attn as flash_attn_2  # type: ignore
+    _is_flash_attn_2_available = "flash-attn" in [pkg.replace("_", "-") for pkg in _flash_attn_pkgs]
+
+    if _is_flash_attn_2_available:
+        import flash_attn as flash_attn_2  # type: ignore
 except ImportError:
-    flash_attn_2 = None  # type: ignore
+    pass
 
 try:
     # NOTE: The flash-attn 3 API might be available under the name 'flash_attn_3.flash_attn_interface'
@@ -21,10 +28,17 @@ except ImportError:
     except ImportError:
         flash_attn_3 = None  # type: ignore
 
+# match transformers fa4 detection - cute submodule available in both fa2/fa4
+flash_attn_4 = None
 try:
-    import flash_attn.cute as flash_attn_4  # type: ignore
+    _is_flash_attn_4_available = "flash-attn-4" in [
+        pkg.replace("_", "-") for pkg in _flash_attn_pkgs
+    ]
+
+    if _is_flash_attn_4_available:
+        import flash_attn.cute as flash_attn_4  # type: ignore
 except ImportError:
-    flash_attn_4 = None  # type: ignore
+    pass
 
 try:
     import ring_flash_attn  # type: ignore
