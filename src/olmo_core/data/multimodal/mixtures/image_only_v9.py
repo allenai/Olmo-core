@@ -349,11 +349,25 @@ def build_image_only_v9_mixture(
     datasets_map = build_image_only_v9_datasets(
         tokenizer, seed, max_sequence_length=max_sequence_length
     )
-    lengths = {name: len(datasets_map[name]) for name in datasets_map.keys()}
-    flat = compute_flat_mixture_weights(IMAGE_ONLY_V9_SUBMIXTURES, lengths)
+    # A source's rate is its group's rate times its share of the group's size factors, so the
+    # lengths of the other groups cancel when the weights are renormalized over a subset. Only
+    # open the groups that contain a requested source: a single-source smoke test then needs
+    # only that source's group on disk, and its weights are unchanged.
+    allowed = None if dataset_names is None else set(dataset_names)
+    groups = [
+        group
+        for group in IMAGE_ONLY_V9_SUBMIXTURES
+        if allowed is None or any(src.name in allowed for src in group.datasets)
+    ]
+    lengths = {
+        src.name: len(datasets_map[src.name])
+        for group in groups
+        if group.rate > 0
+        for src in group.datasets
+    }
+    flat = compute_flat_mixture_weights(groups, lengths)
 
-    if dataset_names is not None:
-        allowed = set(dataset_names)
+    if allowed is not None:
         flat = [(name, w) for name, w in flat if name in allowed]
         if not flat:
             raise ValueError(f"No mixture sources matched dataset_names={dataset_names!r}")

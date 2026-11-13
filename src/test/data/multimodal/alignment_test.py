@@ -154,3 +154,43 @@ def test_calibration_is_bounded_reproducible_and_does_not_mutate(monkeypatch):
     assert first == second
     assert datasets["large"].calls[8:] == first_indices
     assert config.mean_loss_weight == {"old_source": 2.0}
+
+
+class _EpochOnlyDataset(ExampleDataset):
+    """Reads its own epoch in ``__getitem__`` (the non-continuous loader's contract): no ``get``."""
+
+    _epoch = 0
+
+    def set_epoch(self, epoch):
+        self._epoch = epoch
+
+    def __getitem__(self, index):
+        return {"row": index, "epoch": self._epoch}
+
+    get = None  # type: ignore[assignment]
+
+
+def _selected(dataset):
+    import numpy as np
+
+    from olmo_core.data.multimodal.alignment import _SelectedDataset
+
+    return _SelectedDataset(dataset, np.array([3, 5, 7]), ExampleDatasetConfig())
+
+
+def test_selected_dataset_follows_the_epoch_set_by_the_loader():
+    """The default (non-continuous) loader calls ``set_epoch`` and then ``dataset[index]``; the
+    selection wrapper used to answer epoch 0 forever, disabling epoch-dependent sampling."""
+    selected = _selected(ExampleDataset(ExampleDatasetConfig()))
+    assert selected[1] == {"row": 5, "epoch": 0}
+    selected.set_epoch(1)
+    assert selected[1] == {"row": 5, "epoch": 1}
+    selected.set_epoch(2)
+    assert selected[2] == {"row": 7, "epoch": 2}
+    assert selected.get(0, 9) == {"row": 3, "epoch": 9}  # an explicit epoch still wins
+
+
+def test_selected_dataset_forwards_the_epoch_to_a_base_that_tracks_its_own():
+    selected = _selected(_EpochOnlyDataset(ExampleDatasetConfig()))
+    selected.set_epoch(3)
+    assert selected[0] == {"row": 3, "epoch": 3}

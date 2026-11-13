@@ -224,11 +224,14 @@ class GuiSynDataset(EpochSeededExamples):
         return messages
 
     def __getitem__(self, i: int) -> Dict[str, np.ndarray]:
+        return self._build(i)
+
+    def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         cfg = self.config
         row = self._data[int(self._index[i])]
         image = row["image"]
         # Per (row, epoch): the element sample has to rotate across epochs.
-        rng = self.epoch_rng(i)
+        rng = self.epoch_rng(i, epoch)
         messages = self.format_row(row["annotation"], image.size, rng)
         fmt = SftFormatter(seed=cfg.seed, **STAGE1_PROMPT_FAMILY)
         branches = [fmt.format_turns(msg, index=i, rng=rng)[0] for msg in messages]

@@ -79,11 +79,20 @@ class _SelectedDataset:
             raise IndexError(index)
         return int(self.indices[index])
 
+    _epoch: int = 0
+
+    def set_epoch(self, epoch: int) -> None:
+        """Set the source epoch (called by the data loader) and pass it to the base dataset."""
+        self._epoch = int(epoch)
+        set_base_epoch = getattr(self._dataset, "set_epoch", None)
+        if callable(set_base_epoch):
+            set_base_epoch(epoch)
+
     def __getitem__(self, index: int) -> Any:
-        return self.get(index, 0)
+        return self.get(index, self._epoch)
 
     def get(self, index: int, epoch: int = 0) -> Any:
-        """Return the selected base row using the current source epoch."""
+        """Return the selected base row for source epoch ``epoch``."""
         raw_index = self._raw_index(index)
         get = getattr(self._dataset, "get", None)
         return get(raw_index, epoch) if callable(get) else self._dataset[raw_index]
