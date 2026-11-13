@@ -75,3 +75,34 @@ def test_layer_norm_builder_config():
 
     with pytest.raises(OLMoConfigurationError):
         LayerNormConfig(name=LayerNormType.l2_norm, elementwise_affine=True).build(size=1024)
+
+
+@pytest.mark.parametrize("norm_type", [LayerNormType.default, LayerNormType.rms])
+@pytest.mark.parametrize("bias", [False, True], ids=["no-bias", "bias"])
+@pytest.mark.parametrize("weight_shape", [None, (4, 16)], ids=["shared", "per-head"])
+def test_layer_norm_output_scale(norm_type: LayerNormType, bias: bool, weight_shape):
+    torch.manual_seed(0)
+    config = LayerNormConfig(name=norm_type, bias=bias)
+    norm = config.build(size=16, weight_shape=weight_shape)
+    with torch.no_grad():
+        norm.weight.normal_()
+        if norm.bias is not None:
+            norm.bias.normal_()
+    scaled = config.build(size=16, weight_shape=weight_shape)
+    scaled.load_state_dict(norm.state_dict())
+    assert scaled.supports_output_scale()
+    scaled.output_scale = 0.3
+
+    x = torch.randn(2, 4, 16)
+    y, y_scaled = norm(x), scaled(x)
+    torch.testing.assert_close(y_scaled, 0.3 * y)
+    y.square().sum().backward()
+    y_scaled.square().sum().backward()
+    # d/dw of (c * y)^2 is c^2 times d/dw of y^2.
+    torch.testing.assert_close(scaled.weight.grad, 0.09 * norm.weight.grad)
+
+
+def test_layer_norm_output_scale_support():
+    assert not RMSNorm(size=16, elementwise_affine=False).supports_output_scale()
+    assert not NemotronRMSNorm(size=16).supports_output_scale()
+    assert not L2Norm(size=16).supports_output_scale()

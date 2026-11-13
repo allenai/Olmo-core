@@ -55,6 +55,12 @@ from .block import (
     TransformerBlock,
     TransformerBlockBase,
 )
+from .completedp import (
+    CompletedPConfig,
+    apply_completedp_init_,
+    completedp_block_configs,
+    validate_completedp_model,
+)
 from .config import (
     TransformerActivationCheckpointingMode,
     TransformerBlockConfig,
@@ -96,6 +102,8 @@ class Transformer(nn.Module):
     :param block_overrides: Overrides for specific blocks. Not supported if `block` is a dict of named blocks.
     :param block_pattern: The pattern of blocks to use. Required if `block` is a dict of named blocks.
     :param embed_scale: The scale factor for the embeddings.
+    :param completedp: Use the CompletedP parameterization: scale every residual branch by depth
+        and the init by width (see :class:`~olmo_core.nn.transformer.completedp.CompletedPConfig`).
     """
 
     def __init__(
@@ -118,6 +126,7 @@ class Transformer(nn.Module):
         embed_scale: Optional[float] = None,
         tie_word_embeddings: bool = False,
         n_extra_vocab: int = 0,
+        completedp: Optional[CompletedPConfig] = None,
     ):
         super().__init__()
 
@@ -155,6 +164,8 @@ class Transformer(nn.Module):
             block_pattern=block_pattern,
             block_overrides=block_overrides,
         )
+        if completedp is not None:
+            block_configs = completedp_block_configs(block_configs, completedp, n_layers)
 
         self.blocks = nn.ModuleDict()
         for block_idx in range(n_layers):
@@ -180,6 +191,9 @@ class Transformer(nn.Module):
         self.init_seed = init_seed
         self.init_std = init_std
         self.embedding_init_std = embedding_init_std
+        self.completedp = completedp
+        if completedp is not None:
+            validate_completedp_model(self)
 
         self._cache = cache
         self._pp_enabled = False
@@ -357,30 +371,36 @@ class Transformer(nn.Module):
         generator = torch.Generator(device).manual_seed(seed)
 
         if self.embeddings is not None:
+            embedding_std = (
+                self.embedding_init_std if self.embedding_init_std is not None else self.init_std
+            )
             self.init_method.init_embeddings(
                 self.embeddings,
                 d_model=self.d_model,
                 embed_scale=self.embed_scale,
-                std=(
-                    self.embedding_init_std
-                    if self.embedding_init_std is not None
-                    else self.init_std
-                ),
+                std=embedding_std,
                 generator=generator,
             )
             if isinstance(self.embeddings, SplitVocabEmbedding):
-                # mm_olmo initialises the added rows from `new_embedding_init_range`, which
-                # matches our `init_std` default of 0.02.
-                _apply_init(
-                    nn.init.normal_,
-                    self.embeddings.extra_weight,
-                    generator=generator,
-                    std=(
-                        self.embedding_init_std
-                        if self.embedding_init_std is not None
-                        else self.init_std
-                    ),
-                )
+                if self.init_method == InitMethod.normal:
+                    # mm_olmo initialises the added rows from `new_embedding_init_range`, which
+                    # matches our `init_std` default of 0.02.
+                    _apply_init(
+                        nn.init.normal_,
+                        self.embeddings.extra_weight,
+                        generator=generator,
+                        std=embedding_std,
+                    )
+                else:
+                    # Other init methods scale the embedding table independently of `init_std`,
+                    # and the added rows must start at the same scale as the base rows.
+                    self.init_method.init_embedding_weight(
+                        self.embeddings.extra_weight,
+                        d_model=self.d_model,
+                        embed_scale=self.embed_scale,
+                        std=embedding_std,
+                        generator=generator,
+                    )
 
         # Re-establish weight tying since `to_empty` above allocates fresh storage.
         if self.tie_word_embeddings:
@@ -456,6 +476,9 @@ class Transformer(nn.Module):
                 std=self.init_std,
                 generator=generator,
             )
+
+        if self.completedp is not None:
+            apply_completedp_init_(self)
 
         return generator
 

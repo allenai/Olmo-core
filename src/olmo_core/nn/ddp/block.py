@@ -475,14 +475,12 @@ class OLMoDDPTransformerBlock(olmo_core.nn.transformer.block.TransformerBlockBas
                 device=init_device,
             )
 
-        if attention_residual_alpha is not None:
-            raise OLMoConfigurationError(
-                "OLMoDDPTransformerBlock does not support attention_residual_alpha"
-            )
-        if feed_forward_residual_alpha is not None:
-            raise OLMoConfigurationError(
-                "OLMoDDPTransformerBlock does not support feed_forward_residual_alpha"
-            )
+        self.attention_residual_alpha = (
+            1.0 if attention_residual_alpha is None else float(attention_residual_alpha)
+        )
+        self.feed_forward_residual_alpha = (
+            1.0 if feed_forward_residual_alpha is None else float(feed_forward_residual_alpha)
+        )
 
         self.routed_experts: Optional[RoutedExperts]
         self.routed_experts_router: Optional[MoERouterV2]
@@ -595,6 +593,18 @@ class OLMoDDPTransformerBlock(olmo_core.nn.transformer.block.TransformerBlockBas
         if self.use_peri_norm:
             self.feed_forward_input_norm = feed_forward_norm.build(d_model, init_device=init_device)
         ######## END: MLP ########
+
+        # Unless the norms are pre-norms, each branch ends in a norm, so a residual multiplier can
+        # be folded into that norm's gains instead of scaling the branch output.
+        self._attention_add_alpha = self.attention_residual_alpha
+        self._feed_forward_add_alpha = self.feed_forward_residual_alpha
+        if not self.use_pre_norm:
+            self._attention_add_alpha = self._fold_into_norm(
+                self.attention_norm, self.attention_residual_alpha
+            )
+            self._feed_forward_add_alpha = self._fold_into_norm(
+                self.feed_forward_norm, self.feed_forward_residual_alpha
+            )
 
         self.ep_pg = None
         self._ep_enabled = False
@@ -1506,10 +1516,28 @@ class OLMoDDPTransformerBlock(olmo_core.nn.transformer.block.TransformerBlockBas
             .view(B, S, D)
         )
 
+    @staticmethod
+    def _fold_into_norm(norm: LayerNorm, alpha: float) -> float:
+        """
+        Fold a residual multiplier into a branch's output norm if the norm supports it.
+
+        :returns: The multiplier left to apply when adding the branch to the residual stream.
+        """
+        if alpha == 1.0 or not norm.supports_output_scale():
+            return alpha
+        norm.output_scale = alpha
+        return 1.0
+
+    @staticmethod
+    def _add_residual(residual: torch.Tensor, branch: torch.Tensor, alpha: float) -> torch.Tensor:
+        if alpha == 1.0:
+            return residual + branch
+        return torch.add(residual, branch, alpha=alpha)
+
     def _res_norm_mlp(self, residual: torch.Tensor, mlp_out: torch.Tensor) -> torch.Tensor:
-        if self.use_pre_norm:
-            return residual + mlp_out
-        return residual + self.feed_forward_norm(mlp_out)
+        if not self.use_pre_norm:
+            mlp_out = self.feed_forward_norm(mlp_out)
+        return self._add_residual(residual, mlp_out, self._feed_forward_add_alpha)
 
     def _res_norm_attn(self, block_inp, **kwargs) -> torch.Tensor:
         attn_in = block_inp
@@ -1518,9 +1546,14 @@ class OLMoDDPTransformerBlock(olmo_core.nn.transformer.block.TransformerBlockBas
             attn_in = self.attention_input_norm(block_inp)
         elif self.use_pre_norm:
             attn_in = self.attention_norm(block_inp)
-            return block_inp + self.attention(attn_in, **kwargs)
-        attn_res_out = block_inp + self.attention_norm(self.attention(attn_in, **kwargs))
-        return attn_res_out
+            return self._add_residual(
+                block_inp, self.attention(attn_in, **kwargs), self._attention_add_alpha
+            )
+        return self._add_residual(
+            block_inp,
+            self.attention_norm(self.attention(attn_in, **kwargs)),
+            self._attention_add_alpha,
+        )
 
     def _checkpointed_res_norm_attn(self, block_inp, **kwargs) -> torch.Tensor:
         if self.checkpoint_attn:
