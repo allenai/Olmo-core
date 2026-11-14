@@ -134,6 +134,23 @@ def main():
         rows.append(out)
         print(f"[docdrop] parsed {task}: {len(out)} rows ({time.time() - t0:.0f}s)", flush=True)
 
+    merged_rows = 0
+    if ogroups is not None:
+        # a NON-gold group no larger than the outlier group can only be a passage-key collision splitting one article
+        # (outlier_groups.py lists it under violations; row 112 of f1952): merge such groups into one
+        ogroups = [list(g) for g in ogroups]
+        for r, info in enumerate(rows[2]):
+            g = ogroups[r]
+            gold_g = {g[i] for i in info["gold"]}
+            counts = {x: g.count(x) for x in set(g)}
+            small = sorted(x for x, c in counts.items() if c <= len(info["gold"]) and x not in gold_g)
+            if small:
+                if len(small) < 2 or sum(counts[x] for x in small) <= len(info["gold"]):
+                    raise SystemExit(f"outlier row {r}: undersized majority groups {small} cannot be merged")
+                ogroups[r] = [small[0] if x in small else x for x in g]
+                merged_rows += 1
+        print(f"[docdrop] outlier groups: merged split groups in {merged_rows} row(s)", flush=True)
+
     # ---- FLOP model and q ------------------------------------------------------------------------------------
     fm = FlopModel()
     full_lens = [r["e"] - r["s"] for part in rows for r in part]
@@ -263,6 +280,7 @@ def main():
                "min_example_len": int(min(new_lens_all)), "task": "mt4",
                "docdrop": {"src": a.src, "keep_frac_nongold": q, "seed": a.seed, "oolong": "whole",
                            "outlier": "whole topic groups" if ogroups is not None else "random documents",
+                           "outlier_rows_with_merged_groups": merged_rows,
                            "gold": "IDs cited by the answer span, matched to the IDs the documents print",
                            "target_pf": a.target_pf, "model_pf": pf}})
     json.dump(nm, open(os.path.join(a.out, "metadata.json"), "w"), indent=1)
