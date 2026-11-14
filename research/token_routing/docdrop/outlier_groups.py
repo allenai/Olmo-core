@@ -8,7 +8,8 @@ rendered (use_titles False), so this maps every decoded passage back to its arti
 ``(title, [passages])`` lists, by the passage's first 160 characters.
 
 Writes ``{"rows": [[group id per document] per outlier row], "titles": [...], "stats": {...}}``; group ids are
-indices into ``titles``. Refuses a row with an unmatched passage or a gold set that is not exactly one article.
+indices into ``titles``. Refuses a row with an unmatched passage; rows that break the invariant (gold not exactly one article, a
+majority group not larger than the outlier group) are listed under ``violations``.
 
     $PY research/token_routing/docdrop/outlier_groups.py --shard /data/prasann/oracle/shards/mt4f3904 \\
         --seed-pool /data/prasann/ctc_seed_pools/outlier.seed.jsonl.gz --out /data/prasann/docdrop/outlier_groups_f3904.json
@@ -73,50 +74,62 @@ def main():
     print(f"[groups] seed pool {header.get('ladder')} / {header.get('pool')}: {len(body['articles'])} articles "
           f"({time.time() - t0:.0f}s)", flush=True)
     k2t = {}
-    clash = 0
     for title, passages in body["articles"]:
         for p in passages:
             k = key(p)
             if k in need:
-                if k in k2t and k2t[k] != title:
-                    clash += 1
-                k2t[k] = title
+                k2t.setdefault(k, set()).add(title)
     del body
+    clash = sum(1 for v in k2t.values() if len(v) > 1)
     titles, tid = [], {}
-    out_rows, bad = [], 0
+    out_rows, violations = [], []
     min_major, gold_sizes = [], []
     for r, (texts, gold) in enumerate(rows):
         miss = [i for i, k in enumerate(texts) if k not in k2t]
         if miss:
-            bad += 1
             raise SystemExit(f"row {r}: {len(miss)} passages not found in the seed pool, e.g. {texts[miss[0]]!r}")
-        g = []
+        # a key shared by several articles (identical opening text): take the candidate most of the row agrees on
+        votes = {}
         for k in texts:
-            t = k2t[k]
+            if len(k2t[k]) == 1:
+                t = next(iter(k2t[k]))
+                votes[t] = votes.get(t, 0) + 1
+        names = [max(sorted(k2t[k]), key=lambda t: votes.get(t, 0)) for k in texts]
+        g = []
+        for t in names:
             if t not in tid:
                 tid[t] = len(titles)
                 titles.append(t)
             g.append(tid[t])
-        gold_groups = {g[i] for i in gold}
-        if len(gold_groups) != 1:
-            raise SystemExit(f"row {r}: gold spans {len(gold_groups)} articles")
-        gg = gold_groups.pop()
-        if sorted(i for i, x in enumerate(g) if x == gg) != sorted(gold):
-            raise SystemExit(f"row {r}: a non-gold passage shares the outlier article")
         counts = {}
         for x in g:
             counts[x] = counts.get(x, 0) + 1
-        major = [c for x, c in counts.items() if x != gg]
-        if min(major) <= counts[gg]:
-            raise SystemExit(f"row {r}: a majority group ({min(major)}) is not larger than the outlier ({counts[gg]})")
-        min_major.append(min(major))
-        gold_sizes.append(counts[gg])
+        gold_groups = {g[i] for i in gold}
+        problem = None
+        if len(gold_groups) != 1:
+            problem = f"gold spans {len(gold_groups)} articles"
+        else:
+            gg = next(iter(gold_groups))
+            major = [c for x, c in counts.items() if x != gg]
+            if sorted(i for i, x in enumerate(g) if x == gg) != sorted(gold):
+                problem = "a non-gold passage shares the outlier article"
+            elif min(major) <= counts[gg]:
+                problem = f"smallest majority group {min(major)} <= outlier group {counts[gg]}"
+            else:
+                min_major.append(min(major))
+                gold_sizes.append(counts[gg])
+        if problem:
+            violations.append({"row": r, "problem": problem,
+                               "groups": {titles[x]: c for x, c in counts.items()},
+                               "gold_titles": [titles[g[i]] for i in gold]})
         out_rows.append(g)
-    stats = {"rows": len(out_rows), "key_clashes": clash, "min_majority_group": DD.summarize(min_major),
+    stats = {"rows": len(out_rows), "key_clashes": clash, "rows_violating_invariant": len(violations), "min_majority_group": DD.summarize(min_major),
              "outlier_group_size": DD.summarize(gold_sizes),
              "majority_groups_per_row": DD.summarize([len(set(g)) - 1 for g in out_rows])}
-    json.dump({"rows": out_rows, "titles": titles, "stats": stats, "shard": a.shard}, open(a.out, "w"))
+    json.dump({"rows": out_rows, "titles": titles, "stats": stats, "shard": a.shard, "violations": violations}, open(a.out, "w"))
     print(json.dumps(stats, indent=1))
+    for v in violations[:5]:
+        print("[violation]", json.dumps(v)[:600])
     print(f"[groups] wrote {a.out} ({time.time() - t0:.0f}s)")
 
 

@@ -122,3 +122,30 @@ def test_gold_and_id_parsers():
     assert DD.doc_id_from_text("\n\nClaim 37: The increased", "contradiction") == 37
     assert DD.doc_id_from_text("\n\nDocument [12]: \"Title\"", "nq") == 12
     assert DD.doc_id_from_text("\n\nsomething else", "outlier") is None
+
+
+def test_group_keep_keeps_whole_groups_and_the_outlier_invariant():
+    rng = np.random.default_rng(3)
+    for row in range(200):
+        n_groups = int(rng.integers(8, 16))
+        sizes = [int(rng.integers(4, 9)) for _ in range(n_groups)]
+        groups = [g for g, sz in enumerate(sizes) for _ in range(sz)] + [99] * 3  # 99 = the outlier article
+        perm = rng.permutation(len(groups))
+        groups = [groups[i] for i in perm]
+        gold = [i for i, g in enumerate(groups) if g == 99]
+        for q in (0.0, 0.15, 0.4, 1.0):
+            keep = DD.choose_keep_groups(groups, gold, q, DD.row_seed(0, 2, row))
+            kept = [groups[i] for i in keep]
+            assert set(gold) <= set(keep.tolist())
+            for g in set(kept):  # whole groups only
+                assert kept.count(g) == groups.count(g)
+            major = [kept.count(g) for g in set(kept) if g != 99]
+            assert major and min(major) > 3, "every visible majority topic is larger than the outlier topic"
+            n_ng = len(groups) - 3
+            if q > 0:  # closest whole-group count: within one group of the target
+                assert abs((len(keep) - 3) - round(q * n_ng)) <= max(sizes)
+            if q == 1.0:
+                assert len(keep) == len(groups)
+        a = DD.choose_keep_groups(groups, gold, 0.15, DD.row_seed(0, 2, row))
+        b = DD.choose_keep_groups(groups, gold, 0.15, DD.row_seed(0, 2, row))
+        assert np.array_equal(a, b)

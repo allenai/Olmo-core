@@ -79,6 +79,8 @@ def main():
     ap.add_argument("--keep-frac", type=float, default=None, help="fix q instead of bisecting on --target-pf")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-sidecar", action="store_true")
+    ap.add_argument("--outlier-groups", default="",
+                    help="outlier_groups.py output: drop WHOLE topic groups on outlier rows (group-aware arm)")
     a = ap.parse_args()
     if os.path.exists(os.path.join(a.out, "metadata.json")):
         raise SystemExit(f"{a.out} already has metadata.json; refusing to overwrite")
@@ -91,6 +93,9 @@ def main():
     DS, DE, EOS = meta["doc_start_id"], meta["doc_end_id"], meta["eos_token_id"]
     t0 = time.time()
     parts = load_parts(a.src, meta)
+    ogroups = json.load(open(a.outlier_groups))["rows"] if a.outlier_groups else None
+    if ogroups is not None and len(ogroups) < len(parts[2][2]):
+        raise SystemExit(f"--outlier-groups has {len(ogroups)} rows < {len(parts[2][2])} outlier rows")
     print(f"[docdrop] loaded {sum(len(p[2]) for p in parts)} rows in {time.time() - t0:.0f}s", flush=True)
 
     # ---- parse every row: spans, printed IDs, gold ----------------------------------------------------------
@@ -146,6 +151,10 @@ def main():
                 n = len(info["spans"])
                 if task == "oolong":
                     keep = np.arange(n)
+                elif task == "outlier" and ogroups is not None:
+                    if len(ogroups[r]) != n:
+                        raise SystemExit(f"outlier row {r}: {len(ogroups[r])} group ids vs {n} documents")
+                    keep = DD.choose_keep_groups(ogroups[r], info["gold"], q, DD.row_seed(a.seed, p, r))
                 else:
                     keep = DD.choose_keep(n, info["gold"], q, DD.row_seed(a.seed, p, r), task)
                 L = (info["e"] - info["s"]) - int(info["span_lens"].sum()) + int(info["span_lens"][keep].sum())
@@ -170,7 +179,7 @@ def main():
 
     # ---- write -----------------------------------------------------------------------------------------------
     os.makedirs(a.out, exist_ok=True)
-    stats = {"keep_frac_nongold": q, "seed": a.seed, "target_pf": a.target_pf, "model_pf": pf,
+    stats = {"keep_frac_nongold": q, "seed": a.seed, "outlier_groups": a.outlier_groups or None, "target_pf": a.target_pf, "model_pf": pf,
              "dense_fullft_pf_model": dense_pf, "dense_lora_full_rows_pf_model": lora_full_pf,
              "step_cost_vs_dense_fullft": pf / dense_pf, "issues": issues, "tasks": {}}
     examples = []
@@ -185,6 +194,7 @@ def main():
         tok_in = tok_out = doc_in = doc_out = 0
         gs_before, gs_after, keep_share_rows = [], [], []
         n_nonctx = []
+        maj_groups, min_kept_major = [], []
         for r, info in enumerate(part):
             row, m = ids[info["s"]:info["e"]], msk[info["s"]:info["e"]]
             keep = keeps[p][r]
@@ -205,6 +215,15 @@ def main():
                 gs_before.append(DD.gold_share(g, n))
                 gs_after.append(DD.gold_share(g, len(keep)))
                 keep_share_rows.append((len(keep) - g) / max(1, n - g))
+                if task == "outlier":
+                    grp = ogroups[r] if ogroups is not None else None
+                    if grp is not None:
+                        kg = [grp[k] for k in keep]
+                        gg = {grp[i] for i in info["gold"]}
+                        sizes = [kg.count(x) for x in set(kg) if x not in gg]
+                        maj_groups.append(len(sizes))
+                        min_kept_major.append(min(sizes))
+                        assert min(sizes) > len(info["gold"]), "outlier invariant broken"
             if not a.no_sidecar:
                 sidecar[content_fingerprint_from_row(row.tolist(), EOS)] = [int(k) for k in keep]
             if r < 2:
@@ -229,6 +248,9 @@ def main():
             "non_document_tokens_per_row": DD.summarize(n_nonctx),
             "row_len_after": DD.summarize([len(x) for x in out_t]),
         }
+        if maj_groups:
+            stats["tasks"][task]["kept_majority_groups"] = DD.summarize(maj_groups)
+            stats["tasks"][task]["smallest_kept_majority_group"] = DD.summarize(min_kept_major)
         print(f"[docdrop] {task}: tokens {tok_in} -> {tok_out} ({tok_out / tok_in:.3f}), docs {doc_in} -> {doc_out} "
               f"({doc_out / doc_in:.3f})", flush=True)
     tin = sum(v["tokens_in"] for v in stats["tasks"].values())
@@ -240,6 +262,7 @@ def main():
     nm.update({"num_tokens": int(tout), "max_example_len": int(max(new_lens_all)),
                "min_example_len": int(min(new_lens_all)), "task": "mt4",
                "docdrop": {"src": a.src, "keep_frac_nongold": q, "seed": a.seed, "oolong": "whole",
+                           "outlier": "whole topic groups" if ogroups is not None else "random documents",
                            "gold": "IDs cited by the answer span, matched to the IDs the documents print",
                            "target_pf": a.target_pf, "model_pf": pf}})
     json.dump(nm, open(os.path.join(a.out, "metadata.json"), "w"), indent=1)

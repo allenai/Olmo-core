@@ -93,6 +93,33 @@ def choose_keep(n_docs: int, gold_idx: Sequence[int], keep_frac: float, rng: np.
     return np.sort(np.concatenate([np.array(gold, dtype=np.int64), nongold[perm[:k]]]))
 
 
+def choose_keep_groups(groups: Sequence[int], gold_idx: Sequence[int], keep_frac: float,
+                       rng: np.random.Generator) -> np.ndarray:
+    """Group-aware keep set (outlier): every document of the gold group(s) plus WHOLE non-gold groups, in one random
+    group order, as many as bring the kept non-gold count closest to ``round(keep_frac * n_nongold)`` (at least one
+    group). Whole groups keep the generator's invariant -- every visible majority topic stays larger than the outlier
+    topic -- and every visible topic is a cluster, so "the passages that share a topic" is not a tell."""
+    groups = [int(g) for g in groups]
+    gold = sorted(set(int(g) for g in gold_idx))
+    gold_groups = {groups[i] for i in gold}
+    other = sorted(set(groups) - gold_groups)
+    sizes = {g: 0 for g in other}
+    for g in groups:
+        if g in sizes:
+            sizes[g] += 1
+    order = [other[i] for i in rng.permutation(len(other))]
+    n_ng = sum(sizes.values())
+    target = int(round(keep_frac * n_ng))
+    cum, best_m, best_err = 0, 1, None
+    for m, g in enumerate(order, 1):
+        cum += sizes[g]
+        err = abs(cum - target)
+        if best_err is None or err < best_err:
+            best_m, best_err = m, err
+    kept = gold_groups | set(order[:best_m])
+    return np.array([i for i, g in enumerate(groups) if g in kept], dtype=np.int64)
+
+
 def drop_docs(ids: np.ndarray, mask: np.ndarray, prefix_end: int, spans: Sequence[Tuple[int, int]],
               suffix_start: int, keep: Sequence[int]) -> Tuple[np.ndarray, np.ndarray]:
     """The row without the dropped documents: prefix + kept spans in their original order + suffix, with the
