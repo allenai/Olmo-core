@@ -67,6 +67,7 @@ class FlopMeterCallback(Callback):
     _real_tokens_this_step: Optional[int] = None
     _supervised_this_step: Optional[int] = None
     _fpt_cache: Optional[Dict[int, int]] = None
+    _lora_cache: Optional[Dict[int, float]] = None
     _examples: int = 0
 
     #: cumulative accumulators carried across a preemption resume (2026-10-30): without them a resumed run's
@@ -129,6 +130,21 @@ class FlopMeterCallback(Callback):
             )
         else:
             actual = cost(st["actual"], skipped)
+        if getattr(m, "_early_lora", None) and getattr(m, "_online_token_router", None) is None:
+            # --lora-rank without the router: the frozen-base / adapter adjustment at each example's OWN length
+            # (post_step skips its seq_len-priced version when per_example is on)
+            if skipped:
+                raise ValueError("FlopMeter: --lora-rank + layer drop in one step is not priced; refusing to guess")
+            from olmo_core.nn.early_lora import lora_flop_adjust_per_token
+
+            if self._lora_cache is None:
+                self._lora_cache = {}
+            lcache = self._lora_cache
+            for L in st["actual"]:
+                a = lcache.get(L)
+                if a is None:
+                    a = lcache[L] = lora_flop_adjust_per_token(m, int(L))
+                actual += float(L) * a
         dev = next(m.parameters()).device
         v = torch.tensor(
             [cost(st["dense"]), actual, float(sum(st["dense"])), float(len(st["dense"]))],
@@ -334,9 +350,11 @@ class FlopMeterCallback(Callback):
             actual -= head * max(0, tokens - self._supervised_this_step)
             self.trainer.record_metric("flop_meter/supervised_frac", self._supervised_this_step / max(1, tokens))
             self._supervised_this_step = None
-        if getattr(m, "_early_lora", None) and otr is None:
+        if getattr(m, "_early_lora", None) and otr is None and not self.per_example:
             # LoRA without the online router (the --lora-rank modifier): frozen-base blocks skip their weight
-            # gradient, blocks below the adapters run forward-only, plus the adapters themselves
+            # gradient, blocks below the adapters run forward-only, plus the adapters themselves. Per-example mode
+            # charges this in _per_example_flops at each example's length instead (2026-11-13; before that every
+            # token was adjusted at --seq-len, which over-credits rows shorter than seq_len)
             from olmo_core.nn.early_lora import lora_flop_adjust_per_token
 
             actual += tokens * lora_flop_adjust_per_token(m, self.seq_len)
