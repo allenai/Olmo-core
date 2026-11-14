@@ -69,6 +69,8 @@ def main():
         for task, stem in TASKS.items():
             for rung in ("8k", "2k"):
                 p = f"{base}/{stem}_{rung}_responses.jsonl"
+                if not os.path.exists(p):  # a finished cell before the job's final copy into eval/
+                    p = f"{os.path.dirname(base)}/cells/{task}_{rung}/{stem}_{rung}_responses.jsonl"
                 if os.path.exists(p):
                     res[f"{run}|{task}|{rung}"] = check(p, task)
     for k, v in res.items():
