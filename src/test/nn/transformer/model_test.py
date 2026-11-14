@@ -39,6 +39,7 @@ from olmo_core.nn.lm_head import LMHeadConfig, LMOutputWithLoss
 from olmo_core.nn.moe import LatentMoEConfig, MoEConfig, MoERouterConfig, MoEType
 from olmo_core.nn.rope import RoPEConfig
 from olmo_core.nn.transformer import (
+    InitMethod,
     MoEHybridTransformerBlockBase,
     MoEReorderedNormTransformerBlock,
     MoETransformer,
@@ -962,6 +963,13 @@ def test_qwen3_5_forward():
 def test_normalized_transformer_rejects_tied_word_embeddings():
     with pytest.raises(OLMoConfigurationError):
         TransformerConfig.ngpt_271M(vocab_size=128, n_layers=2, tie_word_embeddings=True)
+
+
+def test_normalized_transformer_rejects_nanochat_init():
+    config = TransformerConfig.ngpt_271M(vocab_size=128, n_layers=2)
+    config.init_method = InitMethod.nanochat
+    with pytest.raises(OLMoConfigurationError, match="nanochat"):
+        config.build(init_device="meta")
 
 
 def test_pipeline_parallel_rejects_tied_word_embeddings():

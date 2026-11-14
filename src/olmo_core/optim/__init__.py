@@ -1,5 +1,6 @@
 from .adam import AdamConfig
 from .adamw import AdamWConfig, SkipStepAdamW, SkipStepAdamWConfig
+from .completedp import CompletedPOptimConfig
 from .config import (
     INITIAL_LR_FIELD,
     LR_FIELD,
@@ -11,6 +12,7 @@ from .dion import DionConfig
 from .lion import Lion, LionConfig, SkipStepLion, SkipStepLionConfig
 from .moe_optimizer import OLMoDDPOptimizer, OLMoDDPOptimizerConfig
 from .muon import MuonConfig, NorMuonConfig
+from .mup import MuPConfig
 from .noop import NoOpConfig, NoOpOptimizer
 from .scheduler import (
     WSD,
@@ -44,6 +46,8 @@ __all__ = [
     "Lion",
     "MuonConfig",
     "NorMuonConfig",
+    "MuPConfig",
+    "CompletedPOptimConfig",
     "OLMoDDPOptimizer",
     "OLMoDDPOptimizerConfig",
     "DionConfig",
