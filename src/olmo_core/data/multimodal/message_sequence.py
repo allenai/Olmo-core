@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 
@@ -73,6 +73,8 @@ def encode_sft_example(
     message_weight: Union[None, float, MessageWeight] = None,
     seed: int = 0,
     shuffle_rng: Optional[np.random.RandomState] = None,
+    branches_as_documents: bool = False,
+    document_token_budget: Optional[int] = None,
 ) -> Dict[str, np.ndarray]:
     """Build a branched Molmo2 SFT example from (user, assistant) turn pairs.
 
@@ -82,6 +84,17 @@ def encode_sft_example(
     same crop budget, ``"Image {i+1}"`` text prefixes when there is more than one
     image, crops concatenated along the crop axis, and each image's pooled patch
     indices offset by the running crop-patch count.
+
+    :param branches_as_documents: Serialize each branch as its own document (prefix + that
+        branch, exactly the single-branch example) instead of sibling branches of one shared
+        prefix, with a per-token ``document_ids`` array numbering them. The documents share the
+        image's crops: every document's pooled rows index the same crops, so the vision encoder
+        runs once for all of them. For language models that isolate packed examples only by
+        document boundaries (Kimi Delta Attention). Requires ``loss_token_weighting="none"``,
+        under which each document weights its tokens as the sibling-branch layout does.
+    :param document_token_budget: With ``branches_as_documents``, stop adding documents (in the
+        shuffled branch order) once the next would take the example past this many tokens. The
+        first document is always kept.
     """
     import torch
 
@@ -180,20 +193,31 @@ def encode_sft_example(
     # (mm_olmo DatasetWithArgs.message_weight can disable root_length /
     # root_subsegments too); with_overrides handles both.
     mw = MessageWeight.from_string(loss_token_weighting).with_overrides(message_weight)
-    seq = build_branched_sequence(
-        prefix,
-        branches,
-        eos_id=tokenizer.eos_token_id,
-        image_token_ids=resolved_token_ids.image_token_ids,
-        loss_token_weighting=loss_token_weighting_for_build(mw),
-    )
-    subsegment_ids = seq.get("subsegment_ids")
-    seq["loss_masks"] = apply_message_weight_to_loss_masks(
-        seq["loss_masks"],
-        subsegment_ids,
-        mw,
-        branch_scaling_already_applied=True,
-    )
+    if branches_as_documents and len(branches) > 1:
+        seq, n_documents = _build_documents(
+            prefix,
+            branches,
+            mw,
+            eos_id=tokenizer.eos_token_id,
+            image_token_ids=resolved_token_ids.image_token_ids,
+            token_budget=document_token_budget,
+        )
+    else:
+        n_documents = 1
+        seq = build_branched_sequence(
+            prefix,
+            branches,
+            eos_id=tokenizer.eos_token_id,
+            image_token_ids=resolved_token_ids.image_token_ids,
+            loss_token_weighting=loss_token_weighting_for_build(mw),
+        )
+        subsegment_ids = seq.get("subsegment_ids")
+        seq["loss_masks"] = apply_message_weight_to_loss_masks(
+            seq["loss_masks"],
+            subsegment_ids,
+            mw,
+            branch_scaling_already_applied=True,
+        )
     if not crops_list:
         # Text-only example: zero crops / pooled rows (same shape convention as Tulu).
         from olmo_core.nn.vision.molmo2_tokens import (
@@ -207,7 +231,48 @@ def encode_sft_example(
         seq["pooled_patches_idx"] = np.full((0, POOL_H * POOL_W), -1, dtype=np.int64)
         return seq
     seq["images"] = np.concatenate(crops_list, axis=0) if len(crops_list) > 1 else crops_list[0]
-    seq["pooled_patches_idx"] = (
-        np.concatenate(pooling_list, axis=0) if len(pooling_list) > 1 else pooling_list[0]
-    )
+    pooled = np.concatenate(pooling_list, axis=0) if len(pooling_list) > 1 else pooling_list[0]
+    # Each document's image block pools the same crops.
+    seq["pooled_patches_idx"] = np.tile(pooled, (n_documents, 1)) if n_documents > 1 else pooled
     return seq
+
+
+def _build_documents(
+    prefix: Sequence[int],
+    branches: Sequence[Any],
+    message_weight: MessageWeight,
+    *,
+    eos_id: int,
+    image_token_ids: frozenset,
+    token_budget: Optional[int],
+) -> Tuple[Dict[str, np.ndarray], int]:
+    """Serialize each branch as ``prefix + branch``, the single-branch example, and concatenate
+    them with a per-token ``document_ids`` array. Returns the example and its document count."""
+    if loss_token_weighting_for_build(message_weight) != "none":
+        raise ValueError(
+            "branches_as_documents requires loss_token_weighting='none': the sibling-branch "
+            "layout scales branches by their count, which separate documents do not reproduce"
+        )
+    documents: List[Dict[str, np.ndarray]] = []
+    n_tokens = 0
+    for branch in branches:
+        document = build_branched_sequence(
+            prefix,
+            [branch],
+            eos_id=eos_id,
+            image_token_ids=image_token_ids,
+            loss_token_weighting="none",
+        )
+        document["loss_masks"] = apply_message_weight_to_loss_masks(
+            document["loss_masks"], None, message_weight, branch_scaling_already_applied=True
+        )
+        length = len(document["input_ids"])
+        if documents and token_budget is not None and n_tokens + length > token_budget:
+            break
+        documents.append(document)
+        n_tokens += length
+    seq = {key: np.concatenate([d[key] for d in documents], axis=0) for key in documents[0]}
+    seq["document_ids"] = np.concatenate(
+        [np.full(len(d["input_ids"]), i, dtype=np.int64) for i, d in enumerate(documents)]
+    )
+    return seq, len(documents)

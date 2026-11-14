@@ -265,3 +265,83 @@ def test_config_round_trip():
     d = cfg.as_config_dict()
     assert d["pooling_type"] == "attention_meanq"
     assert d["projector_type"] == "mlp"
+
+
+# ---------------------------------------------------------------------------
+# Pooling attention and patch gather: the generic SDPA and advanced-indexing results
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("masked", [False, True])
+def test_few_key_attention_matches_sdpa(masked: bool):
+    from olmo_core.nn.vision.connector import _few_key_attention
+
+    torch.manual_seed(0)
+    G, P, H, D = 12, 4, 3, 8
+    q = torch.randn(G, H, D, requires_grad=True)
+    k = torch.randn(G, P, H, D, requires_grad=True)
+    v = torch.randn(G, P, H, D, requires_grad=True)
+    valid = None
+    if masked:
+        valid = torch.rand(G, P) < 0.6
+        valid[0] = False  # a group without any valid key
+        valid[1] = True
+    out = _few_key_attention(q, k, v, valid)
+    ref = torch.nn.functional.scaled_dot_product_attention(
+        q[:, :, None],
+        k.transpose(1, 2),
+        v.transpose(1, 2),
+        attn_mask=None if valid is None else valid[:, None, None, :],
+    )[:, :, 0]
+    torch.testing.assert_close(out, ref)
+    for a, b in zip(
+        torch.autograd.grad(out.square().sum(), [q, k, v]),
+        torch.autograd.grad(ref.square().sum(), [q, k, v]),
+    ):
+        torch.testing.assert_close(a, b)
+
+
+def _reference_connector(connector: VisionConnector, features, idx) -> torch.Tensor:
+    """The connector with advanced-indexing gather and generic SDPA pooling."""
+    pool, cfg = connector.pooling, connector.cfg
+    assert pool is not None
+    B, n_pooled, pool_size = idx.shape
+    valid = idx >= 0
+    batch_idx = torch.arange(B)[:, None, None].expand_as(idx)
+    flat = (features[batch_idx, idx.clamp(min=0)] * valid[..., None]).reshape(
+        B * n_pooled, pool_size, -1
+    )
+    attn_mask = None
+    if cfg.pooling_attention_mask:
+        attn_mask = valid.reshape(B * n_pooled, 1, 1, pool_size)
+        denom = valid.reshape(B * n_pooled, pool_size).sum(-1).clamp(min=1)
+        query = flat.sum(dim=1, keepdim=True) / denom[:, None, None]
+    else:
+        query = flat.mean(dim=1, keepdim=True)
+    heads = (pool.num_heads, pool.head_dim)
+    q = pool.wq(query).reshape(B * n_pooled, 1, *heads).transpose(1, 2)
+    k = pool.wk(flat).reshape(B * n_pooled, pool_size, *heads).transpose(1, 2)
+    v = pool.wv(flat).reshape(B * n_pooled, pool_size, *heads).transpose(1, 2)
+    out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
+    pooled = pool.wo(out.transpose(1, 2).reshape(B * n_pooled, 1, -1))
+    return connector.projector(pooled.reshape(B, n_pooled, -1))
+
+
+@pytest.mark.parametrize("pooling_attention_mask", [False, True])
+def test_connector_matches_the_generic_gather_and_attention(pooling_attention_mask: bool):
+    torch.manual_seed(0)
+    connector = _small_cfg(pooling_attention_mask=pooling_attention_mask).build()
+    connector.reset_parameters()
+    features = _features(2, 3 * 16).requires_grad_()
+    idx = torch.cat([_row_major_pooled_idx(2, 4, 4), _row_major_pooled_idx(2, 4, 4) + 16], dim=1)
+    idx[0, 1, 2:] = -1  # a partly padded group
+    idx[1, -3:] = -1  # padded rows
+    params = [features, *connector.parameters()]
+    out = connector(features, idx)
+    ref = _reference_connector(connector, features, idx)
+    torch.testing.assert_close(out, ref)
+    for a, b in zip(
+        torch.autograd.grad(out.square().sum(), params),
+        torch.autograd.grad(ref.square().sum(), params),
+    ):
+        torch.testing.assert_close(a, b)

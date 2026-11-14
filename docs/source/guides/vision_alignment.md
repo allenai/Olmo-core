@@ -266,7 +266,7 @@ decoded accuracy; decoded and external benchmarks remain separate evaluations.
 
 ### Checkpoint benchmarks
 
-`src/scripts/eval/Vision-Align.py` provides three independent runners. Each uses one
+`src/scripts/eval/Vision-Align-Eval.py` provides three independent runners. Each uses one
 eight-GPU allocation and saves results separately from checkpoints:
 
 | Suite | Definition |
@@ -281,15 +281,15 @@ the full official benchmark splits. Its overlap annotations describe the manifes
 original training inventory, not necessarily the checkpoint being evaluated.
 
 ```bash
-torchrun --standalone --nproc-per-node=8 src/scripts/eval/Vision-Align.py fast-text \
+torchrun --standalone --nproc-per-node=8 src/scripts/eval/Vision-Align-Eval.py fast-text \
   --checkpoint /path/to/stepN --tokenizer /path/to/dolma2/tokenizer.json \
   --output /path/to/eval/fast_text.json
 
-torchrun --standalone --nproc-per-node=8 src/scripts/eval/Vision-Align.py decoded \
+torchrun --standalone --nproc-per-node=8 src/scripts/eval/Vision-Align-Eval.py decoded \
   --checkpoint /path/to/stepN --panel-checkpoint /path/to/panel/checkpoint \
   --panel-file /path/to/panel.json --output-dir /path/to/eval/decoded
 
-torchrun --standalone --nproc-per-node=8 src/scripts/eval/Vision-Align.py academic \
+torchrun --standalone --nproc-per-node=8 src/scripts/eval/Vision-Align-Eval.py academic \
   --checkpoint /path/to/stepN --manifest /path/to/academic-manifest.json \
   --hf-cache /path/to/hf-cache/hub --output /path/to/eval/academic.json
 ```
