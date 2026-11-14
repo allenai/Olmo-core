@@ -19,7 +19,7 @@ See :class:`~olmo_core.nn.vision.MultimodalLM` for how ``subsegment_ids`` /
 
 from __future__ import annotations
 
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -208,7 +208,9 @@ def build_packed_sequence(
 
 def build_branched_sequence(
     prefix_ids: Sequence[int],
-    branches: Sequence[Tuple[Sequence[int], Sequence[int]]],
+    branches: Sequence[
+        Union[Tuple[Sequence[int], Sequence[int]], Sequence[Tuple[Sequence[int], Sequence[int]]]]
+    ],
     *,
     eos_id: int,
     image_token_ids: frozenset = IMAGE_TOKEN_IDS,

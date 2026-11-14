@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `UnshardedModelExportCallback` and `load_unsharded_model_state()`, which write an unsharded `model.safetensors` (plus the config) into every permanent checkpoint so evaluation can read one file instead of the sharded state.
+- Added the Molmo2 stage-1 pretraining recipe: the stage-1 datasets (PixMo-Cap, PixMo-Points/Count v1 and v2, CoSyn-Point, MolmoPoint-GUISyn, OCR caption tars / OlmOCR / synthetic OCR / text-rich captions, academic QA, PixMo-Clocks, Tulu 4 text) with their mixtures, and `src/scripts/train/Molmo2-Stage1.py` (`dry_run` / `launch` / `train`; v1/v2/v3 recipes, 4B and 8B).
 - Added `olmo_core.nn.maxtext` for converting model weights between OLMo Core and MaxText checkpoints in both directions, built on `StateConverter` like the Hugging Face converter. It picks the MaxText decoder from the OLMo Core config (dense `olmo3`, and the hybrid KDA/MoE `olmoe3`), handles MaxText's scanned and unscanned layouts, and checks that converting back is bit-exact. Example CLIs are in `src/examples/maxtext/`.
 - Added Molmo2 support in `olmo_core.nn.vision`: a HuggingFace Molmo2 checkpoint loader (`molmo2_loader`) and special-token definitions, plus logit-parity and generation tests. `MultimodalLM` gains bidirectional image-token attention (`token_type_ids`), explicit RoPE `position_ids`, and sub-segment (branch-packing) attention isolation.
 - Added `MultimodalTransformerTrainModule` for training `MultimodalLM` (per-token weighted loss, optimizer param groups for the LM / vision tower / connector, FSDP/DDP over the composite model), `weighted_cross_entropy_loss`, the `PerGroupScheduler` (per-param-group LR schedules), and examples-per-second / extra-FLOPs reporting in `SpeedMonitorCallback`.
@@ -34,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The extra token rows of `SplitVocabEmbedding` (`TransformerConfig.n_extra_vocab > 0`) are now initialized by the model's init method like the base rows, instead of always with `init_std`, so they start at the same scale under `nanochat`, `llama`, `llama_depth`, `fan_in` and `normalized` init. The `normal` init is unchanged. muP and CompletedP now classify both rows as embeddings instead of raising.
 - Fixed int32 pointer-offset overflow in the valid-prefix SwiGLU Triton kernels (forward, dynamic-row forward, and backward). Row and column indices are widened to int64 before stride multiplication, so no-gradient MoE activation buffers with 2^31 or more elements (for example 1,048,576 rows by 2,048 BF16 columns) no longer read or write wrapped addresses.
+- Activation checkpointing now preserves the RNG state across recomputation whenever dropout is active (including `ResidualStream.masked_dropout`), so the recomputed forward replays the same dropout masks as the original forward instead of drawing new ones. Previously this was done only for EMO routing.
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
 - Preserve 16-byte parameter alignment in OLMoDDP flat model buffers so compiled kernels remain valid after small BF16 parameters are packed.
@@ -71,9 +74,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve serialized tokenizer behavior during HF export, including source BOS settings when the training config leaves BOS unspecified.
 - Preserve FP32 router probabilities and accumulation when combining BF16 experts in the HF reference model.
 - Avoid graph breaks from no-op profiling decorators, including compiled router load-balancing collectives.
+
+- Fixed tensor-parallel cross-entropy loss returning a rank-local partial sum instead of the replicated global loss. Mean reduction now uses the global valid-token count, including when ignored tokens are unevenly distributed across shards. The corrected reference-loss assertion covers sum, mean, and unreduced losses, with and without normalization and z-loss.
+
 - `dispatch_flash_attn_4` passed `cu_seqlens_q`, `cu_seqlens_k`, `max_seqlen_q` and `max_seqlen_k` positionally. flash-attn 4 inserted a `qv` parameter at position 3 (present from ~`4.0.0b19` onward), which shifts every following argument by one, so `max_seqlen_q` — an `int` — lands where `cu_seqlens_k` is expected and the call fails with `AttributeError: 'int' object has no attribute 'shape'`. These are now passed by keyword; the parameter names are unchanged across flash-attn 4 releases, so this is correct against both old and new versions. Only reachable on Blackwell, where `has_flash_attn_4()` returns True.
 
 ### Changed
+
+- Shared DDP test block construction, mesh setup, initialization, and routing helpers across no-EP, no-sync, and parity suites, preserving their distinct defaults and FP8 overrides.
+
+- Consolidated synchronous and rowwise EP/no-EP parity tests into one parameterized suite, sharing block/router setup and preserving backend-specific dtypes, tolerances, GPU requirements, and zero-drop checks.
+
+- Consolidated output-discard checkpoint tests: removed duplicate generic tests under MoE v2 and parameterized linear-chain coverage while retaining 3D-view, Python-fallback, native-storage, and router-specific checks.
 
 - `OLMoDDPModel.apply_ddp()` now raises `NotImplementedError` directing callers to `apply_dp()`, including under `python -O`. Removed its unreachable legacy DDP implementation.
 
