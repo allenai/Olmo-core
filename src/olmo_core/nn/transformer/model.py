@@ -1323,6 +1323,12 @@ class NormalizedTransformer(Transformer):
         block_overrides: Optional[Dict[int, TransformerBlockConfig]] = None,
         block_pattern: Optional[List[str]] = None,
     ):
+        # init_weights() normalizes every matrix, which would erase the fan-in/fan-out-dependent
+        # scales of the nanochat init.
+        if init_method == InitMethod.nanochat:
+            raise OLMoConfigurationError(
+                f"Init method '{InitMethod.nanochat}' is not supported by the normalized transformer"
+            )
         super().__init__(
             d_model=d_model,
             vocab_size=vocab_size,

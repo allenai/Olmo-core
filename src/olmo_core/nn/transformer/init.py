@@ -166,7 +166,8 @@ class InitMethod(StrEnum):
     scaling. Unlike nanochat, the output projections and the LM head are not zero-initialized.
     Fused matrices use the shape of each fused projection, depthwise convolutions use
     ``std = 1/√kernel_size``, and embeddings use a normal distribution with ``std = 1.0``.
-    The base ``init_std`` and ``embedding_init_std`` are ignored.
+    The base ``init_std`` and ``embedding_init_std`` are ignored. Not supported by the normalized
+    transformer, which normalizes every matrix after initialization.
     """
 
     def init_embeddings(
