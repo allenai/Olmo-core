@@ -2,11 +2,12 @@
 experiment: tokdrop_lr
 title: LR ablation for token-drop training — dense vs gold_fl20p8_noslot (gfl20p8ns) × LR {5e-6, 1.5e-5, 5e-5}, ONE multi-task job per (arm, LR) on contradiction+nq+outlier+oolong (fast8k mt4 shard), Qwen3.5-4B base
 status: active
-updated: 2026-10-21
+updated: 2026-11-13
 branch: prasann/flopdrop_clean @ 9bdff38d0 (pushed)
 launcher: research/token_routing/ds64_fast8k/launch_fast8k.py (env F8K_SUFFIX=-lra, OPS_EXPERIMENT=tokdrop_lr)
 records:
   - records/flopdrop-final-figures-plan.md
+  - records/docdrop-nongold-baseline.md (branch claude/docdrop-nongold-42bb6b, unmerged: random non-gold document drop at the recipe's FLOPs; negative)
 results:
 artifacts:
   - https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5
@@ -95,6 +96,17 @@ See `next_step` above.
 - Run-to-run noise (3 accidental gbfl20p8 repeats): ±~0.02 contradiction, ±~0.03 outlier at 8k.
 - BUG (fixed 2026-10-22, commit after f889c827e): --st-kept-doc-k / --st-keep-token-min / --st-pad-multiple /
   --st-span-len were not SoftTokenOptions fields → silently defaulted. recipes/train/variants_options_test.py guards it.
+
+## Doc-drop baseline (2026-11-13, branch claude/docdrop-nongold-42bb6b; record docdrop-nongold-baseline.md)
+- Prasann 11-12: drop random x% of non-gold documents at the recipe's FLOPs, IDs preserved. Implemented as: keep all gold
+  (IDs cited by the answer, matched to printed IDs) + 15.7% of non-gold docs, oolong whole; whole-model LoRA r64, LR 1e-5,
+  1,952 rows/task, 350-352 PF (recipe 343-345), 0.229x dense f1952, peak 25.6 GiB. Code research/token_routing/docdrop/.
+- 8k mean (single seed, eval_size 500/cell): ddp (orig positions) 0.555, ddc (compact) 0.588 -- outlier 0.00 because the
+  random drop makes the outlier article the only multi-passage topic (generator: outlier = uniquely smallest group);
+  group-aware outlier drop ddpg 0.665 (2k mean 0.930, above the recipe's 0.921). Recipe 0.846/0.847, dense 0.843.
+  FTM < 1.08x (below dense f488). Contradiction 0.70-0.80 vs 0.96: no over-prediction, a 2k->8k transfer loss.
+- ddcg (compact + group-aware) RUNNING (mooney slurm 5043384), eval to follow.
+- Flop meter fix (this branch): --lora-rank + per-example now credits the frozen base at each example's length.
 
 ## Open issues / traps
 - The Beaker image (OLMoCoreBeakerImage.stable) now ships torch 2.13.0+cu129, while this branch was

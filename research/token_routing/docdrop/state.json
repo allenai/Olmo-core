@@ -69,6 +69,20 @@
    "code": "/data/prasann/docdrop/code_4099befaf",
    "extra": "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-gold-sidecar /data/prasann/docdrop/shards/mt4f1952_ddg/keep_sidecar.json --st-n-random 0 --st-keep-mode gold_plus_random --st-drop-slots --ephemeral-save-interval 100",
    "steps": 0
+  },
+  "f8k-mt4-ddcg-f1952-dd-lr1e-05-loc": {
+   "job": "5043384",
+   "arm": "ddcg",
+   "variant": "full",
+   "data": "/data/prasann/docdrop/shards/mt4f1952_ddg",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "node": "mooney",
+   "git": "8cf73f0c60db79760cf74c11104c9394b2b7a0cf",
+   "code": "/data/prasann/docdrop/code_4099befaf",
+   "extra": "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --ephemeral-save-interval 100",
+   "steps": 0
   }
  }
 }

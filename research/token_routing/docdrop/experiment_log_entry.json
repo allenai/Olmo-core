@@ -1,0 +1,162 @@
+{
+ "date": "2026-11-13",
+ "status": "done (negative)",
+ "track": "sft4",
+ "who": "side session (docdrop-nongold)",
+ "title": "Random non-gold document dropping at the recipe's FLOPs: gold kept, document IDs preserved, dense full-context eval",
+ "result": "Negative. Keep every gold document (the IDs the answer cites) and a random 15.7% of non-gold documents, cut the rest before block 0 (printed IDs unchanged; oolong whole), whole-model LoRA r64 at LR 1e-5 as the recipe, 1,952 rows/task, 350-352 PF (recipe 343-345; 0.229x dense). 8k 4-task mean 0.555 (original positions) / 0.588 (compact): outlier collapses to 0.00 because random dropping leaves the outlier article as the only multi-passage topic, the opposite of the generator's definition (uniquely smallest group); the model learns to name passages that share an article (99% of its 8k answers). With a group-aware outlier drop (whole articles kept) 0.665, still 0.18 under the recipe's 0.846 and below dense f488 (FTM < 1.08x vs 4.6x). The same model scores 0.930 at 2k, above the recipe's 0.921: trained on ~1.5k-token rows it does not transfer to 8k contexts (contradiction 0.70-0.80 vs 0.96, no over-prediction). Single seed per arm; no seeds or 3,904 point (clearly below).",
+ "match": "1,952 rows/task, recipe optimiser and FLOPs (350 PF vs 344)",
+ "record": "records/docdrop-nongold-baseline.md",
+ "branch": "claude/docdrop-nongold-42bb6b",
+ "tables": [
+  {
+   "title": "8k rung (primary), 1,952 rows/task, single seed, eval_size 500/cell, no-cot",
+   "cols": [
+    "arm",
+    "8k mean",
+    "contra",
+    "nq",
+    "outlier",
+    "oolong",
+    "2k mean",
+    "PF",
+    "step cost (x dense)",
+    "peak GiB",
+    "FTM 8k"
+   ],
+   "rows": [
+    [
+     "dense (full FT)",
+     0.843,
+     0.973,
+     0.924,
+     0.817,
+     0.656,
+     "-",
+     1531,
+     "1.0",
+     "-",
+     "1.0"
+    ],
+    [
+     "recipe (s0 / sd1)",
+     ".846 / .847",
+     ".960 / .956",
+     ".912 / .922",
+     ".860 / .861",
+     ".650 / .649",
+     ".921 / .919",
+     "343-345",
+     "0.221",
+     "26.9",
+     "4.6x"
+    ],
+    [
+     "ddp: random docs, original positions",
+     0.555,
+     0.696,
+     0.886,
+     0.001,
+     0.635,
+     0.672,
+     350.6,
+     "0.229",
+     "25.6",
+     "<1.08x"
+    ],
+    [
+     "ddc: random docs, compact positions",
+     0.588,
+     0.799,
+     0.89,
+     0.002,
+     0.662,
+     0.684,
+     350.6,
+     "0.229",
+     "26.7 (padded)",
+     "<1.08x"
+    ],
+    [
+     "ddpg: group-aware outlier, original positions",
+     0.665,
+     0.715,
+     0.896,
+     0.421,
+     0.627,
+     0.93,
+     352.5,
+     "0.230",
+     "25.6",
+     "<1.08x"
+    ],
+    [
+     "ddcg: group-aware outlier, compact positions",
+     "running",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ]
+   ]
+  },
+  {
+   "title": "Realised keep (q = 0.157 of non-gold docs)",
+   "cols": [
+    "task",
+    "docs/row",
+    "gold/row",
+    "docs kept",
+    "tokens kept",
+    "gold share of visible docs"
+   ],
+   "rows": [
+    [
+     "contradiction",
+     187,
+     6,
+     "18.2%",
+     "19.7%",
+     "3.2% -> 17.6%"
+    ],
+    [
+     "nq",
+     48,
+     1,
+     "16.7%",
+     "17.3%",
+     "2.1% -> 12.5%"
+    ],
+    [
+     "outlier (random / group-aware)",
+     57,
+     3,
+     "19.3% / 19.9%",
+     "20.5% / 21.1%",
+     "5.3% -> 27.3% / 26.6%"
+    ],
+    [
+     "oolong (whole)",
+     "30-200",
+     "-",
+     "100%",
+     "100%",
+     "-"
+    ],
+    [
+     "all",
+     "",
+     "",
+     "34.2%",
+     "31.2%",
+     ""
+    ]
+   ]
+  }
+ ]
+}
