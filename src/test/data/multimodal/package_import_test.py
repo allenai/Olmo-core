@@ -25,6 +25,8 @@ def _run_import_check(code: str):
     [
         "olmo_core.data.multimodal",
         "olmo_core.data.multimodal.alignment",
+        "olmo_core.internal.vision_alignment",
+        "olmo_core.internal.vision_alignment_pipeline",
     ],
 )
 def test_clean_import_does_not_load_legacy_registries(module):
@@ -51,11 +53,17 @@ assert not loaded, loaded
 
 def test_native_configs_are_public_and_keep_serialization_names():
     from olmo_core.config import Config
-    from olmo_core.data.multimodal import MultimodalMixtureConfig
+    from olmo_core.data.multimodal import (
+        MultimodalMixtureConfig,
+        MultimodalSourceConfig,
+        PretrainingReplayConfig,
+    )
     from olmo_core.data.tokenizer import TokenizerConfig
 
     configs = [
         MultimodalMixtureConfig(tokenizer=TokenizerConfig.dolma2()),
+        MultimodalSourceConfig(dataset=PretrainingReplayConfig(checkpoint="/unused")),
+        PretrainingReplayConfig(checkpoint="/unused"),
     ]
     for config in configs:
         saved = config.as_config_dict()
@@ -71,11 +79,12 @@ def test_star_import_preserves_target_and_native_dataset_exports():
 import olmo_core.data.multimodal as package
 from olmo_core.data.multimodal.tulu import Tulu4DatasetConfig
 from olmo_core.data.multimodal.pixmo_points import PixMoPointsDatasetConfig
+from olmo_core.data.multimodal.pretraining_replay import PretrainingReplayConfig
 
 namespace = {}
 exec('from olmo_core.data.multimodal import *', namespace)
 assert all(name in namespace for name in package.__all__)
-for cls in (Tulu4DatasetConfig, PixMoPointsDatasetConfig):
+for cls in (Tulu4DatasetConfig, PixMoPointsDatasetConfig, PretrainingReplayConfig):
     assert namespace[cls.__name__] is cls
 """
     )

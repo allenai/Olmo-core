@@ -78,6 +78,7 @@ from .pixmo_points_v2 import (
     PixMoPointsV2Dataset,
     PixMoPointsV2DatasetConfig,
 )
+from .pretraining_replay import PretrainingReplayConfig, PretrainingReplayDataset
 from .sequence_builder import (
     ATTEND_ALL_SUBSEGMENT_ID,
     build_branched_sequence,
@@ -92,11 +93,25 @@ from .synthetic_ocr import (
 )
 from .text_rich_caption import TextRichCaptionDataset, TextRichCaptionDatasetConfig
 from .tulu import Tulu4Dataset, Tulu4DatasetConfig
+from .vision_alignment_perception import (
+    VISION_ALIGNMENT_OCR_SOURCES,
+    VisionAlignmentAuditedAlignmentDataset,
+    VisionAlignmentAuditedAlignmentDatasetConfig,
+    VisionAlignmentOcrDocumentDataset,
+    VisionAlignmentOcrDocumentDatasetConfig,
+)
 
 __all__ = [
     "MultimodalDatasetMixture",
     "MultimodalMixtureConfig",
     "MultimodalSourceConfig",
+    "PretrainingReplayConfig",
+    "PretrainingReplayDataset",
+    "VISION_ALIGNMENT_OCR_SOURCES",
+    "VisionAlignmentAuditedAlignmentDataset",
+    "VisionAlignmentAuditedAlignmentDatasetConfig",
+    "VisionAlignmentOcrDocumentDataset",
+    "VisionAlignmentOcrDocumentDatasetConfig",
     "FineVisionDataset",
     "FineVisionDatasetConfig",
     "VisualWebInstructDataset",
