@@ -9,6 +9,8 @@ oolong whole; build_docdrop_shard.py).
   ddp  original positions: the FULL rows, with the same kept documents chosen by the soft-token compaction from the
        shard's keep_sidecar.json (dropped documents leave the row before block 0; kept tokens keep their
        full-context position ids)
+  ddcg / ddpg  the same with the group-aware outlier drop (whole topic groups, shard mt4<budget>_ddg): the plain
+       drop breaks the outlier task's label (outlier = uniquely smallest topic group)
 
     python research/token_routing/docdrop/launch_docdrop.py --arms ddc --code /data/prasann/docdrop/code_<sha> [--steps 8]
 """
@@ -29,6 +31,8 @@ FULL = "/data/prasann/oracle/shards/mt4{b}"
 
 
 def arm_cfg(arm, budget, shard_tag):
+    if arm in ("ddcg", "ddpg"):  # group-aware outlier drop: the mt4<budget>_ddg shard (build --outlier-groups)
+        arm, shard_tag = arm[:-1], "g" + shard_tag
     dd = SHARD.format(b=budget, tag=shard_tag)
     if arm == "ddc":
         return "full", dd, LORA
