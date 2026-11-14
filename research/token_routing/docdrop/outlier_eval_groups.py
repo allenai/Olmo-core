@@ -1,5 +1,6 @@
 """Which topic groups a model's outlier answers come from, on an outlier eval rung (records/docdrop-nongold-baseline.md).
-Maps every eval passage to its seed-pool article (as outlier_groups.py) and, per run, reports the share of predicted
+Aligns each response to its rung row by gold tuple (the eval scores a shuffled
+500-row subset). Maps every eval passage to its seed-pool article (as outlier_groups.py) and, per run, reports the share of predicted
 IDs in the gold (outlier) article vs a majority article, how often all of a row's predictions come from ONE majority
 article, and that article's size rank among the row's majority articles. Runs on a node (~100 GB RAM).
 
@@ -49,11 +50,16 @@ def main():
     for spec in a.responses:
         name, path = spec.split("=", 1)
         resp = [json.loads(l) for l in open(path)]
-        assert len(resp) <= len(ex)
+        # the eval scores a shuffled subset of the rung: align each response to its rung row by its gold tuple
+        by_gold = {}
+        for j, e in enumerate(ex):
+            by_gold.setdefault(tuple(e["gold_doc_indices"]), []).append(j)
+        ambiguous = sum(1 for r in resp if len(by_gold.get(tuple(r["gold_doc_indices"]), [])) != 1)
+        resp = [r for r in resp if len(by_gold.get(tuple(r["gold_doc_indices"]), [])) == 1]
         n_pred = in_gold = in_major = one_major = 0
         size_rank = []
         for r in resp:
-            i = int(r["i"])
+            i = by_gold[tuple(r["gold_doc_indices"])][0]
             g, gold = groups[i], set(ex[i]["gold_doc_indices"])
             txt = r["response"].split("Outliers:", 1)[1] if "Outliers:" in r["response"] else ""
             pred = [int(x) - 1 for x in re.findall(r"\d+", txt) if 0 < int(x) <= len(g)]
@@ -71,7 +77,7 @@ def main():
                 sizes = sorted(set(counts.values()))
                 size_rank.append({"group_size": counts[maj[0]], "min_majority": min(counts.values()),
                                   "covers_whole_group": len(set(pred)) == counts[maj[0]]})
-        out[name] = {"rows": len(resp), "pred_ids": n_pred, "share_in_outlier_article": in_gold / max(1, n_pred),
+        out[name] = {"rows": len(resp), "rows_skipped_ambiguous": ambiguous, "pred_ids": n_pred, "share_in_outlier_article": in_gold / max(1, n_pred),
                      "share_in_majority_articles": in_major / max(1, n_pred),
                      "rows_all_preds_one_majority_article": one_major / max(1, len(resp)),
                      "of_those_group_is_a_smallest_majority": (sum(x["group_size"] == x["min_majority"] for x in size_rank)
