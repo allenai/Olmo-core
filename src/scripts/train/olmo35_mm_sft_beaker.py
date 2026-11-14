@@ -64,6 +64,8 @@ def main() -> None:
         + " ".join(shlex.quote(o) for o in overrides + [f"--recipe.num_nodes={args.nodes}"])
     )
     cmd = f"""set -uo pipefail
+# Single-replica jobs get neither variable from Beaker.
+: "${{BEAKER_REPLICA_RANK:=0}}" "${{BEAKER_LEADER_REPLICA_HOSTNAME:=localhost}}"
 echo MMSFT-JOB-START $(date -u +%FT%TZ) job $BEAKER_JOB_ID replica $BEAKER_REPLICA_RANK
 cd {weka_tree} && git log -1 --format='code %H' ; git status --short | head -20
 pip install -q -e "{weka_tree}[fla,kernel-fun]" 'datasets>=4,<6' pypdfium2 h5py 2>&1 | tail -2
