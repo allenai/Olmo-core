@@ -38,6 +38,7 @@ def main() -> None:
     parser.add_argument("run_name")
     parser.add_argument("--dry", action="store_true")
     parser.add_argument("--nodes", type=int, default=2)
+    parser.add_argument("--workspace", default=WORKSPACE, help="Beaker workspace.")
     parser.add_argument("--pre", default="", help="Shell run on every replica before training.")
     parser.add_argument("--post", default="", help="Shell run on replica 0 after training.")
     parser.add_argument("--timeout", default="3h")
@@ -130,7 +131,7 @@ exit $RC"""
         print(open(f.name).read())
         return
     out = subprocess.run(
-        ["beaker", "experiment", "create", f.name, "--workspace", WORKSPACE, "--name", args.run_name],
+        ["beaker", "experiment", "create", f.name, "--workspace", args.workspace, "--name", args.run_name],
         capture_output=True,
         text=True,
     )

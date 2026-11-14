@@ -50,6 +50,11 @@ STAGE1_DEFAULT_MAX_QUESTIONS: Dict[str, int] = {"plot_qa": 20}
 class AcademicDatasetConfig(Config):
     name: str
     max_crops: int = 8
+    p_high_res: float = 0.0
+    """Probability that a training example's image is cut into up to ``high_res_max_crops`` (24)
+    crops instead of ``max_crops``: Molmo2's per-example high-resolution draw
+    (``override_p_high_res`` in mm_olmo), which lets a source train at the 24-crop resolution its
+    benchmark is evaluated at. 0 keeps every example at ``max_crops``."""
     loss_token_weighting: str = "root_subsegments_root_tokens"
     message_weight: float | None = None
     token_ids: Optional[Molmo2TokenIds] = None
@@ -90,6 +95,7 @@ class AcademicDataset:
             formatted["image"],
             turns,
             max_crops=self.config.max_crops,
+            p_high_res=self.config.p_high_res,
             loss_token_weighting=self.config.loss_token_weighting,
             message_weight=message_weight,
             shuffle_rng=rng,

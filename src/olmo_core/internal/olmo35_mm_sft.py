@@ -33,7 +33,7 @@ import json
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 import numpy as np
 
@@ -160,6 +160,21 @@ class Olmo35MultimodalSFTRecipeConfig(Config):
     in the text SFT's order)."""
     data_seed: int = 34521
     image_dose_tokens: float = 3.5e9
+    image_loss_share: Optional[float] = None
+    """Target share of the token-weighted loss carried by the images, reached by scaling every
+    image token's loss weight (``source_loss_scales``) with the sampled data unchanged: the same
+    examples, sampling weights and steps as without it. ``None`` leaves the share the data give
+    (about 0.015 at 3.5B image tokens)."""
+    high_res_sources: List[str] = field(default_factory=list)
+    """Image sources trained with Molmo2's per-example high-resolution draw: each example's
+    image is cut into up to 24 crops with probability :attr:`high_res_p` instead of 8."""
+    high_res_p: float = 1.0
+    high_res_mean_tokens: Dict[str, float] = field(default_factory=dict)
+    """Measured mean tokens per example of the :attr:`high_res_sources` at :attr:`high_res_p`,
+    so the dose keeps its total image tokens."""
+    save_fraction: Optional[float] = None
+    """If set, the permanent save interval is ``round(steps * save_fraction)``: with 0.5 the
+    permanent saves are the 50% and final checkpoints."""
     """Image tokens (packed positions holding image examples) over the run."""
     image_pack_fill: float = 0.95
     """Expected fraction of an image sequence's positions that hold tokens (the rest pad)."""
@@ -287,6 +302,16 @@ def derive_schedule(
     )
 
 
+def image_loss_scale(text_loss_mass: float, image_loss_mass: float, image_loss_share: float) -> float:
+    """The weight multiplier on every image token that gives the images ``image_loss_share`` of
+    the token-weighted loss: ``W * V / (T + W * V) = s``, so ``W = s * T / ((1 - s) * V)``."""
+    if not 0.0 < image_loss_share < 1.0:
+        raise OLMoConfigurationError("image_loss_share must be in (0, 1)")
+    if text_loss_mass <= 0 or image_loss_mass <= 0:
+        raise OLMoConfigurationError("Loss masses must be positive")
+    return image_loss_share * text_loss_mass / ((1.0 - image_loss_share) * image_loss_mass)
+
+
 STAND_IN_SOURCES = ("pixmo_points_v2", "cosyn_chart_exp", "text_rich_doc", "pixmo_count_v2")
 """Stand-in image sources until the stage-2 chat-format mixture lands: stage-1 sources from the
 base checkpoint's own saved config (exactly configured for this model and tokenizer), equal
@@ -316,22 +341,57 @@ def stand_in_image_sources(raw: dict[str, Any], sequence_length: int) -> Dict[st
     return out
 
 
-def stage2_v1_image_sources(dose_tokens: float, sequence_length: int) -> Dict[str, ImageSourceConfig]:
+def stage2_v1_image_sources(
+    dose_tokens: float,
+    sequence_length: int,
+    *,
+    rebalance: bool = False,
+    high_res_sources: Sequence[str] = (),
+    high_res_p: float = 1.0,
+    high_res_mean_tokens: Optional[Mapping[str, float]] = None,
+) -> Dict[str, ImageSourceConfig]:
     """The stage-2 v1 mixture: each source's loss share is its expected examples at the dose
-    times its calibrated mean loss weight, so the mixture draws the expected examples."""
+    times its calibrated mean loss weight, so the mixture draws the expected examples.
+
+    :param rebalance: Use :func:`~olmo_core.data.multimodal.mixtures.olmo35_sft_mm_v1.rebalanced_examples`
+        (the over-trained pointing and counting sources cut to anchors, their tokens moved to the
+        multi-image and document/chart/info sources) instead of v1's example counts.
+    :param high_res_sources: Sources trained with Molmo2's per-example high-resolution draw at
+        ``high_res_p`` (24 crops instead of 8). Their mean tokens per example come from
+        ``high_res_mean_tokens`` (measured), so the dose keeps its total image tokens.
+    """
     from olmo_core.data.multimodal.mixtures import olmo35_sft_mm_v1 as v1
 
     if sequence_length != v1.SEQUENCE_LENGTH:
         raise OLMoConfigurationError(f"stage2_v1 is calibrated at {v1.SEQUENCE_LENGTH} tokens")
-    examples = v1.expected_examples(dose_tokens)
+    mean_tokens = dict(v1.MEAN_TOKENS)
+    for name in high_res_sources:
+        if name not in mean_tokens:
+            raise OLMoConfigurationError(f"Unknown high-resolution source {name!r}")
+        if not high_res_mean_tokens or name not in high_res_mean_tokens:
+            if high_res_p == 1.0 and name in v1.HIGH_RES_MEAN_TOKENS:
+                high_res_mean_tokens = {**(high_res_mean_tokens or {}), name: v1.HIGH_RES_MEAN_TOKENS[name]}
+            else:
+                raise OLMoConfigurationError(f"High-resolution source {name!r} needs measured mean tokens")
+        mean_tokens[name] = float(high_res_mean_tokens[name])
+    if rebalance:
+        examples = v1.rebalanced_examples(dose_tokens, mean_tokens=mean_tokens)
+    else:
+        examples = v1.expected_examples(dose_tokens, mean_tokens=mean_tokens)
+    configs = v1.build_sources(max_sequence_length=sequence_length)
+    for name in high_res_sources:
+        config = configs[name]
+        if not hasattr(config, "p_high_res"):
+            raise OLMoConfigurationError(f"{name}'s config has no p_high_res")
+        config.p_high_res = high_res_p  # type: ignore[attr-defined]
     return {
         name: ImageSourceConfig(
             source=config,
             loss_share=examples[name] * v1.MEAN_LOSS_WEIGHTS[name],
             mean_loss_weight=v1.MEAN_LOSS_WEIGHTS[name],
-            mean_tokens=v1.MEAN_TOKENS[name],
+            mean_tokens=mean_tokens[name],
         )
-        for name, config in v1.build_sources(max_sequence_length=sequence_length).items()
+        for name, config in configs.items()
     }
 
 
@@ -432,8 +492,15 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
     else:
         if recipe.image_sources:
             image_sources = dict(recipe.image_sources)
-        elif recipe.image_data == "stage2_v1":
-            image_sources = stage2_v1_image_sources(recipe.image_dose_tokens, L)
+        elif recipe.image_data in ("stage2_v1", "stage2_v1_rebal"):
+            image_sources = stage2_v1_image_sources(
+                recipe.image_dose_tokens,
+                L,
+                rebalance=recipe.image_data == "stage2_v1_rebal",
+                high_res_sources=list(recipe.high_res_sources),
+                high_res_p=recipe.high_res_p,
+                high_res_mean_tokens=dict(recipe.high_res_mean_tokens),
+            )
         elif recipe.image_data == "stand_in":
             image_sources = stand_in_image_sources(raw, L)
         else:
@@ -508,6 +575,11 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
         )
 
     steps = recipe.schedule_steps or schedule["steps"]
+    if recipe.save_fraction is not None:
+        if not 0.0 < recipe.save_fraction < 1.0:
+            raise OLMoConfigurationError("save_fraction must be in (0, 1)")
+        recipe.save_interval = max(1, round(steps * recipe.save_fraction))
+        schedule["save_interval"] = recipe.save_interval
     schedule["steps"] = steps
     warmup = int(steps * recipe.warmup_ratio)
     linear = LinearWithWarmup(warmup=warmup, alpha_f=0.0, t_max=steps)
@@ -538,6 +610,15 @@ def build_config(cli: CliContext) -> Olmo35MultimodalSFTExperimentConfig:
     train_module.source_loss_mass_targets = (
         dict(schedule["target_loss_mass"]) if dataset is not None and len(schedule["target_loss_mass"]) > 1 else None
     )
+    if recipe.image_loss_share is not None:
+        if dataset is None or not image_sources:
+            raise OLMoConfigurationError("image_loss_share needs image sources")
+        scale = image_loss_scale(
+            schedule["text_loss_mass"], schedule["image_loss_mass"], recipe.image_loss_share
+        )
+        train_module.source_loss_scales = {name: scale for name in image_sources}
+        schedule["image_loss_scale"] = scale
+        schedule["effective_text_loss_share"] = 1.0 - recipe.image_loss_share
 
     checkpointer = MultimodalCheckpointerCallback(
         save_interval=recipe.save_interval,

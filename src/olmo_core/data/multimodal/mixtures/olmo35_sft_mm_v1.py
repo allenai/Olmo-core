@@ -44,6 +44,10 @@ __all__ = [
     "build_source_config",
     "build_sources",
     "expected_examples",
+    "REBALANCE_CUT",
+    "REBALANCE_TARGETS",
+    "rebalanced_examples",
+    "HIGH_RES_MEAN_TOKENS",
     "visual_loss_mass",
 ]
 
@@ -373,3 +377,62 @@ def visual_loss_mass(
     """
     means = MEAN_LOSS_WEIGHTS if mean_loss_weights is None else mean_loss_weights
     return sum(n * means[name] for name, n in expected_examples(dose_tokens, **kwargs).items())
+
+
+REBALANCE_CUT_ROWS: Dict[str, int] = {
+    "pixmo_points_train": 161_723,
+    "pixmo_points_high_freq_train": 101_259,
+    "cosyn_point": 68_051,
+    "pixmo_count_train": 73_832,
+}
+"""Rows (examples per epoch) of the four same-task pointing and counting sources, which stage 1
+already trained 26-55 times (probe-v1)."""
+REBALANCE_CUT: Tuple[str, ...] = tuple(REBALANCE_CUT_ROWS)
+REBALANCE_ANCHOR_EPOCHS = 0.1
+"""The cut sources keep 0.1 of an epoch each, about PixMo-Cap's anchor dose."""
+REBALANCE_TARGETS: Tuple[str, ...] = tuple(
+    name
+    for name in KEPT
+    if name.startswith(("mantis_instruct_", "cosyn_multidoc_"))
+    or name in ("correction_qa_multi_only_max5", "doc_qa", "info_qa", "chart_qa_weighted")
+)
+"""Multi-image sources and the document/chart/infographic academic sources: the furthest behind
+on the evals (MuirBench, MMIU, BLINK; DocVQA, InfoVQA, ChartQA)."""
+
+
+def rebalanced_examples(
+    dose_tokens: float = DEFAULT_DOSE_TOKENS,
+    *,
+    mean_tokens: Optional[Mapping[str, float]] = None,
+) -> Dict[str, float]:
+    """v1's expected examples with the :data:`REBALANCE_CUT` sources cut to
+    :data:`REBALANCE_ANCHOR_EPOCHS` of an epoch and the tokens they free given to the
+    :data:`REBALANCE_TARGETS` in proportion to their v1 tokens; every other source keeps its v1
+    examples, so the total image tokens stay ``dose_tokens``."""
+    means = MEAN_TOKENS if mean_tokens is None else mean_tokens
+    base = expected_examples(dose_tokens, mean_tokens=means)
+    out = dict(base)
+    freed = 0.0
+    for name, rows in REBALANCE_CUT_ROWS.items():
+        anchor = REBALANCE_ANCHOR_EPOCHS * rows
+        if anchor >= base[name]:
+            raise ValueError(f"{name} is already below its anchor dose")
+        freed += (base[name] - anchor) * means[name]
+        out[name] = anchor
+    target_tokens = sum(base[name] * means[name] for name in REBALANCE_TARGETS)
+    scale = 1.0 + freed / target_tokens
+    for name in REBALANCE_TARGETS:
+        out[name] = base[name] * scale
+    return out
+
+
+HIGH_RES_MEAN_TOKENS: Dict[str, float] = {
+    "doc_qa": 2839.359375,
+    "info_qa": 2472.0546875,
+    "chart_qa_weighted": 1087.40625,
+    "text_vqa": 1679.203125,
+    "st_qa": 757.296875,
+}
+"""Mean tokens per example at ``p_high_res=1.0`` (every image cut into up to 24 crops), 128 rows
+per source, seed 0, the olmo35 layout; at ``p_high_res=0`` the same probe reproduces
+:data:`MEAN_TOKENS` within 3%. The loss weight per example does not depend on the crops."""

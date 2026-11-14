@@ -111,6 +111,32 @@ def _matched_component_grad_norm_patterns(
     }
 
 
+def _scale_source_losses(batch: Dict[str, Any], scales: Dict[str, float]) -> Dict[str, Any]:
+    """Multiply the loss weights of every packed example from a source in ``scales`` by its scale.
+
+    The sampled data are unchanged; only each token's weight in the token-weighted loss moves
+    (and with it the loss divisor, the summed weights). The source of each position comes from
+    ``pack_source_names`` and ``example_ids``, as the per-source telemetry reads it.
+    """
+    packed_sources = batch.get("pack_source_names")
+    example_ids = batch.get("example_ids")
+    loss_masks = batch.get("loss_masks")
+    if packed_sources is None or example_ids is None or loss_masks is None:
+        raise OLMoConfigurationError(
+            "source_loss_scales requires pack_source_names, example_ids and loss_masks"
+        )
+    scaled = loss_masks.clone().float() if not loss_masks.is_floating_point() else loss_masks.clone()
+    for row, source_names in enumerate(packed_sources):
+        for example_id, source_name in enumerate(source_names):
+            scale = scales.get(source_name)
+            if scale is not None and scale != 1.0:
+                positions = example_ids[row] == example_id
+                scaled[row][positions] = scaled[row][positions] * scale
+    out = dict(batch)
+    out["loss_masks"] = scaled
+    return out
+
+
 def _validate_loss_group_weights(weights: Optional[Dict[str, float]]) -> Dict[str, float]:
     if weights is None:
         return {}
@@ -862,8 +888,14 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         padding_input_token_id: Optional[int] = None,
         balance_vit_crops: bool = False,
         router_loss_divisor: str = "valid_tokens",
+        source_loss_scales: Optional[Dict[str, float]] = None,
         **kwargs,
     ):
+        if source_loss_scales and any(
+            not math.isfinite(v) or v <= 0 for v in source_loss_scales.values()
+        ):
+            raise OLMoConfigurationError("source_loss_scales must be positive and finite")
+        self.source_loss_scales = dict(source_loss_scales or {})
         if router_loss_divisor not in ("valid_tokens", "loss_tokens"):
             raise OLMoConfigurationError(f"Unknown router_loss_divisor {router_loss_divisor!r}")
         self.router_loss_divisor = router_loss_divisor
@@ -1301,6 +1333,9 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         )
 
     def train_batch(self, batch: Dict[str, Any], dry_run: bool = False):
+        if getattr(self, "source_loss_scales", None) and batch.get("pack_source_names") is not None:
+            # The trainer's dry-run batch carries no source metadata; real batches always do.
+            batch = _scale_source_losses(batch, self.source_loss_scales)
         original_batch = batch
         if self.loss_group_weights:
             batch, global_mass = _normalize_loss_groups(
@@ -2053,6 +2088,12 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     without this every rank waits for the one holding the most crops. Features and summed
     gradients are unchanged up to floating-point rounding. Requires zero vision dropout: a crop
     encoded on another rank would draw that rank's dropout randomness."""
+
+    source_loss_scales: Optional[Dict[str, float]] = None
+    """Multiply the loss weight of every token from these mixture sources by the given scale
+    (see :func:`_scale_source_losses`), so a source's share of the token-weighted loss rises or
+    falls with the same sampled data. Multimodal SFT uses it to give the images a larger share of
+    the loss without changing the examples drawn."""
 
     router_loss_divisor: str = "valid_tokens"
     """What the router auxiliary losses (load balancing, router z-loss) are divided by:
