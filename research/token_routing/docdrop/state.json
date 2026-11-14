@@ -1,0 +1,60 @@
+{
+ "runs": {
+  "f8k-mt4-ddc-f1952-dd-lr1e-05-st8-loc": {
+   "job": "5043062",
+   "arm": "ddc",
+   "variant": "full",
+   "data": "/data/prasann/docdrop/shards/mt4f1952_dd",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "node": "mooney",
+   "git": "77df7846215eea432fb3d78b37b8b01f4e04110f",
+   "code": "/data/prasann/docdrop/code_77df78462",
+   "extra": "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2",
+   "steps": 8
+  },
+  "f8k-mt4-ddp-f1952-dd-lr1e-05-st8-loc": {
+   "job": "5043063",
+   "arm": "ddp",
+   "variant": "softtoken",
+   "data": "/data/prasann/oracle/shards/mt4f1952",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "node": "mooney",
+   "git": "77df7846215eea432fb3d78b37b8b01f4e04110f",
+   "code": "/data/prasann/docdrop/code_77df78462",
+   "extra": "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-gold-sidecar /data/prasann/docdrop/shards/mt4f1952_dd/keep_sidecar.json --st-n-random 0 --st-keep-mode gold_plus_random --st-drop-slots",
+   "steps": 8
+  },
+  "f8k-mt4-ddc-f1952-dd-lr1e-05-loc": {
+   "job": "5043072",
+   "arm": "ddc",
+   "variant": "full",
+   "data": "/data/prasann/docdrop/shards/mt4f1952_dd",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "node": "mooney",
+   "git": "77df7846215eea432fb3d78b37b8b01f4e04110f",
+   "code": "/data/prasann/docdrop/code_77df78462",
+   "extra": "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-ddp-f1952-dd-lr1e-05-loc": {
+   "job": "5043073",
+   "arm": "ddp",
+   "variant": "softtoken",
+   "data": "/data/prasann/oracle/shards/mt4f1952",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "node": "mooney",
+   "git": "77df7846215eea432fb3d78b37b8b01f4e04110f",
+   "code": "/data/prasann/docdrop/code_77df78462",
+   "extra": "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-gold-sidecar /data/prasann/docdrop/shards/mt4f1952_dd/keep_sidecar.json --st-n-random 0 --st-keep-mode gold_plus_random --st-drop-slots --ephemeral-save-interval 100",
+   "steps": 0
+  }
+ }
+}
