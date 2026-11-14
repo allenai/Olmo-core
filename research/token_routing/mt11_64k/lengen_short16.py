@@ -1,4 +1,8 @@
-"""Rows <= 16k vs rows <= 64k at matched FLOPs: how much do long eval rungs lose when training never sees long rows?
+"""Rows <= 16k / <= 32k vs rows <= 64k at matched FLOPs: how much do long eval rungs lose when training never sees long
+rows?
+
+* m32 runs (mt11L32 shard, seq 32,768; 2026-11-13) are scored and compared the same way, plus against their m16 twin
+  (same arm, nearest PF): d_m16 = m32 score - m16 score.
 
 * m16 runs (mt11L16 shard, seq 16,384): native docchunk ladder scores (2k..64k, 10 tasks; eval logs parsed with
   collect_m64.eval_rows) + olmo-eval long-rung scores (r64k/r128k/r256k, 6 tasks; results_lengen/lengen.json).
@@ -30,6 +34,18 @@ DENSE = ["m64-dense-f16-lr5e-06", "m64-dense-f8-lr5e-06", "m64-dense-f4-lr5e-06"
 RECIPE64 = "m64-lora64r20to7f16-f4-lr5e-06"
 SHORT = {"m16-dense-s380-lr5e-06": "dense", "m16-dense-s770-lr5e-06": "dense",
          "m16-lora64r20to7f16-s380-lr5e-06": "recipe"}
+#: m32 runs (rows <= 32k) are every m32-* run with a measured PF in extra_pf.json
+for _r in json.load(open(os.path.join(HERE, "extra_pf.json"))):
+    if _r.startswith("m32-"):
+        SHORT[_r] = "recipe" if "lora64" in _r else "dense"
+
+
+def m16_twin(run, pf):
+    """The m16 run of the same arm with the nearest log PF (None for m16 runs)."""
+    if not run.startswith("m32-"):
+        return None
+    c = [r for r in SHORT if r.startswith("m16-") and SHORT[r] == SHORT[run] and r in pf]
+    return min(c, key=lambda r: abs(math.log(pf[r]) - math.log(pf[run]))) if c else None
 NATIVE_RUNGS = ["2k", "8k", "16k", "32k", "64k"]
 LONG_RUNGS = ["r64k", "r128k", "r256k"]
 #: no-signal cells excluded from means, as in the main record (every arm fails the parser / scores ~0)
@@ -86,10 +102,13 @@ def main():
                 v = src[(run, t, rung)]
                 ref_dense = interp_neighbours(lambda d: src.get((d, t, rung)), pf, pf[run])
                 ref_rec = src.get((RECIPE64, t, rung)) if kind == "recipe" else None
+                twin = m16_twin(run, pf)
+                s16 = src.get((twin, t, rung)) if twin else None
                 out["native" if rung in NATIVE_RUNGS else "long"].append(dict(
                     run=run, kind=kind, pf=pf[run], task=t, rung=rung, score=v, dense64_at_pf=ref_dense,
                     d_dense=None if ref_dense is None else v - ref_dense, recipe64=ref_rec,
-                    d_recipe=None if ref_rec is None else v - ref_rec))
+                    d_recipe=None if ref_rec is None else v - ref_rec, m16_twin=twin, m16=s16,
+                    d_m16=None if s16 is None else v - s16))
     json.dump(out, open(os.path.join(RES, "short16.json"), "w"), indent=1)
     for part in ("native", "long"):
         print(f"\n== {part} ==")
@@ -98,15 +117,17 @@ def main():
                 cs = [c for c in out[part] if c["run"] == run and c["rung"] == rung]
                 dd = [c["d_dense"] for c in cs if c["d_dense"] is not None]
                 dr = [c["d_recipe"] for c in cs if c["d_recipe"] is not None]
+                d6 = [c["d_m16"] for c in cs if c["d_m16"] is not None]
                 if not cs:
                     continue
                 print(f"  {run:34} {rung:6} n_tasks={len(cs):2}  vs64k-dense@PF "
                       f"{(sum(dd) / len(dd) if dd else float('nan')):+.3f} ({len(dd)})"
                       + (f"  vs64k-recipe {(sum(dr) / len(dr) if dr else float('nan')):+.3f} ({len(dr)})" if dr else "")
+                      + (f"  vs16k-twin {sum(d6) / len(d6):+.3f} ({len(d6)})" if d6 else "")
                       + "   " + " ".join(f"{c['task'][:6]}" + ("" if c["d_dense"] is None else f"{c['d_dense']:+.2f}")
                                          for c in cs))
     if a.record and new_rows:
-        path = os.path.join(RES, "record_m16.jsonl")
+        path = os.path.join(RES, "record_m16.jsonl")  # (m16 and m32 native rows; one done-list)
         done_path = os.path.join(RES, "recorded_m16.json")
         done = set(json.load(open(done_path))) if os.path.exists(done_path) else set()
         todo = [r for r in new_rows if f"{r['eval_run']}|{r['task']}|{r['rung']}" not in done]

@@ -99,15 +99,19 @@ def steps_for(budget):
     return SMOKE_STEPS if budget == "smk" else math.ceil(STEPS_FULL / FRACTIONS[budget])
 
 
+#: dense seconds per step (default ~30 s = 0.5 min); m32 on 4 GPUs measured ~40 s/step (dense), ~34 s (recipe)
+SEC_PER_STEP = float(os.environ.get("M64_SEC_PER_STEP", "30"))
+
+
 def expected_minutes(arm, steps):
-    return int(30 + 0.5 * steps * (1.0 if arm == "dense" else 0.6))
+    return int(30 + SEC_PER_STEP / 60 * steps * (1.0 if arm == "dense" else 0.6))
 
 
 def min_runtime(arm, steps):
     """Beaker minRuntime covering the whole run (x1.3, at least 1h): urgent jobs are preemptible once minRuntime
     has passed, and the 2-3 h runs were preempted at ~1 h and restarted from scratch twice (2026-10-23)."""
-    # Beaker refuses minRuntime > 8h; longer runs rely on the resume point every SAVE_INTERVAL steps past that
-    return f"{min(8, max(1, math.ceil(expected_minutes(arm, steps) * 1.3 / 60)))}h"
+    # 2026-11-10 rule: min(4h, 1.3x expected); longer runs rely on the resume point every SAVE_INTERVAL steps
+    return f"{min(4, max(1, math.ceil(expected_minutes(arm, steps) * 1.3 / 60)))}h"
 
 
 def run_name(arm, budget, lr, seed=0):
