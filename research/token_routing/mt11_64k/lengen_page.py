@@ -25,7 +25,10 @@ DENSE = ["m64-dense-f16-lr5e-06", "m64-dense-f8-lr5e-06", "m64-dense-f4-lr5e-06"
 METHODS = {"m64-lora64r20to7f16-f4-lr5e-06": "recipe f4", "m64-otr10M7-f2-lr5e-06": "otr10M7 f2",
            "m64-otr10M7-f1-lr5e-06": "otr10M7 f1"}
 SHORT = {"m16-dense-s380-lr5e-06": "16k-data dense (f4 PF)", "m16-dense-s770-lr5e-06": "16k-data dense (f2 PF)",
-         "m16-lora64r20to7f16-s380-lr5e-06": "16k-data recipe"}
+         "m16-lora64r20to7f16-s380-lr5e-06": "16k-data recipe",
+         "m32-dense-s304-lr5e-06": "32k-data dense (f4 PF)", "m32-dense-s610-lr5e-06": "32k-data dense (f2 PF)",
+         "m32-lora64r20to7f16-s304-lr5e-06": "32k-data recipe"}
+CHART_PNG = os.path.join(HERE, "lengen_rows16_32_64.png")
 STYLE = """<style>
 :root { --short: #0e7490; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --short: #5cc8d8; } }
@@ -129,12 +132,15 @@ def short16_table():
         if not any(c["run"] == run for c in cells):
             rows.append(f"<tr><th>{esc(name)}</th><td class='na' colspan='{len(rungs) * 2}'>pending</td></tr>")
             continue
-        for key, what in (("d_dense", "vs 64k-data dense at same PF"), ("d_recipe", "vs 64k-data recipe")):
-            if key == "d_recipe" and "recipe" not in run:
+        for key, what in (("d_dense", "vs 64k-data dense at same PF"), ("d_recipe", "vs 64k-data recipe"),
+                          ("d_m16", "vs 16k-data twin")):
+            if key == "d_recipe" and "lora64" not in run:
+                continue
+            if key == "d_m16" and not run.startswith("m32-"):
                 continue
             tds = []
             for rg in rungs:
-                ds = [c[key] for c in cells if c["run"] == run and c["rung"] == rg and c[key] is not None]
+                ds = [c[key] for c in cells if c["run"] == run and c["rung"] == rg and c.get(key) is not None]
                 tds.append(dcell(sum(ds) / len(ds), f" <span class='muted'>({len(ds)})</span>") if ds
                            else '<td class="na">pending</td>')
             pfv = next((c["pf"] for c in cells if c["run"] == run), float("nan"))
@@ -142,7 +148,8 @@ def short16_table():
     head = "".join(f"<th>{lab[r]}</th>" for r in rungs)
     return ("<p>Mean Δ over the tasks scored at each rung (count in brackets). 2k–64k: native ladder, 10 tasks "
             "(no-signal cells reorder 8k/16k and grouping 32k excluded); * = olmo-eval path, 6 tasks. "
-            "Training rows ≤16,384 tokens, mostly ≤ the 8k rung; the 64k-data runs saw rows to 65,536.</p>"
+            "16k-data runs: rows ≤16,384 tokens, mostly ≤ the 8k rung; 32k-data runs: rows ≤32,768 tokens (5% of rows, "
+            "23% of tokens above 16k, mostly 16–24k); the 64k-data runs saw rows to 65,536.</p>"
             f"<div class='tw'><table><thead><tr><th>run</th>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
 
 
@@ -216,6 +223,14 @@ def section():
             anc.append(f"<tr><th>{esc(METHODS.get(run, run.replace('m64-', '')))}</th><td>{lm:.3f}</td>"
                        f"<td>{means['r64k'][run]:.3f}</td>{dcell(means['r64k'][run] - lm)}</tr>")
     short_html = prog.get("short16_html", "") or short16_table()
+    if os.path.exists(CHART_PNG):
+        import base64
+        b64 = base64.b64encode(open(CHART_PNG, "rb").read()).decode()
+        short_html += ('<figure style="margin:12px 0"><img style="max-width:100%;background:#fff;border-radius:6px" '
+                       f'alt="6-task mean vs eval length, rows ≤16k/≤32k/≤64k at matched FLOPs" src="data:image/png;base64,{b64}">'
+                       '<figcaption class="muted">6-task mean vs eval length. 2k–32k native ladder, 64k–256k olmo-eval '
+                       '(256k eval_size 125). The ≤64k line is the real 64k-data checkpoint nearest each budget.</figcaption></figure>')
+    short_html += prog.get("short32_html", "")
     status = "".join(f"<li>{esc(x)}</li>" for x in prog.get("status", []))
     verdict = prog.get("verdict", "Results pending: the long-rung eval wave is running.")
     return f"""<!-- lengen:start -->
@@ -245,12 +260,13 @@ Dense reference = dense LR 5e-6, f16→f1, interpolated linearly in log PF. No-c
 <h3>Anchor: 64k on the two eval paths (6-task mean)</h3>
 <div class="tw"><table><thead><tr><th>checkpoint</th><th>native ladder</th><th>olmo-eval</th><th>Δ</th></tr></thead>
 <tbody>{''.join(anc) or '<tr><td class="na" colspan="4">pending</td></tr>'}</tbody></table></div>
-<h3>Training on rows ≤16k at matched FLOPs</h3>
+<h3>Training on rows ≤16k and ≤32k at matched FLOPs</h3>
 {short_html or '<p class="pend">Training (mt11L16: every setA s42 row ≤16,384 tokens, 192,554 rows / 716M tokens; seq 16,384): dense at the f4 and f2 FLOP budgets and the universal recipe at its budget. Evals follow.</p>'}
 <h3>All long-rung scores</h3>
 <div class="tw"><table><thead><tr><th>checkpoint</th><th>PF</th>{''.join(f'<th colspan="6">{r}</th>' for r in RUNGS)}</tr>
 <tr><th></th><th></th>{head_tasks * 3}</tr></thead><tbody>{''.join(srows) or '<tr><td class="na">pending</td></tr>'}</tbody></table></div>
-<p class="muted" style="margin-top:8px">Code: branch <code>claude/mt11-lengen-bed337</code>,
+<p class="muted" style="margin-top:8px">Code: branches <code>claude/mt11-lengen-bed337</code> (≤16k, long rungs) and
+<code>claude/mt11-lengen-32k-56ed58</code> (≤32k: <code>lengen_short16.py</code>, <code>lengen_chart.py</code>),
 <code>research/token_routing/mt11_64k/lengen_{{evals,collect_beaker.sh,pool,page}}.py</code>; olmo-eval branch
 <code>prasann/ctc-suite-mt11lengen</code>; record <code>records/mt11-64k-length-generalization.md</code>; results in ops
 (runs <code>m11lg-*</code>).</p>
