@@ -62,8 +62,18 @@ PDFA_PAGES = os.environ.get(
     "PDFA_PAGES_DIR", "/weka/oe-training-default/rustin/v7-recipe/long-docs/data"
 )
 
+# HARDCODED personal dataset (rustins' SA-1B pointing build in the PixMo-Points v2 row shape: the phrases of the encoder
+# team's SA-1B concept points (``oe-encoder/grounding_v5_tars/sa1b``), points from SAM 3, kept only where an audit by
+# Qwen3.8-27B passes them; images are read in place from ``mm-olmo/img_datasets/SA-1B/SA-1B-high-count``;
+# v7-recipe/grounding/sa1b_points/README.md has the build and its filters). Override with the env var or per source
+# (``dataset_path``).
+SA1B_POINTS = os.environ.get(
+    "SA1B_POINTS_DIR", "/weka/oe-training-default/rustin/v7-recipe/grounding/sa1b_points/dataset"
+)
+
 __all__ = [
     "PDFA_PAGES",
+    "SA1B_POINTS",
     "MOLMO_DATA_DIR",
     "TORCH_DATASETS",
     "PIXMO_DATASETS",

@@ -73,6 +73,7 @@ from .vision_alignment import (
 )
 from .vision_alignment_data import (
     DEFAULT_ALIGNMENT_ARTIFACT_ROOT,
+    SA1B_POINTS_SOURCE_NAME,
     STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
     STAGE1_V3_LOSS_TARGETS,
     STAGE1_V3_MEAN_LOSS_WEIGHTS,
@@ -86,8 +87,10 @@ from .vision_alignment_data import (
     build_stage1_gui_syn_source,
     build_stage1_nemotron_sources,
     build_stage1_pdfa_sources,
+    build_stage1_sa1b_points_source,
     build_stage1_v3_sources,
     scale_visual_loss_shares,
+    with_added_loss_shares,
     with_pdfa_loss_shares,
 )
 from .vision_midtraining_data import (
@@ -304,6 +307,14 @@ class MixedMidtrainingRecipeConfig(Config):
     pdfa_mean_loss_weights: dict[str, float] = field(default_factory=dict)
     """Calibrated mean loss weight per example of every source in :attr:`pdfa_loss_shares`
     (``MultimodalMixtureConfig.estimate_mean_loss_weights``)."""
+    sa1b_points_loss_share: float = 0.0
+    """Share of the visual loss for the SA-1B concept points
+    (:func:`~olmo_core.internal.vision_alignment_data.build_stage1_sa1b_points_source`), with
+    stage1_v3 to stage1_v7 visual data. Above zero the source joins the mixture and the recipe's
+    other visual shares are scaled by one minus it (after :attr:`visual_loss_share_scale` and
+    :attr:`pdfa_loss_shares`). Needs :attr:`sa1b_points_mean_loss_weight`."""
+    sa1b_points_mean_loss_weight: float = 0.0
+    """Calibrated mean loss weight per example of the SA-1B concept points."""
 
 
 @dataclass
@@ -340,6 +351,8 @@ def _build_recipe(
         "recipe.max_tokens",
         "recipe.max_crops",
         "recipe.text_mean_loss_weight",
+        "recipe.sa1b_points_loss_share",
+        "recipe.sa1b_points_mean_loss_weight",
         "recipe.pack_max_crops",
         "recipe.pack_buffer_size",
     }
@@ -1283,6 +1296,16 @@ def build_config(
             means.update(
                 {name: recipe.pdfa_mean_loss_weights[name] for name in recipe.pdfa_loss_shares}
             )
+        if recipe.sa1b_points_loss_share:
+            if recipe.sa1b_points_mean_loss_weight <= 0:
+                raise OLMoConfigurationError(
+                    "recipe.sa1b_points_loss_share needs recipe.sa1b_points_mean_loss_weight"
+                )
+            recipe.visual_loss_shares = with_added_loss_shares(
+                recipe.visual_loss_shares,
+                {SA1B_POINTS_SOURCE_NAME: recipe.sa1b_points_loss_share},
+            )
+            means[SA1B_POINTS_SOURCE_NAME] = recipe.sa1b_points_mean_loss_weight
     else:
         means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if _text_loss_share(recipe) < 1.0 else {}
     if not masked_text:
@@ -1315,6 +1338,10 @@ def build_config(
         if recipe.pdfa_loss_shares:
             pdfa = build_stage1_pdfa_sources(recipe.sequence_length)
             visual_sources.update({name: pdfa[name] for name in recipe.pdfa_loss_shares})
+        if recipe.sa1b_points_loss_share:
+            visual_sources[SA1B_POINTS_SOURCE_NAME] = build_stage1_sa1b_points_source(
+                recipe.sequence_length
+            )
         if documents and recipe.annotation_layout == "sequence":
             for source in visual_sources.values():
                 config = getattr(source, "dataset", source)

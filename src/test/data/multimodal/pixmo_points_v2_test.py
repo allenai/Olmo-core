@@ -692,3 +692,25 @@ def test_stage1_rejects_empty_mixture_sources():
     with pytest.raises(OLMoConfigurationError) as e:
         mod._size_fractions([0, 3], "sqrt")
     assert "['0']" in str(e.value)
+
+
+def test_sa1b_points_source_reads_a_points_v2_shaped_build(tmp_path):
+    from olmo_core.internal.vision_alignment_data import (
+        build_stage1_sa1b_points_source,
+        with_added_loss_shares,
+    )
+
+    cfg = build_stage1_sa1b_points_source(262144, dataset_path=_write_points_v2(tmp_path))
+    cfg.validate()
+    assert cfg.heldout_paths == () and cfg.p_paired_negatives == 0.0 and cfg.audit_style is None
+    assert cfg.annotation_sampling == "documents" and cfg.message_format == "document"
+    assert len(cfg.build(_FakeTok())) == 3
+    with pytest.raises(ValueError, match="positive"):
+        build_stage1_sa1b_points_source(0)
+
+    shares = with_added_loss_shares({"a": 0.75, "b": 0.25}, {"sa1b_points": 0.2})
+    assert shares == pytest.approx({"a": 0.6, "b": 0.2, "sa1b_points": 0.2})
+    with pytest.raises(ValueError, match="already in the recipe"):
+        with_added_loss_shares({"a": 1.0}, {"a": 0.1})
+    with pytest.raises(ValueError, match="less than one"):
+        with_added_loss_shares({"a": 1.0}, {"sa1b_points": 1.0})

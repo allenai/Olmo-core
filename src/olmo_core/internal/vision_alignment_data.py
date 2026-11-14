@@ -1194,6 +1194,32 @@ def build_stage1_pdfa_sources(
     }
 
 
+def with_added_loss_shares(
+    visual_loss_shares: dict[str, float], added_loss_shares: dict[str, float]
+) -> dict[str, float]:
+    """Give added sources their shares of the visual loss, scaling the others to make room.
+
+    :param visual_loss_shares: A recipe's shares of the visual loss, summing to one.
+    :param added_loss_shares: Shares of the visual loss for sources the recipe does not have.
+
+    :returns: Shares summing to one: the added sources at theirs, every other source scaled by
+        one minus their sum.
+
+    :raises ValueError: For a source the recipe already has, a non-positive share, or shares
+        summing to one or more.
+    """
+    present = sorted(set(added_loss_shares) & set(visual_loss_shares))
+    if present:
+        raise ValueError(f"Sources {present} are already in the recipe")
+    total = sum(added_loss_shares.values())
+    if any(share <= 0 for share in added_loss_shares.values()) or total >= 1:
+        raise ValueError("Added loss shares must be positive and sum to less than one")
+    return {
+        **{name: share * (1.0 - total) for name, share in visual_loss_shares.items()},
+        **added_loss_shares,
+    }
+
+
 def with_pdfa_loss_shares(
     visual_loss_shares: dict[str, float], pdfa_loss_shares: dict[str, float]
 ) -> dict[str, float]:
@@ -1214,10 +1240,43 @@ def with_pdfa_loss_shares(
     total = sum(pdfa_loss_shares.values())
     if any(share <= 0 for share in pdfa_loss_shares.values()) or total >= 1:
         raise ValueError("PDFA loss shares must be positive and sum to less than one")
-    return {
-        **{name: share * (1.0 - total) for name, share in visual_loss_shares.items()},
-        **pdfa_loss_shares,
-    }
+    return with_added_loss_shares(visual_loss_shares, pdfa_loss_shares)
+
+
+SA1B_POINTS_SOURCE_NAME = "sa1b_points"
+"""Mixture name of the SA-1B concept-point source (``recipe.sa1b_points_loss_share``)."""
+
+
+def build_stage1_sa1b_points_source(
+    sequence_length: int, dataset_path: str | None = None
+) -> Config:
+    """Configure the SA-1B concept points as a stage-1 pointing source.
+
+    The build has PixMo-Points v2's row shape and is read by the same dataset class with
+    ``pixmo_points_v2``'s settings (eight crops, every response token weighted equally, plain
+    documents, every phrase its own document, both pointing styles, two easy negatives per image
+    and epoch). It has no audit results and no paired negatives, and it is checked against the
+    SA-Co Gold images when it is built, not here.
+
+    :param sequence_length: Maximum serialized example length.
+    :param dataset_path: The ``save_to_disk`` build; the module default when ``None``.
+    """
+    from olmo_core.data.multimodal.paths import SA1B_POINTS
+    from olmo_core.data.multimodal.pixmo_points_v2 import PixMoPointsV2DatasetConfig
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    return PixMoPointsV2DatasetConfig(
+        dataset_path=SA1B_POINTS if dataset_path is None else dataset_path,
+        heldout_paths=(),
+        n_easy_samples=2,
+        p_paired_negatives=0.0,
+        max_crops=8,
+        max_sequence_length=sequence_length,
+        loss_token_weighting="none",
+        message_format="document",
+        annotation_sampling="documents",
+    )
 
 
 def scale_visual_loss_shares(
