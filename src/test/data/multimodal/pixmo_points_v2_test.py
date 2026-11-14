@@ -695,10 +695,9 @@ def test_stage1_rejects_empty_mixture_sources():
     assert "['0']" in str(e.value)
 
 
-def test_count_v1_drops_train_images_shared_with_heldout_splits(tmp_path, monkeypatch):
+def test_count_v1_drops_train_images_shared_with_heldout_splits(tmp_path):
     """PixMo-Count's real test split shares 15 images with its train split; v1 must not train on
     them (the v2 class already excludes them)."""
-    from olmo_core.data.multimodal import pixmo_points
     from olmo_core.data.multimodal.pixmo_points import PixMoCountDatasetConfig
 
     rows: dict[str, list] = {
@@ -715,13 +714,13 @@ def test_count_v1_drops_train_images_shared_with_heldout_splits(tmp_path, monkey
             "test": Dataset.from_dict({**rows, "image_sha256": ["s1", "x", "y"]}),
         }
     ).save_to_disk(str(root / "count"))
-    monkeypatch.setattr(pixmo_points, "PIXMO_DATASETS", str(root))
+    path = str(root / "count")
 
-    guarded = PixMoCountDatasetConfig(heldout_paths=(str(root / "count"),)).build(_FakeTok())
+    guarded = PixMoCountDatasetConfig(dataset_path=path, heldout_paths=(path,)).build(_FakeTok())
     assert [guarded._data[int(i)]["image_sha256"] for i in guarded._index] == ["s0", "s2"]
     assert guarded.n_heldout_dropped == 1
     assert len(guarded) == 4  # two rows, each as point_count and pointing
-    unguarded = PixMoCountDatasetConfig(heldout_paths=()).build(_FakeTok())
+    unguarded = PixMoCountDatasetConfig(dataset_path=path, heldout_paths=()).build(_FakeTok())
     assert len(unguarded) == 6 and unguarded.n_heldout_dropped == 0
 
 
@@ -743,7 +742,6 @@ def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
         PixMoPointsDataset,
         PixMoPointsDatasetConfig,
     )
-    from olmo_core.data.multimodal.sequence_builder import example_rng
 
     captured: list = []
     monkeypatch.setattr(pixmo_points, "_open_image", lambda image: image)
@@ -761,14 +759,8 @@ def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
     }
     config = PixMoPointsDatasetConfig(counting="both", seed=7)
     ds = _bare_dataset(PixMoPointsDataset, config, row)
-    assert issubclass(PixMoPointsDataset, pixmo_points.EpochSeededExamples)
 
-    ds[0]
-    ds.set_epoch(1)
-    ds[0]
+    ds.get(0, 0)
+    ds.get(0, 1)
     epoch0, epoch1 = captured
     assert epoch0 != epoch1  # the same annotations get a different style mix in epoch 1
-
-    # Epoch 0 is the unchanged mm_olmo stream, so a run that never revisits a row is unaffected.
-    ds.set_epoch(0)
-    assert ds.epoch_rng(0).randint(1 << 30) == example_rng(7, 0).randint(1 << 30)

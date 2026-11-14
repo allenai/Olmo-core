@@ -26,7 +26,8 @@ per example (and hence for the pack).
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Iterator, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 import numpy as np
 
@@ -40,6 +41,14 @@ __all__ = [
     "DynamicPacker",
     "iter_dynamic_packs",
 ]
+
+
+@dataclass(frozen=True)
+class _PackedImageParts:
+    """Float32 crop arrays copied directly into the collator's final allocation."""
+
+    parts: tuple[np.ndarray, ...]
+    shape: tuple[int, int, int]
 
 
 def example_has_images(ex: Dict[str, np.ndarray]) -> bool:
@@ -61,8 +70,8 @@ def greedy_pack_indices(
 ) -> List[List[int]]:
     """Greedily group example indices so each group's total length ``<= seq_len``.
 
-    First-fit-decreasing is overkill here; a simple next-fit over the given order keeps the
-    sampling order stable (important for mixture proportions) and is what mm_olmo does.
+    A simple next-fit over the given order keeps the sampling order stable and remains the
+    default packing policy for backwards compatibility.
 
     :param lengths: real token length of each example, in the order they should be packed.
     :param seq_len: maximum packed length.
@@ -94,7 +103,66 @@ def greedy_pack_indices(
     return groups
 
 
-def pack_examples(examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray]:
+def _select_buffered_pack_indices(
+    lengths: Sequence[int],
+    crop_counts: Sequence[int],
+    seq_len: int,
+    max_crops_per_pack: int,
+    image_weight: float = 1.0,
+) -> List[int]:
+    """Select one pack with Molmo2's two-constraint dynamic program."""
+    if not np.isfinite(image_weight) or image_weight < 0:
+        raise ValueError("image_weight must be finite and non-negative")
+    token_granularity = max(1, seq_len // 512)
+    token_values = np.asarray(
+        [(int(n) + token_granularity - 1) // token_granularity for n in lengths],
+        dtype=np.int64,
+    )
+    crop_values = np.asarray(crop_counts, dtype=np.int64)
+    # The released 2,560-token recipe is evenly divisible by this granularity and therefore
+    # matches Molmo2 exactly. For custom unaligned lengths, floor division is deliberately
+    # conservative so quantization can never select a pack whose real tokens exceed seq_len.
+    max_tokens = seq_len // token_granularity
+
+    # Match Molmo2's objective: useful text tokens plus weighted image crops. Stage 1 uses
+    # image_weight=1 while Stage 2 uses image_weight=30.
+    objective = np.asarray(lengths, dtype=np.float32) + (
+        crop_values.astype(np.float32) * float(image_weight)
+    )
+    return select_subset_2d_knapsack(
+        token_values.tolist(),
+        crop_values.tolist(),
+        max_tokens,
+        max_crops_per_pack,
+        objective.tolist(),
+    )
+
+
+def _pop_buffered_pack(
+    buffer: List[Dict[str, np.ndarray]],
+    seq_len: int,
+    max_crops_per_pack: int,
+    image_weight: float = 1.0,
+) -> List[Dict[str, np.ndarray]]:
+    selected = _select_buffered_pack_indices(
+        [len(ex["input_ids"]) for ex in buffer],
+        [example_crop_count(ex) for ex in buffer],
+        seq_len,
+        max_crops_per_pack,
+        image_weight,
+    )
+    if not selected:
+        raise RuntimeError("Buffered packer could not select an example within its constraints")
+    # Emit in buffer order, like Molmo2's DynamicSolver and :class:`DynamicPacker`.
+    packed = [buffer[i] for i in sorted(selected)]
+    for i in sorted(selected, reverse=True):
+        buffer.pop(i)
+    return packed
+
+
+def pack_examples(
+    examples: List[Dict[str, np.ndarray]], *, defer_image_copy: bool = False
+) -> Dict[str, Any]:
     """Concatenate several example dicts into one packed example.
 
     Each input is a dict as produced by the stage-1 datasets (``input_ids``, ``labels``,
@@ -104,13 +172,17 @@ def pack_examples(examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray
     crop axis for images), plus an ``example_ids`` vector. It is **not** padded — the
     collator pads to the batch/seq length.
 
+    :param defer_image_copy: Retain float32 image parts for direct final-batch assembly by
+        :class:`~olmo_core.data.multimodal.collator.MultimodalCollator`. Other image dtypes
+        retain the ordinary concatenation path and its dtype-promotion behavior. Input
+        image arrays must remain unmodified until collation when this option is enabled.
     :raises ValueError: if ``examples`` is empty.
     """
     if not examples:
         raise ValueError("pack_examples requires at least one example")
 
     tok_keys = ["input_ids", "labels", "loss_masks", "position_ids", "token_type_ids"]
-    out: Dict[str, np.ndarray] = {}
+    out: Dict[str, Any] = {}
     for k in tok_keys:
         out[k] = np.concatenate([ex[k] for ex in examples], axis=0)
 
@@ -153,11 +225,22 @@ def pack_examples(examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray
             pooled_parts.append(pp)
         crop_offset += im.shape[0]
 
-    out["images"] = (
-        np.concatenate([im for im in images if im.shape[0]], axis=0)
-        if any(im.shape[0] for im in images)
-        else np.zeros((0, n_patches, patch_dim), dtype=np.float32)
-    )
+    image_parts = tuple(im for im in images if im.shape[0])
+    if (
+        defer_image_copy
+        and image_parts
+        and all(
+            im.dtype == np.float32 and im.ndim == 3 and im.shape[1:] == (n_patches, patch_dim)
+            for im in image_parts
+        )
+    ):
+        out["images"] = _PackedImageParts(image_parts, (crop_offset, n_patches, patch_dim))
+    else:
+        out["images"] = (
+            np.concatenate(image_parts, axis=0)
+            if image_parts
+            else np.zeros((0, n_patches, patch_dim), dtype=np.float32)
+        )
     out["pooled_patches_idx"] = (
         np.concatenate(pooled_parts, axis=0)
         if pooled_parts
@@ -171,22 +254,73 @@ def iter_packs(
     seq_len: int,
     *,
     max_crops_per_pack: Optional[int] = None,
-) -> Iterator[Dict[str, np.ndarray]]:
-    """Greedily next-fit-pack a stream of example dicts into ``<= seq_len`` sequences.
+    buffer_size: int = 0,
+    image_weight: float = 1.0,
+    defer_image_copy: bool = False,
+) -> Iterator[Dict[str, Any]]:
+    """Pack a stream of example dicts into ``<= seq_len`` sequences.
 
     ``examples`` is an iterator of example dicts — typically an infinite, cycled (and
     optionally prefetched) stream, in which case this yields indefinitely and the caller
     caps the number of batches. Cycling in the caller keeps every data-parallel rank
     yielding the same number of batches regardless of how its examples pack (no collective
     desync). An example longer than ``seq_len`` is emitted alone (the collator tail-truncates
-    it; the image block at the front is preserved). A finite stream flushes a final partial
-    pack.
+    it; the image block at the front is preserved). A finite stream flushes all examples.
+
+    The default ``buffer_size=0`` retains the original deterministic next-fit behavior.
+    A positive buffer enables the same two-constraint knapsack policy used by Molmo2: it
+    selects examples that maximize useful tokens while respecting the token and crop
+    budgets. Buffered packing may safely mix image and text-only examples because selected
+    packs are guaranteed not to be tail-truncated.
 
     :param examples: iterator of per-example dicts (the heavy loading happens upstream, so it
         can be prefetched off the training thread).
     :param seq_len: target packed length.
     :param max_crops_per_pack: cap total image crops per pack (mm_olmo crop-budget parity).
+    :param buffer_size: number of examples considered by the dynamic packing solver; zero
+        keeps the original next-fit policy.
+    :param image_weight: objective value assigned to each image crop by the buffered
+        solver. Molmo2 Stage 1 uses 1 and Stage 2 uses 30.
+    :param defer_image_copy: Retain float32 image parts for direct final-batch collation.
     """
+    if buffer_size < 0:
+        raise ValueError("buffer_size must be non-negative")
+    if buffer_size:
+        if max_crops_per_pack is None:
+            raise ValueError("max_crops_per_pack is required when buffer_size is positive")
+        if max_crops_per_pack <= 0:
+            raise ValueError("max_crops_per_pack must be positive")
+
+        buffer: List[Dict[str, np.ndarray]] = []
+        for ex in examples:
+            length = len(ex["input_ids"])
+            crops = example_crop_count(ex)
+            token_granularity = max(1, seq_len // 512)
+            at_token_capacity = (length + token_granularity - 1) // token_granularity >= (
+                seq_len + token_granularity - 1
+            ) // token_granularity
+            # Preserve the existing handling of an individually oversized example. Stage-1
+            # datasets are bounded by these constraints, but emitting alone is safer than
+            # allowing an invalid item to stall an infinite stream.
+            if at_token_capacity or crops > max_crops_per_pack:
+                yield pack_examples([ex], defer_image_copy=defer_image_copy)
+                continue
+            if len(buffer) < buffer_size:
+                buffer.append(ex)
+                continue
+            packed = _pop_buffered_pack(
+                buffer, seq_len, max_crops_per_pack, image_weight=image_weight
+            )
+            buffer.append(ex)
+            yield pack_examples(packed, defer_image_copy=defer_image_copy)
+
+        while buffer:
+            yield pack_examples(
+                _pop_buffered_pack(buffer, seq_len, max_crops_per_pack, image_weight=image_weight),
+                defer_image_copy=defer_image_copy,
+            )
+        return
+
     cur: List[Dict[str, np.ndarray]] = []
     cur_len = 0
     cur_crops = 0
@@ -206,13 +340,13 @@ def iter_packs(
         if cur and (
             over_tokens or over_crops or example_has_images(ex) != example_has_images(cur[0])
         ):
-            yield pack_examples(cur)
+            yield pack_examples(cur, defer_image_copy=defer_image_copy)
             cur, cur_len, cur_crops = [], 0, 0
         cur.append(ex)
         cur_len += length
         cur_crops += crops
     if cur:
-        yield pack_examples(cur)
+        yield pack_examples(cur, defer_image_copy=defer_image_copy)
 
 
 # ---------------------------------------------------------------------------
