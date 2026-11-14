@@ -4,7 +4,7 @@
  "track": "sft4",
  "who": "side session (docdrop-nongold)",
  "title": "Random non-gold document dropping at the recipe's FLOPs: gold kept, document IDs preserved, dense full-context eval",
- "result": "Negative. Keep every gold document (the IDs the answer cites) and a random 15.7% of non-gold documents, cut the rest before block 0 (printed IDs unchanged; oolong whole), whole-model LoRA r64 at LR 1e-5 as the recipe, 1,952 rows/task, 350-352 PF (recipe 343-345; 0.229x dense). 8k 4-task mean 0.555 (original positions) / 0.588 (compact): outlier collapses to 0.00 because random dropping leaves the outlier article as the only multi-passage topic, the opposite of the generator's definition (uniquely smallest group); the model learns to name passages that share an article (99% of its 8k answers). With a group-aware outlier drop (whole articles kept) 0.665, still 0.18 under the recipe's 0.846 and below dense f488 (FTM < 1.08x vs 4.6x). The same model scores 0.930 at 2k, above the recipe's 0.921: trained on ~1.5k-token rows it does not transfer to 8k contexts (contradiction 0.70-0.80 vs 0.96, no over-prediction). Single seed per arm; no seeds or 3,904 point (clearly below).",
+ "result": "Negative. Keep every gold document (the IDs the answer cites) and a random 15.7% of non-gold documents, cut the rest before block 0 (printed IDs unchanged; oolong whole), whole-model LoRA r64 at LR 1e-5 as the recipe, 1,952 rows/task, 350-352 PF (recipe 343-345; 0.229x dense). 8k 4-task mean 0.555 (original positions) / 0.588 (compact): outlier collapses to 0.00 because random dropping leaves the outlier article as the only multi-passage topic, the opposite of the generator's definition (uniquely smallest group); the model learns to name passages that share an article (99% of its 8k answers). With a group-aware outlier drop (whole articles kept) 0.665 / 0.661 (original / compact positions), still 0.18 under the recipe's 0.846 and below dense f488 (FTM < 1.08x vs 4.6x). The same models score 0.930 / 0.934 at 2k, above the recipe's 0.921: trained on ~1.5k-token rows it does not transfer to 8k contexts (contradiction 0.70-0.80 vs 0.96, no over-prediction). Single seed per arm; no seeds or 3,904 point (clearly below).",
  "match": "1,952 rows/task, recipe optimiser and FLOPs (350 PF vs 344)",
  "record": "records/docdrop-nongold-baseline.md",
  "branch": "claude/docdrop-nongold-42bb6b",
@@ -92,16 +92,16 @@
     ],
     [
      "ddcg: group-aware outlier, compact positions",
-     "running",
-     "",
-     "",
-     "",
-     "",
-     "",
-     "",
-     "",
-     "",
-     ""
+     0.661,
+     0.76,
+     0.885,
+     0.353,
+     0.646,
+     0.934,
+     352.5,
+     "0.230",
+     "26.7 (padded)",
+     "<1.08x"
     ]
    ]
   },

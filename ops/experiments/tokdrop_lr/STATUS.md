@@ -105,7 +105,7 @@ See `next_step` above.
   random drop makes the outlier article the only multi-passage topic (generator: outlier = uniquely smallest group);
   group-aware outlier drop ddpg 0.665 (2k mean 0.930, above the recipe's 0.921). Recipe 0.846/0.847, dense 0.843.
   FTM < 1.08x (below dense f488). Contradiction 0.70-0.80 vs 0.96: no over-prediction, a 2k->8k transfer loss.
-- ddcg (compact + group-aware) RUNNING (mooney slurm 5043384), eval to follow.
+- ddcg (compact + group-aware) 0.661 8k (2k 0.934). Done; nothing running. Not pursued further (clearly below; no seeds, no 3,904).
 - Flop meter fix (this branch): --lora-rank + per-example now credits the frozen base at each example's length.
 
 ## Open issues / traps

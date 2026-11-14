@@ -19,7 +19,7 @@ contexts. Handle any edge-case task-specific behavior however you want." Code: `
 ## Verdict
 
 **No.** At the recipe's training FLOPs, random document dropping with gold kept is far below the recipe on the
-primary metric: the best arm reaches an 8k 4-task mean of **0.665** (group-aware outlier drop, original positions)
+primary metric: the best arms reach an 8k 4-task mean of **0.665 / 0.661** (group-aware outlier drop, original / compact positions)
 against the recipe's 0.846 / 0.847 and dense 0.843 (single seed each; seed noise on the 8k mean is about 0.02-0.03).
 It is below dense f488 (0.667 at 379 PF), so its FTM is an upper bound, **< 1.1x**, against the recipe's 4.6x.
 Best-case per-step FLOP speedup is the same as the recipe's (4.4x vs 4.5x), by construction. Where it loses:
@@ -31,7 +31,7 @@ Best-case per-step FLOP speedup is the same as the recipe's (4.4x vs 4.5x), by c
 3. **nq** a little (0.886-0.896 vs 0.912); **oolong** (kept whole) 0.63-0.66 vs 0.650, within noise.
 
 The pattern across rungs is the clearest finding: with a valid outlier label the doc-drop model is at or above the
-recipe at the **2k** rung (`ddpg` 2k mean 0.930 vs 0.921; outlier 0.988) and far below it at **8k**. Its training rows
+recipe at the **2k** rung (2k mean 0.930 / 0.934 vs 0.921; outlier 0.988) and far below it at **8k**. Its training rows
 are ~1.3-1.8k tokens with 8-34 documents and 3 topic groups, which is what the 2k rung looks like; it has never seen
 an 8k context of 48-187 documents and 14 topic groups at training time. The recipe trains on the full 8k contexts
 (blocks 0-6 see every token) and keeps its 8k score. Dropping whole documents trades away exactly the long-context
@@ -133,17 +133,18 @@ SE per cell 0.01-0.02 (outlier at 0.4: 0.022); SE of the 4-task mean about 0.008
 | `ddp` | original | random docs | 350.6 | 0.229 | 4.4 | 25.6 | 0.696 | 0.886 | 0.001 | 0.635 | **0.555** | 0.672 | < 1.08x |
 | `ddc` | compact | random docs | 350.6 | 0.229 | 4.4 | 26.7* | 0.799 | 0.890 | 0.002 | 0.662 | **0.588** | 0.684 | < 1.08x |
 | `ddpg` | original | whole groups | 352.5 | 0.230 | 4.3 | 25.6 | 0.715 | 0.896 | 0.421 | 0.627 | **0.665** | **0.930** | < 1.08x |
-| `ddcg` | compact | whole groups | DDCGPF | | | | DDCG | | | | | | |
+| `ddcg` | compact | whole groups | 352.5 | 0.230 | 4.3 | 26.7* | 0.760 | 0.885 | 0.353 | 0.646 | **0.661** | **0.934** | < 1.08x |
 
-2k per task: `ddp` 0.868 / 0.962 / 0.000 / 0.856; `ddc` 0.898 / 0.978 / 0.002 / 0.858; `ddpg` 0.902 / 0.976 / 0.988 / 0.854 (2k mean 0.930, above the recipe's 0.921).
+2k per task: `ddp` 0.868 / 0.962 / 0.000 / 0.856; `ddc` 0.898 / 0.978 / 0.002 / 0.858; `ddpg` 0.902 / 0.976 / 0.988 / 0.854 (2k mean 0.930, above the recipe's 0.921); `ddcg` 0.923 / 0.972 / 0.987 / 0.855 (0.934).
 References at 1,952 rows (8k mean): random token keep after block 7 at 19.7% 0.841 and at 11.7% 0.796; content-blind
 tail rule 0.781. FTM: every docdrop arm is below dense f488 (0.667 at 379 PF), so FTM = 379 / PF is an upper bound.
 Step cost = PF / dense f1952's 1,531 PF; speedup = 1 / step cost.
 \* `ddc` trains padded rows (the dense path pads every row to `--seq-len` 12,288), so its memory is the full-length
 row's; the compacting `ddp` arms show what the method needs (25.6 GiB, set by the longest row, a whole oolong row).
 
-Compact vs original positions: compact is better on contradiction (0.799 vs 0.696 at 8k, ~4 SE) and level elsewhere
-(single seed).
+Compact vs original positions: compact is better on contradiction (0.799 vs 0.696 plain, 0.760 vs 0.715 group-aware) and
+worse on group-aware outlier (0.353 vs 0.421); the 8k means are level (0.588 vs 0.555 plain, 0.661 vs 0.665 group-aware;
+single seed).
 
 ## Limits
 
