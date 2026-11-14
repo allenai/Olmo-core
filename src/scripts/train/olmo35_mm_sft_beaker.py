@@ -112,11 +112,13 @@ exit $RC"""
         "constraints": {"cluster": ["ai2/holmes"]},
         "timeout": args.timeout,
     }
+    # Host networking always: NCCL_SOCKET_IFNAME=ib names the host's interfaces, which a
+    # single-node job without it does not see ("no socket interface found").
+    task["hostNetworking"] = True
     if args.nodes > 1:
         task.update(
             replicas=args.nodes,
             leaderSelection=True,
-            hostNetworking=True,
             propagateFailure=True,
             propagatePreemption=True,
             synchronizedStartTimeout="20m",
