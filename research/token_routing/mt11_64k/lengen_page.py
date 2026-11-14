@@ -30,12 +30,13 @@ SHORT = {"m16-dense-s380-lr5e-06": "16k-data dense (f4 PF)", "m16-dense-s770-lr5
          "m32-lora64r20to7f16-s304-lr5e-06": "32k-data recipe"}
 CHART_PNG = os.path.join(HERE, "lengen_rows16_32_64.png")
 STYLE = """<style>
-:root { --short: #0e7490; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --short: #5cc8d8; } }
-:root[data-theme="dark"] { --short: #5cc8d8; }
+:root { --short: #0e7490; --short32: #7c3aed; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --short: #5cc8d8; --short32: #b79cf5; } }
+:root[data-theme="dark"] { --short: #5cc8d8; --short32: #b79cf5; }
 #lengen .pend { color: var(--muted); font-style: italic; }
 #lengen .lg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 svg .short-pt { fill: var(--short); stroke: var(--panel); stroke-width: 1; }
+svg .short32-pt { fill: var(--short32); stroke: var(--panel); stroke-width: 1; }
 </style>"""
 
 
@@ -108,7 +109,7 @@ def chart(rung, means, pf, w=260, h=170):
     g += [f'<circle class="dense-pt" cx="{X(math.log(p)):.1f}" cy="{Y(v):.1f}" r="2.6"><title>dense {p:.0f} PF: '
           f'{v:.3f}</title></circle>' for p, v in dense]
     for r, p, v in others:
-        cls = "short-pt" if r in SHORT else "router-pt"
+        cls = ("short32-pt" if r.startswith("m32-") else "short-pt") if r in SHORT else "router-pt"
         lab = SHORT.get(r) or METHODS.get(r)
         g.append(f'<circle class="{cls}" cx="{X(math.log(p)):.1f}" cy="{Y(v):.1f}" r="4"><title>{esc(lab)} {p:.0f} PF:'
                  f' {v:.3f}</title></circle>')
@@ -240,7 +241,8 @@ def section():
 <div class="verdict prose" style="border-left-color:var(--short)"><strong>Verdict so far.</strong> {verdict}</div>
 <div class="prose" style="margin-top:10px">
 <p>Prasann (2026-11-04): do the matched-FLOP gains persist when evaluating beyond the 64k training length, and how much does
-a model trained only on rows ≤16k (more rows, same FLOPs) lose at long eval lengths? Six tasks with 128k/256k rows (nq,
+a model trained only on rows ≤16k (more rows, same FLOPs) lose at long eval lengths? Follow-up (2026-11-12): the same
+with rows ≤32k ("32k training with more data such that FLOPs match the 64k runs"). Six tasks with 128k/256k rows (nq,
 hotpotqa, qdmatch_nq, outlier, oolong, contradiction), scored on olmo-eval's CTC launcher (chat format + doc markers,
 full attention; r256k with YaRN ×2 and 131,072-token chunked prefill). The 2k–64k ladder above came from the native
 docchunk evaluator, which cannot go past ~77k on one H100, so r64k is re-scored on the new path for every checkpoint
@@ -254,7 +256,8 @@ Dense reference = dense LR 5e-6, f16→f1, interpolated linearly in log PF. No-c
 <div class="lg-grid" style="margin-top:12px">{''.join(chart(r, means[r], pf) for r in RUNGS)}</div>
 <div class="legend" style="margin-top:6px"><span><span class="sw" style="background:var(--dense)"></span>dense (LR 5e-6, f16…f1)</span>
 <span><span class="sw" style="background:var(--router)"></span>router / recipe</span>
-<span><span class="sw" style="background:var(--short)"></span>trained on rows ≤16k</span></div>
+<span><span class="sw" style="background:var(--short)"></span>trained on rows ≤16k</span>
+<span><span class="sw" style="background:var(--short32)"></span>trained on rows ≤32k</span></div>
 <h3>Per-task matched-FLOP Δ at 128k and 256k</h3>
 <div class="tw"><table><thead><tr><th></th>{head_tasks}</tr></thead><tbody>{''.join(det)}</tbody></table></div>
 <h3>Anchor: 64k on the two eval paths (6-task mean)</h3>
@@ -291,10 +294,12 @@ def main():
         i = s.index('<div class="verdict prose">')
         j = s.index("</div>", i) + len("</div>")
         s = s[:j] + "\n" + sec + "\n" + s[j:]
-    if "length generalization · in progress" not in s:
+    # one length-generalization pill in the header: drop any old one, add the current state
+    s = re.sub(r' <span class="pill" style="border-color:var\(--short\);color:var\(--short\)">length generalization · [^<]*</span>', "", s)
+    if True:
         s = s.replace('<span class="pill">complete · universal recipe and otr10M7</span>',
                       '<span class="pill">complete · universal recipe and otr10M7</span> '
-                      '<span class="pill" style="border-color:var(--short);color:var(--short)">length generalization · in progress</span>')
+                      f'<span class="pill" style="border-color:var(--short);color:var(--short)">length generalization · {esc(json.load(open(os.path.join(RES, "progress.json"))).get("pill", "in progress"))}</span>')
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     open(a.out, "w").write(s)
     print(f"wrote {a.out} ({len(s):,} bytes)")
