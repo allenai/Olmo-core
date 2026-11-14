@@ -755,6 +755,12 @@ class NumpyFSLDataLoader(NumpyDataLoaderBase):
         return state_dict
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
+        if state_dict["tokens_processed"] % self.global_batch_size != 0:
+            raise RuntimeError(
+                f"Cannot resume after {state_dict['tokens_processed']:,d} tokens with a global "
+                f"batch size of {self.global_batch_size:,d}: the checkpoint must fall on a "
+                "batch boundary to avoid duplicating or losing data."
+            )
         super().load_state_dict(state_dict)
         # Account for change in batch size / sequence length.
         self.batches_processed = self.tokens_processed // self.global_batch_size
