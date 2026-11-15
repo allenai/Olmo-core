@@ -1,8 +1,22 @@
+from importlib import import_module
+
 import pytest
 import torch
 
 from olmo_core.nn.functional import cross_entropy_loss, weighted_cross_entropy_loss
 from olmo_core.testing import DEVICES
+
+
+@pytest.mark.parametrize("extra_outputs", [(None,), (None, None)])
+def test_fused_linear_cross_entropy_optional_liger_outputs(monkeypatch, extra_outputs):
+    loss_module = import_module("olmo_core.nn.functional.cross_entropy_loss")
+    ce, z = torch.tensor(4.0), torch.tensor(0.1)
+    monkeypatch.setattr(
+        loss_module, "_fused_linear_cross_entropy_loss", lambda *args: (ce, z, *extra_outputs)
+    )
+    x, w, labels = torch.randn(2, 4), torch.randn(8, 4), torch.tensor([1, 2])
+    assert loss_module.fused_linear_cross_entropy_loss(x, w, labels, compute_z_loss=True) == (ce, z)
+    assert loss_module.fused_linear_cross_entropy_loss(x, w, labels) == (ce, None)
 
 
 @pytest.mark.parametrize("device", DEVICES)
