@@ -400,6 +400,12 @@ class ComposableDataLoader(TextDataLoaderBase):
             )
 
         # Account for change in batch size / sequence length.
+        if state_dict["tokens_processed"] % self.global_batch_size != 0:
+            raise RuntimeError(
+                f"Cannot resume after {state_dict['tokens_processed']:,d} tokens with a global "
+                f"batch size of {self.global_batch_size:,d}: the checkpoint must fall on a "
+                "batch boundary to avoid duplicating or losing data."
+            )
         self.tokens_processed = state_dict["tokens_processed"]
         self.batches_processed = self.tokens_processed // self.global_batch_size
 

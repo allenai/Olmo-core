@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Reject fixed-length data loader checkpoints whose consumed-token count is not aligned with the resumed global batch size, instead of silently replaying previously consumed data.
+
 ### Added
 
 - Added `UnshardedModelExportCallback` and `load_unsharded_model_state()`, which write an unsharded `model.safetensors` (plus the config) into every permanent checkpoint so evaluation can read one file instead of the sharded state.
