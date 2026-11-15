@@ -1545,6 +1545,94 @@ def test_merged_stage_high_res_share(merged_stage, monkeypatch):
         merged_stage.build("--recipe.visual_data=stage1_v6", "--recipe.high_res_max_crops=0")
 
 
+def test_merged_stage_shard_sources(merged_stage, monkeypatch):
+    """``--recipe.shard_sources`` adds image-text shards datasets at their shares of the visual
+    loss, scaling the recipe's other shares, with their means and per-source options."""
+    from olmo_core.data.multimodal.image_text_shards import ImageTextShardsDatasetConfig
+    from olmo_core.internal.vision_alignment_data import STAGE1_V3_MEAN_LOSS_WEIGHTS
+
+    names = list(STAGE1_V3_MEAN_LOSS_WEIGHTS)
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _HighResConfig(dataset_path=f"/data/{name}", max_sequence_length=sequence_length)
+            for name in names
+        },
+    )
+    v6 = "--recipe.visual_data=stage1_v6"
+    eq = [
+        "--recipe.shard_sources.docgenome_eq=/data/docgenome",
+        "--recipe.shard_loss_shares.docgenome_eq=0.02",
+        "--recipe.shard_mean_loss_weights.docgenome_eq=41.5",
+    ]
+    base = merged_stage.build(v6)
+    config = merged_stage.build(
+        v6,
+        *eq,
+        "--recipe.shard_kinds.docgenome_eq=equation",
+        "--recipe.shard_keep_columns.docgenome_eq=keep",
+        "--recipe.shard_max_crops.docgenome_eq=4",
+        "--recipe.shard_sources.pubtables=/data/pubtables",
+        "--recipe.shard_loss_shares.pubtables=0.03",
+        "--recipe.shard_mean_loss_weights.pubtables=900",
+        "--recipe.high_res_share.pubtables=0.3",
+    )
+    sources = config.dataset.sources
+    eq_source, pages = sources["docgenome_eq"], sources["pubtables"]
+    assert isinstance(eq_source, ImageTextShardsDatasetConfig)
+    assert eq_source.dataset_path == "/data/docgenome" and eq_source.split == "train"
+    assert eq_source.kinds == ("equation",) and eq_source.keep_column == "keep"
+    assert eq_source.max_crops == 4 and eq_source.p_high_res == 0.0
+    assert eq_source.message_format == "document" and eq_source.loss_token_weighting == "none"
+    assert eq_source.max_sequence_length == config.recipe.sequence_length
+    assert pages.kinds is None and pages.keep_column is None and pages.max_crops == 8
+    assert pages.p_high_res == 0.3 and pages.high_res_max_crops == 24
+    assert set(sources) == set(base.dataset.sources) | {"docgenome_eq", "pubtables"}
+
+    # The two sources take 5% of the visual loss; every other visual share is scaled by 0.95.
+    mass, base_mass = config.dataset.target_loss_mass, base.dataset.target_loss_mass
+    visual = 1.0 - mass["text_midtraining"]
+    assert mass["text_midtraining"] == pytest.approx(base_mass["text_midtraining"])
+    assert mass["docgenome_eq"] == pytest.approx(0.02 * visual)
+    assert mass["pubtables"] == pytest.approx(0.03 * visual)
+    for name, share in base_mass.items():
+        if name != "text_midtraining":
+            assert mass[name] == pytest.approx(0.95 * share)
+    assert sum(mass.values()) == pytest.approx(sum(base_mass.values()))
+    means = config.dataset.mean_loss_weight
+    assert means["docgenome_eq"] == 41.5 and means["pubtables"] == 900.0
+    assert {k: v for k, v in means.items() if k not in ("docgenome_eq", "pubtables")} == (
+        base.dataset.mean_loss_weight
+    )
+
+    for overrides, message in (
+        (eq[:2], "shard_mean_loss_weights is missing"),
+        ([eq[0], eq[2]], "shard_loss_shares is missing"),
+        (eq[1:], "shard_sources does not have"),
+        ([*eq, "--recipe.shard_kinds.other=page"], "shard_sources does not have"),
+        ([*eq, "--recipe.shard_max_crops.docgenome_eq=0"], "positive integer"),
+        ([*eq, "--recipe.shard_max_crops.docgenome_eq=true"], "numeric"),
+        ([*eq, "--recipe.shard_loss_shares.docgenome_eq=1.0"], "less than one"),
+        ([*eq, "--recipe.shard_loss_shares.docgenome_eq=true"], "numeric"),
+        ([*eq, "--recipe.shard_mean_loss_weights.docgenome_eq=0"], "must be positive"),
+        ([*eq, "--recipe.shard_kinds.docgenome_eq=equation,,table"], "comma-separated"),
+        ([s.replace("docgenome_eq", names[0]) for s in eq], "already sources"),
+        ([s.replace("docgenome_eq", "text_midtraining") for s in eq], "already sources"),
+    ):
+        with pytest.raises(OLMoConfigurationError, match=message):
+            merged_stage.build(v6, *overrides)
+
+
+def test_shard_sources_need_stage1_visual_data(mixed_recipe):
+    with pytest.raises(OLMoConfigurationError, match="stage1_v3 to stage1_v7"):
+        mixed_recipe.build(
+            "--recipe.shard_sources.docgenome_eq=/data/docgenome",
+            "--recipe.shard_loss_shares.docgenome_eq=0.02",
+            "--recipe.shard_mean_loss_weights.docgenome_eq=41.5",
+        )
+
+
 def test_annotation_layout_is_documents_or_sequence(mixed_recipe):
     with pytest.raises(OLMoConfigurationError, match="annotation_layout"):
         mixed_recipe.build("--recipe.annotation_layout=branches")

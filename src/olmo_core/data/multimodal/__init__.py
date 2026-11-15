@@ -36,6 +36,7 @@ from .finevision import (
     VisualWebInstructDatasetConfig,
 )
 from .gui_syn import GuiSynDataset, GuiSynDatasetConfig
+from .image_text_shards import ImageTextShardsDataset, ImageTextShardsDatasetConfig
 from .message_weight import MessageWeight, apply_message_weight_to_loss_masks
 from .mixture_data_loader import MixtureDataLoader
 from .mixture_weights import DatasetSource, SubMixture, compute_flat_mixture_weights
@@ -142,6 +143,8 @@ __all__ = [
     "PixMoCountV2DatasetConfig",
     "GuiSynDataset",
     "GuiSynDatasetConfig",
+    "ImageTextShardsDataset",
+    "ImageTextShardsDatasetConfig",
     "OlmOcrMixDataset",
     "OlmOcrMixDatasetConfig",
     "OcrCaptionTarsDataset",

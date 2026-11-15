@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from olmo_core.config import Config
 from olmo_core.data.multimodal.pixmo_cap import PixMoCapDatasetConfig
@@ -1290,6 +1290,49 @@ def build_stage1_sa1b_points_source(
         loss_token_weighting="none",
         message_format="document",
         annotation_sampling="documents",
+    )
+
+
+def build_stage1_shard_source(
+    sequence_length: int,
+    dataset_path: str,
+    *,
+    keep_column: str | None = None,
+    kinds: Sequence[str] | None = None,
+    max_crops: int = 8,
+) -> Config:
+    """Configure an image-text shards dataset as a stage-1 transcription source.
+
+    The dataset (:mod:`olmo_core.data.multimodal.image_text_shards`: one stored image and its
+    target text per row) is read with the olmOCR page sources' settings: the bare ``olmocr:``
+    tag, every response token weighted equally, plain documents, truncated at
+    ``sequence_length``. Only its ``train`` rows are read.
+
+    :param sequence_length: Maximum serialized example length.
+    :param dataset_path: The dataset directory (index and ``shards/``).
+    :param keep_column: A boolean index column; only rows where it is true are read.
+    :param kinds: Row kinds to read (``equation`` / ``table`` / ``page``); all when ``None``.
+    :param max_crops: Crop budget per image.
+    """
+    from olmo_core.data.multimodal.image_text_shards import ImageTextShardsDatasetConfig
+
+    if sequence_length <= 0:
+        raise ValueError("sequence_length must be positive")
+    if not dataset_path:
+        raise ValueError("dataset_path must name an image-text shards directory")
+    if isinstance(max_crops, bool) or not isinstance(max_crops, int) or max_crops < 1:
+        raise ValueError("max_crops must be a positive integer")
+    if kinds is not None and (len(kinds) == 0 or not all(kinds)):
+        raise ValueError("kinds must be None or name at least one kind")
+    return ImageTextShardsDatasetConfig(
+        dataset_path=dataset_path,
+        split="train",
+        kinds=None if kinds is None else tuple(kinds),
+        keep_column=keep_column or None,
+        max_crops=max_crops,
+        max_sequence_length=sequence_length,
+        loss_token_weighting="none",
+        message_format="document",
     )
 
 

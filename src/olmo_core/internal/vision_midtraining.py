@@ -89,6 +89,7 @@ from .vision_alignment_data import (
     build_stage1_nemotron_sources,
     build_stage1_pdfa_sources,
     build_stage1_sa1b_points_source,
+    build_stage1_shard_source,
     build_stage1_v3_sources,
     scale_visual_loss_shares,
     with_added_loss_shares,
@@ -325,6 +326,28 @@ class MixedMidtrainingRecipeConfig(Config):
     A named source must be in the mixture and have the option."""
     high_res_max_crops: int = 24
     """Crop budget of an example drawn by :attr:`high_res_share`."""
+    shard_sources: dict[str, str] = field(default_factory=dict)
+    """Image-text shards datasets (:mod:`olmo_core.data.multimodal.image_text_shards`: one stored
+    image and its transcription per row) to add to stage1_v3 to stage1_v7 visual data, as mixture
+    name -> dataset directory
+    (:func:`~olmo_core.internal.vision_alignment_data.build_stage1_shard_source`). Every name
+    needs a share in :attr:`shard_loss_shares` and a mean in :attr:`shard_mean_loss_weights`. Two
+    names may read one directory with different :attr:`shard_kinds`."""
+    shard_loss_shares: dict[str, float] = field(default_factory=dict)
+    """Share of the visual loss for every source in :attr:`shard_sources`. The sources join the
+    mixture and the recipe's other visual shares are scaled by one minus the sum (after
+    :attr:`visual_loss_share_scale`, :attr:`pdfa_loss_shares` and
+    :attr:`sa1b_points_loss_share`)."""
+    shard_mean_loss_weights: dict[str, float] = field(default_factory=dict)
+    """Calibrated mean loss weight per example of every source in :attr:`shard_sources`."""
+    shard_keep_columns: dict[str, str] = field(default_factory=dict)
+    """Per source in :attr:`shard_sources`, a boolean index column: only rows where it is true
+    are read. Sources not named read every training row."""
+    shard_kinds: dict[str, str] = field(default_factory=dict)
+    """Per source in :attr:`shard_sources`, the row kinds to read, comma-separated
+    (``equation``, ``table``, ``page``). Sources not named read every kind."""
+    shard_max_crops: dict[str, int] = field(default_factory=dict)
+    """Per source in :attr:`shard_sources`, the crop budget per image (default 8)."""
 
 
 @dataclass
@@ -351,6 +374,86 @@ def _read_checkpoint_config(checkpoint: str) -> dict[str, Any]:
     return config
 
 
+_SHARD_OPTIONS = (
+    "shard_sources",
+    "shard_loss_shares",
+    "shard_mean_loss_weights",
+    "shard_keep_columns",
+    "shard_kinds",
+    "shard_max_crops",
+)
+
+
+def _has_shard_options(recipe: "MixedMidtrainingRecipeConfig") -> bool:
+    return any(getattr(recipe, option) for option in _SHARD_OPTIONS)
+
+
+def _shard_kinds(kinds: str | None) -> tuple[str, ...] | None:
+    """``"equation,table"`` -> ``("equation", "table")``; ``None`` (every kind) stays ``None``."""
+    if kinds is None:
+        return None
+    return tuple(kind.strip() for kind in kinds.split(","))
+
+
+def _validate_shard_sources(recipe: "MixedMidtrainingRecipeConfig", existing: set[str]) -> None:
+    """Check the ``recipe.shard_*`` options against each other and the recipe's other sources.
+
+    :param recipe: The recipe being built.
+    :param existing: Names of the visual sources the recipe already has.
+
+    :raises OLMoConfigurationError: For a source without a path, share or mean, a name another
+        source has, a per-source option naming no source, or shares that leave nothing.
+    """
+    names = set(recipe.shard_sources)
+    for option in _SHARD_OPTIONS[1:]:
+        unknown = sorted(set(getattr(recipe, option)) - names)
+        if unknown:
+            raise OLMoConfigurationError(
+                f"recipe.{option} names {unknown}, which recipe.shard_sources does not have"
+            )
+    for name, path in recipe.shard_sources.items():
+        if not isinstance(path, str) or not path:
+            raise OLMoConfigurationError(f"recipe.shard_sources.{name} must be a dataset path")
+    for option in ("shard_loss_shares", "shard_mean_loss_weights"):
+        missing = sorted(names - set(getattr(recipe, option)))
+        if missing:
+            raise OLMoConfigurationError(f"recipe.{option} is missing {missing}")
+    taken = sorted(names & (existing | {TEXT_SOURCE_NAME}))
+    if taken:
+        raise OLMoConfigurationError(
+            f"recipe.shard_sources: {taken} are already sources of this recipe"
+        )
+    shares = recipe.shard_loss_shares
+    if (
+        any(not isfinite(share) or share <= 0 for share in shares.values())
+        or sum(shares.values()) >= 1
+    ):
+        raise OLMoConfigurationError(
+            "recipe.shard_loss_shares must be positive and sum to less than one"
+        )
+    for name, mean in recipe.shard_mean_loss_weights.items():
+        if not isfinite(mean) or mean <= 0:
+            raise OLMoConfigurationError(
+                f"recipe.shard_mean_loss_weights.{name} must be positive, got {mean}"
+            )
+    for name, crops in recipe.shard_max_crops.items():
+        if isinstance(crops, bool) or not isinstance(crops, int) or crops < 1:
+            raise OLMoConfigurationError(
+                f"recipe.shard_max_crops.{name} must be a positive integer, got {crops}"
+            )
+    for name, kinds in recipe.shard_kinds.items():
+        parsed = _shard_kinds(kinds) if isinstance(kinds, str) else None
+        if not parsed or not all(parsed):
+            raise OLMoConfigurationError(
+                f"recipe.shard_kinds.{name} must be a comma-separated list of kinds"
+            )
+    for name, column in recipe.shard_keep_columns.items():
+        if not isinstance(column, str) or not column:
+            raise OLMoConfigurationError(
+                f"recipe.shard_keep_columns.{name} must name an index column"
+            )
+
+
 def _build_recipe(
     cli: CliContext, overrides: list[tuple[str, Any]]
 ) -> MixedMidtrainingRecipeConfig:
@@ -369,6 +472,9 @@ def _build_recipe(
     }
     numeric_maps = {
         "recipe.high_res_share",
+        "recipe.shard_loss_shares",
+        "recipe.shard_mean_loss_weights",
+        "recipe.shard_max_crops",
         "recipe.visual_example_weights",
         "recipe.visual_loss_shares",
         "recipe.visual_loss_share_scale",
@@ -1326,6 +1432,14 @@ def build_config(
                 {SA1B_POINTS_SOURCE_NAME: recipe.sa1b_points_loss_share},
             )
             means[SA1B_POINTS_SOURCE_NAME] = recipe.sa1b_points_mean_loss_weight
+        if _has_shard_options(recipe):
+            _validate_shard_sources(recipe, set(recipe.visual_loss_shares))
+            recipe.visual_loss_shares = with_added_loss_shares(
+                recipe.visual_loss_shares, recipe.shard_loss_shares
+            )
+            means.update(
+                {name: float(recipe.shard_mean_loss_weights[name]) for name in recipe.shard_sources}
+            )
     else:
         means = dict(DEFAULT_VISUAL_MEAN_LOSS_WEIGHTS) if _text_loss_share(recipe) < 1.0 else {}
     if not masked_text:
@@ -1362,6 +1476,14 @@ def build_config(
             visual_sources[SA1B_POINTS_SOURCE_NAME] = build_stage1_sa1b_points_source(
                 recipe.sequence_length
             )
+        for name, path in recipe.shard_sources.items():
+            visual_sources[name] = build_stage1_shard_source(
+                recipe.sequence_length,
+                path,
+                keep_column=recipe.shard_keep_columns.get(name),
+                kinds=_shard_kinds(recipe.shard_kinds.get(name)),
+                max_crops=recipe.shard_max_crops.get(name, 8),
+            )
         if documents and recipe.annotation_layout == "sequence":
             for source in visual_sources.values():
                 config = getattr(source, "dataset", source)
@@ -1393,6 +1515,10 @@ def build_config(
     if recipe.high_res_share and not (stage1_v3 and not replaced_sources):
         raise OLMoConfigurationError(
             "recipe.high_res_share needs stage1_v3 to stage1_v7 visual data built by the recipe"
+        )
+    if _has_shard_options(recipe) and not (stage1_v3 and not replaced_sources):
+        raise OLMoConfigurationError(
+            "recipe.shard_sources needs stage1_v3 to stage1_v7 visual data built by the recipe"
         )
     dataset = MultimodalMixtureConfig(
         tokenizer=tokenizer.copy(),
