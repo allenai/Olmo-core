@@ -282,3 +282,36 @@ def test_documents_mode_builds_one_document_per_element(tmp_path):
 def test_documents_mode_rejects_unknown_sampling(tmp_path):
     with pytest.raises(ValueError, match="annotation_sampling"):
         GuiSynDatasetConfig(dataset_path=str(tmp_path), annotation_sampling="some").build(None)
+
+
+def test_high_res_share_in_the_sequence_layout(tmp_path, monkeypatch):
+    """The mixed recipe's layout (plain documents, every element after one copy of the image):
+    ``p_high_res`` raises the crop budget on the example's stream and leaves its loss weight."""
+    from .stage1_document_mode_test import DOLMA2_IDS, _Tok
+
+    # The fixture's 64x48 screenshots fit one crop: write desktop-sized ones instead.
+    monkeypatch.setattr(sys.modules[__name__], "W", 1200)
+    monkeypatch.setattr(sys.modules[__name__], "H", 900)
+    elements = [_el(f"Button {k}", [f"Press button {k}"], x=40 + 60 * k, y=100) for k in range(5)]
+    cache = _cache(tmp_path, train=[elements])
+    common = dict(
+        token_ids=DOLMA2_IDS,
+        message_format="document",
+        loss_token_weighting="none",
+        max_sequence_length=65536,
+        max_elements=3,
+        annotation_sampling="sequence",
+        max_crops=2,
+        high_res_max_crops=6,
+    )
+
+    def build(**kw):
+        return _cfg(cache, **common, **kw).build(_Tok())
+
+    low, high = build().get(0, 0), build(p_high_res=1.0).get(0, 0)
+    assert len(low["images"]) == 3 and len(high["images"]) == 7
+    assert high["loss_masks"].sum() == pytest.approx(low["loss_masks"].sum())
+    mixed = build(p_high_res=0.5)
+    assert {len(mixed.get(0, epoch)["images"]) for epoch in range(24)} == {3, 7}
+    with pytest.raises(OLMoConfigurationError, match="p_high_res"):
+        _cfg(cache, p_high_res=2.0).validate()

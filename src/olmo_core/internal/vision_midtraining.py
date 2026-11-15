@@ -316,6 +316,15 @@ class MixedMidtrainingRecipeConfig(Config):
     :attr:`pdfa_loss_shares`). Needs :attr:`sa1b_points_mean_loss_weight`."""
     sa1b_points_mean_loss_weight: float = 0.0
     """Calibrated mean loss weight per example of the SA-1B concept points."""
+    high_res_share: dict[str, float] = field(default_factory=dict)
+    """Per visual source (stage1_v3 to stage1_v7), the probability that a training example is
+    cropped with :attr:`high_res_max_crops` instead of the source's ``max_crops`` (the source
+    config's ``p_high_res``; mm_olmo's ``override_p_high_res``, 0.3 on the image pointing sources
+    of the released Molmo2 fine-tuning). The example's loss weight does not change, so the loss
+    shares and calibrated means hold; a high-resolution example takes more positions and crops.
+    A named source must be in the mixture and have the option."""
+    high_res_max_crops: int = 24
+    """Crop budget of an example drawn by :attr:`high_res_share`."""
 
 
 @dataclass
@@ -356,8 +365,10 @@ def _build_recipe(
         "recipe.sa1b_points_mean_loss_weight",
         "recipe.pack_max_crops",
         "recipe.pack_buffer_size",
+        "recipe.high_res_max_crops",
     }
     numeric_maps = {
+        "recipe.high_res_share",
         "recipe.visual_example_weights",
         "recipe.visual_loss_shares",
         "recipe.visual_loss_share_scale",
@@ -398,6 +409,7 @@ def _build_recipe(
         ("max_crops", 1),
         ("pack_max_crops", 1),
         ("pack_buffer_size", 1),
+        ("high_res_max_crops", 1),
     ):
         value = getattr(recipe, name)
         if name in ("max_tokens", "pack_max_crops", "pack_buffer_size") and value is None:
@@ -1355,12 +1367,32 @@ def build_config(
                 config = getattr(source, "dataset", source)
                 if getattr(config, "annotation_sampling", None) == "documents":
                     setattr(config, "annotation_sampling", "sequence")
+        for name, share in recipe.high_res_share.items():
+            if name not in visual_sources:
+                raise OLMoConfigurationError(
+                    f"recipe.high_res_share: no visual source {name!r} in this recipe"
+                )
+            config = getattr(visual_sources[name], "dataset", visual_sources[name])
+            if not hasattr(config, "p_high_res") or not hasattr(config, "high_res_max_crops"):
+                raise OLMoConfigurationError(
+                    f"recipe.high_res_share: source {name!r} has no high-resolution option"
+                )
+            if not 0.0 <= share <= 1.0:
+                raise OLMoConfigurationError(
+                    f"recipe.high_res_share.{name} must be in [0, 1], got {share}"
+                )
+            setattr(config, "p_high_res", float(share))
+            setattr(config, "high_res_max_crops", recipe.high_res_max_crops)
     elif _text_loss_share(recipe) < 1.0 and not replaced_sources:
         visual_sources = build_visual_sources(
             sequence_length=recipe.sequence_length,
             max_crops=recipe.max_crops,
             alignment_artifact_root=recipe.alignment_artifact_root,
             midtraining_artifact_root=recipe.midtraining_artifact_root,
+        )
+    if recipe.high_res_share and not (stage1_v3 and not replaced_sources):
+        raise OLMoConfigurationError(
+            "recipe.high_res_share needs stage1_v3 to stage1_v7 visual data built by the recipe"
         )
     dataset = MultimodalMixtureConfig(
         tokenizer=tokenizer.copy(),

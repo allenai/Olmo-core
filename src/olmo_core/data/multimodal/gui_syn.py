@@ -59,6 +59,7 @@ from .pixmo_points_v2 import (
     _build_selected_example,
     _released_layout,
     _rows_with_any,
+    _validate_high_res,
 )
 from .sft_common import EpochSeededExamples, SftMessageFormat
 from .sft_formatter import SftFormatter
@@ -135,6 +136,12 @@ class GuiSynDatasetConfig(Config):
     (mm_olmo ``p_intent``)."""
 
     max_crops: int = 8
+    p_high_res: float = 0.0
+    """Probability that a training example is cropped with :attr:`high_res_max_crops` instead of
+    :attr:`max_crops`, drawn on the example's ``(row, epoch)`` stream (mm_olmo's
+    ``override_p_high_res``; the released Molmo2 fine-tuning uses 0.3 on its image pointing
+    sources). Zero draws nothing, so the examples are unchanged."""
+    high_res_max_crops: int = 24
     loss_token_weighting: str = "none"
     """``"none"`` weights every response token equally, like the other v2 pointing sources."""
     message_weight: Optional[float] = None
@@ -164,6 +171,7 @@ class GuiSynDatasetConfig(Config):
         if not 0.0 <= self.p_intent <= 1.0:
             raise OLMoConfigurationError("p_intent must be in [0, 1]")
         _validate_annotation_sampling(self.annotation_sampling)
+        _validate_high_res(self)
 
     def build(self, tokenizer) -> "GuiSynDataset":
         self.validate()
@@ -263,6 +271,8 @@ class GuiSynDataset(EpochSeededExamples):
                 image,
                 branches,
                 max_crops=cfg.max_crops,
+                p_high_res=cfg.p_high_res,
+                high_res_max_crops=cfg.high_res_max_crops,
                 loss_token_weighting=cfg.loss_token_weighting,
                 message_weight=cfg.message_weight,
                 shuffle_rng=rng,

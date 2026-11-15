@@ -241,10 +241,11 @@ def test_points_v2_config_validation(tmp_path):
 
 
 @pytest.mark.parametrize("config_cls", [PixMoPointsV2DatasetConfig, PixMoCountV2DatasetConfig])
-@pytest.mark.parametrize("knob", ["prompt_templates", "system_prompt", "p_high_res"])
+@pytest.mark.parametrize("knob", ["prompt_templates", "system_prompt"])
 def test_v2_configs_are_stage1_only(config_cls, knob):
     """The prompt family is fixed to the released pretrain's (bare label behind ``"<style>:"``),
-    so no default or override can change it."""
+    so no default or override can change it. (``p_high_res`` is a field since the mixed
+    mid-training recipe's ``high_res_share``; its default of zero is the released pretrain's.)"""
     assert STAGE1_PROMPT_FAMILY == {
         "prompt_templates": "none",
         "system_prompt": "style_and_length_v2",
@@ -714,3 +715,47 @@ def test_sa1b_points_source_reads_a_points_v2_shaped_build(tmp_path):
         with_added_loss_shares({"a": 1.0}, {"a": 0.1})
     with pytest.raises(ValueError, match="less than one"):
         with_added_loss_shares({"a": 1.0}, {"sa1b_points": 1.0})
+
+
+def _write_large_image(tmp_path, size=(1200, 900)):
+    """Replace the fixtures' 64x48 image with one that fills more crops than ``max_crops``."""
+    from PIL import Image
+
+    Image.new("RGB", size, color=(30, 200, 30)).save(tmp_path / "img.png")
+
+
+@pytest.mark.parametrize("cfg_fn", [_points_cfg, _count_cfg])
+def test_v2_high_res_share_draws_the_larger_crop_budget(tmp_path, cfg_fn):
+    """``p_high_res`` crops an example with ``high_res_max_crops`` on its ``(row, epoch)``
+    stream: zero leaves the example as it was, one always takes the larger budget, and the
+    example's loss weight is the same at either resolution."""
+    path = (_write_points_v2 if cfg_fn is _points_cfg else _write_count_v2)(tmp_path)
+    _write_large_image(tmp_path)
+    tok = _FakeTok()
+
+    def build(**kw):
+        kw.setdefault("high_res_max_crops", 6)
+        cfg = cfg_fn(path, **kw)
+        cfg.max_crops = 2
+        return cfg.build(tok)
+
+    low = build(high_res_max_crops=24)[0]
+    off, high = build(p_high_res=0.0)[0], build(p_high_res=1.0)[0]
+    assert low["images"].shape[0] == 3  # two tiles and the global crop
+    np.testing.assert_array_equal(low["input_ids"], off["input_ids"])
+    np.testing.assert_array_equal(low["images"], off["images"])
+    assert high["images"].shape[0] == 7  # six tiles and the global crop
+    assert len(high["input_ids"]) > len(low["input_ids"])
+    assert high["loss_masks"].sum() == pytest.approx(low["loss_masks"].sum())
+
+    mixed = build(p_high_res=0.5)
+    crops = []
+    for epoch in range(24):
+        mixed.set_epoch(epoch)
+        crops.append(mixed[0]["images"].shape[0])
+        assert mixed[0]["images"].shape[0] == crops[-1]  # deterministic per (row, epoch)
+    assert set(crops) == {3, 7}
+
+    for bad in (dict(p_high_res=1.5), dict(p_high_res=-0.1), dict(high_res_max_crops=0)):
+        with pytest.raises(OLMoConfigurationError, match="high_res"):
+            cfg_fn(path, **bad).validate()

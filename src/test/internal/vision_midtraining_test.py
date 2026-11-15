@@ -1490,6 +1490,61 @@ def test_merged_stage_annotation_layout(merged_stage, monkeypatch, layout):
     assert means == STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS
 
 
+@dataclass
+class _HighResConfig(_MultiAnnotationConfig):
+    """A stand-in source with the high-resolution option, as the pointing sources have."""
+
+    p_high_res: float = 0.0
+    high_res_max_crops: int = 24
+
+
+def test_merged_stage_high_res_share(merged_stage, monkeypatch):
+    """``--recipe.high_res_share.<source>`` sets the named sources' ``p_high_res`` and crop
+    budget and leaves the others, the loss shares and the calibrated means alone."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS,
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+    )
+
+    names = list(STAGE1_V3_MEAN_LOSS_WEIGHTS)
+    first, plain = names[0], names[-1]
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: (_MultiAnnotationConfig if name == plain else _HighResConfig)(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in names
+        },
+    )
+    base = merged_stage.build("--recipe.visual_data=stage1_v6")
+    config = merged_stage.build(
+        "--recipe.visual_data=stage1_v6",
+        f"--recipe.high_res_share.{first}=0.3",
+        "--recipe.high_res_max_crops=16",
+    )
+    sources = config.dataset.sources
+    assert sources[first].p_high_res == 0.3 and sources[first].high_res_max_crops == 16
+    others = [s for n, s in sources.items() if n not in (first, plain, "text_midtraining")]
+    assert others and all(s.p_high_res == 0.0 and s.high_res_max_crops == 24 for s in others)
+    assert config.dataset.mean_loss_weight == base.dataset.mean_loss_weight
+    assert config.dataset.target_loss_mass == base.dataset.target_loss_mass
+    means = {k: v for k, v in config.dataset.mean_loss_weight.items() if k != "text_midtraining"}
+    assert means == STAGE1_V3_DOCUMENTS_MEAN_LOSS_WEIGHTS
+
+    for override, message in (
+        ("--recipe.high_res_share.no_such_source=0.3", "no visual source"),
+        (f"--recipe.high_res_share.{plain}=0.3", "no high-resolution option"),
+        (f"--recipe.high_res_share.{first}=1.5", "must be in"),
+        (f"--recipe.high_res_share.{first}=true", "numeric"),
+    ):
+        with pytest.raises(OLMoConfigurationError, match=message):
+            merged_stage.build("--recipe.visual_data=stage1_v6", override)
+    with pytest.raises(OLMoConfigurationError, match="high_res_max_crops"):
+        merged_stage.build("--recipe.visual_data=stage1_v6", "--recipe.high_res_max_crops=0")
+
+
 def test_annotation_layout_is_documents_or_sequence(mixed_recipe):
     with pytest.raises(OLMoConfigurationError, match="annotation_layout"):
         mixed_recipe.build("--recipe.annotation_layout=branches")

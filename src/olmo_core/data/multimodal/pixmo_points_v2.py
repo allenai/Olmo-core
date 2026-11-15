@@ -227,6 +227,12 @@ class PixMoPointsV2DatasetConfig(Config):
     (mm_olmo ``PixMoPointV2.format_example``)."""
 
     max_crops: int = 8
+    p_high_res: float = 0.0
+    """Probability that a training example is cropped with :attr:`high_res_max_crops` instead of
+    :attr:`max_crops`, drawn on the example's ``(row, epoch)`` stream (mm_olmo's
+    ``override_p_high_res``; the released Molmo2 fine-tuning uses 0.3 on its image pointing
+    sources). Zero draws nothing, so the examples are unchanged."""
+    high_res_max_crops: int = 24
     loss_token_weighting: str = "none"
     """``"none"`` weights every response token equally, as the released Molmo2 pretrain does for
     its pointing sources (``loss_token_weighting: None``)."""
@@ -263,10 +269,19 @@ class PixMoPointsV2DatasetConfig(Config):
         if self.n_easy_samples < 0 or self.n_hard_negatives < 0:
             raise OLMoConfigurationError("n_easy_samples / n_hard_negatives must be >= 0")
         _validate_annotation_sampling(self.annotation_sampling)
+        _validate_high_res(self)
 
     def build(self, tokenizer) -> "PixMoPointsV2Dataset":
         self.validate()
         return PixMoPointsV2Dataset(self, tokenizer)
+
+
+def _validate_high_res(cfg: Any) -> None:
+    """Check a source config's ``p_high_res`` / ``high_res_max_crops`` pair."""
+    if not 0.0 <= cfg.p_high_res <= 1.0:
+        raise OLMoConfigurationError("p_high_res must be in [0, 1]")
+    if cfg.high_res_max_crops < 1:
+        raise OLMoConfigurationError("high_res_max_crops must be at least 1")
 
 
 def _released_layout(cfg: Any) -> bool:
@@ -315,6 +330,8 @@ def _build_selected_example(
             fmt.format_turns(msg, index=index, rng=branch_rng)[0] for msg in messages
         ],
         max_crops=cfg.max_crops,
+        p_high_res=cfg.p_high_res,
+        high_res_max_crops=cfg.high_res_max_crops,
         loss_token_weighting=cfg.loss_token_weighting,
         token_ids=cfg.token_ids,
         message_weight=message_weight,
@@ -496,6 +513,8 @@ class PixMoPointsV2Dataset(EpochSeededExamples):
                 _open_image(row["image"]),
                 branches,
                 max_crops=cfg.max_crops,
+                p_high_res=cfg.p_high_res,
+                high_res_max_crops=cfg.high_res_max_crops,
                 loss_token_weighting=cfg.loss_token_weighting,
                 message_weight=cfg.message_weight,
                 shuffle_rng=rng,
@@ -540,6 +559,12 @@ class PixMoCountV2DatasetConfig(Config):
     ``("aux_point_count", "aux_pointing")``."""
 
     max_crops: int = 8
+    p_high_res: float = 0.0
+    """Probability that a training example is cropped with :attr:`high_res_max_crops` instead of
+    :attr:`max_crops`, drawn on the example's ``(row, epoch)`` stream (mm_olmo's
+    ``override_p_high_res``; the released Molmo2 fine-tuning uses 0.3 on its image pointing
+    sources). Zero draws nothing, so the examples are unchanged."""
+    high_res_max_crops: int = 24
     loss_token_weighting: str = "none"
     """``"none"`` weights every response token equally, as the released Molmo2 pretrain does for
     its pointing sources (``loss_token_weighting: None``)."""
@@ -566,6 +591,7 @@ class PixMoCountV2DatasetConfig(Config):
         if self.audit_style is not None and not self.audit_style:
             raise OLMoConfigurationError("audit_style must be None or name at least one style")
         _validate_annotation_sampling(self.annotation_sampling)
+        _validate_high_res(self)
 
     def build(self, tokenizer) -> "PixMoCountV2Dataset":
         self.validate()
@@ -683,6 +709,8 @@ class PixMoCountV2Dataset(EpochSeededExamples):
                 pil,
                 branches,
                 max_crops=cfg.max_crops,
+                p_high_res=cfg.p_high_res,
+                high_res_max_crops=cfg.high_res_max_crops,
                 loss_token_weighting=cfg.loss_token_weighting,
                 message_weight=cfg.message_weight,
                 shuffle_rng=rng,

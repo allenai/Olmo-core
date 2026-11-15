@@ -536,6 +536,7 @@ def _build_example(
         dtype=torch.float32,
         device=torch.device("cpu"),
         max_crops=max_crops,
+        high_res_max_crops=high_res_max_crops,
         p_high_res=p_high_res,
         is_training=True,
         rng=rng,

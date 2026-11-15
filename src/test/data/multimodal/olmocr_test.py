@@ -372,3 +372,32 @@ def test_stage1_ocr_group_is_opt_in_and_sqrt_split():
     np.testing.assert_allclose(
         mod._size_fractions([100, 400, 1600], "linear"), np.array([100, 400, 1600]) / 2100
     )
+
+
+def test_high_res_share_draws_the_larger_crop_budget(tmp_path, stub_renderer):
+    """``p_high_res`` crops a page with ``high_res_max_crops`` on the example's stream; the
+    transcription and its loss weight do not change."""
+    root = _write_root(tmp_path)
+    tok = _FakeTok()
+
+    def build(**kw):
+        return _cfg(
+            root,
+            max_crops=2,
+            high_res_max_crops=6,
+            target_longest_image_dim_range=(1400, 1400),
+            **kw,
+        ).build(tok)
+
+    low, high = build()[0], build(p_high_res=1.0)[0]
+    assert low["images"].shape[0] == 3 and high["images"].shape[0] == 7
+    assert high["loss_masks"].sum() == pytest.approx(low["loss_masks"].sum())
+    mixed = build(p_high_res=0.5)
+    crops = set()
+    for epoch in range(24):
+        mixed.set_epoch(epoch)
+        crops.add(mixed[0]["images"].shape[0])
+    assert crops == {3, 7}
+    for bad in (dict(p_high_res=1.5), dict(high_res_max_crops=0)):
+        with pytest.raises(OLMoConfigurationError, match="high_res"):
+            _cfg(root, **bad).validate()

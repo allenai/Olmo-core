@@ -188,6 +188,11 @@ class OlmOcrMixDatasetConfig(Config):
     listed. ``None`` keeps every language."""
 
     max_crops: int = 8
+    p_high_res: float = 0.0
+    """Probability that a training page is cropped with :attr:`high_res_max_crops` instead of
+    :attr:`max_crops`, drawn on the example's ``(row, epoch)`` stream. Zero draws nothing, so the
+    examples are unchanged. A page rendered below about 1,300 pixels does not fill 24 crops."""
+    high_res_max_crops: int = 24
     max_sequence_length: Optional[int] = None
     """Tail-truncate the built sequence to this many tokens (the image block always fits; an
     example left without loss tokens is rejected, and the loader skips it). Set it to the
@@ -217,6 +222,10 @@ class OlmOcrMixDatasetConfig(Config):
                 )
         if self.target_longest_image_dim <= 0:
             raise OLMoConfigurationError("target_longest_image_dim must be positive")
+        if not 0.0 <= self.p_high_res <= 1.0:
+            raise OLMoConfigurationError("p_high_res must be in [0, 1]")
+        if self.high_res_max_crops < 1:
+            raise OLMoConfigurationError("high_res_max_crops must be at least 1")
         if self.languages is not None and len(self.languages) == 0:
             raise OLMoConfigurationError(
                 "languages=() would filter out every row; use None to keep all languages"
@@ -326,6 +335,8 @@ class OlmOcrMixDataset(EpochSeededExamples):
             image,
             [(prompt, text)],
             max_crops=cfg.max_crops,
+            p_high_res=cfg.p_high_res,
+            high_res_max_crops=cfg.high_res_max_crops,
             loss_token_weighting=cfg.loss_token_weighting,
             message_weight=cfg.message_weight,
             token_ids=cfg.token_ids,
