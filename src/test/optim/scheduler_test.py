@@ -66,6 +66,11 @@ def test_inv_sqrt_with_warmup():
     assert scheduler.get_lr(initial_lr, 10_000, max_steps) == 2.0 + 8.0 * math.sqrt(3_000 / 10_000)
 
 
+def test_inv_sqrt_with_zero_warmup_at_step_zero():
+    scheduler = InvSqrtWithWarmup(warmup=0)
+    assert scheduler.get_lr(10.0, 0, 10_000) == 10.0
+
+
 def test_cos_with_warmup_scheduler():
     initial_lr = 10.0
     warmup_min_lr = 4.0
