@@ -25,6 +25,10 @@ The subsets are English and single-image. Two kinds are used:
 
 Every source's user turn is its question behind its ``"<style>:"`` tag, as the stage-1 academic
 sources do (``chart_reasoning: Which platform has ...``).
+
+A caption source can train on other captions than the prepared ones: a caption overrides file
+(:func:`write_caption_overrides`) holds one caption per prepared row, and
+:attr:`NemotronImageDatasetConfig.caption_overrides` makes it the row's response.
 """
 
 from __future__ import annotations
@@ -38,7 +42,17 @@ import os
 import re
 import tarfile
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import numpy as np
 
@@ -67,6 +81,7 @@ __all__ = [
     "parse_conversation",
     "prepare_nemotron_subset",
     "write_batch_index",
+    "write_caption_overrides",
     "BATCH_INDEX",
 ]
 
@@ -949,6 +964,125 @@ class _IndexedArrow:
 
 
 # ---------------------------------------------------------------------------
+# Caption overrides (new captions for the prepared rows)
+# ---------------------------------------------------------------------------
+
+CAPTION_OVERRIDES_BATCH_ROWS = 1024
+"""Rows per record batch of a caption overrides file: a lookup decodes one batch's offsets and
+touches only the pages of its own caption."""
+
+
+def write_caption_overrides(
+    path: str,
+    subset: str,
+    rows: Iterable[Tuple[str, Optional[str]]],
+    *,
+    batch_rows: int = CAPTION_OVERRIDES_BATCH_ROWS,
+) -> Dict[str, int]:
+    """Write a caption overrides file for one prepared subset: an uncompressed Arrow IPC file of
+    ``id`` / ``caption`` whose row ``k`` belongs to prepared row ``k``.
+
+    The captions are stored as given, so clean them first (:func:`clean_caption`). A row with no
+    usable caption (none was made, it was cut off, nothing is left of it) is given as ``None``; an
+    empty or blank caption is stored as one too. Such rows are skipped in training.
+
+    :param path: The file to write.
+    :param subset: Source name in :data:`NEMOTRON_SUBSETS` the rows belong to.
+    :param rows: ``(row id, caption or None)`` of every prepared row, in prepared order.
+    :param batch_rows: Rows per record batch.
+
+    :returns: ``{"rows": ..., "captions": ...}``: rows written and rows with a caption.
+    """
+    import pyarrow as pa
+
+    if subset not in NEMOTRON_SUBSETS:
+        raise OLMoConfigurationError(f"unknown Nemotron subset {subset!r}")
+    if batch_rows <= 0:
+        raise ValueError("batch_rows must be positive")
+    schema = pa.schema(
+        [("id", pa.string()), ("caption", pa.string())],
+        metadata={"subset": subset, "batch_rows": str(batch_rows)},
+    )
+    total = captions = 0
+    ids: List[str] = []
+    texts: List[Optional[str]] = []
+
+    def flush(writer) -> None:
+        if ids:
+            writer.write_batch(pa.record_batch([ids, texts], schema=schema))
+            ids.clear()
+            texts.clear()
+
+    with pa.OSFile(path, "wb") as sink, pa.ipc.new_file(sink, schema) as writer:
+        for row_id, caption in rows:
+            if caption is not None and not caption.strip():
+                caption = None
+            ids.append(str(row_id))
+            texts.append(caption)
+            total += 1
+            captions += caption is not None
+            if len(ids) == batch_rows:
+                flush(writer)
+        flush(writer)
+    return {"rows": total, "captions": captions}
+
+
+class _CaptionOverrides:
+    """Captions of a :func:`write_caption_overrides` file by prepared row. The file is
+    memory-mapped when first read (per process; nothing is mapped when pickled) and a lookup
+    decodes one string, so data workers share the page cache instead of each holding the
+    captions."""
+
+    def __init__(self, path: str, subset: str, rows: int):
+        if not os.path.isfile(path):
+            raise OLMoConfigurationError(f"caption overrides file {path!r} does not exist")
+        self._path = path
+        self._reader: Any = None
+        reader = self._open()
+        metadata = {k.decode(): v.decode() for k, v in (reader.schema.metadata or {}).items()}
+        if reader.schema.names != ["id", "caption"] or "batch_rows" not in metadata:
+            raise OLMoConfigurationError(f"{path!r} is not a caption overrides file")
+        if metadata.get("subset") != subset:
+            raise OLMoConfigurationError(
+                f"{path!r} holds captions of {metadata.get('subset')!r}, not of {subset!r}"
+            )
+        self._batch_rows = int(metadata["batch_rows"])
+        batches = reader.num_record_batches
+        stored = 0
+        if batches:
+            stored = (batches - 1) * self._batch_rows + reader.get_batch(batches - 1).num_rows
+        if stored != rows:
+            raise OLMoConfigurationError(
+                f"{path!r} was made for {stored} rows, the prepared subset has {rows}"
+            )
+        self._rows = rows
+        self._reader = None  # opened again by the process that reads
+
+    def _open(self):
+        import pyarrow as pa
+
+        return pa.ipc.open_file(pa.memory_map(self._path, "r"))
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state["_reader"] = None
+        return state
+
+    def __len__(self) -> int:
+        return self._rows
+
+    def __getitem__(self, i: int) -> Tuple[str, Optional[str]]:
+        """``(row id, caption or None)`` of prepared row ``i``."""
+        if not 0 <= i < self._rows:
+            raise IndexError(i)
+        if self._reader is None:
+            self._reader = self._open()
+        batch = self._reader.get_batch(i // self._batch_rows)
+        j = i % self._batch_rows
+        return batch.column(0)[j].as_py(), batch.column(1)[j].as_py()
+
+
+# ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
 
@@ -966,6 +1100,12 @@ class NemotronImageDatasetConfig(Config):
     listing the row indices to keep (for example, the rows left after an audit's drop list).
     ``prepared_rows`` must equal the prepared subset's length, so a list made for another
     preparation is refused."""
+    caption_overrides: Optional[str] = None
+    """Train on other captions than the prepared ones: a caption overrides file of this subset
+    (:func:`write_caption_overrides`), whose caption replaces the response of each prepared row.
+    The file must have one row per prepared row, with the prepared row ids. Rows it has no caption
+    for are skipped like other unusable rows (the next usable row is built); they are never
+    trained on their prepared caption. Only for single-turn rows (the caption subsets)."""
 
     max_crops: int = 8
     max_sequence_length: Optional[int] = None
@@ -1031,6 +1171,21 @@ class NemotronImageDataset(EpochSeededExamples):
             if len(rows) == 0 or rows.min() < 0 or rows.max() >= len(self._data):
                 raise OLMoConfigurationError(f"{config.keep_rows_path!r} lists no valid rows")
             self._keep = rows
+        self._captions: Optional[_CaptionOverrides] = None
+        if config.caption_overrides is not None:
+            if NEMOTRON_SUBSETS[config.subset].reasoning:
+                raise OLMoConfigurationError(
+                    f"caption_overrides: {config.subset!r} is not a caption subset"
+                )
+            self._captions = _CaptionOverrides(
+                config.caption_overrides, config.subset, len(self._data)
+            )
+            # The file must follow this preparation's row order, not only its length.
+            for k in sorted({0, len(self._data) // 2, len(self._data) - 1}):
+                if self._captions[k][0] != self._data[k]["id"]:
+                    raise OLMoConfigurationError(
+                        f"{config.caption_overrides!r}: row {k} is not row {k} of {prepared!r}"
+                    )
         log.info("%s: %d of %d rows", config.subset, len(self), len(self._data))
 
     def __len__(self) -> int:
@@ -1044,7 +1199,18 @@ class NemotronImageDataset(EpochSeededExamples):
     def _build(self, i: int, epoch: Optional[int] = None) -> Dict[str, np.ndarray]:
         from PIL import Image
 
-        row = self._data[i if self._keep is None else int(self._keep[i])]
+        k = i if self._keep is None else int(self._keep[i])
+        row = self._data[k]
+        responses = row["responses"]
+        if self._captions is not None:
+            row_id, caption = self._captions[k]
+            if row_id != row["id"]:
+                raise ValueError(f"caption overrides row {k} is {row_id!r}, not {row['id']!r}")
+            if caption is None:
+                raise ValueError(f"no caption for row {k} ({row_id}) in the caption overrides")
+            if len(row["prompts"]) != 1:
+                raise ValueError(f"row {k} has {len(row['prompts'])} turns, expected one")
+            responses = [caption]
         image = Image.open(io.BytesIO(row["image"])).convert("RGB")
         prompts = list(row["prompts"])
         prompts[0] = f"{self.style}: {prompts[0]}"
@@ -1052,7 +1218,7 @@ class NemotronImageDataset(EpochSeededExamples):
         seq = encode_sft_example(
             self.tokenizer,
             image,
-            list(zip(prompts, row["responses"])),
+            list(zip(prompts, responses)),
             max_crops=cfg.max_crops,
             loss_token_weighting=cfg.loss_token_weighting,
             message_weight=cfg.message_weight,

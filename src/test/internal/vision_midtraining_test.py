@@ -1705,6 +1705,67 @@ def test_merged_stage_v6_caps_the_repeated_sources(merged_stage, monkeypatch):
     assert config.dataset.target_loss_mass["text_midtraining"] == 0.9
 
 
+def test_merged_stage_nemotron_caption_overrides(merged_stage, monkeypatch, tmp_path):
+    """``--recipe.nemotron_caption_overrides.<source>=<file>`` points the named Nemotron sources
+    at a caption overrides file and leaves the others, the loss shares and the means alone."""
+    from olmo_core.internal.vision_alignment_data import (
+        STAGE1_V3_MEAN_LOSS_WEIGHTS,
+        STAGE1_V7_NEMOTRON_EPOCHS,
+    )
+
+    monkeypatch.setattr(
+        vision_midtraining,
+        "build_stage1_v3_sources",
+        lambda phase, sequence_length, artifact_root: {
+            name: _MultiAnnotationConfig(
+                dataset_path=f"/data/{name}", max_sequence_length=sequence_length
+            )
+            for name in STAGE1_V3_MEAN_LOSS_WEIGHTS
+        },
+    )
+    store = tmp_path / "nemotron_openimages_1.arrow"
+    store.write_bytes(b"")  # the recipe checks that the file is there; the loader reads it
+    option = "--recipe.nemotron_caption_overrides"
+    base = merged_stage.build("--recipe.visual_data=stage1_v7")
+    assert all(
+        base.dataset.sources[name].caption_overrides is None for name in STAGE1_V7_NEMOTRON_EPOCHS
+    )
+    config = merged_stage.build(
+        "--recipe.visual_data=stage1_v7",
+        f"{option}.nemotron_openimages_1={store}",
+        "--dataset.mean_loss_weight.nemotron_openimages_1=700.5",
+    )
+    sources = config.dataset.sources
+    assert sources["nemotron_openimages_1"].caption_overrides == str(store)
+    assert all(
+        sources[name].caption_overrides is None
+        for name in STAGE1_V7_NEMOTRON_EPOCHS
+        if name != "nemotron_openimages_1"
+    )
+    assert config.dataset.mean_loss_weight["nemotron_openimages_1"] == 700.5
+    plain = merged_stage.build(
+        "--recipe.visual_data=stage1_v7", f"{option}.nemotron_openimages_1={store}"
+    )
+    assert plain.dataset.mean_loss_weight == base.dataset.mean_loss_weight
+    assert plain.dataset.target_loss_mass == base.dataset.target_loss_mass
+    assert set(sources) == set(base.dataset.sources)
+
+    first = next(iter(STAGE1_V3_MEAN_LOSS_WEIGHTS))
+    for override, message in (
+        (f"{option}.no_such_source={store}", "no Nemotron source 'no_such_source'"),
+        (f"{option}.{first}={store}", f"no Nemotron source '{first}'"),
+        (f"{option}.nemotron_openimages_1={tmp_path / 'missing.arrow'}", "is not a file"),
+        (f"{option}.nemotron_openimages_1={tmp_path}", "is not a file"),
+    ):
+        with pytest.raises(OLMoConfigurationError, match=message):
+            merged_stage.build("--recipe.visual_data=stage1_v7", override)
+    # The Nemotron sources are stage1_v7's.
+    with pytest.raises(OLMoConfigurationError, match="no Nemotron source"):
+        merged_stage.build(
+            "--recipe.visual_data=stage1_v6", f"{option}.nemotron_openimages_1={store}"
+        )
+
+
 def test_merged_stage_v7_adds_the_nemotron_sources(merged_stage, monkeypatch):
     """``stage1_v7``. Its base split: the Nemotron sources funded by the OCR group, the CoSyn and
     olmOCR sets capped at five passes with their loss moved to the Nemotron captions and reasoning

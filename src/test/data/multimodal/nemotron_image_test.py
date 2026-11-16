@@ -381,3 +381,187 @@ def test_keep_rows_made_for_another_preparation_is_refused(tmp_path, monkeypatch
         NemotronImageDatasetConfig(
             subset="nemotron_ecd", dataset_path=str(root), keep_rows_path=str(path)
         ).build(_PromptTok())
+
+
+# ---------------------------------------------------------------------------
+# Caption overrides
+# ---------------------------------------------------------------------------
+
+
+def _caption_rows(captions):
+    return [
+        _row(f"row{k}", f"{k}.png", [("Describe this image.", caption)])
+        for k, caption in enumerate(captions)
+    ]
+
+
+def _prepare_captions(tmp_path, monkeypatch, captions, name="nemotron_openimages_1"):
+    tmp_path.mkdir(exist_ok=True)
+    images = {f"{k}.png": _png((64 + 8 * k, 48)) for k in range(len(captions))}
+    root, stats = _prepare(tmp_path, monkeypatch, _caption_rows(captions), images, name=name)
+    assert stats["rows"] == len(captions)
+    return root
+
+
+def _captions_dataset(root, overrides=None, name="nemotron_openimages_1", **kwargs):
+    return NemotronImageDatasetConfig(
+        subset=name,
+        dataset_path=str(root),
+        max_crops=1,
+        caption_overrides=None if overrides is None else str(overrides),
+        **kwargs,
+    ).build(_PromptTok())
+
+
+def _assert_same_example(a, b):
+    import numpy as np
+
+    assert set(a) == set(b)
+    for key in a:
+        np.testing.assert_array_equal(a[key], b[key], err_msg=key)
+
+
+OLD_CAPTIONS = ["An old caption of a dog.", "An old caption of a cat.", "An old one of a bird."]
+NEW_CAPTIONS = ["A photograph of a brown dog on grass.", "A drawing of a cat.", "A chart of birds."]
+
+
+def test_caption_overrides_replace_the_prepared_captions(tmp_path, monkeypatch):
+    """With the option, every row is the example a preparation with the new captions gives."""
+    import pickle
+
+    old = _prepare_captions(tmp_path / "old", monkeypatch, OLD_CAPTIONS)
+    new = _prepare_captions(tmp_path / "new", monkeypatch, NEW_CAPTIONS)
+    store = tmp_path / "captions.arrow"
+    written = nv.write_caption_overrides(
+        str(store),
+        "nemotron_openimages_1",
+        [(f"row{k}", caption) for k, caption in enumerate(NEW_CAPTIONS)],
+        batch_rows=2,  # two record batches
+    )
+    assert written == {"rows": 3, "captions": 3}
+    overridden = _captions_dataset(old, store)
+    reference = _captions_dataset(new)
+    plain = _captions_dataset(old)
+    assert len(overridden) == len(reference) == 3
+    for k in range(3):
+        _assert_same_example(overridden[k], reference[k])
+        assert len(overridden[k]["input_ids"]) != len(plain[k]["input_ids"])
+    # As the mixture loader reads it, and from a data worker's copy.
+    _assert_same_example(overridden.get(2, 1), reference.get(2, 1))
+    clone = pickle.loads(pickle.dumps(overridden))
+    assert clone._captions._reader is None
+    _assert_same_example(clone[1], reference[1])
+
+
+def test_without_caption_overrides_examples_are_the_prepared_rows(tmp_path, monkeypatch):
+    """The option unset: each example is the prepared row's own turns, built as before."""
+    from PIL import Image
+
+    from olmo_core.data.multimodal.message_sequence import encode_sft_example
+    from olmo_core.data.multimodal.sft_common import truncate_for_format
+
+    root = _prepare_captions(tmp_path / "old", monkeypatch, OLD_CAPTIONS)
+    ds = _captions_dataset(root)
+    assert ds.config.caption_overrides is None and ds._captions is None
+    cfg = ds.config
+    for k in range(3):
+        row = ds._data[k]
+        assert row["responses"] == [OLD_CAPTIONS[k]]
+        seq = encode_sft_example(
+            ds.tokenizer,
+            Image.open(io.BytesIO(row["image"])).convert("RGB"),
+            [(f"detailed_caption: {row['prompts'][0]}", row["responses"][0])],
+            max_crops=cfg.max_crops,
+            loss_token_weighting=cfg.loss_token_weighting,
+            message_weight=cfg.message_weight,
+            token_ids=cfg.token_ids,
+            message_format=cfg.message_format,
+            shuffle_rng=ds.epoch_rng(k),
+        )
+        expected = truncate_for_format(
+            seq, cfg.max_sequence_length, cfg.token_ids, cfg.message_format
+        )
+        _assert_same_example(ds[k], expected)
+
+
+@pytest.mark.parametrize("missing", [None, "", "  \n"])
+def test_caption_overrides_skip_rows_without_a_caption(tmp_path, monkeypatch, missing):
+    """A row the file has no caption for is never trained on its prepared caption: the next
+    usable row is built in its place, as for any unusable row."""
+    old = _prepare_captions(tmp_path / "old", monkeypatch, OLD_CAPTIONS)
+    new = _prepare_captions(tmp_path / "new", monkeypatch, NEW_CAPTIONS)
+    store = tmp_path / "captions.arrow"
+    captions = [NEW_CAPTIONS[0], missing, NEW_CAPTIONS[2]]
+    written = nv.write_caption_overrides(
+        str(store), "nemotron_openimages_1", [(f"row{k}", c) for k, c in enumerate(captions)]
+    )
+    assert written == {"rows": 3, "captions": 2}
+    overridden = _captions_dataset(old, store)
+    reference = _captions_dataset(new)
+    assert len(overridden) == 3
+    _assert_same_example(overridden[0], reference[0])
+    with pytest.raises(ValueError, match="no caption for row 1"):
+        overridden._build(1)
+    # Row 1 is built as row 2 (the reference draws row 2's stream for index 2 as well).
+    _assert_same_example(overridden[1], reference._build(2, 0))
+    _assert_same_example(overridden.get(1, 0), reference._build(2, 0))
+
+
+def test_caption_overrides_follow_keep_rows(tmp_path, monkeypatch):
+    """The captions are looked up by prepared row, also when a keep-rows file reorders them."""
+    old = _prepare_captions(tmp_path / "old", monkeypatch, OLD_CAPTIONS)
+    new = _prepare_captions(tmp_path / "new", monkeypatch, NEW_CAPTIONS)
+    store = tmp_path / "captions.arrow"
+    nv.write_caption_overrides(
+        str(store), "nemotron_openimages_1", [(f"row{k}", c) for k, c in enumerate(NEW_CAPTIONS)]
+    )
+    keep = tmp_path / "keep.json"
+    keep.write_text(json.dumps({"prepared_rows": 3, "rows": [2, 0]}))
+    overridden = _captions_dataset(old, store, keep_rows_path=str(keep))
+    reference = _captions_dataset(new, keep_rows_path=str(keep))
+    assert len(overridden) == 2
+    for k in range(2):
+        _assert_same_example(overridden[k], reference[k])
+
+
+@pytest.mark.parametrize(
+    "case, message",
+    [
+        ("missing", "does not exist"),
+        ("not_a_store", "not a caption overrides file"),
+        ("other_subset", "not of 'nemotron_openimages_1'"),
+        ("fewer_rows", "was made for 2 rows"),
+        ("other_order", "is not row"),
+    ],
+)
+def test_caption_overrides_made_for_another_preparation_are_refused(
+    tmp_path, monkeypatch, case, message
+):
+    import pyarrow as pa
+
+    root = _prepare_captions(tmp_path / "old", monkeypatch, OLD_CAPTIONS)
+    store = tmp_path / "captions.arrow"
+    rows = [(f"row{k}", caption) for k, caption in enumerate(NEW_CAPTIONS)]
+    if case == "not_a_store":
+        table = pa.table({"id": ["row0"], "text": ["x"]})
+        with pa.OSFile(str(store), "wb") as sink, pa.ipc.new_file(sink, table.schema) as writer:
+            writer.write_table(table)
+    elif case == "other_subset":
+        nv.write_caption_overrides(str(store), "nemotron_openimages_2", rows)
+    elif case == "fewer_rows":
+        nv.write_caption_overrides(str(store), "nemotron_openimages_1", rows[:2])
+    elif case == "other_order":
+        nv.write_caption_overrides(str(store), "nemotron_openimages_1", rows[::-1])
+    with pytest.raises(OLMoConfigurationError, match=message):
+        _captions_dataset(root, store)
+
+
+def test_caption_overrides_are_for_caption_subsets(tmp_path, monkeypatch):
+    rows = [_row("row0", "1.png", [("Q?", "<think>t</think>A")])]
+    root, _ = _prepare(tmp_path, monkeypatch, rows, {"1.png": _png()})
+    store = tmp_path / "captions.arrow"
+    nv.write_caption_overrides(str(store), "nemotron_ecd", [("row0", "A caption.")])
+    with pytest.raises(OLMoConfigurationError, match="not a caption subset"):
+        _captions_dataset(root, store, name="nemotron_ecd")
+    with pytest.raises(OLMoConfigurationError, match="unknown Nemotron subset"):
+        nv.write_caption_overrides(str(store), "no_such_subset", [("row0", "A caption.")])

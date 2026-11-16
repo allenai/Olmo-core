@@ -301,6 +301,12 @@ class MixedMidtrainingRecipeConfig(Config):
     """Per Nemotron source (stage1_v7), a keep-rows file
     (:attr:`~olmo_core.data.multimodal.nemotron_image.NemotronImageDatasetConfig.keep_rows_path`).
     Set the filtered source's mean with ``dataset.mean_loss_weight.<name>``."""
+    nemotron_caption_overrides: dict[str, str] = field(default_factory=dict)
+    """Per Nemotron caption source (stage1_v7), a caption overrides file
+    (:attr:`~olmo_core.data.multimodal.nemotron_image.NemotronImageDatasetConfig.caption_overrides`):
+    the source trains on the file's captions instead of the prepared ones and skips the rows it
+    has no caption for. Set the source's mean for the new captions with
+    ``dataset.mean_loss_weight.<name>``."""
     pdfa_loss_shares: dict[str, float] = field(default_factory=dict)
     """Shares of the visual loss for PDFA page sources (names of
     :data:`~olmo_core.internal.vision_alignment_data.STAGE1_PDFA_SOURCES`), with stage1_v3 to
@@ -1463,6 +1469,16 @@ def build_config(
                     f"recipe.nemotron_keep_rows: no Nemotron source {name!r}"
                 )
             setattr(visual_sources[name], "keep_rows_path", path)
+        for name, path in recipe.nemotron_caption_overrides.items():
+            if name not in visual_sources or not hasattr(visual_sources[name], "caption_overrides"):
+                raise OLMoConfigurationError(
+                    f"recipe.nemotron_caption_overrides: no Nemotron source {name!r}"
+                )
+            if not isinstance(path, str) or not Path(path).is_file():
+                raise OLMoConfigurationError(
+                    f"recipe.nemotron_caption_overrides.{name}: {path!r} is not a file"
+                )
+            setattr(visual_sources[name], "caption_overrides", path)
         if recipe.visual_loss_share_scale:
             visual_sources = {
                 name: source
@@ -1515,6 +1531,10 @@ def build_config(
     if recipe.high_res_share and not (stage1_v3 and not replaced_sources):
         raise OLMoConfigurationError(
             "recipe.high_res_share needs stage1_v3 to stage1_v7 visual data built by the recipe"
+        )
+    if recipe.nemotron_caption_overrides and not (stage1_v3 and not replaced_sources):
+        raise OLMoConfigurationError(
+            "recipe.nemotron_caption_overrides needs stage1_v7 visual data built by the recipe"
         )
     if _has_shard_options(recipe) and not (stage1_v3 and not replaced_sources):
         raise OLMoConfigurationError(
