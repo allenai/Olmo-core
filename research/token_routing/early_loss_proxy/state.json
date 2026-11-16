@@ -1,0 +1,77 @@
+{
+ "jobs": {
+  "5149817": {
+   "node": "mooney",
+   "tag": "smoke",
+   "runs": [
+    "elp-smoke-dense-sd0",
+    "elp-smoke-recipe-sd0"
+   ],
+   "steps": "1,2,5,10",
+   "sets": "suite8k:16,suite2k:16,train:16",
+   "code": "/data/prasann/early_loss_proxy/code_281e228c2",
+   "extra": "",
+   "lr_mult": 1.0
+  },
+  "5149824": {
+   "node": "mooney",
+   "tag": "v1",
+   "runs": [
+    "elp-v1-dense-sd0",
+    "elp-v1-recipe-sd0",
+    "elp-v1-ddp-sd0",
+    "elp-v1-ddpg-sd0",
+    "elp-v1-rnd19-sd0",
+    "elp-v1-rnd9-sd0",
+    "elp-v1-wtsS1-sd0",
+    "elp-v1-denselora-sd0",
+    "elp-v1-tail20to7-sd0",
+    "elp-v1-orc95-sd0",
+    "elp-v1-orc70-sd0",
+    "elp-v1-rnd17-sd0",
+    "elp-v1-rnd11-sd0",
+    "elp-v1-wtsS0wr-sd0",
+    "elp-v1-tail10-sd0",
+    "elp-v1-orc90-sd0",
+    "elp-v1-orc85-sd0",
+    "elp-v1-orc80-sd0",
+    "elp-v1-orc60-sd0"
+   ],
+   "steps": "1,2,5,10,20",
+   "sets": "suite8k:32,suite2k:16,train:16",
+   "code": "/data/prasann/early_loss_proxy/code_281e228c2",
+   "extra": "",
+   "lr_mult": 1.0
+  },
+  "5149825": {
+   "node": "mooney",
+   "tag": "v1",
+   "runs": [
+    "elp-v1-dense-sd1",
+    "elp-v1-recipe-sd1",
+    "elp-v1-ddp-sd1",
+    "elp-v1-ddpg-sd1",
+    "elp-v1-rnd19-sd1",
+    "elp-v1-rnd9-sd1",
+    "elp-v1-wtsS1-sd1",
+    "elp-v1-denselora-sd1",
+    "elp-v1-tail20to7-sd1",
+    "elp-v1-orc95-sd1",
+    "elp-v1-orc70-sd1",
+    "elp-v1-rnd17-sd1",
+    "elp-v1-rnd11-sd1",
+    "elp-v1-wtsS0wr-sd1",
+    "elp-v1-tail10-sd1",
+    "elp-v1-orc90-sd1",
+    "elp-v1-orc85-sd1",
+    "elp-v1-orc80-sd1",
+    "elp-v1-orc60-sd1"
+   ],
+   "steps": "1,2,5,10,20",
+   "sets": "suite8k:32,suite2k:16,train:16",
+   "code": "/data/prasann/early_loss_proxy/code_281e228c2",
+   "extra": "",
+   "lr_mult": 1.0
+  }
+ }
+}
