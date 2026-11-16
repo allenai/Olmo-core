@@ -24,6 +24,8 @@ def _load(script: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, SCRIPT_DIR / script)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # dataclasses resolve string annotations through sys.modules[cls.__module__].
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -39,7 +41,9 @@ def _common(module: ModuleType) -> SimpleNamespace:
     )
 
 
-ENTRY_POINTS = sorted(p.name for p in SCRIPT_DIR.glob("*.py") if p.name != "moe_8l_common.py")
+# Shared modules imported by entry points and other examples, not entry points themselves.
+SHARED_MODULES = {"moe_8l_common.py", "olmoe3_small_medium_models.py"}
+ENTRY_POINTS = sorted(p.name for p in SCRIPT_DIR.glob("*.py") if p.name not in SHARED_MODULES)
 
 
 @pytest.mark.parametrize("script", ENTRY_POINTS)
@@ -50,6 +54,15 @@ def test_entry_point_configs_build(script):
     train_module = module.build_train_module_config(common)
     assert model.num_params >= model.num_active_params > 0
     assert train_module.rank_microbatch_size > 0
+
+
+@pytest.mark.parametrize("model_size", ["small", "medium"])
+def test_small_medium_models_build(model_size):
+    module = _load("olmoe3_small_medium_models.py")
+    g = module.geometry(model_size)
+    # build_model_config raises if the parameter counts drift from the guarded values.
+    model = module.build_model_config(model_size, eos_token_id=100_257)
+    assert model.num_params == g.expected_total_params
 
 
 # (script, EP degree, PP degree, global batch in Mi tokens, rank microbatch tokens,

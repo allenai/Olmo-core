@@ -4,7 +4,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributed.tensor import init_device_mesh
+from torch.distributed.tensor import DTensor, init_device_mesh
 from torch.distributed.tensor.parallel import (
     ColwiseParallel,
     RowwiseParallel,
@@ -16,6 +16,7 @@ from olmo_core.distributed.checkpoint import (
     async_save_model_and_optim_state,
     load_keys,
     load_model_and_optim_state,
+    load_unsharded_model_state,
     merge_state_dicts,
     prune_state_dict,
     save_model_and_optim_state,
@@ -212,6 +213,42 @@ def run_save_sharded_checkpoint(dir):
     optim.zero_grad(set_to_none=True)
 
     save_model_and_optim_state(dir, feed_forward, optim)
+
+
+def run_load_unsharded_model_state_in_distributed_job(dir):
+    run_save_sharded_checkpoint(dir)
+
+    # Reassemble the expected full weights on every rank (a collective), then read them back
+    # from the checkpoint on rank 0 alone while the job is still distributed.
+    tp_mesh = init_device_mesh(get_default_device().type, (dist.get_world_size(),))
+    feed_forward = FeedForward().to(get_default_device())
+    parallelize_module(
+        feed_forward,
+        tp_mesh,
+        {"w1": ColwiseParallel(), "w2": RowwiseParallel(), "w3": ColwiseParallel()},
+    )
+    load_model_and_optim_state(dir, feed_forward)
+    expected = {
+        k: (v.full_tensor() if isinstance(v, DTensor) else v).cpu()
+        for k, v in feed_forward.state_dict().items()
+    }
+
+    if dist.get_rank() == 0:
+        state_dict = load_unsharded_model_state(dir)
+        assert state_dict.keys() == expected.keys()
+        for key, value in expected.items():
+            torch.testing.assert_close(state_dict[key], value)
+    dist.barrier()
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_load_unsharded_model_state_in_distributed_job(backend, tmp_path):
+    run_distributed_test(
+        run_load_unsharded_model_state_in_distributed_job,
+        backend=backend,
+        func_args=(tmp_path / "sharded",),
+        start_method="spawn",
+    )
 
 
 @pytest.mark.parametrize("backend", BACKENDS)

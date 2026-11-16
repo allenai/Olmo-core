@@ -43,8 +43,10 @@ from olmo_core.utils import env_bool, get_default_device, move_to_device
 from ..config import Config, DType
 from ..exceptions import OLMoConfigurationError
 from .adamw import foreach_adamw_step
+from .completedp import CompletedPOptimConfig, apply_completedp
 from .config import INITIAL_LR_FIELD, LR_FIELD, OptimGroupOverride
 from .grad_debug import debug_nan_inf_grad_norm
+from .mup import MuPConfig, mup_lr_multipliers, split_groups_by_lr_multiplier
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +148,19 @@ class OLMoDDPOptimizerConfig(Config):
     """
     These are fields that should not be overridden by the value in a checkpoint after
     loading optimizer state.
+    """
+
+    mup: Optional[MuPConfig] = None
+    """
+    Scale each parameter's learning rate following muP. Every parameter group, including the
+    ones from :data:`group_overrides`, is split by learning-rate multiplier.
+    """
+
+    completedp: Optional[CompletedPOptimConfig] = None
+    """
+    Set each parameter's learning rate, epsilon, weight decay and betas following CompletedP.
+    Requires a model built with CompletedP. Every parameter group, including the ones from
+    :data:`group_overrides`, is split by multiplier.
     """
 
     # TODO(optim-config-dup): the fields below mirror OLMoDDPOptimizer.__init__ (name + default),
@@ -276,6 +291,30 @@ class OLMoDDPOptimizerConfig(Config):
         # group_overrides.append(default_override)
         group_overrides.insert(0, default_override)  # to ensure default is first
 
+        group_overrides = apply_completedp(
+            group_overrides,
+            model_parts,
+            self.completedp,
+            optimizer_name=self.__class__.__name__,
+            supported=True,
+            mup_enabled=self.mup is not None,
+            lr=self.lr,
+            eps=self.eps,
+            weight_decay=self.weight_decay,
+            betas=self.betas,
+        )
+        if self.mup is not None:
+            multipliers: Dict[str, float] = {}
+            for part in model_parts:
+                multipliers.update(mup_lr_multipliers(part, self.mup))
+            group_overrides = split_groups_by_lr_multiplier(
+                group_overrides,
+                multipliers,
+                self.mup,
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+            )
+
         param_groups = []
         for go in group_overrides:
             if len(go.params) > 0:
@@ -340,6 +379,8 @@ class OLMoDDPOptimizerConfig(Config):
         kwargs.pop("group_overrides")
         kwargs.pop("compile")
         kwargs.pop("fixed_fields")
+        kwargs.pop("mup")
+        kwargs.pop("completedp")
 
         # Stable parameter order (by name) for each partition, used by all ranks for packing/broadcast.
         ep_param_ids = self._collect_ep_param_ids(model_parts)

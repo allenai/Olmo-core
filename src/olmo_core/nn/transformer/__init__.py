@@ -11,6 +11,7 @@ from .block import (
     TransformerBlock,
     TransformerBlockBase,
 )
+from .completedp import CompletedPConfig
 from .config import (
     OLMoDDPModelConfig,
     TransformerActivationCheckpointingMode,
@@ -46,4 +47,5 @@ __all__ = [
     "TransformerDataParallelWrappingStrategy",
     "TransformerActivationCheckpointingMode",
     "InitMethod",
+    "CompletedPConfig",
 ]

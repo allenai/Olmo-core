@@ -46,13 +46,15 @@ if triton is not None:
         start_row_base = tl.load(start_elements_ptr) if HAS_START_TENSOR else START_ROW
         end_row = start_row_base + tl.load(num_elements_ptr)
 
-        col_idx = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)[None, :]
+        col_idx = (pid_n * BLOCK_N + tl.arange(0, BLOCK_N)[None, :]).to(tl.int64)
         col_mask = col_idx < hidden
         row_start = start_row_base + pid_m * BLOCK_M
         row_stride: tl.constexpr = ROW_PROGRAMS * BLOCK_M
 
         while row_start < end_row:
-            row_idx = row_start + tl.arange(0, BLOCK_M)[:, None]
+            # Widen before multiplying by strides: large MoE buffers can exceed
+            # 2**31 elements even when row counts and strides individually fit int32.
+            row_idx = (row_start + tl.arange(0, BLOCK_M)[:, None]).to(tl.int64)
             mask = (row_idx < end_row) & (row_idx < rows) & col_mask
 
             up_offsets = row_idx * x_stride_0 + col_idx * x_stride_1
@@ -94,13 +96,15 @@ if triton is not None:
         start_row_base = tl.load(start_elements_ptr) if HAS_START_TENSOR else START_ROW
         end_row = start_row_base + tl.load(num_elements_ptr)
 
-        col_idx = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)[None, :]
+        col_idx = (pid_n * BLOCK_N + tl.arange(0, BLOCK_N)[None, :]).to(tl.int64)
         col_mask = col_idx < hidden
         row_start = start_row_base + pid_m * BLOCK_M
         row_stride = tl.num_programs(0) * BLOCK_M
 
         while row_start < end_row:
-            row_idx = row_start + tl.arange(0, BLOCK_M)[:, None]
+            # Widen before multiplying by strides: large MoE buffers can exceed
+            # 2**31 elements even when row counts and strides individually fit int32.
+            row_idx = (row_start + tl.arange(0, BLOCK_M)[:, None]).to(tl.int64)
             mask = (row_idx < end_row) & (row_idx < rows) & col_mask
 
             up_offsets = row_idx * x_stride_0 + col_idx * x_stride_1
@@ -145,13 +149,15 @@ if triton is not None:
         start_row_base = tl.load(start_elements_ptr) if HAS_START_TENSOR else START_ROW
         end_row = start_row_base + tl.load(num_elements_ptr)
 
-        col_idx = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)[None, :]
+        col_idx = (pid_n * BLOCK_N + tl.arange(0, BLOCK_N)[None, :]).to(tl.int64)
         col_mask = col_idx < hidden
         row_start = start_row_base + pid_m * BLOCK_M
         row_stride: tl.constexpr = ROW_PROGRAMS * BLOCK_M
 
         while row_start < end_row:
-            row_idx = row_start + tl.arange(0, BLOCK_M)[:, None]
+            # Widen before multiplying by strides: large MoE buffers can exceed
+            # 2**31 elements even when row counts and strides individually fit int32.
+            row_idx = (row_start + tl.arange(0, BLOCK_M)[:, None]).to(tl.int64)
             mask = (row_idx < end_row) & (row_idx < rows) & col_mask
 
             up_offsets = row_idx * x_stride_0 + col_idx * x_stride_1

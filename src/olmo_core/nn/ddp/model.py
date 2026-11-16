@@ -48,6 +48,7 @@ from ..moe.v2.ep_no_sync_tbo_rowwise import (
     ep_no_sync_rowwise_tbo_stage_c_launch,
     ep_no_sync_rowwise_tbo_stage_tail,
 )
+from ..transformer.completedp import apply_completedp_init_
 from .block import OLMoDDPTransformerBlock
 
 if TYPE_CHECKING:
@@ -958,6 +959,9 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
             self.init_method.init_final_w_out(
                 self.lm_head.w_out, d_model=self.d_model, std=self.init_std, generator=generator
             )
+
+        if self.completedp is not None:
+            apply_completedp_init_(self)
 
         # `to_empty()` above allocated fresh storage for the embedding and LM-head params, breaking
         # any weight tie; re-establish it so a tied model doesn't silently train/save an independent

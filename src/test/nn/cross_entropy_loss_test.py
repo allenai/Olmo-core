@@ -15,13 +15,13 @@ def compute_loss(
     loss_fn: CrossEntropyLoss,
     logits: torch.Tensor,
     labels: torch.Tensor,
-    batch_num_tokens_for_loss: torch.Tensor,
+    batch_num_tokens_for_loss: Optional[torch.Tensor],
 ) -> torch.Tensor:
     ce_loss, z_loss = loss_fn(logits, labels, batch_num_tokens_for_loss)
 
     loss = ce_loss
     if z_loss is not None:
-        loss += z_loss
+        loss = loss + z_loss
 
     if loss_fn.reduction != "none":
         assert loss.shape == tuple(), f"{loss}"
@@ -38,9 +38,9 @@ def run_cross_entropy_loss_parallel(
     z_loss_multiplier: Optional[float],
     logits: torch.Tensor,
     labels: torch.Tensor,
-    batch_num_tokens_for_loss: torch.Tensor,
+    batch_num_tokens_for_loss: Optional[torch.Tensor],
     grad: torch.Tensor,
-    loss: torch.Tensor,
+    expected_loss: torch.Tensor,
 ):
     # Init device mesh.
     tp_mesh = init_device_mesh("cuda", (get_world_size(),), mesh_dim_names=("tp",))
@@ -54,11 +54,12 @@ def run_cross_entropy_loss_parallel(
     labels = distribute_tensor(
         labels.to(device=get_default_device()), device_mesh=tp_mesh, placements=(Shard(1),)
     )
-    batch_num_tokens_for_loss = batch_num_tokens_for_loss.to(device=get_default_device())
+    if batch_num_tokens_for_loss is not None:
+        batch_num_tokens_for_loss = batch_num_tokens_for_loss.to(device=get_default_device())
     grad = distribute_tensor(
         grad.to(device=get_default_device()), device_mesh=tp_mesh, placements=(Shard(1),)
     )
-    loss = loss.to(device=get_default_device())
+    expected_loss = expected_loss.to(device=get_default_device())
 
     # Initialize loss and apply parallelism.
     loss_fn = CrossEntropyLoss(
@@ -70,7 +71,7 @@ def run_cross_entropy_loss_parallel(
     loss = compute_loss(loss_fn, logits, labels, batch_num_tokens_for_loss)
 
     # Check loss.
-    torch.testing.assert_close(loss.detach(), loss)
+    torch.testing.assert_close(loss.detach(), expected_loss)
 
     # Trigger backward pass.
     loss.backward()
@@ -81,17 +82,23 @@ def run_cross_entropy_loss_parallel(
 
 
 @pytest.mark.parametrize(
-    "compile, reduction",
+    "compile, reduction, ignore_shard",
     [
-        pytest.param(False, "sum", id="default-sum"),
-        pytest.param(False, "none", id="default-none"),
+        pytest.param(False, "mean", False, id="default-mean"),
+        pytest.param(False, "mean", True, id="mean-ignored-shard"),
+        pytest.param(False, "sum", False, id="default-sum"),
+        pytest.param(False, "none", False, id="default-none"),
     ],
 )
+@pytest.mark.parametrize("normalize_loss", [False, True])
+@pytest.mark.parametrize("z_loss_multiplier", [None, 1e-4])
 @requires_multi_gpu
 def test_cross_entropy_loss_parallel(
     compile: bool,
+    ignore_shard: bool,
     reduction: Literal["sum", "mean", "none"],
-    z_loss_multiplier: Optional[float] = None,
+    normalize_loss: bool,
+    z_loss_multiplier: Optional[float],
 ):
     B, S, V = 4, 16, 256
 
@@ -104,7 +111,9 @@ def test_cross_entropy_loss_parallel(
     labels[0][2] = -100
     labels[2][9] = -100
     labels[3][12] = -100
-    batch_num_tokens_for_loss = (labels != -100).sum()
+    if ignore_shard:
+        labels[:, : S // 2] = -100
+    batch_num_tokens_for_loss = (labels != -100).sum() if normalize_loss else None
 
     # Get loss.
     loss = compute_loss(loss_fn, logits, labels, batch_num_tokens_for_loss)
@@ -124,7 +133,9 @@ def test_cross_entropy_loss_parallel(
             z_loss_multiplier,
             logits.detach().cpu(),
             labels.detach().cpu(),
-            batch_num_tokens_for_loss.detach().cpu(),
+            batch_num_tokens_for_loss.detach().cpu()
+            if batch_num_tokens_for_loss is not None
+            else None,
             logits.grad.detach().cpu(),
             loss.detach().cpu(),
         ),

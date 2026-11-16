@@ -336,14 +336,18 @@ class KimiDeltaAttention(SequenceMixer):
         std: float = 0.02,
         generator: torch.Generator | None = None,
     ) -> None:
-        from olmo_core.nn.transformer.init import InitMethod, init_linear
+        from olmo_core.nn.transformer.init import (
+            InitMethod,
+            init_linear,
+            init_linear_nanochat,
+        )
 
         if init_method == InitMethod.fan_in:
             raise NotImplementedError(f"init method '{init_method}' is not supported for KDA")
         if init_method == InitMethod.normalized:
             std = d_model**-0.5
 
-        for linear in (
+        for m in (
             self.w_q,
             self.w_k,
             self.w_v,
@@ -352,16 +356,23 @@ class KimiDeltaAttention(SequenceMixer):
             self.w_b,
             self.g_proj_1,
             self.g_proj_2,
+            self.q_conv1d,
+            self.k_conv1d,
+            self.v_conv1d,
         ):
-            init_linear(linear, std=std, generator=generator)
-        for conv in (self.q_conv1d, self.k_conv1d, self.v_conv1d):
-            init_linear(conv, std=std, generator=generator)
+            if init_method == InitMethod.nanochat:
+                init_linear_nanochat(m, generator=generator)
+            else:
+                init_linear(m, std=std, generator=generator)
 
         self.A_log.copy_(nn.init.uniform_(self.A_log, a=1, b=16, generator=generator).log())
         # Match FLA 0.4.1's released KDA layer initialization.
         self.dt_bias.zero_()
         self.o_norm.reset_parameters()
 
+        if init_method == InitMethod.nanochat:
+            init_linear_nanochat(self.w_out, generator=generator)
+            return
         if init_method == InitMethod.llama:
             std = std / (2 * num_blocks) ** 0.5
         elif init_method == InitMethod.llama_depth:

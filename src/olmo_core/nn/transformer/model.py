@@ -37,9 +37,11 @@ from olmo_core.nn.attention.ring import (
     UlyssesContextParallelStyle,
 )
 from olmo_core.nn.embedding import SplitVocabEmbedding
+from olmo_core.nn.residual_stream import ResidualStream
 from olmo_core.utils import get_default_device, mark_dynamic, move_to_device
 
 from ..attention import Attention, RingAttentionLoadBalancer, SequenceMixer
+from ..attention.backend import AttentionBackend
 from ..buffer_cache import BufferCache
 from ..functional import l2_normalize
 from ..layer_norm import LayerNormConfig
@@ -52,6 +54,12 @@ from .block import (
     NormalizedTransformerBlock,
     TransformerBlock,
     TransformerBlockBase,
+)
+from .completedp import (
+    CompletedPConfig,
+    apply_completedp_init_,
+    completedp_block_configs,
+    validate_completedp_model,
 )
 from .config import (
     TransformerActivationCheckpointingMode,
@@ -94,6 +102,8 @@ class Transformer(nn.Module):
     :param block_overrides: Overrides for specific blocks. Not supported if `block` is a dict of named blocks.
     :param block_pattern: The pattern of blocks to use. Required if `block` is a dict of named blocks.
     :param embed_scale: The scale factor for the embeddings.
+    :param completedp: Use the CompletedP parameterization: scale every residual branch by depth
+        and the init by width (see :class:`~olmo_core.nn.transformer.completedp.CompletedPConfig`).
     """
 
     def __init__(
@@ -116,6 +126,7 @@ class Transformer(nn.Module):
         embed_scale: Optional[float] = None,
         tie_word_embeddings: bool = False,
         n_extra_vocab: int = 0,
+        completedp: Optional[CompletedPConfig] = None,
     ):
         super().__init__()
 
@@ -153,6 +164,8 @@ class Transformer(nn.Module):
             block_pattern=block_pattern,
             block_overrides=block_overrides,
         )
+        if completedp is not None:
+            block_configs = completedp_block_configs(block_configs, completedp, n_layers)
 
         self.blocks = nn.ModuleDict()
         for block_idx in range(n_layers):
@@ -178,6 +191,9 @@ class Transformer(nn.Module):
         self.init_seed = init_seed
         self.init_std = init_std
         self.embedding_init_std = embedding_init_std
+        self.completedp = completedp
+        if completedp is not None:
+            validate_completedp_model(self)
 
         self._cache = cache
         self._pp_enabled = False
@@ -355,30 +371,36 @@ class Transformer(nn.Module):
         generator = torch.Generator(device).manual_seed(seed)
 
         if self.embeddings is not None:
+            embedding_std = (
+                self.embedding_init_std if self.embedding_init_std is not None else self.init_std
+            )
             self.init_method.init_embeddings(
                 self.embeddings,
                 d_model=self.d_model,
                 embed_scale=self.embed_scale,
-                std=(
-                    self.embedding_init_std
-                    if self.embedding_init_std is not None
-                    else self.init_std
-                ),
+                std=embedding_std,
                 generator=generator,
             )
             if isinstance(self.embeddings, SplitVocabEmbedding):
-                # mm_olmo initialises the added rows from `new_embedding_init_range`, which
-                # matches our `init_std` default of 0.02.
-                _apply_init(
-                    nn.init.normal_,
-                    self.embeddings.extra_weight,
-                    generator=generator,
-                    std=(
-                        self.embedding_init_std
-                        if self.embedding_init_std is not None
-                        else self.init_std
-                    ),
-                )
+                if self.init_method == InitMethod.normal:
+                    # mm_olmo initialises the added rows from `new_embedding_init_range`, which
+                    # matches our `init_std` default of 0.02.
+                    _apply_init(
+                        nn.init.normal_,
+                        self.embeddings.extra_weight,
+                        generator=generator,
+                        std=embedding_std,
+                    )
+                else:
+                    # Other init methods scale the embedding table independently of `init_std`,
+                    # and the added rows must start at the same scale as the base rows.
+                    self.init_method.init_embedding_weight(
+                        self.embeddings.extra_weight,
+                        d_model=self.d_model,
+                        embed_scale=self.embed_scale,
+                        std=embedding_std,
+                        generator=generator,
+                    )
 
         # Re-establish weight tying since `to_empty` above allocates fresh storage.
         if self.tie_word_embeddings:
@@ -454,6 +476,9 @@ class Transformer(nn.Module):
                 std=self.init_std,
                 generator=generator,
             )
+
+        if self.completedp is not None:
+            apply_completedp_init_(self)
 
         return generator
 
@@ -982,6 +1007,25 @@ class Transformer(nn.Module):
         if self.lm_head is not None:
             self.lm_head.apply_cp(cp_mesh)
 
+    def _dropout_is_active(self) -> bool:
+        """
+        Whether any submodule applies dropout, and therefore whether activation checkpointing has
+        to preserve the RNG state across recomputation.
+
+        Covers :class:`~olmo_core.nn.residual_stream.ResidualStream` (whose ``masked_dropout`` drives
+        Molmo2's ``response_residual_dropout``), plain :class:`torch.nn.Dropout`, and the attention
+        backends' own ``dropout_p``.
+        """
+        for module in self.modules():
+            if isinstance(module, ResidualStream):
+                if module.p > 0.0 or module.masked_dropout > 0.0:
+                    return True
+            elif isinstance(module, nn.Dropout) and module.p > 0.0:
+                return True
+            elif isinstance(module, AttentionBackend) and module.dropout_p > 0.0:
+                return True
+        return False
+
     def apply_activation_checkpointing(
         self,
         mode: TransformerActivationCheckpointingMode,
@@ -1027,10 +1071,13 @@ class Transformer(nn.Module):
         if mode == TransformerActivationCheckpointingMode.selected_modules and modules is None:
             raise ValueError("'modules' is required for 'selected_modules' mode")
 
-        # EMO samples a routed-expert pool size for each document. Recompute must replay those
-        # samples so it routes through the same experts as the original checkpointed forward.
-        # TODO: also preserve RNG state if dropout is active.
-        preserve_rng_state = any(
+        # Recomputation must replay the *same* random draws the forward pass used, otherwise the
+        # gradients are taken with respect to a different sample than the loss was. Saving and
+        # restoring the RNG state costs a little per checkpointed block, so only pay it when needed:
+        # - Dropout is active (mirrors mm_olmo's `llm_activation_checkpoint_function`).
+        # - EMO samples a routed-expert pool size for each document, and recompute must route
+        #   through the same experts as the original checkpointed forward.
+        preserve_rng_state = self._dropout_is_active() or any(
             getattr(
                 getattr(block, "routed_experts_router", None),
                 "requires_segment_ids",
@@ -1300,6 +1347,12 @@ class NormalizedTransformer(Transformer):
         block_overrides: Optional[Dict[int, TransformerBlockConfig]] = None,
         block_pattern: Optional[List[str]] = None,
     ):
+        # init_weights() normalizes every matrix, which would erase the fan-in/fan-out-dependent
+        # scales of the nanochat init.
+        if init_method == InitMethod.nanochat:
+            raise OLMoConfigurationError(
+                f"Init method '{InitMethod.nanochat}' is not supported by the normalized transformer"
+            )
         super().__init__(
             d_model=d_model,
             vocab_size=vocab_size,

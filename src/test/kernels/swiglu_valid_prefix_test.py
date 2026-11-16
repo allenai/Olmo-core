@@ -11,6 +11,65 @@ from olmo_core.nn.moe.v2.routed_experts import RoutedExpertsConfig
 from olmo_core.testing import requires_gpu, requires_triton
 
 
+@requires_gpu
+@requires_triton
+@pytest.mark.parametrize("mode", ["static", "dynamic"])
+@pytest.mark.parametrize("tensor_start", [False, True])
+def test_swiglu_offsets_cross_int32_boundary(mode, tensor_start):
+    # The stride (2048) and row index each fit int32; their product does not.
+    # Keep wrapped reads inside a sentinel prefix of OUR allocation so a broken
+    # kernel fails the assertion instead of poisoning CUDA for subsequent tests.
+    if torch.cuda.mem_get_info()[0] < 12 * 2**30:
+        pytest.skip("large-offset regression needs 12 GiB of free GPU memory")
+    hidden = 1024
+    boundary = 2**20
+    rows = boundary + 64
+    backing = torch.full((2**31 + rows * 2 * hidden,), -3.0, device="cuda", dtype=torch.bfloat16)
+    x = backing[2**31 :].view(rows, 2 * hidden)
+    x.fill_(2.0)
+    out = torch.full((rows, hidden), 7.0, device="cuda", dtype=x.dtype)
+    start_row = boundary - 32
+    start = torch.tensor(start_row, device="cuda", dtype=torch.int32) if tensor_start else start_row
+    count = torch.tensor(64, device="cuda", dtype=torch.int32)
+    swiglu_valid_prefix(
+        x, count, start=start, out=out, row_specialization=mode, match_eager_rounding=True
+    )
+    expected = x[start_row : start_row + 64, :hidden] * F.silu(
+        x[start_row : start_row + 64, hidden:]
+    )
+    torch.testing.assert_close(out[start_row : start_row + 64], expected, atol=0, rtol=0)
+    assert (out[start_row - 1] == 7).all()
+    assert (out[start_row + 64] == 7).all()
+
+
+@requires_gpu
+@requires_triton
+def test_swiglu_backward_offsets_cross_int32_boundary():
+    if torch.cuda.mem_get_info()[0] < 22 * 2**30:
+        pytest.skip("large-offset backward regression needs 22 GiB of free GPU memory")
+    hidden = 1024
+    boundary = 2**20
+    rows = boundary + 64
+    # Both input reads and gradient-output writes cross the boundary. Guard
+    # both allocations so old int32 stores cannot overwrite unrelated tensors.
+    x_backing = torch.full(
+        (2**31 + rows * 2 * hidden,), -3.0, device="cuda", dtype=torch.bfloat16
+    )
+    x = x_backing[2**31 :].view(rows, 2 * hidden)
+    x.fill_(2.0)
+    out_backing = torch.full_like(x_backing, 7.0)
+    out = out_backing[2**31 :].view_as(x)
+    grad_h = torch.ones((rows, hidden), device="cuda", dtype=x.dtype)
+    start = boundary - 32
+    count = torch.tensor(64, device="cuda", dtype=torch.int32)
+    swiglu_backward_valid_prefix(x, grad_h, count, start=start, out=out)
+    expected = _swiglu_backward_reference(x[start : start + 64], grad_h[start : start + 64])
+    torch.testing.assert_close(out[start : start + 64], expected, atol=2e-2, rtol=2e-2)
+    assert (out[start - 1] == 7).all()
+    assert (out[start + 64] == 7).all()
+    assert (out_backing[: 32 * 2 * hidden] == 7).all()
+
+
 def test_swiglu_valid_prefix_torch_fallback():
     rows = 5
     hidden = 4
@@ -291,9 +350,10 @@ def test_routed_experts_eager_rounding_is_opt_in(rounding):
     # Exercise dispatch without a GPU; numerical kernel parity is covered above.
     x = mock.Mock(is_cuda=True, device=torch.device("cuda"))
     count = mock.Mock(device=x.device)
-    with mock.patch(
-        "olmo_core.nn.moe.v2.routed_experts.swiglu_valid_prefix"
-    ) as kernel, torch.no_grad():
+    with (
+        mock.patch("olmo_core.nn.moe.v2.routed_experts.swiglu_valid_prefix") as kernel,
+        torch.no_grad(),
+    ):
         experts.chunk_and_activate(x, num_elements=count)
     assert kernel.call_args.kwargs["match_eager_rounding"] is rounding
 
