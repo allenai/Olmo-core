@@ -66,7 +66,8 @@ def load_shard_rows(d: str):
     meta = json.load(open(f"{d}/metadata.json"))
     rows = []
     for f in sorted(glob.glob(f"{d}/token_ids_part_*.npy")):
-        mf = f.replace("token_ids_part_", "labels_mask_")
+        mf = f.replace("token_ids_part_", "labels_mask_part_")
+        mf = mf if os.path.exists(mf) else f.replace("token_ids_part_", "labels_mask_")
         ids = np.memmap(f, dtype=np.dtype(meta["dtype"]), mode="r")
         mask = np.memmap(mf, dtype=np.dtype(meta.get("mask_dtype", "bool")), mode="r")
         rows += split_rows(ids, mask)
