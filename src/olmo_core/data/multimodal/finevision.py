@@ -52,6 +52,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from olmo_core.config import Config
+from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 
 from .fs_cache import maybe_cache_env
@@ -242,13 +243,16 @@ class FineVisionDatasetConfig(Config):
     strict_annotations: bool = False
     """Require every selected row to contain usable text and exactly one image/turn.
 
-    Enabled for the single-image, single-turn alignment subset.
+    Enabled for the single-image, single-turn alignment subset. It is fail-closed, so it needs
+    ``skip_bad_rows=False``: a bad row raises instead of being replaced by a later one. The
+    exhaustive up-front scan is :meth:`FineVisionDataset.validate_required_annotations`.
     """
 
     skip_bad_rows: bool = True
     """Deterministically advance over bad rows.
 
-    Disable this when logical indices must identify exact source rows and images.
+    Disable this when logical indices must identify exact source rows and images. Strict
+    sources (``strict_annotations=True``) must disable it.
     """
 
     max_crops: int = 8
@@ -294,6 +298,11 @@ class FineVisionDataset:
 
     def __init__(self, config: FineVisionDatasetConfig, tokenizer):
         validate_sft_message_format(config.message_format)
+        if config.strict_annotations and config.skip_bad_rows:
+            raise OLMoConfigurationError(
+                "strict_annotations=True requires skip_bad_rows=False: with skipping, a malformed "
+                "row is silently replaced by a later one, which defeats the fail-closed contract"
+            )
         self.config = config
         self.tokenizer = tokenizer
 
@@ -313,7 +322,10 @@ class FineVisionDataset:
             if identities != _materialized_file_identities(config.resolved_path()):
                 raise ValueError("FineVision materialization changed while loading")
         self._index = self._build_index()
-        if config.strict_annotations:
+        # The resume identity of every source, not only strict ones, so a changed corpus or
+        # filter is caught on restore. A source without a stable Arrow fingerprint (strict ones
+        # raise) just has none.
+        if config.strict_annotations or self._arrow_fingerprint() is not None:
             self.content_fingerprint = self._build_content_fingerprint()
         self._warned = 0
 
@@ -352,15 +364,21 @@ class FineVisionDataset:
         )
         return index
 
-    def _build_content_fingerprint(self) -> str:
-        """Build a stable identity for source rows, filtering, and serialization policy."""
+    def _arrow_fingerprint(self) -> Optional[str]:
+        """The pinned materialization fingerprint, else the live Arrow one; ``None`` if neither."""
         cfg = self.config
-        arrow_fingerprint = (
+        fingerprint = (
             cfg.expected_materialized_fingerprint
             if cfg.expected_materialized_fingerprint is not None
             else getattr(self._data, "_fingerprint", None)
         )
-        if not isinstance(arrow_fingerprint, str) or not arrow_fingerprint:
+        return fingerprint if isinstance(fingerprint, str) and fingerprint else None
+
+    def _build_content_fingerprint(self) -> str:
+        """Build a stable identity for source rows, filtering, and serialization policy."""
+        cfg = self.config
+        arrow_fingerprint = self._arrow_fingerprint()
+        if arrow_fingerprint is None:
             raise ValueError(
                 f"FineVision[{cfg.config_name}] lacks a stable Arrow dataset fingerprint"
             )
@@ -389,6 +407,9 @@ class FineVisionDataset:
             "max_sequence_length": cfg.max_sequence_length,
             "loss_token_weighting": cfg.loss_token_weighting,
             "message_format": cfg.message_format,
+            # The serialized token stream depends on these ids, so a changed tokenizer revision
+            # or image-token assignment must not restore a checkpoint's buffered references.
+            "token_ids": cfg.token_ids.as_config_dict(),
             "seed": cfg.seed,
             "selected_rows": len(selected),
             "selection_sha256": selection_sha256,
