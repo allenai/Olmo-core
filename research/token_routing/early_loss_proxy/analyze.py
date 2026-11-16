@@ -74,19 +74,25 @@ def load(results, tag):
         if not m:
             continue
         d = json.load(open(p))
+        if len(d["probes"]) < len(d["probe_steps"]):
+            print(f"[skip] {os.path.basename(p)}: {len(d['probes'])}/{len(d['probe_steps'])} probes (still running?)")
+            continue
         runs[(m.group(1), int(m.group(2)))] = d
     return runs
 
 
-def curves(d):
-    """{step: {set: {task: mean CE}}} plus the per-row CE arrays keyed (step, set, task)."""
+def curves(d, max_rows=0):
+    """{step: {set: {task: mean CE}}} plus the per-row CE arrays keyed (step, set, task); ``max_rows`` > 0 keeps only
+    the first N held-out rows per (set, task) (the cheaper probe, re-scored from the same runs)."""
     rows = d["rows"]
     out, per_row = {}, {}
     for pr in d["probes"]:
         st = pr["step"]
         by = {}
         for r, c in zip(rows, pr["ce"]):
-            by.setdefault(r["set"], {}).setdefault(r["task"], []).append(c)
+            lst = by.setdefault(r["set"], {}).setdefault(r["task"], [])
+            if not max_rows or len(lst) < max_rows:
+                lst.append(c)
         out[st] = {s: {t: float(np.mean(v)) for t, v in tv.items()} for s, tv in by.items()}
         for s, tv in by.items():
             for t, v in tv.items():
@@ -106,13 +112,14 @@ def main():
     ap.add_argument("--fig", default="")
     ap.add_argument("--fig-set", default="suite8k")
     ap.add_argument("--fig-step", type=int, default=10)
+    ap.add_argument("--rows-per-task", type=int, default=0, help="use only the first N held-out rows per (set, task)")
     a = ap.parse_args()
     runs = load(a.results, a.tag)
     arms = sorted({k[0] for k in runs}, key=lambda x: -final_mean(x) if x in FINAL else 0)
-    C = {k: curves(d) for k, d in runs.items()}
+    C = {k: curves(d, a.rows_per_task) for k, d in runs.items()}
     steps = sorted(set.intersection(*[set(c[0]) for c in C.values()]))
     sets = sorted(next(iter(C.values()))[0][0].keys())
-    res = {"tag": a.tag, "steps": steps, "sets": sets, "arms": {}, "corr": {}, "step0": {}, "noise": {}}
+    res = {"tag": a.tag, "rows_per_task": a.rows_per_task or "all", "steps": steps, "sets": sets, "arms": {}, "corr": {}, "step0": {}, "noise": {}}
 
     # step 0 agreement (same base, same rows): max abs spread across all runs per set/task
     for s in sets:
@@ -192,6 +199,17 @@ def main():
                               "frac": (A["drop"][s][st] / dd if dd else None)}
                 A["frac_flops"][s] = fr
 
+    # same-LR reference: every method arm is LoRA r64 at LR 1e-5, as dense LoRA is; excess dense eval CE over it
+    if "denselora" in res["arms"]:
+        L = res["arms"]["denselora"]
+        for arm, A in res["arms"].items():
+            A["frac_step_vs_denselora"] = {s: {st: (A["drop"][s][st] / L["drop"][s][st] if L["drop"][s][st] else None)
+                                               for st in steps} for s in sets}
+            A["excess_vs_denselora"] = {s: {st: L["drop"][s][st] - A["drop"][s][st] for st in steps} for s in sets}
+            A["excess_task_vs_denselora"] = {
+                s: {t: {st: L["drop_task"][s][t][st] - A["drop_task"][s][t][st] for st in steps} for t in TASKS}
+                for s in sets}
+
     # rank correlations: over arms with a known outcome
     known = [arm for arm in res["arms"] if arm in FINAL]
     for s in sets:
@@ -241,6 +259,7 @@ def main():
             ls = "--" if arm in ("dense", "denselora") else "-"
             ax[0].plot(steps, [A["ce"][s][st] for st in steps], ls, marker="o", ms=3, color=col,
                        label=f"{arm} ({A['final_8k']:.3f})" if A["final_8k"] else arm)
+        ax[0].set_yscale("log")
         ax[0].set_xlabel("training step")
         ax[0].set_ylabel(f"dense eval answer CE ({s}, 4-task mean)")
         ax[0].set_title("Dense-forward held-out CE during early training")

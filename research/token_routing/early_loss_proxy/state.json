@@ -72,6 +72,75 @@
    "code": "/data/prasann/early_loss_proxy/code_281e228c2",
    "extra": "",
    "lr_mult": 1.0
+  },
+  "5149884": {
+   "node": "mooney",
+   "tag": "s50",
+   "runs": [
+    "elp-s50-recipe-sd0",
+    "elp-s50-ddp-sd0",
+    "elp-s50-ddpg-sd0",
+    "elp-s50-rnd19-sd0",
+    "elp-s50-rnd9-sd0",
+    "elp-s50-wtsS1-sd0",
+    "elp-s50-tail20to7-sd0",
+    "elp-s50-denselora-sd0",
+    "elp-s50-dense-sd0",
+    "elp-s50-recipe-sd1",
+    "elp-s50-ddp-sd1",
+    "elp-s50-ddpg-sd1",
+    "elp-s50-rnd19-sd1",
+    "elp-s50-rnd9-sd1",
+    "elp-s50-wtsS1-sd1",
+    "elp-s50-tail20to7-sd1",
+    "elp-s50-denselora-sd1",
+    "elp-s50-dense-sd1"
+   ],
+   "steps": "30,50",
+   "sets": "suite8k:32,suite2k:16,train:16",
+   "code": "/data/prasann/early_loss_proxy/code_281e228c2",
+   "extra": "",
+   "lr_mult": 1.0
+  },
+  "5149886": {
+   "node": "mooney",
+   "tag": "s50",
+   "runs": [
+    "elp-s50-recipe-sd0",
+    "elp-s50-ddp-sd0",
+    "elp-s50-ddpg-sd0",
+    "elp-s50-wtsS1-sd0",
+    "elp-s50-rnd19-sd0",
+    "elp-s50-rnd9-sd0",
+    "elp-s50-tail20to7-sd0",
+    "elp-s50-denselora-sd0",
+    "elp-s50-dense-sd0"
+   ],
+   "steps": "30,50",
+   "sets": "suite8k:32,suite2k:16,train:16",
+   "code": "/data/prasann/early_loss_proxy/code_281e228c2",
+   "extra": "",
+   "lr_mult": 1.0
+  },
+  "5149887": {
+   "node": "mooney",
+   "tag": "s50",
+   "runs": [
+    "elp-s50-recipe-sd1",
+    "elp-s50-ddp-sd1",
+    "elp-s50-ddpg-sd1",
+    "elp-s50-wtsS1-sd1",
+    "elp-s50-rnd19-sd1",
+    "elp-s50-rnd9-sd1",
+    "elp-s50-tail20to7-sd1",
+    "elp-s50-denselora-sd1",
+    "elp-s50-dense-sd1"
+   ],
+   "steps": "30,50",
+   "sets": "suite8k:32,suite2k:16,train:16",
+   "code": "/data/prasann/early_loss_proxy/code_281e228c2",
+   "extra": "",
+   "lr_mult": 1.0
   }
  }
 }
