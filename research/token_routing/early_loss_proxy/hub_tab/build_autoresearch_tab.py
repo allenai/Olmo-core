@@ -51,6 +51,9 @@ if os.path.exists(_impl):
 # FLOPs the cheapest dense reference needs to reach its own step-k loss, divided by the arm's FLOPs to reach that loss, for
 # k = the reference's probe steps. Reference pool = the `v2` tag's reference curves (this reproduces `board[i].x` exactly).
 LENSETS = [("s4k", "set/suite4k", "4k", 0.2), ("s8k", "set/suite8k", "8k", 0.3), ("s16k", "set/suite16k", "16k", 0.5)]
+# one task at a time (CE of that task's held-out rows over all three lengths): id, curve key, label
+TASKSETS = [("t_contradiction", "task/contradiction", "contradiction"), ("t_outlier", "task/outlier", "outlier"),
+            ("t_reorder", "task/reorder", "reorder"), ("t_qdmatch", "task/qdmatch_nq", "qdmatch_nq")]
 
 
 def _reach(pf, ls, loss):
@@ -77,7 +80,7 @@ def _series(c, m):
         if not all(k in by and len(by[k]) == len(c["pts"]) for _, k, _, _ in LENSETS):
             return None
         return [sum(w * by[k][i] for _, k, _, w in LENSETS) for i in range(len(c["pts"]))]
-    k = {a: b for a, b, _, _ in LENSETS}[m]
+    k = dict([(a, b) for a, b, _, _ in LENSETS] + [(a, b) for a, b, _ in TASKSETS])[m]
     return by.get(k) if by.get(k) and len(by[k]) == len(c["pts"]) else None
 
 
@@ -111,7 +114,7 @@ def add_length_metrics(st):
             continue
         cs = [c for c in curves if c["tag"] == b["tag"] and c["arm"] == b["arm"]]
         b["xm"] = {}
-        for m in ["all", "w"] + [a for a, _, _, _ in LENSETS]:
+        for m in ["all", "w"] + [a for a, _, _, _ in LENSETS] + [a for a, _, _ in TASKSETS]:
             per = [_xlevels(c, refs, m) for c in cs] if cs and refs else []
             if not per or any(q is None for q in per):
                 continue
@@ -136,6 +139,7 @@ def add_length_metrics(st):
             if abs(_bestx(b["x"]) - row["x"]) <= 0.15 * row["x"]:
                 row["xm"] = {m: _bestx(v) for m, v in b["xm"].items()}
     st["meta"] = {"default": "w", "check": [ok, bad], "weights": {a: w for a, _, _, w in LENSETS},
+                  "tasks": [{"id": a, "label": c} for a, _, c in TASKSETS],
                   "metrics": [{"id": "w", "label": "Weighted, 16k-heavy"}, {"id": "s16k", "label": "16k"}, {"id": "s8k", "label": "8k"},
                               {"id": "s4k", "label": "4k"}, {"id": "all", "label": "All lengths, mean CE (as scored)"}]}
     if ok + bad and bad / (ok + bad) > 0.05:
@@ -149,7 +153,7 @@ add_length_metrics(STATE)
 # dense-LoRA reference: ratio at a level = (PF the base arm needs to reach its own loss at probe step k) / (PF this arm needs).
 #   ladder:  base = dense full fine-tune; each rung adds one decision on top of the previous one (LoRA, random drop, router, data).
 #   groups:  base = the plain recipe; each item changes ONE decision (random tokens, keep fraction, LR, short rows, ...).
-DEC_METRICS = ["w", "s16k", "s8k", "s4k", "all"]
+DEC_METRICS = ["w", "s16k", "s8k", "s4k", "all"] + [a for a, _, _ in TASKSETS]
 
 
 def _ratios(curves, arm, base, m):
@@ -235,6 +239,12 @@ PART = PS + '''
 .glance .gr { position: absolute; top: -2px; bottom: -2px; border-left: 2px dashed var(--dense); opacity: .75; }
 .glance .gax { display: grid; grid-template-columns: minmax(180px, 42%) minmax(0, 1fr); gap: 0 14px; padding: 4px 4px 0; } .glance .gax > div { position: relative; height: 14px; font: .68rem var(--mono); color: var(--muted); } .glance .gax span { position: absolute; transform: translateX(-50%); }
 @media (max-width: 640px) { .glance details.gi > summary, .glance .gax { grid-template-columns: minmax(0, 1fr); } .glance .gax > div:first-child { display: none; } }
+/* hover: per-task breakdown */
+.dtip { position: fixed; z-index: 60; pointer-events: none; background: var(--surface); color: var(--fg); border: 1px solid var(--fg); border-radius: 6px; padding: 8px 10px; font-size: .76rem; line-height: 1.35; max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.22); }
+.dtip b { display: block; font-size: .78rem; } .dtip .ts { color: var(--muted); margin-bottom: 5px; }
+.dtip .tr2 { display: grid; grid-template-columns: 7em minmax(0, 1fr) 3.6em; gap: 6px; align-items: center; } .dtip .tb { height: 8px; background: color-mix(in srgb, var(--rule) 60%, transparent); position: relative; } .dtip .tb i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c3); } .dtip .tb i.lo { background: var(--c1); }
+.dtip .tv { font: .72rem var(--mono); text-align: right; } .dtip .tn { margin-top: 5px; color: var(--muted); font-size: .7rem; }
+[data-tip] { cursor: help; }
 /* where the gain comes from */
 .dec { display: grid; grid-template-columns: minmax(190px, 40%) minmax(0, 1fr); gap: 2px 14px; align-items: center; font-size: .82rem; max-width: 980px; }
 .dec .dl { line-height: 1.3; min-width: 0; text-align: right; } .dec .dl small { display: block; color: var(--muted); font-size: .72rem; }
@@ -279,6 +289,7 @@ ul.ql details.more[open] > summary { border-bottom: 0; }
 </style>
 <div class="parthead"><span class="eyebrow">Tried · was tab 8d · live</span><h2 class="ptitle">Auto-research loop: FLOPs to reach the dense loss at 4k-16k</h2><p class="verdict" id="arVerdict"></p><p class="note" id="arUpdated"></p></div>
 <div class="aropt" id="arMetric" role="group" aria-label="Context length the gains are measured at"></div>
+<div class="aropt" id="arTask" role="group" aria-label="Task the gains are measured on"></div>
 <p class="note" id="arMetricNote"></p>
 <div class="tiles" id="arStrip"></div>
 ''' + bar("ar-progress", "Best so far, over time", '''
@@ -327,6 +338,18 @@ JS = SS + r'''
   const fold = (summ, open, cls) => { const d = el("details", null, "more" + (cls ? " " + cls : "")); if (open) d.open = true; const sm = el("summary"); (Array.isArray(summ) ? summ : [summ]).forEach(n => sm.appendChild(n.nodeType ? n : document.createTextNode(n))); d.appendChild(sm); return d; };
   const mh = t => el("span", t, "mh");
   const setN = (id, t) => { const e = $(id); if (e) e.textContent = t; };
+  /* hover: task breakdown of any number (vals = [[task label, speedup]]) */
+  const TIP = el("div", null, "dtip"); TIP.hidden = true; TIP.setAttribute("role", "tooltip"); document.body.appendChild(TIP);
+  const placeTip = e => { const w = TIP.offsetWidth, h = TIP.offsetHeight; let x = e.clientX + 14, y = e.clientY + 16;
+    if (x + w > innerWidth - 8) x = Math.max(8, innerWidth - w - 8); if (y + h > innerHeight - 8) y = Math.max(8, e.clientY - h - 12); TIP.style.left = x + "px"; TIP.style.top = y + "px"; };
+  const showTip = (e, sp) => { TIP.textContent = ""; TIP.appendChild(el("b", sp.title)); if (sp.sub) TIP.appendChild(el("div", sp.sub, "ts"));
+    const have = sp.vals.map(v => v[1]).filter(v => v != null), mx = Math.max(2, ...have);
+    sp.vals.forEach(v => { const r = el("div", null, "tr2"); r.appendChild(el("span", v[0])); const b = el("div", null, "tb"); if (v[1] != null) { const i = el("i", null, v[1] < 1 ? "lo" : ""); i.style.width = Math.min(100, v[1] / mx * 100) + "%"; b.appendChild(i); } r.appendChild(b);
+      r.appendChild(el("span", v[1] == null ? "n/a" : (v[1] >= 10 ? f(v[1], 0) : f(v[1], 2)) + "×", "tv")); TIP.appendChild(r); });
+    TIP.appendChild(el("div", sp.note || "One task's held-out rows (about 40-48), so noisy; one seed.", "tn")); TIP.hidden = false; placeTip(e); };
+  const attachTip = (node, fn) => { node.dataset.tip = "1"; node.addEventListener("pointerenter", e => { const sp = fn(); if (sp) showTip(e, sp); }); node.addEventListener("pointermove", e => { if (!TIP.hidden) placeTip(e); }); node.addEventListener("pointerleave", () => { TIP.hidden = true; }); };
+  document.addEventListener("pointerdown", e => { if (!e.target.closest || !e.target.closest("[data-tip]")) TIP.hidden = true; });
+  const taskVals = (xm, k) => ((ST.meta || {}).tasks || []).map(t => [t.label, ((xm || {})[t.id] || {})[k]]);
 
   /* header and verdict */
   const sents = sentences(ST.status);
@@ -338,7 +361,9 @@ JS = SS + r'''
   if (!BH.length) { empty($("arBest"), "No 16k result yet"); $("arBestChart").closest("figure").style.display = "none"; } else {
     $("arBestN").textContent = BH.length + " rows"; }
   const MT = ST.meta || { default: "all", metrics: [{ id: "all", label: "All lengths, mean CE (as scored)" }], weights: {}, check: [0, 0] };
-  let M = MT.default || "all"; const mlab = () => (MT.metrics.find(m => m.id === M) || {}).label || M;
+  let M = MT.default || "all", LM = M; const TK = MT.tasks || [], isTask = () => TK.some(t => t.id === M);
+  const ALLM = MT.metrics.concat(TK.map(t => ({ id: t.id, label: t.label + " (all lengths)" })));
+  const mlab = () => (ALLM.find(m => m.id === M) || {}).label || M;
   const xOf = r => M === "all" ? (r.x || {}) : ((r.xm || {})[M] || {});
   const bestOfRow = r => { const v = Object.values(xOf(r)).filter(q => q != null); return v.length ? Math.max(...v) : null; };
   const bhVal = r => M === "all" ? r.x : (r.xm || {})[M];
@@ -368,7 +393,8 @@ JS = SS + r'''
       return [two((r.is_ref ? "[ref] " : "") + r.arm, r.desc), (r.seeds || []).length, r.steps, ce, r.pf_per_step_vs_dense == null ? "" : f(r.pf_per_step_vs_dense, 2) + "×"]
         .concat(levels.map(l => xs(xOf(r)[l])), [iso(r), isr(r), xs((r.xw || {})[deep]), f(r.train_s, 0)]); });
     const nc = [1, 2, 3, 4].concat(levels.map((_, i) => 5 + i), [5 + levels.length, 6 + levels.length, 7 + levels.length, 8 + levels.length]);
-    const t = table(head, body, nc); [...t.querySelectorAll("tr")].slice(1).forEach((tr, i) => { if (rows[i].is_ref) { tr.style.background = "var(--surface)"; tr.style.fontStyle = "italic"; } }); return t; };
+    const t = table(head, body, nc); [...t.querySelectorAll("tr")].slice(1).forEach((tr, i) => { if (rows[i].is_ref) { tr.style.background = "var(--surface)"; tr.style.fontStyle = "italic"; }
+      levels.forEach((l, j) => { const td = tr.children[5 + j], v = xOf(rows[i])[l]; if (td && v != null) attachTip(td, () => ({ title: rows[i].arm + ": " + xs(v) + " (" + mlab() + ")", sub: "by task, at the loss dense LoRA had at step " + l, vals: taskVals(rows[i].xm, l) })); }); }); return t; };
 
   /* units = ideas, plus a pseudo-unit per family that has arms but no idea ("no queue entry") */
   const units = ideasAll.map(i => ({ key: i.id, idea: i, family: i.family, status: i.status, title: i.title, arms: [] }));
@@ -454,6 +480,7 @@ JS = SS + r'''
       if (pc > 55) { v.style.right = (100 - pc) + "%"; v.style.paddingRight = "5px"; v.style.color = "var(--bg)"; } else v.style.left = pc + "%"; t.appendChild(v); }
     else { const v = el("span", u.arms.length ? "no comparison level reached (" + u.arms.length + " arms)" : "no arms scored yet", "gv"); v.style.left = "0"; t.appendChild(v); }
     if (refX != null) { const r = el("div", null, "gr"); r.style.left = (refX / mx * 100) + "%"; t.appendChild(r); }
+    const bi = u.best != null ? bestInfo(u) : null; if (bi) attachTip(t, () => ({ title: "arm " + bi.r.arm + ": " + f(bi.v, 2) + "× (" + mlab() + ")", sub: "by task, at the loss dense LoRA had at step " + bi.k, vals: taskVals(bi.r.xm, bi.k) }));
     sm.appendChild(t); d.appendChild(sm); d.appendChild(implPanel(u, true)); G.appendChild(d); });
   const ax = el("div", null, "gax"), axi = el("div"); ax.appendChild(el("div")); ax.appendChild(axi);
   [1, 2, 3, 4, 6, 8].filter(v => v < mx).forEach(v => { const s = el("span", v + "×"); s.style.left = (v / mx * 100) + "%"; axi.appendChild(s); }); G.insertBefore(ax, G.firstChild); };
@@ -483,7 +510,8 @@ JS = SS + r'''
       DEC.ladder.forEach((rg, i) => { decLabel(LAD, rg.label, rg.what); const t = track(lo, hi), prev = i ? cum[i - 1] : 1, cur = cum[i], a = Math.min(prev, cur), b = Math.max(prev, cur);
         const br = el("div", null, "db" + (cur < prev ? " dn" : "")); br.style.left = lpos(a, lo, hi) + "%"; br.style.width = (i ? lpos(b, lo, hi) - lpos(a, lo, hi) : 0.6) + "%"; t.appendChild(br);
         const w = el("div", null, "dw"); w.style.left = lpos(mn[i], lo, hi) + "%"; w.style.width = (lpos(mx2[i], lo, hi) - lpos(mn[i], lo, hi)) + "%"; t.appendChild(w);
-        decText(t, i ? "×" + f(cur / prev, 2) + " → " + fx(cur) + " total" : "1× (reference)", Math.min(a, mn[i]), Math.max(b, mx2[i]), lo, hi); LAD.appendChild(t); }); }
+        decText(t, i ? "×" + f(cur / prev, 2) + " → " + fx(cur) + " total" : "1× (reference)", Math.min(a, mn[i]), Math.max(b, mx2[i]), lo, hi);
+        attachTip(t, () => ({ title: rg.label + ": " + fx(cur) + " over dense full FT (" + mlab() + ")", sub: "by task, at the loss dense reached at step " + L, vals: ((ST.meta || {}).tasks || []).map(tk => [tk.label, ((rg.r || {})[tk.id] || {})[L]]) })); LAD.appendChild(t); }); }
     /* 2 one change at a time */
     const items = []; DEC.groups.forEach(g => g.items.forEach(it => { if (keysOf((it.r || {})[M]).length) items.push(it); }));
     let lo2 = 0.25, hi2 = 2.6; items.forEach(it => keysOf(it.r[M]).forEach(k => { hi2 = Math.max(hi2, it.r[M][k] * 1.2); lo2 = Math.min(lo2, it.r[M][k] * 0.9); }));
@@ -497,13 +525,16 @@ JS = SS + r'''
         const k = ks[ks.length - 1], v = o[k], a = Math.min(1, v), b = Math.max(1, v), vals = ks.map(q => o[q]), mnv = Math.min(...vals), mxv = Math.max(...vals);
         const br = el("div", null, "db" + (v < 1 ? " dn" : "") + (+k < 50 ? " sh" : "")); br.style.left = lpos(a, lo2, hi2) + "%"; br.style.width = (lpos(b, lo2, hi2) - lpos(a, lo2, hi2)) + "%"; t.appendChild(br);
         if (ks.length > 1) { const w = el("div", null, "dw"); w.style.left = lpos(mnv, lo2, hi2) + "%"; w.style.width = (lpos(mxv, lo2, hi2) - lpos(mnv, lo2, hi2)) + "%"; t.appendChild(w); }
-        decText(t, fx(v), Math.min(a, mnv), Math.max(b, mxv), lo2, hi2); ABL.appendChild(t); }); }); };
+        decText(t, fx(v), Math.min(a, mnv), Math.max(b, mxv), lo2, hi2);
+        attachTip(t, () => ({ title: it.label + ": " + fx(v) + " vs the recipe (" + mlab() + ")", sub: "by task, vs the recipe's loss at step " + k, vals: ((ST.meta || {}).tasks || []).map(tk => [tk.label, ((it.r || {})[tk.id] || {})[k]]) })); ABL.appendChild(t); }); }); };
 
   /* ideas list, PAIL style */
   const famNote = $("arFamNote");
   const itemOf = u => { const li = el("li"), t = el("div", null, "t");
     t.appendChild(el("span", u.family, "tag")); t.appendChild(pill(u.status)); t.appendChild(el("b", u.title));
-    t.appendChild(el("span", (u.best != null ? "best " + f(u.best, 2) + "× · " : "") + u.arms.length + " arm" + (u.arms.length === 1 ? "" : "s"), "rd")); li.appendChild(t);
+    const rdn = el("span", (u.best != null ? "best " + f(u.best, 2) + "× · " : "") + u.arms.length + " arm" + (u.arms.length === 1 ? "" : "s"), "rd"); t.appendChild(rdn);
+    const bi2 = u.best != null ? bestInfo(u) : null; if (bi2) attachTip(rdn, () => ({ title: "arm " + bi2.r.arm + ": " + f(bi2.v, 2) + "× (" + mlab() + ")", sub: "by task, at the loss dense LoRA had at step " + bi2.k, vals: taskVals(bi2.r.xm, bi2.k) }));
+    li.appendChild(t);
     if (u.idea && u.idea.result) li.appendChild(el("div", lead(u.idea.result, 230), "res"));
     const open = u.status === "running", d = fold(["Details and arms"], open);
     const body = el("div", null, "ideabody");
@@ -532,14 +563,19 @@ JS = SS + r'''
   const renderMetric = () => { calcBest(); refX = refUnit ? refUnit.best : null;
     const nok = BH.filter(r => bhVal(r) != null).length, wts = MT.weights || {};
     const base = M === "w" ? "Held-out CE averaged with weights " + Object.keys(wts).map(k => k.replace("s", "") + " " + Math.round(wts[k] * 100) + "%").join(" · ") + ", then FLOPs to reach the dense-LoRA loss, as in the published speedups."
-      : M === "all" ? "The loop's own metric: held-out CE averaged over all lengths and tasks." : "Held-out CE on the " + mlab() + " rows only (eval_size below 500, so noisy), then FLOPs to reach the dense-LoRA loss.";
+      : M === "all" ? "The loop's own metric: held-out CE averaged over all lengths and tasks." : isTask() ? "Held-out CE on the " + mlab() + " rows only: about 40-48 rows per task (16 per length, 8 for reorder at 16k), so very noisy, then FLOPs to reach the dense-LoRA loss." : "Held-out CE on the " + mlab() + " rows only (eval_size below 500, so noisy), then FLOPs to reach the dense-LoRA loss.";
     $("arMetricNote").textContent = base + (M === "all" ? "" : " Recomputed here from the per-length CE curves; it reproduces the loop's published speedups on " + MT.check[0] + " of " + (MT.check[0] + MT.check[1]) + " levels. " + nok + " of " + BH.length + " hourly entries can be traced to an arm on the board; the others are left out of the chart.");
     if (last) { const sr = bhSeries(), lv = sr[sr.length - 1]; $("arBestNote").textContent = lv == null ? "No hourly entry can be traced to an arm with this measurement." : "Latest best at " + mlab() + ": " + xs(lv) + (M === "all" ? " (" + last.arm + ", " + last.idea + "), found " + last.t + "." : "."); }
     drawStrip(); drawGlance(); drawDecisions(); drawIdeas(BYV); drawBestTable();
     if (bestChart) { bestChart.data.datasets[0].data = bhSeries(); bestChart.options.scales.y.title.text = "FLOP speedup (×), " + mlab(); bestChart.update(); } };
-  const mbar = $("arMetric"); mbar.appendChild(el("span", "Gains at context length"));
-  MT.metrics.forEach(m => { const b = el("button", m.label); b.type = "button"; b.dataset.m = m.id; b.setAttribute("aria-pressed", m.id === M); b.onclick = () => { M = m.id; mbar.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === M)); renderMetric(); }; mbar.appendChild(b); });
+  const mbar = $("arMetric"), tbar = $("arTask"), press = () => { mbar.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === M)); tbar.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.all ? !isTask() : x.dataset.m === M)); mbar.style.opacity = isTask() ? ".55" : ""; };
+  mbar.appendChild(el("span", "Gains at context length"));
+  MT.metrics.forEach(m => { const b = el("button", m.label); b.type = "button"; b.dataset.m = m.id; b.onclick = () => { M = LM = m.id; press(); renderMetric(); }; mbar.appendChild(b); });
   if (MT.metrics.length < 2) mbar.style.display = "none";
+  tbar.appendChild(el("span", "Or one task"));
+  const ball = el("button", "All tasks"); ball.type = "button"; ball.dataset.all = "1"; ball.dataset.m = "-"; ball.onclick = () => { M = LM; press(); renderMetric(); }; tbar.appendChild(ball);
+  TK.forEach(t => { const b = el("button", t.label); b.type = "button"; b.dataset.m = t.id; b.onclick = () => { M = t.id; press(); renderMetric(); }; tbar.appendChild(b); });
+  if (!TK.length) tbar.style.display = "none"; press();
   renderMetric();
 
   /* FLOPs to reach a held-out loss */
@@ -588,7 +624,7 @@ JS = SS + r'''
   const axis = (lab, extra) => Object.assign({ title: { display: true, text: lab, color: mu }, ticks: { color: mu }, grid: { color: ru } }, extra || {});
   if (BH.length && $("arBestChart")) {
     bestChart = new Chart($("arBestChart"), { type: "line", data: { labels: BH.map(r => r.t), datasets: [{ label: "best FLOP speedup", data: bhSeries(), borderColor: css("--c1"), backgroundColor: css("--c1"), tension: 0, stepped: "before", pointRadius: 4 }] },
-      options: { ...base, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => (M === "all" ? BH[c.dataIndex].arm + ": " : "best so far: ") + f(c.raw, 1) + "×", afterLabel: c => lead(BH[c.dataIndex].note, 160) } } }, scales: { x: { ticks: { color: mu, maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: axis("FLOP speedup (×), " + mlab(), { beginAtZero: true }) } } });
+      options: { ...base, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => (M === "all" ? BH[c.dataIndex].arm + ": " : "best so far: ") + f(c.raw, 1) + "×", afterLabel: c => lead(BH[c.dataIndex].note, 160), afterBody: it => { const xm = (BH[it[0].dataIndex] || {}).xm || {}, tk = (ST.meta || {}).tasks || []; return tk.length && Object.keys(xm).length ? ["By task, best level of that arm:"].concat(tk.map(t => "  " + t.label + ": " + (xm[t.id] == null ? "n/a" : f(xm[t.id], 1) + "×"))) : []; } } } }, scales: { x: { ticks: { color: mu, maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: axis("FLOP speedup (×), " + mlab(), { beginAtZero: true }) } } });
   }
   const C = (ST.curves || []).filter(c => !HIDE(c));
   if ($("arCurves")) {
