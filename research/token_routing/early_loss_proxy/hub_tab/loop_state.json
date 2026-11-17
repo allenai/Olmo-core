@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-17 12:35 PT",
+ "updated": "2026-11-17 12:52 PT",
  "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k): 3.1-3.7x fewer training FLOPs than dense LoRA at every held-out loss level its epoch reaches (two seeds, full epoch), and 3.2-3.5x on the 16k rows alone (56 rows) against 2.1-2.7x for the plain recipe. Priority since 11:45 is the 16k held-out loss and methods that gain with length; a 320-row 16k held-out set is in place and the references and all mixed pools are being rerun on it. Memory: measured slope 0.37 GiB per 1k tokens for dense LoRA (out of memory at 256k on 141 GB) and 0.24 for the recipe; a chunked version of the early blocks is being built to make memory nearly flat in length. Closed since the last update: loss-per-cost sampling (no gain at 16k), document-local attention beyond block 3 (training stalls). Nothing is near 10x; about 115 arms scored.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "Memory: the proxy's logged transient memory was wrong until 11-17 12:25 (the peak was reset before being read). Valid memory numbers are in the memory-scaling entries of the log; the leaderboard's memory columns should be ignored."
  ],
  "log": [
+  {
+   "t": "11-17 12:55",
+   "text": "First results on the 320-row 16k set (recipe on each pool, full epoch, one seed unless noted; the dense-LoRA and plain-recipe references on this set are still training, so no ratios yet). 16k held-out CE at about 130 PF: 80/20 pool 0.199-0.202 (two seeds), 90% short 0.21, 80% short with 1k-only short rows 0.21, 50/50 pool 0.21, 80% short with the long part all 16k 0.22, 95% short 0.23. At 215 PF: 50/50 pool 0.176, long-part-all-16k 0.188. So 80% short with mixed long lengths is the best ratio; more short rows, 16k-only long rows or 1k-only short rows are all slightly worse at 16k."
+  },
   {
    "t": "11-17 12:45",
    "text": "Document-local attention closed as negative (real mask effect, verified against a causal-mask control). A 3x larger 80/20 pool (5,856 rows per task, 73M tokens) is built; the recipe is running on it for its full epoch (1,464 steps, two seeds) on the 320-row 16k set."

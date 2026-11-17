@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-17 12:55",
+   "text": "First results on the 320-row 16k set (recipe on each pool, full epoch, one seed unless noted; the dense-LoRA and plain-recipe references on this set are still training, so no ratios yet). 16k held-out CE at about 130 PF: 80/20 pool 0.199-0.202 (two seeds), 90% short 0.21, 80% short with 1k-only short rows 0.21, 50/50 pool 0.21, 80% short with the long part all 16k 0.22, 95% short 0.23. At 215 PF: 50/50 pool 0.176, long-part-all-16k 0.188. So 80% short with mixed long lengths is the best ratio; more short rows, 16k-only long rows or 1k-only short rows are all slightly worse at 16k."
+  },
+  {
    "t": "11-17 12:45",
    "text": "Document-local attention closed as negative (real mask effect, verified against a causal-mask control). A 3x larger 80/20 pool (5,856 rows per task, 73M tokens) is built; the recipe is running on it for its full epoch (1,464 steps, two seeds) on the 320-row 16k set."
   },
