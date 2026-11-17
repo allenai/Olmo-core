@@ -52,19 +52,20 @@ JS = S + r'''
   // best by hour
   const BH = ST.best_by_hour || [];
   if (!BH.length) empty($("arBest"), "No 16k result yet"); else
-    $("arBest").appendChild(table(["time", "method", "idea", "FLOP speedup", "worst task", "peak memory vs dense", "note"],
+    $("arBest").appendChild(table(["time", "method", "idea", "FLOP speedup", "worst task", "transient memory vs dense", "note"],
       BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level != null ? " @ step " + r.level : ""), xs(r.xw), r.mem == null ? "" : f(r.mem, 2) + "×", r.note]), [3, 4, 5]));
   if (!BH.length) { const fg = $("arBestChart"); if (fg) fg.closest("figure").style.display = "none"; }
   // leaderboard
+  const tg = r => { const s = el("span"); s.appendChild(document.createTextNode(f(r.transient_gib, 1))); if (r.peak_gib != null && r.peak_gib !== "") s.appendChild(el("span", " (" + f(r.peak_gib, 1) + ")", "note")); return s; };
   const B = ST.board || [], lv = new Set();
   B.forEach(r => Object.keys(r.x || {}).forEach(k => lv.add(k)));
   const levels = [...lv].sort((a, b) => a - b), deep = levels[levels.length - 1];
   if (!B.length) empty($("arBoard"), "No scored methods yet."); else {
-    const head = ["method", "idea", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l), ["worst task @ step " + deep, "peak GiB", "vs dense", "train s"]);
+    const head = ["method", "idea", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l), ["worst task @ step " + deep, "transient GiB (peak)", "transient vs dense", "train s"]);
     const rows = B.map(r => { const ce = r.ce_last == null ? "" : f(r.ce_last, 3) + (r.d_vs_ref_se != null && !r.is_ref ? "  (Δ " + f(r.d_vs_ref, 3) + " ±" + f(r.d_vs_ref_se, 3) + ")" : "");
       const m = two((r.is_ref ? "[ref] " : "") + r.arm, r.desc);
       return [m, r.idea, (r.seeds || []).length, r.steps, ce, r.pf_per_step_vs_dense == null ? "" : f(r.pf_per_step_vs_dense, 2) + "×"]
-        .concat(levels.map(l => xs((r.x || {})[l])), [xs((r.xw || {})[deep]), f(r.peak_gib, 1), r.peak_vs_ref == null ? "" : f(r.peak_vs_ref, 2) + "×", f(r.train_s, 0)]); });
+        .concat(levels.map(l => xs((r.x || {})[l])), [xs((r.xw || {})[deep]), tg(r), r.transient_vs_ref == null ? "" : f(r.transient_vs_ref, 2) + "×", f(r.train_s, 0)]); });
     const t = table(head, rows, [2, 3, 4, 5].concat(levels.map((_, i) => 6 + i), [6 + levels.length, 7 + levels.length, 8 + levels.length, 9 + levels.length]));
     [...t.querySelectorAll("tr")].slice(1).forEach((tr, i) => { if (B[i].is_ref) tr.style.background = "var(--surface)"; if (B[i].is_ref) tr.style.fontStyle = "italic"; });
     $("arBoard").appendChild(t);
