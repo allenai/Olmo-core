@@ -1,0 +1,332 @@
+{
+ "runs": {
+  "f8k-mt4-orcbatchr2-f1952st3-orc-lr1e-05": {
+   "ex": "01M6JVQHDG1Z6XVR6KE1090EHT",
+   "arm": "orcbatchr2",
+   "budget": "f1952@3",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchr2-f1952st3-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05": {
+   "ex": "01M6JW7VN6M2YCBY0NCHDVRA8G",
+   "arm": "orcdoc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcdoc-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orcrow-f1952-orc-lr1e-05": {
+   "ex": "01M6JW8MQHZZY64DYP4SF1B9F3",
+   "arm": "orcrow",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcrow-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
+  },
+  "f8k-mt4-orcbatch-f1952-orc-lr1e-05": {
+   "ex": "01M6JW9GWP8TQQJGYGP2Z8X7HF",
+   "arm": "orcbatch",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatch-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 repeatedly preempted; insurance copy carries the arm"
+  },
+  "f8k-mt4-orcbatchr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JWAAQTE8G77PV52EF64X4B",
+   "arm": "orcbatchr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchr2-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
+  },
+  "f8k-mt4-orcdocr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JWBA5QB2XFERTEJP4V9NE8",
+   "arm": "orcdocr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcdocr2-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05": {
+   "ex": "01M6JWCDX361B4AKASH0DX1EGA",
+   "arm": "orcbatchall",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchall-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 repeatedly preempted; insurance copy carries the arm"
+  },
+  "f8k-mt4-orcbatchrc-f1952-orc-lr1e-05": {
+   "ex": "01M6JWD6HQEBY5Q6C69FXQXSZF",
+   "arm": "orcbatchrc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orcbatchrc-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by single-cut orc1*"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05": {
+   "arm": "orc1doc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/data/prasann/oracle/runs/f8k-mt4-orc1doc-f1952-orc-lr1e-05/oracle_meta (mooney)",
+   "beaker_cancelled": "01M6JWZPQ1P5GDCC1FEEQHYT38",
+   "slurm": "4150057",
+   "cluster": "jsteinhardt mooney",
+   "data": "/data/prasann/oracle/shards/mt4f1952 (merge_tasks first-1952 of the *_fresh pools; no gold sidecar)"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05": {
+   "ex": "01M6JX0JHJY66CTBYPZRGHJ213",
+   "arm": "orc1row",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1row-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 superseded by the finished mooney copy"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05": {
+   "arm": "orc1batch",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/data/prasann/oracle/runs/f8k-mt4-orc1batch-f1952-orc-lr1e-05/oracle_meta (mooney)",
+   "beaker_cancelled": "01M6JX1FT7R5RA0F8GA6QYCXC5",
+   "slurm": "4150058",
+   "cluster": "jsteinhardt mooney",
+   "data": "/data/prasann/oracle/shards/mt4f1952 (merge_tasks first-1952 of the *_fresh pools; no gold sidecar)"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JX2RDW6G050C4BSP1K6GN7",
+   "arm": "orc1batchr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchr2-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1docr2-f1952-orc-lr1e-05": {
+   "ex": "01M6JX3MX70CKYTERC8GP48JB7",
+   "arm": "orc1docr2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1docr2-f1952-orc-lr1e-05/oracle_meta"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05": {
+   "ex": "01M6JX4KV5GP3MK75XHBGRMRH5",
+   "arm": "orc1batchrc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "meta": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-orc1batchrc-f1952-orc-lr1e-05/oracle_meta",
+   "cancelled": "2026-11-04 repeatedly preempted; insurance copy carries the arm"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney": {
+   "arm": "orc1row",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "slurm": "4150110",
+   "cluster": "jsteinhardt mooney",
+   "data": "/data/prasann/oracle/shards/mt4f1952 (no gold sidecar)"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney": {
+   "arm": "orc1batchrc",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "slurm": "4150112",
+   "cluster": "jsteinhardt mooney"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney": {
+   "arm": "orcbatchall",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "slurm": "4150169",
+   "cluster": "jsteinhardt mooney"
+  }
+ },
+ "evals": {
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KDT1147V1T5P2MPVVGYMJE",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KDTT8A0WRCVX4ZNS6J7SMF",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KDVMPWG161X7ZABXP4EGTF",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1doc-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KDWE6Z2AM02PZGQVH0S24E",
+   "train_run": "f8k-mt4-orc1doc-f1952-orc-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KDXQ8VQJ0E7ZECVYP22TK5",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KDYHHEPQTY6QTBN3N506TN",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KDZA8BXC1FQCXJRMBX1NXB",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1batch-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KE04E9Q4CR56X2GBGXRNC4",
+   "train_run": "f8k-mt4-orc1batch-f1952-orc-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KS1K0J2C2JAPK115TAX60H",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KS2BES2KT58MWCDY4FAYKM",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KS349178GPYE9WH17SV8FV",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KS3XQJK5STG2QB4E3PHZ42",
+   "train_run": "f8k-mt4-orcdoc-f1952-orc-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evcontradiction": {
+   "ex": "01M6KT009CPRE6KEMYV6ZF6VFD",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evnq": {
+   "ex": "01M6KT0SMP8EF8E2KN9JDN89FC",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evoutlier": {
+   "ex": "01M6KT1KMC6R670FMBJQ0KYBHM",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney-evoolong": {
+   "ex": "01M6KT2DA7QMBQGKGNKAZ4BXAJ",
+   "train_run": "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney",
+   "task": "oolong"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evcontradiction": {
+   "ex": "01M6KV8ENWHH1S0ZS60MW3CX33",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evnq": {
+   "ex": "01M6KV97VM3T5VHXNSBE611DWS",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evoutlier": {
+   "ex": "01M6KVA0YTFQVK8HZQ6MHAJ9V8",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05-evoolong": {
+   "ex": "01M6KVATAM092DHDHDTJSVAFEK",
+   "train_run": "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05",
+   "task": "oolong"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney-evcontradiction": {
+   "ex": "01M6M1SRGV3VNTPMBV052XVD8C",
+   "train_run": "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney-evnq": {
+   "ex": "01M6M1TNBM0S7JRDR36CTSN9M2",
+   "train_run": "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney",
+   "task": "nq"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney-evoutlier": {
+   "ex": "01M6M1VJ898BM8292M302W803Q",
+   "train_run": "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney",
+   "task": "outlier"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney-evoolong": {
+   "ex": "01M6M1WFS853PD1MJ0GQ0YWC4E",
+   "train_run": "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney",
+   "task": "oolong"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evcontradiction": {
+   "ex": "01M6M5G2DXG040X8C9R1XW773R",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "contradiction"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evnq": {
+   "ex": "01M6M5GWFRE58CR0C7NNGQGG1M",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "nq"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evoutlier": {
+   "ex": "01M6M5HPCS58119HXEJ7G7JQSJ",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "outlier"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney-evoolong": {
+   "ex": "01M6M5JHT82PNEWRJSH2H2S46E",
+   "train_run": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney",
+   "task": "oolong"
+  }
+ },
+ "insurance": {
+  "f8k-mt4-orc1row-f1952-orc-lr1e-05-mooney": {
+   "slurm": "4150110",
+   "node": "mooney",
+   "of": "f8k-mt4-orc1row-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05-mooney": {
+   "slurm": "4150112",
+   "node": "mooney",
+   "of": "f8k-mt4-orc1batchrc-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orc1batchr2-f1952-orc-lr1e-05@lambda": {
+   "slurm": "114897",
+   "node": "lambda-hyperplane02",
+   "save": "/tmp/prasann/oracle/runs/f8k-mt4-orc1batchr2-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orc1docr2-f1952-orc-lr1e-05@lambda": {
+   "slurm": "114898",
+   "node": "lambda-hyperplane02",
+   "save": "/tmp/prasann/oracle/runs/f8k-mt4-orc1docr2-f1952-orc-lr1e-05"
+  },
+  "f8k-mt4-orcdoc-f1952-orc-lr1e-05-lam": {
+   "slurm": "114900",
+   "node": "lambda-hyperplane02"
+  },
+  "f8k-mt4-orcbatch-f1952-orc-lr1e-05-lam": {
+   "slurm": "114901",
+   "node": "lambda-hyperplane02"
+  },
+  "f8k-mt4-orcbatchall-f1952-orc-lr1e-05-mooney": {
+   "slurm": "4150169",
+   "node": "mooney",
+   "of": "f8k-mt4-orcbatchall-f1952-orc-lr1e-05"
+  }
+ }
+}
