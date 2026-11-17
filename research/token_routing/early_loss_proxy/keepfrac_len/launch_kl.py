@@ -39,6 +39,7 @@ def arms(L, root=W):
     a = {
         "dft": ("full", 5e-6, "--attn-backend flash_2"),   # dense full fine-tune: the primary reference (Prasann 11-17)
         "ref": ("full", 1e-5, LORA),                       # dense LoRA reference (secondary)
+        "k70": ("softtoken", 1e-5, router(0.70, 0.245)),   # higher keep (short lengths)
         "k40": ("softtoken", 1e-5, router(0.40, 0.14)),
         "k20": ("softtoken", 1e-5, router(0.20, 0.07)),    # the recipe
         "k10": ("softtoken", 1e-5, router(0.10, 0.035)),

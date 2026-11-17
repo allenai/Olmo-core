@@ -1,6 +1,6 @@
 # Interim: quick 32k read (tag q32k), scored 2026-11-17 15:40 PT
 
-**Verdict (provisional, one seed, 40 of 225 steps, eval_size 72):** at 32k there is no sign that the best keep falls
+**Verdict (provisional, one seed, 40 steps, eval_size 72):** at 32k there is no sign that the best keep falls
 below the recipe. 40%/14% and 20%/7% tie (held-out CE 0.370 vs 0.380 at step 40, ±0.015 each) and are the only router
 arms that reach the second matched-loss level; 10%/3.5% and below plateau higher (0.440 / 0.448 / 0.469) and stall on
 contradiction. At the shallow level all router arms reach (CE 0.463) every keep from 40% to 5% is 1.9-2.7x fewer FLOPs
@@ -9,7 +9,8 @@ than dense full fine-tune, i.e. the early read cannot separate them there; it se
 ⚠ eval_size = 72 (24 rows per task, `heldout_v4` set `gen32k`), well below 500: SE of a mean held-out CE ≈ ±0.015.
 The proxy cannot resolve gaps under ~0.03-0.05 CE and understates gains vs generation evals: rank only.
 
-Setup: pool `mtb64k_r32k` (the 960 32k rows of `mtb64k`; NOT the `kl32k` pool of the full wave), 16 rows/step, 2 x H200
+Setup: pool `mtb64k_r32k` (the 960 32k rows of `mtb64k`; NOT the `kl32k` pool of the full wave). 960 rows = 60
+steps per epoch, so the LR schedule ran over 60 steps and was at 0.35x peak by step 40 (the full wave: 225 steps). 16 rows/step, 2 x H200
 on mooney (jsteinhardt), probes at steps 0/10/20/30/40, one seed, code `code_7c6b5d877`. Score = analyze_kl.py
 `--ref dft` (dense full fine-tune); levels = dft's own mean CE at steps 10-40.
 
