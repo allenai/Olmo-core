@@ -1,38 +1,33 @@
 """Chunked prefix blocks for the online token router (memscale, 2026-11-17).
 
 The online router runs every token through blocks ``[0, drop_layer)`` and only the kept tokens
-through the rest. At long rows the training peak is one of those prefix blocks' backward over the
-WHOLE row. This module runs the prefix blocks chunk by chunk instead, with peak memory set by one
-chunk:
+through the rest. At long rows the training peak is one of those prefix blocks' backward
+(activation-checkpoint recompute + gradient) over the WHOLE row. Here the prefix blocks run chunk
+by chunk (chunk-major: chunk 0 through blocks 0..L-1, then chunk 1, ...), each block call still
+under its own activation checkpoint, so the backward recomputes one (block, chunk) at a time:
 
-* Forward: chunk ``c`` (tokens ``[s, e)``) runs blocks ``[0, drop_layer)`` inside a non-reentrant
-  activation checkpoint, so only the chunk's input is kept. Gated DeltaNet state (conv windows +
-  recurrent state) is carried from chunk to chunk exactly (the mixer's chunked-prefill cache),
-  and each full-attention layer attends to the earlier chunks' keys / values (stored as constants
-  in a row-length buffer) plus its own, causally -- the forward equals the unchunked one up to
-  kernel numerics.
-* Backward: autograd recomputes one chunk at a time (chunks are independent subgraphs), restoring
-  that chunk's incoming state from a snapshot, and back-propagates the chunk's slice of
-  dLoss/d(block-``drop_layer`` input) into the adapters. The only approximation: gradient paths
-  that cross a chunk boundary inside the prefix (through the carried state or the earlier chunks'
-  keys / values) are cut.
+* Gated DeltaNet: each (layer, chunk) call gets a FRESH state cache built from the previous
+  chunk's final conv windows + recurrent state (detached), through the ``prefix_state`` block
+  kwarg -- so the activation-checkpoint recompute in backward sees exactly the same incoming state.
+* Full attention: each chunk attends to the earlier chunks' keys / values (written to a row-length
+  buffer, read as constants) plus its own, causally (flash-attn, bottom-right aligned).
 
-The prefix blocks run UNWRAPPED (no per-block activation checkpoint) inside the chunk checkpoint:
-a stateful mixer recomputed by a nested checkpoint would see the advanced state.
+The forward equals the unchunked one up to kernel numerics. The only approximation is in the
+gradient: paths that cross a chunk boundary inside the prefix (through the carried GDN state or
+the earlier chunks' K/V) are cut; each token still gets its own gradient through its own chunk.
 
-Memory: O(row) buffers (block-0 input, block-``drop_layer`` input, attention K/V of the prefix's
-attention layers, one GDN state snapshot per chunk) + one chunk's full activations through the
-prefix blocks. FLOPs: one extra forward of the prefix blocks (the recompute), charged by the caller.
+Memory: the per-block checkpoint inputs (prefix blocks x row x d_model, as before), one K/V buffer
+per prefix attention layer, the block-``drop_layer`` input, + ONE (block, chunk) recompute instead
+of one (block, row). FLOPs: identical to the unchunked forward + checkpointed backward (no extra pass).
 """
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Optional
 
 import torch
-from torch.utils.checkpoint import checkpoint
 
-__all__ = ["prefix_chunk_size", "run_prefix_chunked"]
+__all__ = ["prefix_chunk_size", "run_prefix_chunked", "PrefixState"]
 
 
 def prefix_chunk_size() -> int:
@@ -40,50 +35,74 @@ def prefix_chunk_size() -> int:
     return int(os.environ.get("OLMO_OTR_PREFIX_CHUNK", "0") or 0)
 
 
-def _call_plain(module, *args, **kwargs):
-    return module(*args, **kwargs)
-
-
-def _inner(block):
-    return getattr(block, "_checkpoint_wrapped_module", block)
-
-
 class _PrefixKV:
-    """Per attention layer: the row-length K/V buffer and the current chunk start."""
+    """One attention layer's view for one chunk: the shared row-length K/V buffer and the chunk start."""
 
-    def __init__(self, T: int):
-        self.T = T
-        self.k = None
-        self.v = None
-        self.s = 0
+    def __init__(self, store: Dict[str, Any], s: int):
+        self.store = store
+        self.s = s
 
     def attend(self, mod, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
         from flash_attn import flash_attn_func
 
+        st, s = self.store, self.s
         B, Tq = q.shape[0], q.shape[1]
-        if self.k is None:  # row-length buffers, allocated at the first chunk (dtype / heads from k)
-            self.k = torch.empty(B, self.T, *k.shape[2:], device=k.device, dtype=k.dtype)
-            self.v = torch.empty(B, self.T, *v.shape[2:], device=v.device, dtype=v.dtype)
-        s = self.s
+        if st.get("k") is None:  # allocated at the first chunk (dtype / heads from k)
+            st["k"] = torch.empty(B, st["T"], *k.shape[2:], device=k.device, dtype=k.dtype)
+            st["v"] = torch.empty(B, st["T"], *v.shape[2:], device=v.device, dtype=v.dtype)
         with torch.no_grad():
-            self.k[:, s:s + Tq].copy_(k)
-            self.v[:, s:s + Tq].copy_(v)
+            st["k"][:, s:s + Tq].copy_(k)
+            st["v"][:, s:s + Tq].copy_(v)
         if s > 0:
-            k = torch.cat([self.k[:, :s], k], dim=1)
-            v = torch.cat([self.v[:, :s], v], dim=1)
+            k = torch.cat([st["k"][:, :s], k], dim=1)
+            v = torch.cat([st["v"][:, :s], v], dim=1)
         # causal with Tk > Tq: flash-attn aligns the mask bottom-right (query i sees keys <= s + i)
         return flash_attn_func(q, k, v, causal=True, softmax_scale=mod.backend.scale)
+
+
+class PrefixState:
+    """Passed to every prefix block call of chunk ``c`` as the ``prefix_state`` kwarg."""
+
+    def __init__(self, run: Dict[str, Any], c: int, s: int):
+        self.run, self.c, self.s = run, c, s
+
+    # --- Gated DeltaNet
+    def gdn_cache(self, mix):
+        from .attention.recurrent import GatedDeltaNetStateCache
+
+        B = self.run["B"]
+        cache = GatedDeltaNetStateCache(B, mix.key_dim, mix.value_dim, mix.conv_size - 1,
+                                        self.run["device"], self.run["dtype"])
+        sn = self.run["gdn"].get((id(mix), self.c))  # this chunk's incoming state (None for chunk 0)
+        if sn is not None:
+            cache.conv_state_q, cache.conv_state_k, cache.conv_state_v = (t.clone() for t in sn[:3])
+            cache.recurrent_state = sn[3].clone()
+            cache.has_state = True
+        return cache
+
+    def gdn_done(self, mix, cache) -> None:
+        key = (id(mix), self.c + 1)
+        if key not in self.run["gdn"] and self.c + 1 < self.run["n_chunks"]:
+            self.run["gdn"][key] = tuple(t.detach().clone() for t in (
+                cache.conv_state_q, cache.conv_state_k, cache.conv_state_v, cache.recurrent_state))
+
+    # --- full attention
+    def attn(self, mod) -> _PrefixKV:
+        if getattr(mod, "window_size", None) is not None:
+            raise NotImplementedError("prefix_chunk: sliding-window attention in the prefix")
+        store = self.run["kv"].setdefault(id(mod), {"T": self.run["T"]})
+        return _PrefixKV(store, self.s)
 
 
 def _slice_kwargs(kw: Dict[str, Any], B: int, T: int, s: int, e: int) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for key, val in kw.items():
+        if key in ("cu_doc_lens", "cache_leftpad", "soft_keep", "attn_bias", "token_weight") and val is not None:
+            raise NotImplementedError(f"prefix_chunk: block kwarg {key} is not supported")
         if isinstance(val, torch.Tensor) and val.dim() >= 2 and val.shape[0] == B and val.shape[1] == T:
             out[key] = val[:, s:e]
-        elif isinstance(val, torch.Tensor) and val.dim() >= 1 and val.numel() > 1:
+        elif isinstance(val, torch.Tensor) and val.numel() > 1:
             raise NotImplementedError(f"prefix_chunk: cannot slice block kwarg {key} of shape {tuple(val.shape)}")
-        elif key in ("cu_doc_lens", "cache_leftpad", "soft_keep", "attn_bias") and val is not None:
-            raise NotImplementedError(f"prefix_chunk: block kwarg {key} is not supported")
         else:
             out[key] = val
     return out
@@ -94,84 +113,22 @@ def run_prefix_chunked(
     n_prefix: int, chunk: int,
 ) -> torch.Tensor:
     """Run blocks ``[0, n_prefix)`` of ``model`` over ``h`` (B, T, D) in chunks of ``chunk`` tokens; see module doc."""
-    from .attention import Attention
-    from .attention.recurrent import GatedDeltaNet, GatedDeltaNetStateCache
-
     B, T, D = h.shape
-    # the OUTER blocks (FSDP2 unshard / reduce-scatter hooks live there); their per-block activation checkpoint
-    # is bypassed inside a chunk (_no_block_ac), the inner modules give the mixers
-    blocks = [model.blocks[str(i)] for i in range(n_prefix)]
     kw = dict(all_block_kwargs)
     if kw.get("position_ids") is None:
         kw["position_ids"] = torch.arange(T, device=h.device)[None, :].expand(B, T)
-    gdn: List[Tuple[Any, Any]] = []
-    attn: List[Tuple[Any, _PrefixKV]] = []
-    for blk in blocks:
-        mix = getattr(_inner(blk), "attention", None)
-        if isinstance(mix, GatedDeltaNet):
-            if mix.state_cache is not None:
-                raise RuntimeError("prefix_chunk: GatedDeltaNet already has a state cache")
-            cache = GatedDeltaNetStateCache(B, mix.key_dim, mix.value_dim, mix.conv_size - 1, h.device, h.dtype)
-            gdn.append((mix, cache))
-        elif isinstance(mix, Attention):
-            if getattr(mix, "window_size", None) is not None:
-                raise NotImplementedError("prefix_chunk: sliding-window attention in the prefix")
-            attn.append((mix, _PrefixKV(T)))
-        else:
-            raise NotImplementedError(f"prefix_chunk: sequence mixer {type(mix).__name__}")
-    snaps: Dict[int, Any] = {}
     bounds = [(s, min(s + chunk, T)) for s in range(0, T, chunk)]
-
-    def run_chunk(x: torch.Tensor, c: int) -> torch.Tensor:
-        s, e = bounds[c]
-        if c not in snaps:  # first (checkpointed) forward: the caches hold the state at s -> snapshot it
-            snaps[c] = [None if c == 0 else tuple(t.detach().clone() for t in (
-                cache.conv_state_q, cache.conv_state_k, cache.conv_state_v, cache.recurrent_state))
-                for _, cache in gdn]
-        # fresh tensors (not in-place copies): the previous chunk's forward wrote these buffers under autograd
-        for (mix, cache), sn in zip(gdn, snaps[c]):
-            if sn is None:
-                for name in ("conv_state_q", "conv_state_k", "conv_state_v"):
-                    setattr(cache, name, torch.zeros_like(getattr(cache, name)).detach())
-                cache.recurrent_state = None
-                cache.has_state = False
-            else:
-                cache.conv_state_q, cache.conv_state_k, cache.conv_state_v = (t.clone() for t in sn[:3])
-                cache.recurrent_state = sn[3].clone()
-                cache.has_state = True
-        saved_fn = []
-        try:
-            for blk in blocks:  # no per-block activation checkpoint inside a chunk (stateful mixers)
-                if "checkpoint_fn" in blk.__dict__ or hasattr(blk, "checkpoint_fn"):
-                    saved_fn.append((blk, blk.__dict__.get("checkpoint_fn")))
-                    object.__setattr__(blk, "checkpoint_fn", _call_plain)
-            for mix, cache in gdn:
-                object.__setattr__(mix, "state_cache", cache)
-            for mix, pkv in attn:
-                pkv.s = s
-                object.__setattr__(mix, "_prefix_kv", pkv)
-            kwc = _slice_kwargs(kw, B, T, s, e)
-            for i, blk in enumerate(blocks):
-                x = blk(x, **kwc, **_slice_kwargs(per_block_kwargs.get(i, {}), B, T, s, e))
-        finally:
-            for blk, fn in saved_fn:
-                if fn is None:
-                    del blk.__dict__["checkpoint_fn"]
-                else:
-                    object.__setattr__(blk, "checkpoint_fn", fn)
-            for mix, _ in gdn:
-                object.__setattr__(mix, "state_cache", None)
-            for mix, _ in attn:
-                object.__setattr__(mix, "_prefix_kv", None)
-        return x
-
+    run: Dict[str, Any] = {"B": B, "T": T, "device": h.device, "dtype": h.dtype, "gdn": {}, "kv": {},
+                           "n_chunks": len(bounds)}
+    blocks = [model.blocks[str(i)] for i in range(n_prefix)]
     outs = []
     for c, (s, e) in enumerate(bounds):
         x = h[:, s:e]
-        if torch.is_grad_enabled():
-            outs.append(checkpoint(run_chunk, x, c, use_reentrant=False))
-        else:
-            outs.append(run_chunk(x, c))
+        ps = PrefixState(run, c, s)
+        kwc = _slice_kwargs(kw, B, T, s, e)
+        for i, blk in enumerate(blocks):
+            x = blk(x, prefix_state=ps, **kwc, **_slice_kwargs(per_block_kwargs.get(i, {}), B, T, s, e))
+        outs.append(x)
     out = torch.cat(outs, dim=1)
     if os.environ.get("OLMO_OTR_PREFIX_VERIFY") and not getattr(model, "_prefix_verified", False):
         model._prefix_verified = True
@@ -184,3 +141,8 @@ def run_prefix_chunked(
                   f"{float(d.mean()):.4g} mean|ref| {float(ref.float().abs().mean()):.4g}", flush=True)
             del ref, d
     return out
+
+
+def prefix_attn_kv(mod, prefix_state: Optional[PrefixState]) -> None:
+    """Attention.forward hook: install (or clear) this chunk's K/V view for :meth:`Attention.sdpa`."""
+    mod.__dict__["_prefix_kv"] = prefix_state.attn(mod) if prefix_state is not None else None

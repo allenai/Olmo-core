@@ -344,6 +344,7 @@ class GatedDeltaNet(SequenceMixer):
 
         :returns: The output with shape ``(batch_size, seq_len, d_model)``.
         """
+        prefix_state = kwargs.get("prefix_state")  # chunked online-router prefix (olmo_core.nn.prefix_chunk)
         del kwargs  # Ignore any extra kwargs passed from attention interface
         B, T_og, _ = x.shape
 
@@ -366,7 +367,7 @@ class GatedDeltaNet(SequenceMixer):
         # Cached decoding: once prefill has populated the cache, every subsequent single-token step
         # advances the recurrent state instead of recomputing over the whole sequence. A multi-token
         # call (prefill) always takes the parallel chunk path and, if caching, seeds the state.
-        cache = self.state_cache
+        cache = prefix_state.gdn_cache(self) if prefix_state is not None else self.state_cache
         use_precomputed = cache is not None and cache.has_state and T_og == 1
         # Chunked prefill: a multi-token call arriving when the cache already holds state is the
         # next slice of one long prompt, so it must continue the conv window and the recurrent
@@ -615,6 +616,8 @@ class GatedDeltaNet(SequenceMixer):
         if cache is not None:
             cache.recurrent_state = new_state
             cache.has_state = True
+            if prefix_state is not None:
+                prefix_state.gdn_done(self, cache)
 
         if self.cp_enabled and self.uly is not None:
             assert self._cp_group is not None
