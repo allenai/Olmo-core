@@ -215,17 +215,20 @@ def build_callback(cfg: Dict[str, str]):
             ii = batch["input_ids"]
             self._hash = hashlib.sha1(ii.detach().cpu().numpy().tobytes()).hexdigest()[:12]
             torch.cuda.reset_peak_memory_stats()
+            self._base_mem = float(torch.cuda.memory_allocated())  # weights + optimizer state held before the step
             self._ntok = int(ii.numel())
 
         def post_step(self):
             torch.cuda.synchronize()
             dt = time.time() - self._t_step
             self._train_s += dt
-            pk = torch.tensor([float(torch.cuda.max_memory_allocated())], device="cuda", dtype=torch.float64)
+            pk0 = float(torch.cuda.max_memory_allocated())
+            # [peak, peak - pre-step baseline (the step's own transient: activations, gradients, temporaries)]
+            pk = torch.tensor([pk0, pk0 - self._base_mem], device="cuda", dtype=torch.float64)
             if dist.is_initialized():
                 dist.all_reduce(pk, op=dist.ReduceOp.MAX)
             self.res["steps"].append({"step": int(self.step), "train_s": dt, "lr": self._lrs(),
-                                      "peak_gib": float(pk) / 2**30,
+                                      "peak_gib": float(pk[0]) / 2**30, "transient_gib": float(pk[1]) / 2**30,
                                       "batch_hash_rank0": self._hash, "tokens_rank0": self._ntok,
                                       "flops": self._flops()})
             probed = self.step in steps
