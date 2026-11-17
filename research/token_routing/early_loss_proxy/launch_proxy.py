@@ -69,6 +69,31 @@ ARMS = {
 }
 
 
+def _prefix(stages=None, ng=0, wr=False):
+    """loop idea ``prefix``: RECIPE with other cut stages, a frozen no-grad prefix [0, ng) and/or warmup-random."""
+    f = RECIPE
+    if stages:
+        f = f.replace("--st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07",
+                      f"--st-otr-drop-layer {stages.split(':')[0]} --st-otr-stages {stages}")
+    if ng:
+        f += f" --st-otr-nograd-until {ng} --st-otr-early-lora-start {ng}"
+    return f + (f" {NODENSE}" if wr else "")
+
+
+PREFIX_ARMS = {
+    "ng7": _prefix(ng=7), "ng7wr": _prefix(ng=7, wr=True), "ng16": _prefix(ng=16), "ng16wr": _prefix(ng=16, wr=True),
+    "wr": _prefix(wr=True),
+    "s4": _prefix("2:0.5,4:0.25,7:0.1,16:0.04"), "s4ng7": _prefix("2:0.5,4:0.25,7:0.1,16:0.04", 7),
+    "s4ng7wr": _prefix("2:0.5,4:0.25,7:0.1,16:0.04", 7, True),
+    "s3": _prefix("4:0.2,10:0.07,20:0.03"), "s3ng10": _prefix("4:0.2,10:0.07,20:0.03", 10),
+    "s3ng10wr": _prefix("4:0.2,10:0.07,20:0.03", 10, True), "s3ng4wr": _prefix("4:0.2,10:0.07,20:0.03", 4, True),
+    "s3ng20wr": _prefix("4:0.2,10:0.07,20:0.03", 20, True),
+    "s4ng16wr": _prefix("2:0.5,4:0.25,7:0.1,16:0.04", 16, True),
+}
+for _k, _f in PREFIX_ARMS.items():
+    ARMS["p" + _k] = ("softtoken", 1e-5, _f, None, "loop idea prefix")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arms", default="dense,recipe")
