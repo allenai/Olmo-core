@@ -76,6 +76,8 @@ def build_callback(cfg: Dict[str, str]):
                 rows.append((name, task, ids_all[offs[i]:offs[i + 1]].astype(np.int64),
                              mask_all[offs[i]:offs[i + 1]].astype(bool)))
     out_path = cfg["out"]
+    stop_ce = float(cfg.get("stop_ce", 0) or 0)  # stop once the mean held-out CE at a probe is <= this
+    max_train_s = float(cfg.get("max_train_s", 0) or 0)  # stop (after a final probe) once training took this long
     # step-0 cache: the dense loss of the untrained base is the same for every arm (LoRA B = 0), so it is scored once
     # per (held-out file, sets, base) and reused; each rank still scores ONE row and the run falls back to a full
     # step-0 probe if that row disagrees with the cache (an arm that changes the model at init).
@@ -226,9 +228,26 @@ def build_callback(cfg: Dict[str, str]):
                                       "peak_gib": float(pk) / 2**30,
                                       "batch_hash_rank0": self._hash, "tokens_rank0": self._ntok,
                                       "flops": self._flops()})
-            if self.step in steps:
+            probed = self.step in steps
+            if probed:
                 self._probe(int(self.step))
-            elif self._rank() == 0:
+            stop = ""
+            if max_train_s > 0:
+                ts = torch.tensor([self._train_s], device="cuda", dtype=torch.float64)
+                if dist.is_initialized():
+                    dist.all_reduce(ts, op=dist.ReduceOp.MAX)
+                if float(ts) >= max_train_s:
+                    if not probed:
+                        self._probe(int(self.step))
+                        probed = True
+                    stop = f"train time {float(ts):.0f}s >= {max_train_s:.0f}s"
+            if probed and stop_ce > 0 and float(np.mean(self.res["probes"][-1]["ce"])) <= stop_ce:
+                stop = stop or f"mean CE <= {stop_ce}"
+            if stop or self.step >= max(steps):
+                self.res["finished"] = stop or "last probe step"
+                if stop:
+                    self.trainer.cancel_run(f"dense-probe: {stop}", no_sync=True)  # same decision on every rank
+            if self._rank() == 0:
                 self._write()
 
     return DenseProbeCallback()

@@ -123,6 +123,21 @@ def main():
         lb = not need
         ref_pf = min(need) if need else max(x["curve"][-1]["pf"] for x in rs)
         cross = pf_to_reach(r["curve"], ref_last)
+        # speedup at each reference level: (cheapest reference PF to reach the level) / (run PF to reach it), on the
+        # mean loss ("x") and requiring every task to reach its own reference level ("xw", worst task)
+        best = min(rs, key=lambda x: x["curve"][-1]["all"])
+        tkeys = [k for k in last if k.startswith("task/")]
+        xs, xw = {}, {}
+        for c in best["curve"][1:]:
+            def sp(key):
+                lvl = min(cc[key] for cc in best["curve"] if cc["step"] <= c["step"])
+                need_r = [pf_to_reach(x["curve"], lvl, key) for x in rs]
+                need_r = min(n for n in need_r if n is not None)
+                mine = pf_to_reach(r["curve"], lvl, key)
+                return (need_r / mine) if mine else None
+            xs[str(c["step"])] = sp("all")
+            per = [sp(k) for k in tkeys]
+            xw[str(c["step"])] = (min(per) if per and all(p is not None for p in per) else None)
         rec = {k: r[k] for k in ("tag", "arm", "seed", "steps", "eval_size", "peak_gib", "train_s", "probe_s",
                                  "wall_s", "node", "lr", "step0_src")}
         rec.update({
@@ -130,13 +145,12 @@ def main():
             "pf_per_step_vs_dense": (fa / last["dense_pf"]) if last["dense_pf"] else None,
             "frac": (l0 - la) / max(1e-9, l0 - ref_last),
             "iso": (ref_pf / fa) if fa > 0 else None, "iso_lb": lb,
-            "to_target": (ref_last_pf / cross) if cross else None,
+            "to_target": (ref_last_pf / cross) if cross else None, "x": xs, "xw": xw,
             "peak_vs_ref": (r["peak_gib"] / ref_peak) if ref_peak else None,
             "by": {k: [c[k] for c in r["curve"]] for k in last if k.startswith(("task/", "set/"))},
             "curve": [[c["step"], c["pf"], c["all"]] for c in r["curve"]],
             "is_ref": r["arm"] in a.ref.split(",")})
         # paired SE of the loss difference vs the seed-matched reference rows (same held-out rows)
-        best = min(rs, key=lambda x: x["curve"][-1]["all"])
         if len(best["ce_rows_last"]) == len(r["ce_rows_last"]):
             dlt = np.asarray(r["ce_rows_last"]) - np.asarray(best["ce_rows_last"])
             rec["d_vs_ref"] = float(dlt.mean())
@@ -158,15 +172,26 @@ def main():
                                               "to_target", "peak_gib", "peak_vs_ref", "train_s", "wall_s",
                                               "d_vs_ref", "d_vs_ref_se")},
                       "iso_lb": any(x["iso_lb"] for x in rs)})
-    board.sort(key=lambda b: (-(b["iso"] or 0) if (b["frac"] or 0) >= a.min_frac else 1e9 - (b["frac"] or 0)))
-    print(f"reference seeds {ref_seeds}; ranked by iso-loss FLOP speedup among arms with frac >= {a.min_frac}")
+        for kk in ("x", "xw"):  # per level: mean over seeds, None unless every seed reached it
+            lv = sorted({k for x in rs for k in x[kk]}, key=int)
+            board[-1][kk] = {k: (float(np.mean([x[kk][k] for x in rs])) if all(x[kk].get(k) for x in rs) else None)
+                             for k in lv}
+    def deepest(b, kk="x"):
+        """(deepest reference level reached, speedup there)"""
+        got = [(int(k), v) for k, v in b[kk].items() if v]
+        return max(got) if got else (0, 0.0)
+
+    board.sort(key=lambda b: (-deepest(b)[0], -deepest(b)[1]))
+    print(f"reference seeds {ref_seeds}; ranked by deepest reference level reached, then FLOP speedup there "
+          f"(x@k = cheapest reference PF to reach the reference's step-k loss / run PF to reach it; xw = worst task)")
     print(f"{'tag/arm':34s} {'sd':>4s} {'steps':>5s} {'CE':>6s} {'frac':>5s} {'PF':>7s} {'step/dense':>10s} "
-          f"{'iso':>6s} {'toTgt':>6s} {'peakGiB':>7s} {'mem/ref':>7s} {'train_s':>7s}")
+          f"{'x@lvl':>10s} {'xw@lvl':>10s} {'peakGiB':>7s} {'mem/ref':>7s} {'train_s':>7s}")
     f = lambda v, w, p: (f"{v:{w}.{p}f}" if v is not None else " " * (w - 1) + "-")  # noqa: E731
     for b in board:
         print(f"{(b['tag'] + '/' + b['arm'])[:34]:34s} {len(b['seeds']):>4d} {b['steps']:>5d} {f(b['ce_last'], 6, 3)} "
               f"{f(b['frac'], 5, 2)} {f(b['pf'], 7, 2)} {f(b['pf_per_step_vs_dense'], 10, 3)} "
-              f"{f(b['iso'], 6, 2)}{'+' if b['iso_lb'] else ' '}{f(b['to_target'], 5, 2)} {f(b['peak_gib'], 7, 1)} "
+              f"{deepest(b)[1]:5.2f}@{deepest(b)[0]:<4d} {deepest(b, 'xw')[1]:5.2f}@{deepest(b, 'xw')[0]:<4d} "
+              f"{f(b['peak_gib'], 7, 1)} "
               f"{f(b['peak_vs_ref'], 7, 2)} {f(b['train_s'], 7, 0)}")
     if a.out:
         json.dump({"board": board, "runs": out, "ref": a.ref, "min_frac": a.min_frac}, open(a.out, "w"), indent=1)

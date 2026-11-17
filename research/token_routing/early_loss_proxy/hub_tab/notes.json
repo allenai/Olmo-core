@@ -1,0 +1,7 @@
+{"status": "Setting up. The 4k-16k pool (contradiction, outlier, reorder, qdmatch_nq) and its held-out probe rows are being built; the probe, launcher and scoring code are updated. No 16k result yet: the table below is the earlier 8k pilot on the old task set.",
+ "setup": [
+  "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
+  "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k), eval_size 192.",
+  "Score = training FLOPs the dense reference needs to reach a loss level divided by the FLOPs the method needs to reach the same level, on the mean loss and on the worst task. Peak GPU memory is logged per step.",
+  "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals."],
+ "log": [{"t": "11-16 23:10", "text": "Loop requested: tasks switched to contradiction, outlier, reorder, qdmatch_nq at 4k-16k; target 10-20x FLOPs and 5-10x less peak memory."}]}

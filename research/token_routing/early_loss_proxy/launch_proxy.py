@@ -79,6 +79,8 @@ def main():
     ap.add_argument("--data", default="/data/prasann/early_loss_proxy/shards/mtb16k", help="training pool on the node")
     ap.add_argument("--seq-len", type=int, default=16384)
     ap.add_argument("--gpus", type=int, default=2)
+    ap.add_argument("--stop-ce", type=float, default=0.0, help="stop a run once its mean held-out CE at a probe <= this")
+    ap.add_argument("--max-train-s", type=float, default=0.0, help="stop a run (after a final probe) at this train time")
     ap.add_argument("--custom", action="append", default=[], metavar="NAME=VARIANT,LR,FLAGS",
                     help="an arm not in ARMS (repeatable): name=variant,lr,trainer flags; add its name to --arms")
     ap.add_argument("--tag", default="v2", help="result folder results/<tag>/")
@@ -103,7 +105,8 @@ def main():
     spec = "\n".join(lines) + "\n"
     minutes = a.minutes or max(10, 4 * len(lines))
     env = dict(os.environ, CODE=a.code, STEPS=a.steps, SETS=a.sets, HELDOUT=a.heldout, TAG=a.tag, DATA=a.data,
-               SEQLEN=str(a.seq_len), NGPU=str(a.gpus),
+               SEQLEN=str(a.seq_len), NGPU=str(a.gpus), STOPCE=(str(a.stop_ce) if a.stop_ce else ""),
+               MAXTRAIN=(str(a.max_train_s) if a.max_train_s else ""),
                SPEC_B64=__import__("base64").b64encode(spec.encode()).decode())
     cmd = ["sbatch", "-w", a.node, f"--qos={a.qos}", "-J", f"elp-{a.tag}", f"--time={minutes + 20}",
            f"--gres=gpu:{a.gpus}",

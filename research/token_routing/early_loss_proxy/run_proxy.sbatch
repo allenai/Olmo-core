@@ -38,7 +38,7 @@ while IFS=$'\t' read -r NAME VARIANT LR SEED FLAGS; do
   # shellcheck disable=SC2086
   "$PY" -m torch.distributed.run --nproc_per_node=$NGPU --master_port=$((29000 + RANDOM % 1000)) \
     research/token_routing/early_loss_proxy/dense_probe.py \
-    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" -- \
+    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" ${STOPCE:+--probe-stop-ce $STOPCE} ${MAXTRAIN:+--probe-max-train-s $MAXTRAIN} -- \
     --task mt4 --variant "$VARIANT" --model-family qwen3_5 --model-scale 4b \
     --run-name "$NAME" --base-checkpoint "$BASE" --data "$DATA" --work-dir "$ROOT/work_${SLURM_JOB_ID}" \
     --save-folder "$SAVE" --seq-len $SEQLEN --epochs 1 --lr "$LR" --global-batch $GB --micro-batch-instances $MICRO \
@@ -54,7 +54,7 @@ try:
     d = json.load(open(p))
 except FileNotFoundError:
     print("NO RESULT", p); sys.exit(0)
-d["done"] = len(d["probes"]) == len(d["probe_steps"])
+d["done"] = bool(d.get("finished")) or len(d["probes"]) == len(d["probe_steps"])
 d["process_wall_s"] = wall
 d["slurm"] = {k: __import__("os").environ.get(k) for k in ("SLURM_JOB_ID", "SLURMD_NODENAME", "DATA", "SEQLEN", "NGPU", "GB", "MICRO", "CODE")}
 json.dump(d, open(p, "w"))
