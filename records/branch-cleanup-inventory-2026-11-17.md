@@ -71,7 +71,7 @@ right before deletion. All were local-only, so no remote branch was deleted.
 | | removable after the integration branch is merged | needs Prasann | remove-now but skipped | keep |
 |---|---|---|---|---|
 | branches (104) | 17 | 27 | 7 | 53 |
-| worktrees (56) | 15 (2 need their results archived first) | 14 | - | 28 (incl. main) |
+| worktrees (57) | 15 (2 need their results archived first) | 14 | - | 28 (incl. main) |
 
 ## Branches
 
@@ -256,6 +256,7 @@ of the checkout (result data lives on node-local `/data` / weka, not here). The 
 
 - `git fetch --prune` during this audit dropped stale remote-tracking refs for other users' deleted remote
   branches (e.g. `origin/vision-donovan-stage-2-training`); no remote branch was touched.
+- A new worktree `.claude/worktrees/recipe-pareto-repro` appeared after the scan (another live session); it is not in the table.
 - `claude/great-chatterjee-82e4e0` (hub reorg) is 2 commits ahead of its origin copy: unpushed work.
 - The `o3cd/*` composite branches, `o3cd/devce-eval`, `claude/vigorous-agnesi-20ecb0`, `prasann/ops-tools` and
   `prasann/dropstruct` hold unique commits that exist only locally.
