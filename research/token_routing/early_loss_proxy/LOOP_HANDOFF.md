@@ -7,6 +7,7 @@ heldout_v3 EXISTS (mooney, sneetches, weka, Lambda). Beaker tag `v3` (launched 1
 MEMORY GOAL (Prasann 11-17 12:15): flat memory at 256k-1M+, not savings at 16k; agent memscale (ac86d3a313c91405e).
 lenscale: dlA (block 3 local) ~recipe -0.01..0.02 CE/step; dlB/dlC stall; control smoke Beaker 01M7NJQFFRJ967Q32TNDRK0DZM (tag smoke-lenscale2: dlBstd vs dlB, read [doclocal-check] lines in its log). alloc: closed, no gain at 16k. memscale: scaling law measured; transient_gib in dense_probe was wrong (fix in loop/memscale, merge it).
 deep2 full-epoch: rc-mix80 3.1-3.7x all lengths, 3.2-3.5x on suite16k (56 rows); rc-mix50 2.4-2.6x. Data agent building mtbmix80x3 (5,856 rows/task) -> run recipe on it full epoch (1,464 steps, Beaker, heldout_v3) when on weka.
+lenscale CLOSED negative (doc-local attention hurts; block 3 only is mild but worse per FLOP at 16k). New agent longpos (a717aab682ac9c264): position stretching on short rows + position-preserving doc subsampling of long rows. v3 tag also has rc-mix80x3 sd0/sd1 (1,464 steps).
 Tools: rescore.sh, iso.py, iso_set.py set/suite16k, depth.py, depth_set.py suite16k.
 
 (older state below)

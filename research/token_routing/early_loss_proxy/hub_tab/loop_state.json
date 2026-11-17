@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-17 12:24 PT",
+ "updated": "2026-11-17 12:35 PT",
  "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k): 3.1-3.7x fewer training FLOPs than dense LoRA at every held-out loss level its epoch reaches (two seeds, full epoch), and 3.2-3.5x on the 16k rows alone (56 rows) against 2.1-2.7x for the plain recipe. Priority since 11:45 is the 16k held-out loss and methods that gain with length; a 320-row 16k held-out set is in place and the references and all mixed pools are being rerun on it. Memory: measured slope 0.37 GiB per 1k tokens for dense LoRA (out of memory at 256k on 141 GB) and 0.24 for the recipe; a chunked version of the early blocks is being built to make memory nearly flat in length. Closed since the last update: loss-per-cost sampling (no gain at 16k), document-local attention beyond block 3 (training stalls). Nothing is near 10x; about 115 arms scored.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "Memory: the proxy's logged transient memory was wrong until 11-17 12:25 (the peak was reset before being read). Valid memory numbers are in the memory-scaling entries of the log; the leaderboard's memory columns should be ignored."
  ],
  "log": [
+  {
+   "t": "11-17 12:45",
+   "text": "Document-local attention closed as negative (real mask effect, verified against a causal-mask control). A 3x larger 80/20 pool (5,856 rows per task, 73M tokens) is built; the recipe is running on it for its full epoch (1,464 steps, two seeds) on the 320-row 16k set."
+  },
   {
    "t": "11-17 12:25",
    "text": "Full-epoch runs on the mixed pools: recipe on the 80/20 pool 3.1-3.7x vs dense LoRA at every level down to held-out CE 0.115 (two seeds), ending at 0.111-0.113 after 160 PF; on the 50/50 pool 2.4-2.6x, ending at 0.099 after 265 PF. On the 16k rows (56): 80/20 pool 3.2-3.5x, 50/50 pool 2.6-2.9x, plain recipe 2.1-2.7x."
@@ -212,8 +216,8 @@
    "family": "scales with length",
    "title": "Length-scaling breakdown and document-local attention in the early blocks",
    "what": "Tabulate where the recipe's FLOPs go at 4k-128k rows (the full-length attention of the early blocks is quadratic in length), then make that attention document-local during training so the early blocks' cost grows linearly with length.",
-   "status": "running",
-   "result": "FLOP breakdown done (flop meter's own formulas; the model has 32 blocks, 8 full attention at blocks 3, 7, ..., 31 and 24 Gated DeltaNet). Recipe cost vs dense: 0.227 / 0.217 / 0.189 / 0.168 at 4k / 16k / 64k / 128k. The only early full-attention block is block 3: its full-length attention is 4% of the recipe's step at 16k, 15% at 64k, 25% at 128k; making it document-local would give 1.04x / 1.17x / 1.33x at 16k / 64k / 128k. The floor is the length-independent per-token cost of blocks 0-6 (FFN, GDN, projections): 0.118x dense, 54% of the recipe's step at 16k. Proxy runs with document-local attention (block 3; blocks 3-15; all attention blocks) are running. Proxy at 16k (one seed): local attention in block 3 only trains normally and is 0.01-0.02 held-out CE behind the recipe per step (0.246 / 0.181 / 0.163 / 0.143 vs 0.229 / 0.172 / 0.140 / 0.124) for a 2% FLOP saving; local attention also in blocks 7, 11, 15 stalls training (0.773 / 0.762 / 0.570 / 0.390). A causal-mask control of the same attention path is running to rule out a bug in the later blocks."
+   "status": "dropped",
+   "result": "Negative as a method; the FLOP breakdown stands. Recipe cost vs dense: 0.227 / 0.217 / 0.189 / 0.168 at 4k / 16k / 64k / 128k (flop meter's formulas; 32 blocks, 8 full attention at blocks 3, 7, ..., 31). Document-local attention in training hurts learning per step: block 3 only is 0.01-0.02 held-out CE behind the recipe at every step (0.246 / 0.181 / 0.164 / 0.144 vs 0.229 / 0.172 / 0.140 / 0.124) for a 2.8% FLOP saving, so it is worse at matched FLOPs at 16k; local attention in blocks 3-15 or in all attention blocks stalls training. A causal-mask control of the same attention path trains normally and the masked attention matches a dense reference, so this is a real effect, not a bug: documents need cross-document attention in training. The floor is the linear per-token cost of blocks 0-6 (0.118x dense, 54% of the recipe's step at 16k). Branch loop/lenscale."
   },
   {
    "id": "memscale",
@@ -222,6 +226,14 @@
    "what": "Measure how peak training memory grows with row length (16k-256k) for dense LoRA and the recipe, then run the early blocks chunk by chunk (no-grad pass, later blocks on the kept tokens, second chunked pass with gradient) with a kept-token budget fixed in tokens, so the peak is one chunk plus the kept tokens instead of the whole row.",
    "status": "running",
    "result": "Scaling law measured (transient above a 24.5 GiB baseline, one H200, micro-batch 1): dense LoRA 0.37 GiB per 1k tokens (52 GiB at 128k, out of memory at 256k); recipe 0.24 GiB per 1k (34 GiB at 128k). Chunked early blocks with 8k chunks: forward exact, gradient cosine 0.996 overall and 0.982 in blocks 0-6. Proxy runs and the memory sweep of the chunked method are next."
+  },
+  {
+   "id": "longpos",
+   "family": "scales with length",
+   "title": "Long-range positions on short rows",
+   "what": "Short rows only show the attention blocks distances below 2k. Give them positions that span 16k (stretching), and thin long rows by dropping whole documents at the input while keeping the survivors' original positions, so cheap rows carry long-range structure and fewer full long rows are needed for the 16k loss.",
+   "status": "running",
+   "result": "agent started 12:50"
   }
  ],
  "best_by_hour": [
@@ -293,6 +305,15 @@
    "predicted": "3.1-3.4x at held-out CE 0.125 from the 400-step runs",
    "actual": "80/20 pool (two seeds): 0.113 / 0.111 held-out CE at 160 PF, 3.1-3.7x vs dense LoRA at every level reached; 16k rows 0.154 at 160 PF (3.2-3.5x). 50/50 pool: 0.099 at 265 PF, 2.4-2.6x; 16k rows 0.134 (2.6-2.9x).",
    "note": "The lead holds through the epoch (no plateau as with rows <= 5k). The epoch is short in FLOPs, so a 3x larger 80/20 pool is being built to follow it down to dense LoRA's final loss."
+  },
+  {
+   "run": "recipe on the 3x larger 80/20 pool, full epoch (1,464 steps)",
+   "arm": "recipe on mtbmix80x3, two seeds",
+   "rows": "5,856 per task (4,685 short, 1,171 long); eval_size 384 (320 at 16k)",
+   "status": "running",
+   "predicted": "about 3x fewer FLOPs than dense LoRA, from the 1x pool",
+   "actual": "",
+   "note": "Tests whether the lead holds down to dense LoRA's final held-out loss; compared with the dense-LoRA full-epoch rerun on the same held-out set."
   }
  ],
  "board": [
