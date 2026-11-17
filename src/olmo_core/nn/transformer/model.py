@@ -1764,6 +1764,13 @@ class Transformer(nn.Module):
         grad_was = torch.is_grad_enabled()
         if otr_nograd:
             torch.set_grad_enabled(False)
+        # --st-doclocal-blocks (attention/doclocal.py): training-only document-local roles for the listed blocks
+        dl_blocks = getattr(self, "_doclocal_blocks", None) if self.training else None
+        dl_roles = getattr(self, "_doclocal_roles", None) if dl_blocks else None
+        if dl_blocks:
+            self._doclocal_roles = None  # consumed by this pass (a later forward recomputes it)
+            if dl_roles is None:
+                raise RuntimeError("doclocal: no roles for this training forward")
         for block_key, block in self.blocks.items():
             block_idx = int(block_key)
             if otr_nograd and block_idx == otr_nograd_end:
@@ -1773,6 +1780,14 @@ class Transformer(nn.Module):
             if block_idx in otr_stages:
                 # online router, mid-stack drop: dropped tokens skip blocks [otr_layer, n_layers)
                 h, all_block_kwargs = otr_stages[block_idx].mid_compact(self, h, all_block_kwargs)
+                if dl_roles is not None:
+                    mg = otr_stages[block_idx]._mid_gather
+                    if mg is not None:
+                        if mg[0] == "packed" or mg[2]:
+                            raise NotImplementedError("doclocal: packed rows / merge_dropped are not supported")
+                        from ..attention.doclocal import gather_roles
+
+                        dl_roles = gather_roles(dl_roles, mg[0], mg[1])
             if otr_tap and block_idx == otr_tap:
                 h = otr.tap_target(self, h, block_idx)  # type: ignore[union-attr]
             if block_idx in ld_skip:
@@ -1822,6 +1837,21 @@ class Transformer(nn.Module):
                 )
             elif block_idx in otr_mod:
                 h = otr.mod_block(block, h, {**all_block_kwargs, **block_kwargs, **extra})  # type: ignore[union-attr]
+            elif dl_roles is not None and block_idx in dl_blocks:
+                if tuple(dl_roles.shape) != tuple(h.shape[:2]):
+                    raise RuntimeError(f"doclocal: roles {tuple(dl_roles.shape)} vs hidden {tuple(h.shape[:2])} at "
+                                       f"block {block_idx}")
+                from ..attention.doclocal import pairs_saved
+
+                if torch.is_grad_enabled():
+                    # charge only the attended pairs: the meter / router priced this block's attention causally
+                    am = block.attention
+                    fac = otr._block_factors(len(self.blocks))[block_idx] if otr is not None else 1.0
+                    saved = float(pairs_saved(dl_roles).sum())
+                    self._flop_extra_actual = float(getattr(self, "_flop_extra_actual", 0.0)) - (
+                        fac * 12.0 * am.n_heads * am.head_dim * saved)
+                    self._doclocal_saved = float(getattr(self, "_doclocal_saved", 0.0)) + saved
+                h = block(h, **{**all_block_kwargs, "chunk_ids": dl_roles}, **block_kwargs, **extra)
             else:
                 h = block(h, **all_block_kwargs, **block_kwargs, **extra)
             if ld is not None and ld.rescale:
@@ -2689,6 +2719,20 @@ class Transformer(nn.Module):
 
             lens = example_lengths(input_ids, kwargs.get("doc_lens"), self._flop_pad_id)
             self._record_example_lens(lens, lens)
+        if (
+            getattr(self, "_doclocal_blocks", None)
+            and self.training
+            and not input_ids.is_floating_point()
+        ):
+            # --st-doclocal-blocks: per-token document roles of the input row (consumed by _run_blocks)
+            pst_dl = self._pooled_soft_tokens
+            self._doclocal_roles = build_chunk_ids_from_tokens(
+                input_ids,
+                doc_start_id=pst_dl["doc_start_id"],
+                doc_end_id=pst_dl["doc_end_id"],
+                eos_id=pst_dl["eos_id"],
+                mode="chunked",
+            )
         # Token exit: keep the FULL row (and its kwargs) for blocks [0, L); the soft-token
         # compaction below decides which tokens survive past block L.
         tx_full: Optional[Tuple[torch.Tensor, Dict[str, Any]]] = None

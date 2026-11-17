@@ -2028,6 +2028,11 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-lora-blocks", type=int, default=0,
                     help="early LoRA on blocks [0, K) instead of [0, drop_layer), e.g. the whole model; blocks at or "
                     "above the drop layer then run at the kept length with frozen base + adapters. 0 = drop_layer")
+    ap.add_argument("--st-doclocal-blocks", type=str, default="",
+                    help="lenscale: comma list of FULL-attention block indices that, in TRAINING forwards only, use a "
+                    "document-local mask (a document token attends to its own document + the free prompt / query / "
+                    "answer tokens; free tokens attend everything; FlexAttention). Blocks past a router cut use the "
+                    "compacted row's roles. The meter is charged only the attended pairs. Empty = off")
     ap.add_argument("--st-otr-early-lora-scale", type=float, default=32.0,
                     help="early LoRA output scale (acts as the adapters' LR multiplier under Adam; default 32)")
     ap.add_argument("--st-otr-target-layer", type=int, default=0,

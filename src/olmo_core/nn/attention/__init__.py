@@ -2010,7 +2010,9 @@ class Attention(SequenceMixer):
 
         :returns: The output of attention with shape ``(batch_size, seq_len, d_model)``.
         """
-        # Not applicable to plain attention; see the parameter docs above.
+        # Not applicable to plain attention; see the parameter docs above. Exception: blocks marked by
+        # ``--st-doclocal-blocks`` (doclocal.py) read ``chunk_ids`` as document-local roles in TRAINING forwards.
+        doclocal_roles = chunk_ids if (getattr(self, "_doclocal", False) and self.training) else None
         del chunk_ids, summary_roles, causal_example
         B, T, _ = x.shape
 
@@ -2162,6 +2164,13 @@ class Attention(SequenceMixer):
                         attn_bias, position_ids, self.window_size
                     )
                 att = masked_sdpa(q, k, v, attn_bias, self.head_dim**-0.5)
+            elif doclocal_roles is not None:
+                if cu_doc_lens is not None or local_k_slice is not None:
+                    raise NotImplementedError("doclocal attention runs on padded rows only (no cu_doc_lens / CP)")
+                from .doclocal import doclocal_attention
+
+                sc = getattr(self.backend, "scale", None)
+                att = doclocal_attention(q, k, v, doclocal_roles, sc if sc is not None else self.head_dim**-0.5)
             elif self._use_position_window(position_ids, cu_doc_lens, cu_doc_lens_q, local_k_slice):
                 # Compacted row (dropped tokens, survivors keep their original positions): the
                 # backends window by INDEX, which after dropping reaches ~W / keep original tokens
