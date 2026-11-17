@@ -20,11 +20,12 @@ An **Overview** landing part, then six groups; each old tab is a section (`.part
 | 5 Cost and infrastructure (`g-cost`) | `memory`, `gpuaudit` |
 | 6 Log and provenance (`g-log`) | `log`, `provenance` |
 
-Navigation is built at run time: a sidebar tree on desktop, a group chip row plus a section row on a phone. It reads
-`data-group`, `data-order`, `data-short` (and optional `data-badge`) from each `<div class="part" id="...">`, and the group
-list from `<script type="application/json" id="hubgroups">`. Deep links: `#<part id>`, `#<group id>` (opens its first
-section), and `#<part>--<heading-slug>` for any section heading (ids are generated on load). Each section's "On this page"
-row comes from its `<section><h2>` headings. Long tables (12+ rows) and long notes are inside `<details class="more">`.
+Layout follows the PAIL Workbench: a site title, row 1 of tabs = Overview + the six groups, row 2 = the sections of the active group
+(on a phone both rows scroll sideways). Each section opens on its verdict, then a hero (chart or key table), then **section bars**
+(`<details class="sec">`: heading, counts of charts / tables, verdict snippet; the first bar of a part, or all bars of a part with 3 or fewer, start open;
+"Expand all / Collapse all" per part). Long tables (12+ rows) and long notes sit in `<details class="more">`. Tabs are built at run time from
+`data-group`, `data-order`, `data-short` (and optional `data-badge`) on each `<div class="part" id="...">` and the group list in
+`<script type="application/json" id="hubgroups">`. Deep links: `#<part id>`, `#<group id>` (first section), `#<part>--<heading-slug>` (opens the bar).
 
 **Add a section:** append `<div class="part" id="myid" data-group="g-tried" data-order="6" data-short="Nav label">` with a
 `.parthead` (eyebrow, `h2.ptitle`, `p.verdict`: the verdict first) and `<section><h2>` blocks. Nothing else needs editing.
@@ -46,9 +47,10 @@ then `node --check` the inline scripts and publish HUB.html to the same artifact
 version exists, run the builder on that version, never force). The builder replaces the blocks between
 `<!-- AR:PART:START -->`/`END` and `<!-- AR:SCRIPT:START -->`/`END` in place (first run: part before `provenance`, script at the
 end; legacy `AUTORESEARCH` blocks are stripped). It is idempotent, does not touch the navigation, and also fills the
-overview's "Running now" box. It lays the tab out as: status line and hourly-best table, FLOPs-to-reach table, ideas by family
-(running ideas open, closed ones folded, each with its arms table), the loss-vs-FLOPs chart (references and top arms, plus a
-selector for one idea's arms), validation runs, how it is scored, log (newest first, first five open), 8k pilot folded.
+overview's "Running now" box. Layout (PAIL style): verdict line and stat strip; "Best so far, over time" (step chart, table folded);
+"Every idea at a glance" (one bar per idea: best FLOP speedup, dashed line = plain recipe); "Ideas, with their verdicts" (one line per
+idea, grouped by outcome or by family, details and arms folded); FLOPs to reach a held-out loss; loss vs FLOPs (references, top arms and
+a selector for one idea's arms); validation runs; how it is scored; log newest first; 8k pilot. Every section is a bar with counts.
 Board rows map to ideas by `board[i].idea` (the family, from `hub_tab/arms.json`), then by `tag` (== idea id, or an alias in
 the script), then by the family's single idea; set `idea_id` on a row to pin it.
 
@@ -61,6 +63,7 @@ the script), then by the family's single idea; set `idea_id` on a row to pin it.
 
 ## Files
 
+- `restyle_v3.py`, `hub_v3.css`, `hub_v3_nav.js`: second pass (PAIL layout): swaps the v2 CSS and nav for the tab rows and turns every `<section><h2>` into a bar. Run once on the v2 page; `hub.html` already has it applied.
 - `reorg_hub.py`, `hub_v2.css`, `hub_v2_nav.js`, `hub_v2_map.js`: the one-off transform that produced the grouped page from the
   old one (kept for provenance; the CSS and the nav / overview scripts now live inside `hub.html`). `REORG_PLAN.md`: inventory and plan.
 - `legacy/`: `rebuild_hub.sh`, `build_nov_tabs.py`, `build_gpu_tab.py`, `patch_log_render.py`. They assembled the old flat page from

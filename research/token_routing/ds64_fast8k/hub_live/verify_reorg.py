@@ -116,7 +116,7 @@ if len(sys.argv) > 4:
     seg = dom[s0: dom.index('id="provenance"', s0)]
     txt = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", seg))
     txt = txt.replace("&gt;", ">").replace("&lt;", "<").replace("&amp;", "&")
-    nrows = len(re.findall(r"<tr", seg[seg.index('id="arFam"'): seg.index('id="arCurveSec"')])) - len(re.findall(r"<table", seg[seg.index('id="arFam"'): seg.index('id="arCurveSec"')]))
+    nrows = len(re.findall(r"<tr", seg[seg.index('id="arFam"'): seg.index('id="ar-depth-sec"')])) - len(re.findall(r"<table", seg[seg.index('id="arFam"'): seg.index('id="ar-depth-sec"')]))
     hidden = sum(1 for r in st["board"] if r["tag"] + "/" + r["arm"] == "hp/denselora-lr2e5")
     print("== auto-research: board rows %d (hidden by the loop's own rule: %d), rendered arm rows %d" % (len(st["board"]), hidden, nrows))
     ok &= nrows == len(st["board"]) - hidden
