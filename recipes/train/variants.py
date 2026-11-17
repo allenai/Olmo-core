@@ -317,6 +317,9 @@ class SoftTokenOptions(VariantOptions):
     st_otr_min_per_doc: int = 0
     st_otr_freeze_after: int = 0
     st_otr_exit_loss_weight: float = 0.0
+    st_otr_ee_src: int = -1
+    st_otr_ee_weight: float = 0.0
+    st_otr_ee_detach: bool = False
     st_otr_dense_keep_frac: float = 1.0
     st_otr_score: str = "router"
     st_otr_feature_layer: int = 0
@@ -1206,6 +1209,9 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         min_per_doc=o.st_otr_min_per_doc,
         freeze_after=o.st_otr_freeze_after,
         exit_loss_weight=o.st_otr_exit_loss_weight,
+        ee_src=o.st_otr_ee_src,
+        ee_weight=o.st_otr_ee_weight,
+        ee_detach=o.st_otr_ee_detach,
         dense_keep_frac=o.st_otr_dense_keep_frac,
         score=o.st_otr_score,
         feature_layer=o.st_otr_feature_layer,

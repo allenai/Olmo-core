@@ -2080,7 +2080,17 @@ def parse_args() -> argparse.Namespace:
                     "gradient's cos with the dense one reaches this (0 = off; extra routed passes per step)")
     ap.add_argument("--oracle-npz-every", type=int, default=1,
                     help="--oracle-scope: write the selected tokens + energies (npz per rank) every N steps; 0 = never")
-    ap.add_argument("--st-otr-score", choices=["router", "random", "first_last", "dh", "oracle", "tail"], default="router",
+    ap.add_argument("--st-otr-ee-src", type=int, default=-1,
+                    help="--st-otr-score eegrad: block whose input the early-exit answer CE (h at the first drop layer "
+                    "through the final norm + LM head) is differentiated against; tokens scored by log ||dCE/dh||. "
+                    "-1 = drop_layer - 1")
+    ap.add_argument("--st-otr-ee-weight", type=float, default=0.0,
+                    help="online router: add W x the early-exit answer CE at the first drop layer to the loss (aux)")
+    ap.add_argument("--st-otr-ee-detach", action="store_true",
+                    help="with --st-otr-ee-weight: the main loss's backward stops at the first drop layer (blocks below "
+                    "learn from the early-exit loss only)")
+    ap.add_argument("--st-otr-score", choices=["router", "random", "first_last", "dh", "oracle", "tail", "eegrad"],
+                    default="router",
                     help="online router: who picks the kept tokens -- the learned scorer, or a control with the same "
                     "budget, allocation and drop point (random; each document's first and last tokens; dh = fit-free "
                     "rule, top tokens by residual change ||h^L - h^0||, mid-stack only)")

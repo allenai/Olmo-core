@@ -319,6 +319,20 @@ class OnlineRouterConfig:
     """Keep share on the periodic ``dense_every`` steps: 1.0 = full context (default); < 1 routes those steps at this share
     instead (e.g. 0.5), bounding the peak memory. Such steps are ordinary routed steps (no full-pass fidelity stats).
     Warmup steps stay full."""
+    ee_src: int = -1
+    """score ``eegrad`` (early-exit gradient selection): the block whose INPUT hidden state the early-exit answer CE is
+    differentiated against (-1 = ``drop_layer - 1``, one block). At the first drop layer L the forward's own h^L at the
+    ANSWER positions goes through the model's final norm + LM head (frozen weights, no extra parameters), its summed
+    answer CE is back-propagated (input gradients only) to h^src, and each body token is scored by
+    log ||dCE/dh^src_t||. Later pyramid stages reuse the same score (gathered). Charged: the head on the answer tokens
+    (forward + input gradient, 2/3 of its fwd+bwd) plus 1/2 of each block in [src, L) at the full row length."""
+    ee_weight: float = 0.0
+    """Add ``ee_weight`` x the early-exit answer CE at the first drop layer (same ``loss_div_factor`` as the main loss)
+    to the training loss: an auxiliary loss that trains blocks [0, L) directly. Charged: the head on the answer tokens,
+    forward + backward. 0 = off."""
+    ee_detach: bool = False
+    """With ``ee_weight``: cut the main loss's gradient at the first drop layer (the kept row is detached there), so
+    blocks [0, L) are trained by the early-exit loss only."""
     exit_loss_weight: float = 0.0
     """Mid-stack, single stage: an EARLY-EXIT LM loss for the dropped tokens -- their hidden state at the split goes through
     the model's LM head (final norm + unembedding) and ``exit_loss_weight`` x its CE (same reduction / ``loss_div_factor``
@@ -395,8 +409,12 @@ class OnlineRouterConfig:
             raise ValueError(f"online router min_per_doc must be >= 0, got {self.min_per_doc}")
         if self.keep_first < 0:
             raise ValueError(f"online router keep_first must be >= 0, got {self.keep_first}")
-        if self.score not in ("router", "random", "first_last", "dh", "oracle", "tail"):
+        if self.score not in ("router", "random", "first_last", "dh", "oracle", "tail", "eegrad"):
             raise ValueError(f"online router score must be router / random / first_last / dh, got {self.score!r}")
+        if (self.score == "eegrad" or self.ee_weight > 0 or self.ee_detach) and (self.drop_layer <= 0 or self.mod_layers):
+            raise ValueError("online router eegrad / ee_weight / ee_detach need a mid-stack drop (drop_layer > 0)")
+        if self.score == "eegrad" and not (-1 <= self.ee_src < self.drop_layer):
+            raise ValueError(f"online router ee_src must be in [-1, drop_layer), got {self.ee_src}")
         if self.score == "dh" and self.drop_layer <= 0:
             raise ValueError("online router score 'dh' needs the mid-stack drop (drop_layer > 0)")
         if self.target not in TARGETS:
@@ -778,6 +796,9 @@ class OnlineTokenRouter:
         self._nograd_until = 0
         self.frozen_blocks = 0  # leading blocks frozen so far by freeze_schedule (set by the callback)
         self._exit: Optional[Dict[str, Any]] = None  # this forward's dropped-token hidden states for the exit loss
+        self._ee_h: Optional[torch.Tensor] = None  # eegrad: this forward's hidden state at the input of block ee_src
+        self._ee_loss: Optional[torch.Tensor] = None  # ee_weight: this forward's summed early-exit answer CE
+        self._ee_src = -1  # eegrad: block whose input the model's block loop hands over (-1 = none)
         self._calls = 0
         self.w: Optional[torch.Tensor] = None
         self.XtX: Optional[torch.Tensor] = None
@@ -1056,7 +1077,10 @@ class OnlineTokenRouter:
         fp = self.token_features(model, ids, cid, lab, ignore_index, hidden=not mid)
         full = torch.zeros_like(input_ids, dtype=torch.bool)
         if mid:
-            self._mid = {"fp": fp, "ids": ids, "cid": cid, "Tr": Tr}
+            self._mid = {"fp": fp, "ids": ids, "cid": cid, "Tr": Tr, "lab": lab}
+            self._ee_h, self._ee_loss = None, None
+            self._ee_src = ((self.cfg.ee_src if self.cfg.ee_src >= 0 else self.cfg.drop_layer - 1)
+                            if self.cfg.score == "eegrad" and model.training else -1)
             L0 = self.cfg.drop_layer
             if model.training and self.frozen_blocks > 0:
                 self._nograd_until = min(self.frozen_blocks, L0)
@@ -1128,6 +1152,9 @@ class OnlineTokenRouter:
                 # fixed content-blind rule (claude/posid-reset-0abac3): each document's last tokens (r = 0 is its last
                 # body token); nested across stages because later stages see the compacted row's own tails
                 score, c_explore = -fp["_r"].to(torch.float32), 0.0
+            elif c.score == "eegrad":
+                # early-exit gradient norm (set by _ee_pass at the first drop layer; later stages: gathered)
+                score, c_explore = fp["_eeg"] + 1e-6 * u, 0.0
             elif c.score == "dh":
                 # fixed fit-free rule: residual change through blocks [0, L) (set by mid_compact)
                 score, c_explore = fp["_dh"] + 1e-6 * u, 0.0
@@ -1390,6 +1417,53 @@ class OnlineTokenRouter:
             self._stat("oracle_router_overlap_chance", float(keep.sum()) / max(1.0, float(body.sum())))
         return keep, False
 
+    def pop_ee(self) -> Optional[torch.Tensor]:
+        """This forward's summed early-exit answer CE (``ee_weight``), or None."""
+        e, self._ee_loss = self._ee_loss, None
+        return e
+
+    def _ee_pass(self, model, h: torch.Tensor, st: Dict[str, Any], Tr: int, fp: Dict[str, torch.Tensor],
+                 cid: torch.Tensor) -> None:
+        """Early exit at the first drop layer: the answer positions' h^L through the final norm + LM head, summed CE.
+        ``eegrad``: fp["_eeg"] = log ||dCE/dh^src|| per token (input gradients only, graph retained for the main
+        backward). ``ee_weight``: the CE is kept for the loss (:meth:`pop_ee`)."""
+        c = self.cfg
+        hs, self._ee_h = self._ee_h, None
+        lab = st.get("lab")
+        ign = int(getattr(self, "_ignore_index", -100))
+        B = h.shape[0]
+        if c.score == "eegrad":
+            fp["_eeg"] = torch.zeros(B, Tr, device=h.device, dtype=torch.float32)
+        if lab is None or not torch.is_grad_enabled() or not h.requires_grad:
+            return
+        lab = lab[:, :Tr].to(h.device)
+        ans = lab != ign
+        n_ans = int(ans.sum())
+        if n_ans == 0:
+            return
+        out = model.lm_head(h[:, :Tr][ans][None], labels=lab[ans][None], ignore_index=ign,
+                            loss_reduction="sum", return_logits=False)
+        ce = out.loss.float()
+        head = float(model.lm_head.num_flops_per_token(0))
+        self._stat("ee_ce_mean", float(ce.detach()) / n_ans)
+        if c.score == "eegrad":
+            if hs is None or not hs.requires_grad:
+                raise RuntimeError("eegrad: no grad-carrying hidden state at the source block (freeze / nograd?)")
+            (g,) = torch.autograd.grad(ce, hs, retain_graph=True)
+            fp["_eeg"] = torch.log(g[:, :Tr].float().norm(dim=-1) + 1e-30)
+            body = fp["body"]
+            if bool(body.any()):
+                self._stat("ee_gnorm_body_log_mean", float(fp["_eeg"][body].mean()))
+            # charge: head forward + input gradient (2/3 of its fwd+bwd) on the answer tokens; 1/2 of every block in
+            # [src, L) at each row's real length (input-gradient backward, no weight gradients)
+            blocks = list(model.blocks.values())
+            blk = sum(0.5 * float(blocks[i].num_flops_per_token(int(Lr))) * float(Lr)
+                      for Lr in (cid != -2).sum(dim=1).tolist() for i in range(self._ee_src, c.drop_layer))
+            self._flop(model, head * n_ans * (2.0 / 3.0) + blk)
+        if c.ee_weight > 0:
+            self._ee_loss = ce
+            self._flop(model, head * n_ans)
+
     def mid_compact(self, model, h: torch.Tensor, block_kwargs: Dict[str, Any]) -> Tuple[torch.Tensor, Dict[str, Any]]:
         """Mid-stack drop at block ``drop_layer``: score the forward's own hidden state, gather the kept
         tokens (plus every non-body token) into a shorter row, and re-key ``position_ids``. Records the
@@ -1419,6 +1493,8 @@ class OnlineTokenRouter:
                 dh_all = torch.log((h[:, :Tr].float() - e0.float()).norm(dim=-1) + 1e-12)
             fp["_dh"] = dh_all
             self._flop(model, 3.0 * self.d_model * float((cid != -2).sum()))
+        if self.stage_idx == 0 and (self.cfg.score == "eegrad" or self.cfg.ee_weight > 0):
+            self._ee_pass(model, h, st, Tr, fp, cid)
         keep_body, entry = self._choose(model, fp, ids, cid)
         body = fp["body"]
         real = cid != -2
@@ -1499,6 +1575,9 @@ class OnlineTokenRouter:
                 kw["token_weight"] = tw
         if self.mod_layers:
             return self._mod_begin(model, h, block_kwargs, entry, real, counts, order, valid, kw["position_ids"])
+        if self.stage_idx == 0 and self.cfg.ee_detach and h_new.requires_grad:
+            # blocks [0, L) learn from the early-exit loss only: the main loss's backward stops here
+            h_new = h_new.detach().requires_grad_(True)
         self._mid_gather = (order, valid, n_extra)
         # targets at this layer, on the kept (gathered) columns
         newcol = torch.zeros(B, src.shape[1], dtype=torch.long, device=h.device)

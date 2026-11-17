@@ -1775,6 +1775,11 @@ class Transformer(nn.Module):
                 h, all_block_kwargs = otr_stages[block_idx].mid_compact(self, h, all_block_kwargs)
             if otr_tap and block_idx == otr_tap:
                 h = otr.tap_target(self, h, block_idx)  # type: ignore[union-attr]
+            if otr_layer > 0 and block_idx == getattr(otr, "_ee_src", -1):
+                # online router eegrad: the early-exit CE is differentiated against this block's input
+                if torch.is_grad_enabled() and not h.requires_grad:
+                    h = h.detach().requires_grad_(True)
+                otr._ee_h = h  # type: ignore[union-attr]
             if block_idx in ld_skip:
                 # whole-block skip (olmo_core.nn.layer_drop): identity, forward never called
                 if capture_layers is not None and block_idx in capture_layers:
@@ -3050,6 +3055,13 @@ class Transformer(nn.Module):
                     x_kw["return_logits"] = False
                     x_out = self.lm_head(x_pack[0][None], labels=x_pack[1][None], **x_kw)
                     loss = loss + otr_x.cfg.exit_loss_weight * x_out.loss.to(loss.dtype)
+                ee = otr_x.pop_ee() if otr_x is not None else None
+                if ee is not None:
+                    # online router ee_weight: the early-exit answer CE, normalised like the main loss
+                    div = lm_head_kwargs.get("loss_div_factor")
+                    if div is None:
+                        div = (labels != lm_head_kwargs.get("ignore_index", -100)).sum().clamp(min=1)
+                    loss = loss + otr_x.cfg.ee_weight * (ee / div).to(loss.dtype)
                 if aux_loss is not None:
                     w = self._pooled_soft_tokens["aux_match_weight"]  # type: ignore[index]
                     loss = loss + w * aux_loss.to(loss.dtype)
