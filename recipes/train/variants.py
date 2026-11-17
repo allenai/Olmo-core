@@ -222,6 +222,19 @@ class FFNWidthOptions(VariantOptions):
 
 
 @dataclass
+class FFNSkipOptions(VariantOptions):
+    """ffnskip: document-body tokens skip the FFN sub-layer of the listed blocks with probability p (training only;
+    olmo_core.nn.ffn_token_skip). No params."""
+
+    ffn_skip_layers: str = ""
+    ffn_skip_all_tokens: bool = False
+
+    @property
+    def active(self) -> bool:
+        return bool(self.ffn_skip_layers.strip())
+
+
+@dataclass
 class LoRAOptions(VariantOptions):
     """lora: frozen base + rank-R adapters on blocks [B, K) for ANY arm (olmo_core.nn.early_lora), without the
     online-router path. Embeddings frozen; blocks [0, B) frozen with no adapter (no backward below B)."""
@@ -934,6 +947,29 @@ class FFNWidth(Variant):
         return {"ffn_width": FFNWidthCallback()}
 
 
+class FFNSkip(Variant):
+    """Per-token FFN skip modifier (``--ffn-skip-layers 0-6:0.85``): body tokens skip the FFN of the listed blocks
+    with probability p, staying in the sequence for attention / GDN; eval runs every FFN. FLOPs credited per realised
+    skipped token (``model._ffn_width`` duck-type, priced by the online router or the FLOP meter)."""
+
+    name = "ffnskip"
+    options_cls = FFNSkipOptions
+
+    def post_build_model(self, model, o, ctx):
+        assert isinstance(o, FFNSkipOptions)
+        from olmo_core.nn.ffn_token_skip import install_ffn_token_skip
+
+        ids = ctx.ids
+        h = install_ffn_token_skip(model, o.ffn_skip_layers, doc_start_id=ids.doc_start, doc_end_id=ids.doc_end,
+                                   pad_id=ids.eos, seed=ctx.seed, skip_all_tokens=o.ffn_skip_all_tokens)
+        print(f"[variants] ffn-skip: {h.probs} (all tokens={o.ffn_skip_all_tokens})", flush=True)
+
+    def extra_callbacks(self, o, ctx):
+        from olmo_core.train.callbacks import FFNWidthCallback
+
+        return {"ffn_width": FFNWidthCallback()}
+
+
 class LoRA(Variant):
     """LoRA modifier (``--lora-rank R [--lora-blocks K] [--lora-start B] [--lora-scale S]`` on any arm, e.g. the dense
     one): base weights of blocks [0, K) and the embeddings frozen, rank-R adapters on [B, K). FLOPs: the meter charges
@@ -1553,6 +1589,7 @@ VARIANTS: Dict[str, Variant] = {
         FFNDrop(),
         LayerDrop(),
         FFNWidth(),
+        FFNSkip(),
         FFNChunk(),
         LoRA(),
     )

@@ -336,7 +336,16 @@ class FlopMeterCallback(Callback):
         if fw is not None and not (otr is not None and int(getattr(otr.cfg, "drop_layer", 0)) > 0):
             # partial-MLP without a mid-stack router: every partial FFN ran at its fraction on every real token (the
             # mid-stack router charges this credit itself, per document and at each block's length)
-            actual += tokens * sum(fw.credits_per_block(len(m.blocks)))
+            if getattr(fw, "token_skip", False):
+                # per-token FFN skip (olmo_core.nn.ffn_token_skip): the step's mean realised run share, and a frozen
+                # LoRA base block's FFN costs 2/3 (1/3 below --lora-start), which lora_flop_adjust_per_token already took
+                est = getattr(m, "_early_lora", None)
+                if est:
+                    B0, K0 = int(est.get("start", 0)), int(est["n_blocks"])
+                    fw.lora_factor = {i: (1.0 / 3.0 if i < B0 else 2.0 / 3.0) for i in range(K0)}
+                actual += tokens * sum(fw.credits_per_block(len(m.blocks), step_avg=True))
+            else:
+                actual += tokens * sum(fw.credits_per_block(len(m.blocks)))
         head_pos = tokens if self._supervised_this_step is None else self._supervised_this_step
         if getattr(m, "_head_frozen", False) and otr is None:
             # frozen LM head without the router (which charges it itself): no weight gradient at the positions it ran

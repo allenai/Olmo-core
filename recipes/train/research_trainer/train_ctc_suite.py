@@ -461,6 +461,12 @@ def active_variants(opts: argparse.Namespace) -> List[Tuple["V.Variant", "V.Vari
     if fwidth_opts.active:  # type: ignore[attr-defined]
         fwidth.validate(fwidth_opts)
         out.append((fwidth, fwidth_opts))
+    fskip = V.VARIANTS["ffnskip"]
+    fskip_opts = fskip.options_from_namespace(opts)
+    if fskip_opts.active:  # type: ignore[attr-defined]
+        if fwidth_opts.active:  # type: ignore[attr-defined]
+            raise SystemExit("--ffn-skip-layers and --ffn-width-frac: use one")
+        out.append((fskip, fskip_opts))
     lora = V.VARIANTS["lora"]
     lora_opts = lora.options_from_namespace(opts)
     if lora_opts.active:  # type: ignore[attr-defined]
@@ -1565,6 +1571,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--ffn-width-no-rescale", action="store_true",
                     help="ablation: do not rescale the partial FFN output by 1/f")
     ap.add_argument("--ffn-width-block", type=int, default=128, help="neurons per block in --ffn-width-mode blocked")
+    ap.add_argument("--ffn-skip-layers", default="",
+                    help="per-token FFN skip (olmo_core.nn.ffn_token_skip): 'a-b:p,c-d:q' -- document-body tokens skip "
+                    "the FFN of those blocks with probability p (default 1.0), staying in the sequence for attention / "
+                    "GDN; eval runs every FFN; FLOPs credited per skipped token. '' = off")
+    ap.add_argument("--ffn-skip-all-tokens", action="store_true",
+                    help="--ffn-skip-layers: every real token is eligible, not only document-body tokens (ablation)")
     ap.add_argument("--ffn-chunk-tokens", type=int, default=0,
                     help="sequence-chunked FFN sublayer in training: h + FFN(norm(h)) over chunks of this many tokens, "
                     "each under its own activation checkpoint (exact; cuts the long-row recompute peak). 0 = off")
