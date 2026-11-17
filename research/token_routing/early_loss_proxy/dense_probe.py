@@ -70,8 +70,10 @@ def build_callback(cfg: Dict[str, str]):
             raise SystemExit(f"held-out set {name} not in {cfg['heldout']}")
         for task in tasks_here:
             idx = [i for i in range(len(sets_arr)) if sets_arr[i] == name and tasks_arr[i] == task][:k]
-            if len(idx) < k:
-                raise SystemExit(f"held-out {name}/{task}: only {len(idx)} rows < {k}")
+            if not idx:
+                raise SystemExit(f"held-out {name}/{task}: no rows")
+            if len(idx) < k:  # e.g. suite16k/reorder: only 8 eval rows fit in 16,384 tokens
+                print(f"[dense-probe] held-out {name}/{task}: only {len(idx)} rows < {k}, using all", flush=True)
             for i in idx:
                 rows.append((name, task, ids_all[offs[i]:offs[i + 1]].astype(np.int64),
                              mask_all[offs[i]:offs[i + 1]].astype(bool)))

@@ -1,0 +1,386 @@
+{
+ "updated": "2026-11-16 23:31 PT",
+ "status": "Setting up. The 4k-16k pool (contradiction, outlier, reorder, qdmatch_nq) and its held-out probe rows are being built. Seven idea agents are implementing in parallel; Lambda and Beaker are being staged as extra run capacity. No 16k result yet: the pilot table at the bottom is the earlier 8k run on the old task set.",
+ "setup": [
+  "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
+  "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k), eval_size 192.",
+  "Score = training FLOPs the dense reference needs to reach a loss level divided by the FLOPs the method needs to reach the same level, on the mean loss and on the worst task. Peak GPU memory is logged per step.",
+  "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals."
+ ],
+ "log": [
+  {
+   "t": "11-16 23:45",
+   "text": "Seven idea agents started (no-grad prefix + early cuts, gold-aware stochastic keep, early-layer loss selection, detached context, FLOP-aware row sampling, FFN skip for context tokens, token-drop CPT base search). Staging agents started for Lambda and Beaker."
+  },
+  {
+   "t": "11-16 23:10",
+   "text": "Loop requested: tasks switched to contradiction, outlier, reorder, qdmatch_nq at 4k-16k; target 10-20x FLOPs and 5-10x less peak memory."
+  }
+ ],
+ "ideas": [
+  {
+   "id": "ref",
+   "family": "reference",
+   "title": "Dense full fine-tune and dense LoRA at 4k-16k",
+   "what": "Reference loss-vs-FLOPs curves (probes every 10 steps to step 100). Every speedup on this page is read against these.",
+   "status": "queued",
+   "result": ""
+  },
+  {
+   "id": "recipe",
+   "family": "baseline",
+   "title": "Current recipe (router, keep 20% after block 7, 7% after block 16)",
+   "what": "The 8k recipe unchanged at 4k-16k on the new tasks, plus random keep at the same budget.",
+   "status": "queued",
+   "result": ""
+  },
+  {
+   "id": "prefix",
+   "family": "early layers",
+   "title": "Frozen no-grad prefix + earlier cuts",
+   "what": "Blocks 0-k run forward-only (no backward, no stored activations), tokens dropped from block 2-4 onward in more stages. Attacks the 0.2x/step floor of blocks 0-6 and the memory peak.",
+   "status": "running",
+   "result": "agent implementing; no run yet"
+  },
+  {
+   "id": "goldrand",
+   "family": "gold + randomness",
+   "title": "Gold-aware stochastic keep",
+   "what": "Per-document keep probability raised for gold documents but never 1 and never 0 for distractors, so the kept set does not reveal the answer; drop before block 0 as well as mid-stack.",
+   "status": "running",
+   "result": "agent implementing; no run yet"
+  },
+  {
+   "id": "earlyloss",
+   "family": "early-layer signal",
+   "title": "Loss and backward through the first few blocks only",
+   "what": "An early-exit answer loss after block k gives true per-token gradients at full length for the cost of k blocks; use them to pick tokens and to train the early blocks.",
+   "status": "running",
+   "result": "agent implementing; no run yet"
+  },
+  {
+   "id": "detach",
+   "family": "KV reuse",
+   "title": "Detached context / reused context states",
+   "what": "Context tokens run forward-only (or reuse cached states), gradient only through query and answer tokens; then drop context tokens aggressively in that no-grad pass.",
+   "status": "running",
+   "result": "agent implementing; no run yet"
+  },
+  {
+   "id": "rows",
+   "family": "cross-row",
+   "title": "FLOP-aware row sampling and row skipping",
+   "what": "Sample rows by expected loss decrease per FLOP (short rows more often, a tail of 16k rows), skip rows a cheap early-exit loss marks as solved.",
+   "status": "running",
+   "result": "agent implementing; no run yet"
+  },
+  {
+   "id": "subproblem",
+   "family": "gold + randomness",
+   "title": "Label-consistent sub-problems",
+   "what": "Train on a random subset of a row's documents with the answer rewritten for the subset (reorder, qdmatch), mixed with a few full rows.",
+   "status": "queued",
+   "result": ""
+  },
+  {
+   "id": "ffnskip",
+   "family": "early layers",
+   "title": "Skip the FFN for context tokens",
+   "what": "Context tokens stay in attention / GDN mixing but skip most FFNs, instead of leaving the sequence.",
+   "status": "running",
+   "result": "agent implementing; no run yet"
+  },
+  {
+   "id": "cptbase",
+   "family": "base model",
+   "title": "Start from a base with token-drop continued pre-training",
+   "what": "Look for existing drop-CPT checkpoints and test whether aggressive dropping loses less from such a base. No CPT runs inside the loop.",
+   "status": "running",
+   "result": "agent implementing; no run yet"
+  },
+  {
+   "id": "hparams",
+   "family": "optimisation",
+   "title": "LR, batch size and schedule per FLOP",
+   "what": "Cheap arms can afford more, smaller steps: rows per step, LR and warmup tuned per FLOP rather than per step.",
+   "status": "queued",
+   "result": ""
+  }
+ ],
+ "best_by_hour": [],
+ "validation": [],
+ "board": [],
+ "curves": [],
+ "pilot": [
+  {
+   "tag": "s50",
+   "arm": "denselora",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": true,
+   "ce_last": 0.18016293287632834,
+   "frac": 0.9991178213605969,
+   "pf": 119.19044155530906,
+   "pf_per_step_vs_dense": 0.7429691612734396,
+   "x": {
+    "30": 1.0,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 521.9668327569962,
+   "d_vs_ref": 0.0013288742998156522,
+   "d_vs_ref_se": 0.00405169864819297,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "ddp",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": false,
+   "ce_last": 0.331617841215575,
+   "frac": 0.8980883193697532,
+   "pf": 36.60116341235917,
+   "pf_per_step_vs_dense": 0.2281360459790616,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 213.1025391817093,
+   "d_vs_ref": 0.15278378263906234,
+   "d_vs_ref_se": 0.016797263787088818,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "ddpg",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": false,
+   "ce_last": 0.27602166640599535,
+   "frac": 0.9350961476176505,
+   "pf": 36.77414489990041,
+   "pf_per_step_vs_dense": 0.2292138087153153,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 213.38594818115234,
+   "d_vs_ref": 0.09718760782948266,
+   "d_vs_ref_se": 0.01614892725698365,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "dense",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": true,
+   "ce_last": 0.18725238023353086,
+   "frac": 0.9943618014155788,
+   "pf": 157.41620606400153,
+   "pf_per_step_vs_dense": 1.0,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 510.94018054008484,
+   "d_vs_ref": 0.008418321657018168,
+   "d_vs_ref_se": 0.004993113520901415,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "recipe",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": false,
+   "ce_last": 0.20440219174406593,
+   "frac": 0.9829376723959137,
+   "pf": 36.78015659295689,
+   "pf_per_step_vs_dense": 0.2292665876029174,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 212.99453818798065,
+   "d_vs_ref": 0.025568133167553242,
+   "d_vs_ref_se": 0.009260599383471756,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "rnd19",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": false,
+   "ce_last": 0.2324042741715857,
+   "frac": 0.9642922375723081,
+   "pf": 44.143737177152666,
+   "pf_per_step_vs_dense": 0.27516728304801874,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 200.89530038833618,
+   "d_vs_ref": 0.05357021559507302,
+   "d_vs_ref_se": 0.011353052724706329,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "rnd9",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": false,
+   "ce_last": 0.23498809679585975,
+   "frac": 0.9626113596137638,
+   "pf": 35.184784663196645,
+   "pf_per_step_vs_dense": 0.21932179876545083,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 213.31581258773804,
+   "d_vs_ref": 0.05615403821934706,
+   "d_vs_ref_se": 0.011495651766584698,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "tail20to7",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": false,
+   "ce_last": 0.25436811454324015,
+   "frac": 0.9496199128855756,
+   "pf": 36.78012695871283,
+   "pf_per_step_vs_dense": 0.22926640342647733,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 213.35687971115112,
+   "d_vs_ref": 0.07553405596672746,
+   "d_vs_ref_se": 0.010573480923030338,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "s50",
+   "arm": "wtsS1",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 50,
+   "eval_size": 256,
+   "is_ref": false,
+   "ce_last": 0.22785612997631688,
+   "frac": 0.9673526167629711,
+   "pf": 34.48901979435813,
+   "pf_per_step_vs_dense": 0.21498728120539745,
+   "x": {
+    "30": null,
+    "50": null
+   },
+   "xw": {
+    "30": null,
+    "50": null
+   },
+   "peak_gib": 0.0,
+   "peak_vs_ref": null,
+   "train_s": 210.78524684906006,
+   "d_vs_ref": 0.04902207139980419,
+   "d_vs_ref_se": 0.009933295110864195,
+   "idea": "",
+   "desc": ""
+  }
+ ]
+}

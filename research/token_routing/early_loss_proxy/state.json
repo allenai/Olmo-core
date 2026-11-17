@@ -141,6 +141,23 @@
    "code": "/data/prasann/early_loss_proxy/code_281e228c2",
    "extra": "",
    "lr_mult": 1.0
+  },
+  "5195580": {
+   "node": "mooney",
+   "tag": "smoke2",
+   "runs": [
+    "elp-smoke2-recipe-sd0"
+   ],
+   "steps": "2,4",
+   "sets": "suite8k:8",
+   "code": "/data/prasann/early_loss_proxy/code_8ba2e2302",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/data/prasann/oracle/shards/mt4f1952",
+   "seq_len": 12288,
+   "gpus": 2,
+   "qos": "preemptive_high",
+   "custom": []
   }
  }
 }
