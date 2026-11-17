@@ -41,19 +41,29 @@ import build_short_pools as SP  # noqa: E402
 import build_long_pools as LP  # noqa: E402
 
 TASKS = ["contradiction", "outlier", "qdmatch_nq"]
-LENS = {"16k": 16384, "32k": 32768, "64k": 65536}
+#: row cap (= the runs' --seq-len) per length; non-power-of-2 caps are fine (padded, no packing)
+ALL_LENS = {"2k": 4096, "4k": 6144, "8k": 12288, "16k": 16384, "32k": 32768, "64k": 65536}
+GROUPS = {"long": ["16k", "32k", "64k"], "short": ["2k", "4k", "8k"]}
+LENS = {r: ALL_LENS[r] for r in GROUPS["long"]}  # set by --group
 ROWS = 1200
 HO_ROWS = 48
-GEN = {"contradiction": 1400, "outlier": 1400, "qdmatch_nq": {"16k": 4500, "32k": 9000, "64k": 9000}}
+GEN = {"contradiction": 1400, "outlier": 1400,
+       "qdmatch_nq": {"2k": 5000, "4k": 5000, "8k": 5000, "16k": 4500, "32k": 9000, "64k": 9000}}
 KW = f"{P.WORK}/kl"
 SH = "/data/prasann/early_loss_proxy/shards"
-HO_OUT = "/data/prasann/early_loss_proxy/heldout_kl.npz"
+HO_FILES = {"long": "/data/prasann/early_loss_proxy/heldout_kl.npz", "short": "/data/prasann/early_loss_proxy/heldout_kls.npz"}
+EXCL_FILES = {"long": f"{KW}/heldout_excl.json", "short": f"{KW}/heldout_excl_short.json"}
+HO_OUT = HO_FILES["long"]
+EXCL = EXCL_FILES["long"]
+HO_SEED_EVAL, HO_GEN_EVAL, QD_SEED, QD_ROWS = 99, 120, 7777, 6000  # as build_long_pools (heldout_v4)
 EXISTING = LP.ALL_POOLS + ["mtb64k"]
 
 
 def n_docs(t, r):
-    if r == "16k":
-        return int(json.load(open(P.N_DOCS_FILE))[f"{t}:16k"]["n_docs"])
+    if r == "2k":
+        return int(json.load(open(f"{P.WORK}/n_docs_short.json"))[f"{t}:2k"]["n_docs"])
+    if r in ("4k", "8k", "16k"):
+        return int(json.load(open(P.N_DOCS_FILE))[f"{t}:{r}"]["n_docs"])
     return int(json.load(open(f"{LP.LW}/n_docs_long.json"))[f"{t}:{r}"]["n_docs"])
 
 
@@ -132,6 +142,42 @@ def tokenize_rows(exs, t, tmpdir):
     return rows
 
 
+# ------------------------------------------------------------------------------------------------------------ hogen
+def _hogen(job):
+    """Held-out candidates for a short length, generated as build_long_pools did for 32k / 64k (heldout_v4)."""
+    t, r = job
+    e = P.env()
+    e["CTC_DOCS_OVERRIDE"] = json.dumps({f"{t}:{r}": n_docs(t, r)})
+    if t == "qdmatch_nq":
+        out = f"{KW}/heldout_gen_tr/{t}_{r}"
+        target = f"{out}/{t}/train.jsonl"
+        cmd = ["--split", "train", "--train", str(QD_ROWS), "--seed", str(QD_SEED)]
+    else:
+        out = f"{KW}/heldout_gen/{t}_{r}"
+        target = f"{out}/{t}/eval_{r}.jsonl"
+        cmd = ["--split", "eval", "--eval-size", str(HO_GEN_EVAL), "--allow-small-eval", "--eval-seed", str(HO_SEED_EVAL)]
+    if not (os.path.exists(target) and os.path.getsize(target)):
+        cmd = [sys.executable, f"{P.REPO}/recipes/data/ctc_sft/ctc_calibrated.py", "build", "--task", t, "--rungs", r] + cmd \
+            + ["--out", out, "--pool", P.POOL[t]]
+        p = subprocess.run(cmd, env=e, capture_output=True, text=True)
+        open(f"{out}.log", "w").write(" ".join(cmd) + "\n" + p.stdout + p.stderr)
+        if p.returncode != 0 or not os.path.exists(target):
+            return t, r, "FAILED " + (p.stdout + p.stderr)[-600:]
+    if t != "qdmatch_nq":
+        tok = f"{KW}/heldout_tok/{t}_{r}"
+        if not os.path.exists(f"{tok}/metadata.json"):
+            os.makedirs(tok, exist_ok=True)
+            LP.convert(target, t, tok)
+    return t, r, "ok"
+
+
+def hogen(a):
+    jobs = [(t, r) for t in TASKS for r in LENS if r not in ("16k", "32k", "64k")]
+    with cf.ProcessPoolExecutor(max_workers=a.jobs) as ex:
+        for res in ex.map(_hogen, jobs):
+            print(f"[kl hogen] {res}", flush=True)
+
+
 # ------------------------------------------------------------------------------------------------------------ heldout
 def heldout(a):
     tr_gold, tr_docs, H = existing_train_sets()
@@ -142,7 +188,7 @@ def heldout(a):
     # 16k: heldout_v3 gen16k
     h3 = np.load("/data/prasann/early_loss_proxy/heldout_v3.npz")
     o = h3["offsets"]
-    for t in TASKS:
+    for t in (TASKS if "16k" in LENS else []):
         js = [j for j in np.flatnonzero(h3["sets"] == "gen16k") if h3["tasks"][j] == t]
         assert len(js) == HO_ROWS, (t, len(js))
         for j in js:
@@ -154,12 +200,15 @@ def heldout(a):
         L = [o[j + 1] - o[j] for j in js]
         stats[f"kl16k/{t}"] = {"rows": len(js), "source": "heldout_v3.npz gen16k", "len_mean": float(np.mean(L)),
                                "len_min": int(min(L)), "len_max": int(max(L))}
-    for r in ("32k", "64k"):
+    for r in [x for x in LENS if x != "16k"]:
         cap = LENS[r]
+        hgen, htok = (f"{LP.LW}/heldout_gen", f"{LP.LW}/heldout_tok") if r in ("32k", "64k") else \
+            (f"{KW}/heldout_gen", f"{KW}/heldout_tok")
+        hgen_tr = f"{LP.LW}/heldout_gen_tr" if r in ("32k", "64k") else f"{KW}/heldout_gen_tr"
         for t in TASKS:
             d = {"over_cap": 0, "gold_in_train": 0}
             if t == "qdmatch_nq":
-                src = f"{LP.LW}/heldout_gen_tr/{t}_{r}/{t}/train.jsonl"
+                src = f"{hgen_tr}/{t}_{r}/{t}/train.jsonl"
                 exs = P.read_jsonl(src)
                 cand = [i for i, ex in enumerate(exs) if not (gold_h(t, ex) & tr_gold[t])]
                 d["generated"], d["content_eligible"] = len(exs), len(cand)
@@ -169,9 +218,9 @@ def heldout(a):
                     rows = tokenize_rows([exs[i] for i in take], t, tmp)
                 pairs = list(zip(take, rows))
             else:
-                src = f"{LP.LW}/heldout_gen/{t}_{r}/{t}/eval_{r}.jsonl"
+                src = f"{hgen}/{t}_{r}/{t}/eval_{r}.jsonl"
                 exs = P.read_jsonl(src)
-                _, rows = P.load_shard_rows(f"{LP.LW}/heldout_tok/{t}_{r}")
+                _, rows = P.load_shard_rows(f"{htok}/{t}_{r}")
                 assert len(rows) == len(exs)
                 d["generated"] = len(exs)
                 pairs = list(enumerate(rows))
@@ -204,7 +253,7 @@ def heldout(a):
                 "doc_share_in_existing_train_mean": float(np.mean([np.mean([P.thash(dd.get("text")) in tr_docs[t]
                                                                             for dd in x[3]["documents"]]) for x in sel]))}
             print(f"[kl heldout] kl{r}/{t}: {json.dumps(stats[f'kl{r}/{t}'])}", flush=True)
-    order_ = {"kl16k": 0, "kl32k": 1, "kl64k": 2}
+    order_ = {f"kl{r}": i for i, r in enumerate(ALL_LENS)}
     sel_rows.sort(key=lambda x: (order_[x[0]], TASKS.index(x[1])))
     offs = np.concatenate([[0], np.cumsum([len(x[3]) for x in sel_rows])])
     np.savez(HO_OUT + ".tmp.npz", ids=np.concatenate([np.asarray(x[3], dtype=np.uint32) for x in sel_rows]),
@@ -214,13 +263,13 @@ def heldout(a):
     os.replace(HO_OUT + ".tmp.npz", HO_OUT)
     json.dump(stats, open(HO_OUT.replace(".npz", "_stats.json"), "w"), indent=1)
     json.dump({"excl": {t: sorted(v) for t, v in excl.items()}, "outlier_anywhere": sorted(ho_outlier_gold)},
-              open(f"{KW}/heldout_excl.json", "w"))
+              open(EXCL, "w"))
     print(f"[kl heldout] wrote {HO_OUT}: {len(sel_rows)} rows", flush=True)
 
 
 # ----------------------------------------------------------------------------------------------------------- tokenize
 def train_excl():
-    ex = json.load(open(f"{KW}/heldout_excl.json"))
+    ex = json.load(open(EXCL))
     excl = {t: set(v) for t, v in ex["excl"].items()}
     for t in TASKS:
         for f in [f"{LP.LW}/suite/{LP.SUB[t]}_{r}.jsonl" for r in LP.HF_RUNGS] + SP.eval_files(t):
@@ -396,14 +445,18 @@ def order(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["gen", "heldout", "tokenize", "build", "order"])
+    ap.add_argument("stage", choices=["gen", "hogen", "heldout", "tokenize", "build", "order"])
+    ap.add_argument("--group", choices=list(GROUPS), default="long")
     ap.add_argument("--jobs", type=int, default=9)
     ap.add_argument("--shuffle-seed", type=int, default=20261121)
     ap.add_argument("--verify-rows", type=int, default=10)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--lens", default="", help="build/order only these lengths (e.g. 32k,64k)")
     a = ap.parse_args()
-    {"gen": gen, "heldout": heldout, "tokenize": tokenize, "build": build, "order": order}[a.stage](a)
+    global LENS, HO_OUT, EXCL
+    LENS = {r: ALL_LENS[r] for r in GROUPS[a.group]}
+    HO_OUT, EXCL = HO_FILES[a.group], EXCL_FILES[a.group]
+    {"gen": gen, "hogen": hogen, "heldout": heldout, "tokenize": tokenize, "build": build, "order": order}[a.stage](a)
 
 
 if __name__ == "__main__":
