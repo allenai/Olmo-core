@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-17 12:52 PT",
- "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k): 3.1-3.7x fewer training FLOPs than dense LoRA at every held-out loss level its epoch reaches (two seeds, full epoch), and 3.2-3.5x on the 16k rows alone (56 rows) against 2.1-2.7x for the plain recipe. Priority since 11:45 is the 16k held-out loss and methods that gain with length; a 320-row 16k held-out set is in place and the references and all mixed pools are being rerun on it. Memory: measured slope 0.37 GiB per 1k tokens for dense LoRA (out of memory at 256k on 141 GB) and 0.24 for the recipe; a chunked version of the early blocks is being built to make memory nearly flat in length. Closed since the last update: loss-per-cost sampling (no gain at 16k), document-local attention beyond block 3 (training stalls). Nothing is near 10x; about 115 arms scored.",
+ "updated": "2026-11-17 13:13 PT",
+ "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k): 3.1-3.7x fewer training FLOPs than dense LoRA at every held-out loss level its epoch reaches (two seeds, full epoch), and 3.2-3.5x on the 16k rows alone (56 rows) against 2.1-2.7x for the plain recipe. Priority since 11:45 is the 16k held-out loss and methods that gain with length; a 320-row 16k held-out set is in place and the references and all mixed pools are being rerun on it. Memory: chunked early blocks with a kept-token cap and host offload bring the slope from 0.37 (dense LoRA, out of memory at 256k) and 0.24 (recipe) to 0.040 GiB per 1k tokens, so a 1M-token row trains on one 141 GB GPU and 2M fits; at 16k the chunked method matches the recipe's loss per step and FLOPs. Closed since the last update: loss-per-cost sampling (no gain at 16k), document-local attention beyond block 3 (training stalls). Nothing is near 10x; about 115 arms scored.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -10,9 +10,17 @@
   "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps.",
   "Deep comparisons (from 11-17 11:30) use the full-epoch dense-LoRA curve (488 steps, probes every 50) as the reference and give the FLOP ratio at fixed held-out CE levels 0.160 / 0.140 / 0.125 / 0.115 / 0.105 / 0.095.",
   "From 11-17 12:00 the primary measure is the 16k held-out loss. Until the larger 16k set is in place, 16k readings come from 56 rows (8 for reorder) and are noisy.",
-  "Memory: the proxy's logged transient memory was wrong until 11-17 12:25 (the peak was reset before being read). Valid memory numbers are in the memory-scaling entries of the log; the leaderboard's memory columns should be ignored."
+  "Memory: values logged by the proxy before 11-17 13:10 were wrong (the peak was reset before being read) and are not shown; the fix is merged. Valid measurements are in the memory idea and the log."
  ],
  "log": [
+  {
+   "t": "11-17 13:00",
+   "text": "Hub reorganized by a separate session (overview page, six groups, two-level navigation, long tables folded); the auto-research tab is rendered by a new builder with ideas grouped by family."
+  },
+  {
+   "t": "11-17 13:10",
+   "text": "Memory result: chunked early blocks with a kept-token cap and host offload cut the memory slope from 0.37 (dense LoRA) and 0.24 (recipe) to 0.040 GiB per 1k tokens; a 1M-token row trains on one H200 (77.5 GiB total) and a 2M-token row at 126.5 GiB. At 16k, 4k chunks match the recipe's held-out loss per step and its FLOPs. The proxy's memory logging bug is fixed (the peak is now read before it is reset); true values for the recipe at micro-batch 2 are about 12 GiB transient and about 30 GiB peak."
+  },
   {
    "t": "11-17 12:55",
    "text": "First results on the 320-row 16k set (recipe on each pool, full epoch, one seed unless noted; the dense-LoRA and plain-recipe references on this set are still training, so no ratios yet). 16k held-out CE at about 130 PF: 80/20 pool 0.199-0.202 (two seeds), 90% short 0.21, 80% short with 1k-only short rows 0.21, 50/50 pool 0.21, 80% short with the long part all 16k 0.22, 95% short 0.23. At 215 PF: 50/50 pool 0.176, long-part-all-16k 0.188. So 80% short with mixed long lengths is the best ratio; more short rows, 16k-only long rows or 1k-only short rows are all slightly worse at 16k."
@@ -228,8 +236,8 @@
    "family": "scales with length",
    "title": "Memory that stays flat at 256k-1M tokens",
    "what": "Measure how peak training memory grows with row length (16k-256k) for dense LoRA and the recipe, then run the early blocks chunk by chunk (no-grad pass, later blocks on the kept tokens, second chunked pass with gradient) with a kept-token budget fixed in tokens, so the peak is one chunk plus the kept tokens instead of the whole row.",
-   "status": "running",
-   "result": "Scaling law measured (transient above a 24.5 GiB baseline, one H200, micro-batch 1): dense LoRA 0.37 GiB per 1k tokens (52 GiB at 128k, out of memory at 256k); recipe 0.24 GiB per 1k (34 GiB at 128k). Chunked early blocks with 8k chunks: forward exact, gradient cosine 0.996 overall and 0.982 in blocks 0-6. Proxy runs and the memory sweep of the chunked method are next."
+   "status": "done",
+   "result": "Works. Measured transient memory above baseline for one step (1 H200, micro-batch 1, activation checkpointing on, synthetic long rows): dense LoRA 0.37 GiB per 1k tokens (52 GiB at 128k, out of memory at 256k); recipe 0.24 (65 GiB at 256k); early blocks in 4k chunks 0.10 (57 GiB at 512k); plus a 4,096-token keep cap 0.074 (79 GiB at 1M); plus host offload of the early blocks' checkpoint inputs 0.040 (45 GiB at 1M, 86 GiB at 2M). Longest row that fits on 141 GB: dense LoRA 128k, recipe 256k, chunked 512k, capped 1M, offloaded 2M. Learning at 16k is unchanged: held-out CE at steps 50 / 100 / 150 / 200 is 0.202 / 0.161 / 0.146 / 0.123 with 4k chunks vs 0.216 / 0.156 / 0.142 / 0.121 for the recipe, same FLOPs (one seed, eval_size 184); the chunked forward is bit-exact and the gradient's cosine to the exact gradient is 0.993-0.996 (0.97-0.98 in blocks 0-6). Not yet tested: learning at 64k and beyond, where the cut cross-chunk gradient paths are a larger share, and the keep cap's effect on learning. Branch loop/memscale (merged into the loop branch; flags off by default)."
   },
   {
    "id": "longpos",

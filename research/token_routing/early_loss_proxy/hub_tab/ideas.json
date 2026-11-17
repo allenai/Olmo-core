@@ -124,8 +124,8 @@
   "family": "scales with length",
   "title": "Memory that stays flat at 256k-1M tokens",
   "what": "Measure how peak training memory grows with row length (16k-256k) for dense LoRA and the recipe, then run the early blocks chunk by chunk (no-grad pass, later blocks on the kept tokens, second chunked pass with gradient) with a kept-token budget fixed in tokens, so the peak is one chunk plus the kept tokens instead of the whole row.",
-  "status": "running",
-  "result": "Scaling law measured (transient above a 24.5 GiB baseline, one H200, micro-batch 1): dense LoRA 0.37 GiB per 1k tokens (52 GiB at 128k, out of memory at 256k); recipe 0.24 GiB per 1k (34 GiB at 128k). Chunked early blocks with 8k chunks: forward exact, gradient cosine 0.996 overall and 0.982 in blocks 0-6. Proxy runs and the memory sweep of the chunked method are next."
+  "status": "done",
+  "result": "Works. Measured transient memory above baseline for one step (1 H200, micro-batch 1, activation checkpointing on, synthetic long rows): dense LoRA 0.37 GiB per 1k tokens (52 GiB at 128k, out of memory at 256k); recipe 0.24 (65 GiB at 256k); early blocks in 4k chunks 0.10 (57 GiB at 512k); plus a 4,096-token keep cap 0.074 (79 GiB at 1M); plus host offload of the early blocks' checkpoint inputs 0.040 (45 GiB at 1M, 86 GiB at 2M). Longest row that fits on 141 GB: dense LoRA 128k, recipe 256k, chunked 512k, capped 1M, offloaded 2M. Learning at 16k is unchanged: held-out CE at steps 50 / 100 / 150 / 200 is 0.202 / 0.161 / 0.146 / 0.123 with 4k chunks vs 0.216 / 0.156 / 0.142 / 0.121 for the recipe, same FLOPs (one seed, eval_size 184); the chunked forward is bit-exact and the gradient's cosine to the exact gradient is 0.993-0.996 (0.97-0.98 in blocks 0-6). Not yet tested: learning at 64k and beyond, where the cut cross-chunk gradient paths are a larger share, and the keep cap's effect on learning. Branch loop/memscale (merged into the loop branch; flags off by default)."
  },
  {
   "id": "longpos",

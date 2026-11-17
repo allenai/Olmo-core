@@ -9,6 +9,7 @@ lenscale: dlA (block 3 local) ~recipe -0.01..0.02 CE/step; dlB/dlC stall; contro
 deep2 full-epoch: rc-mix80 3.1-3.7x all lengths, 3.2-3.5x on suite16k (56 rows); rc-mix50 2.4-2.6x. Data agent building mtbmix80x3 (5,856 rows/task) -> run recipe on it full epoch (1,464 steps, Beaker, heldout_v3) when on weka.
 lenscale CLOSED negative (doc-local attention hurts; block 3 only is mild but worse per FLOP at 16k). New agent longpos (a717aab682ac9c264): position stretching on short rows + position-preserving doc subsampling of long rows. v3 tag also has rc-mix80x3 sd0/sd1 (1,464 steps).
 HUB REORG DONE (v108, 13:00): hub has an Overview + six groups; auto-research tab is in group 3. New builder copied to hub_tab/build_autoresearch_tab.py (markers AR:PART / AR:SCRIPT; source of truth hub_live/build_autoresearch_tab.py in the main checkout). Refresh: python3 hub_tab/build_autoresearch_tab.py HUB.html --state hub_tab/loop_state.json; node --check; publish. Republishes resumed via the hub-tab agent.
+memscale DONE and merged (flags --prefix-chunk N, --prefix-chunk-offload, --st-otr-keep-cap N; dense_probe memory fix): slope 0.040 GiB/1k with chunk 4k + cap 4096 + offload; 1M row fits (77.5 GiB), 2M at 126.5 GiB; 16k learning = recipe. NEXT for memory: learning test at 64k+ rows with chunking + keep cap (needs a long-row pool with real tasks), keep-cap effect on learning at 16k.
 Tools: rescore.sh, iso.py, iso_set.py set/suite16k, depth.py, depth_set.py suite16k.
 
 (older state below)
