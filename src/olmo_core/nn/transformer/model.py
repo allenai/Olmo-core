@@ -1838,6 +1838,10 @@ class Transformer(nn.Module):
             elif block_idx in otr_mod:
                 h = otr.mod_block(block, h, {**all_block_kwargs, **block_kwargs, **extra})  # type: ignore[union-attr]
             elif dl_roles is not None and block_idx in dl_blocks:
+                if (dl_roles.shape[0] == h.shape[0] and dl_roles.shape[1] > h.shape[1]
+                        and bool((dl_roles[:, h.shape[1]:] == -2).all())):
+                    # the soft-token path trimmed trailing all-pad columns off the input row
+                    dl_roles = dl_roles[:, : h.shape[1]]
                 if tuple(dl_roles.shape) != tuple(h.shape[:2]):
                     raise RuntimeError(f"doclocal: roles {tuple(dl_roles.shape)} vs hidden {tuple(h.shape[:2])} at "
                                        f"block {block_idx}")
