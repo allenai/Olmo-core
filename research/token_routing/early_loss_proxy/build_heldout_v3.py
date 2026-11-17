@@ -1,7 +1,7 @@
 """Held-out probe rows v3 (POOL_V2.md, "Held-out v3"): more and cleaner 16k rows. Runs on a node (mooney).
 
 Sets (npz format of build_heldout.py: ``ids, mask, offsets, sets, tasks, src_idx``):
-- ``gen16k``: 48 rows per task of FRESH rows from the training generator at the training 16k cell sizes
+- ``gen16k`` (contradiction: from ctc's EVAL split, see CONTRA_EVAL): 48 rows per task of FRESH rows from the training generator at the training 16k cell sizes
   (n_docs_used.json: contradiction 324, outlier 96, reorder 90, qdmatch_nq 174), ``--split train`` with seed 7777
   (every training cell used seed 42; ctc keys its streams by (seed, split, rung)), rows <= 16,384 tokens, and none
   sharing a gold document (qdmatch: the query or document of a gold pair) or a reorder book with ANY row used by any
@@ -38,6 +38,7 @@ GSEED = 7777
 GEN_ROWS = {"contradiction": 400, "outlier": 400, "reorder": 1500, "qdmatch_nq": 20000}
 GDIR = f"{P.WORK}/gen_heldout16k"
 RUNG_CAP = 40960
+CONTRA_EVAL = f"{P.WORK}/gen_heldout16k_eval/contradiction/contradiction/eval_16k.jsonl"
 
 
 def gcell(task):
@@ -151,6 +152,10 @@ def build(a):
     # ---- gen16k --------------------------------------------------------------------------------------------------
     for task in P.TASKS:
         src = f"{gcell(task)}/{task}/train.jsonl"
+        if task == "contradiction":
+            # every --split train row of seed 7777 reused a training gold pair (400/400), so contradiction comes from ctc's
+            # EVAL corpus split instead (`--split eval --rungs 16k --eval-seed 77`, 324 documents, 500 rows): 0/100 hits
+            src = CONTRA_EVAL
         exs = P.read_jsonl(src)
         # content filter on the JSONL first (cheap), tokenize only candidates. Strict (held-out gold absent from every
         # training document) except qdmatch_nq, whose queries recur as training distractors: there gold-vs-gold.
@@ -167,6 +172,13 @@ def build(a):
                 continue
             cand.append(i)
         drop["content_eligible"] = len(cand)
+        drop["content_eligible_gold_vs_gold_only"] = sum(
+            1 for ex in exs if not (gold_hashes(task, ex) & tr_gold[task])
+            and not (task == "reorder" and P.book_of(ex) in tr_books))
+        print(f"[v3] gen16k/{task} content filter: {drop}", flush=True)
+        if not cand:
+            print(f"[v3] WARNING gen16k/{task}: no candidate rows", flush=True)
+            continue
         cand = cand[:a.gen_rows + 24]
         with tempfile.TemporaryDirectory(dir="/data/prasann/tmp") as tmp:
             with open(f"{tmp}/c.jsonl", "w") as g:

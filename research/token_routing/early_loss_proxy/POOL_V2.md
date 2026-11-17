@@ -138,3 +138,28 @@ Turns that would push a row past 16,384 tokens are dropped from the end. Cap dro
 - **Mean row length by rung** (all pools): 1k ~1,061, 2k ~2,164, 4k ~4,170, 8k ~8,480, 16k ~14,780 tokens.
 - **First 800 rows by task:** 188 / 197 / 213 / 202 in every pool.
 - **Gold check:** 20/20 on every check, with one exception. One mtbmix95 reorder row fails the text match on 3 passages. These passages contain Unicode combining marks (e.g. "K͟hwāja"), which the tokenizer's normalization changes; the content is the same and the printed IDs and answer are correct.
+
+## Held-out v3 (`build_heldout_v3.py`, 2026-11-17)
+**Locations:** `heldout_v3.npz` (680 rows) and `heldout_v3_stats.json` are in:
+- `/data/prasann/early_loss_proxy/` on mooney and on sneetches
+- weka `.../prasanns/early_loss_proxy/` (Beaker job 01M7NGY7571FMJMJFXC8CV1PFC)
+- Lambda `/accounts/projects/sewonm/prasann/ctc_suite/elp/`
+
+The npz format is the same as v2.
+
+**Sets:**
+- **`gen16k`:** 48 fresh rows per task at the training 16k cell sizes (324 / 96 / 90 / 174 documents for contradiction / outlier / reorder / qdmatch_nq). Every row is at most 16,384 tokens; means are 14.4-15.8k (range 12,963-16,107).
+  - outlier, reorder, qdmatch_nq: ctc `--split train` with seed 7777.
+  - contradiction: ctc's EVAL split (`--split eval --eval-seed 77`), because all 400/400 train-split rows of seed 7777 reused a training gold pair.
+  - Rows are dropped if any gold document appears anywhere in a training row's documents. For qdmatch_nq the check is only against training gold, since its queries recur as distractors in training. Reorder rows are also dropped if their book was used in training.
+  - Content-eligible rows: contradiction 71/500, outlier 390/400, reorder 105/1,500, qdmatch_nq 790/20,000.
+- **`rung16k`:** the first 32 rows of each suite 16k rung file, uncapped (all of them fit the 40,960 limit).
+  - Length range: contradiction 15,840-17,722; outlier 15,414-17,967; reorder 16,597-20,217; qdmatch_nq 15,475-16,088 tokens.
+  - Rows over 16,384 tokens: 28 / 9 / 32 / 0.
+- **`suite16k`, `suite8k`, `suite4k`:** copied from v2, same rows and order (reorder has 8 rows at 16k).
+
+**Overlap against all 8 training pools (17,960 distinct training rows):**
+- Prompt-hash hits: 0 in every set.
+- Held-out gold documents found among training gold documents: 0.
+- Held-out gold documents found among training distractors: qdmatch_nq queries in gen16k 48/48 and rung16k 32/32; rung16k contradiction 5, outlier 1.
+- gen16k contradiction rows share 89% of their non-gold (filler) claims with training, because the filler pool is shared.
