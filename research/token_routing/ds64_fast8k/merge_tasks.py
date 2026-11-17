@@ -23,7 +23,7 @@ SUMMED = ("num_instances", "num_tokens", "num_loss_tokens", "num_dropped",
           "rows_over_max_len_dropped")
 
 
-def _subset(toks, masks, meta, n_rows, dst_tok, dst_mask, max_len=0, seed=0):
+def _subset(toks, masks, meta, n_rows, dst_tok, dst_mask, max_len=0, seed=0, length_mix=None, tokens_per_src=0):
     """First ``n_rows`` rows of a source (all parts concatenated; 0 = all), keeping only rows of at
     most ``max_len`` tokens when ``max_len`` > 0, written as one part each."""
     import numpy as np
@@ -46,7 +46,27 @@ def _subset(toks, masks, meta, n_rows, dst_tok, dst_mask, max_len=0, seed=0):
     lens = ends - starts + 1
     keep_rows = np.ones(len(ends), dtype=bool) if not max_len else lens <= max_len
     idx = np.flatnonzero(keep_rows)
-    if n_rows:
+    mix_report = None
+    if length_mix:
+        # length-stratified sample: bin (lo, hi] gets share * tokens_per_src tokens, drawn uniformly (seeded)
+        # from the eligible rows in that bin; a bin with fewer tokens than its quota contributes all it has
+        # (the deficit is NOT moved to other bins, so the realised shares are reported, not forced)
+        rng = np.random.default_rng(seed)
+        picked, mix_report, lo = [], [], 0
+        for hi, share in length_mix:
+            cand = idx[(lens[idx] > lo) & (lens[idx] <= hi)]
+            cand = cand[rng.permutation(len(cand))]
+            want_tok = share * tokens_per_src
+            cum = np.cumsum(lens[cand])
+            take = int(np.searchsorted(cum, want_tok, side="left") + 1) if len(cand) else 0
+            take = min(take, len(cand))
+            picked.append(cand[:take])
+            mix_report.append({"lo": int(lo), "hi": int(hi), "share": share, "target_tokens": int(want_tok),
+                               "rows": int(take), "tokens": int(cum[take - 1]) if take else 0,
+                               "available_rows": int(len(cand)), "available_tokens": int(cum[-1]) if len(cand) else 0})
+            lo = hi
+        idx = np.sort(np.concatenate(picked)) if picked else idx[:0]
+    elif n_rows:
         if n_rows > len(idx):
             raise SystemExit(f"--rows-per-src {n_rows} > {len(idx)} rows")
         if seed:  # uniform sample of the eligible rows (kept in source order), not the first n
@@ -54,7 +74,7 @@ def _subset(toks, masks, meta, n_rows, dst_tok, dst_mask, max_len=0, seed=0):
         else:
             idx = idx[:n_rows]
     sel = np.zeros(len(tok), dtype=bool)
-    if len(idx) == len(ends) and not n_rows:
+    if len(idx) == len(ends) and not n_rows and not length_mix:
         sel[:] = True
     else:
         # mark selected rows' token spans via a +1/-1 difference array
@@ -68,7 +88,9 @@ def _subset(toks, masks, meta, n_rows, dst_tok, dst_mask, max_len=0, seed=0):
     return {"num_instances": int(len(idx)), "num_tokens": int(sel.sum()),
             "num_loss_tokens": int(np.asarray(msk[sel]).sum()),
             "max_example_len": int(kl.max()), "min_example_len": int(kl.min()), "subset_eos_id": eos,
-            "rows_over_max_len_dropped": int((~keep_rows).sum()), "subset_max_len": int(max_len)}
+            "rows_over_max_len_dropped": int((~keep_rows).sum()), "subset_max_len": int(max_len),
+            **({"length_mix": mix_report, "tokens_per_src": int(tokens_per_src), "sample_seed": int(seed)}
+               if mix_report is not None else {})}
 
 
 def main() -> None:
@@ -85,7 +107,15 @@ def main() -> None:
     ap.add_argument("--max-row-len", type=int, default=0,
                     help="drop rows longer than this many tokens (e.g. 32768 for a 32k window; the "
                     "trainer refuses a --seq-len below a shard's max_example_len)")
+    ap.add_argument("--length-mix", default="",
+                    help="length-stratified sample per source: 'HI:SHARE,...' bins (prev HI, HI] in tokens, e.g. "
+                    "'3072:0.30,6144:0.20,12288:0.15,24576:0.13,49152:0.12,65536:0.10' (the ds64 short-heavy "
+                    "shares); each bin gets SHARE * --tokens-per-src tokens, sampled with --sample-seed")
+    ap.add_argument("--tokens-per-src", type=int, default=0, help="with --length-mix: token target per source")
     a = ap.parse_args()
+    mix = [(int(h), float(f)) for h, f in (kv.split(":") for kv in a.length_mix.split(","))] if a.length_mix else None
+    if mix and (not a.tokens_per_src or a.rows_per_src):
+        raise SystemExit("--length-mix needs --tokens-per-src and excludes --rows-per-src")
     if os.path.exists(os.path.join(a.out, "metadata.json")):
         raise SystemExit(f"{a.out} already has metadata.json; refusing to overwrite")
     os.makedirs(a.out, exist_ok=True)
@@ -102,9 +132,10 @@ def main() -> None:
                 raise SystemExit(f"unaligned parts {t} / {m}")
         dt = os.path.join(a.out, f"token_ids_part_t{i}_000.npy")
         dm = os.path.join(a.out, f"labels_mask_t{i}_000.npy")
-        if a.rows_per_src or a.max_row_len:
+        if a.rows_per_src or a.max_row_len or mix:
             meta = dict(meta)
-            meta.update(_subset(toks, masks, meta, a.rows_per_src, dt, dm, a.max_row_len, a.sample_seed))
+            meta.update(_subset(toks, masks, meta, a.rows_per_src, dt, dm, a.max_row_len, a.sample_seed, mix,
+                                a.tokens_per_src))
         else:
             for k, (t, m) in enumerate(zip(toks, masks)):
                 shutil.copy2(t, dt.replace("_000.npy", f"_{k:03d}.npy"))
@@ -128,8 +159,11 @@ def main() -> None:
     merged["max_example_len"] = max(int(m.get("max_example_len", 0)) for m in metas)
     merged["min_example_len"] = min(int(m.get("min_example_len", 0)) for m in metas)
     merged["task"] = a.name
-    merged["merged_from"] = [{"src": s, "task": m.get("task"), "num_instances": m.get("num_instances")}
+    merged["merged_from"] = [{"src": s, "task": m.get("task"), "num_instances": m.get("num_instances"),
+                              **({"num_tokens": m.get("num_tokens"), "length_mix": m["length_mix"]}
+                                 if "length_mix" in m else {})}
                              for s, m in zip(a.src, metas)]
+    merged.pop("length_mix", None)
     json.dump(gold, open(os.path.join(a.out, "gold_fingerprints.json"), "w"))
     json.dump(merged, open(os.path.join(a.out, "metadata.json"), "w"), indent=1)
     print(f"[merge] wrote {a.out}: {merged.get('num_instances')} rows, {len(gold)} gold rows, "

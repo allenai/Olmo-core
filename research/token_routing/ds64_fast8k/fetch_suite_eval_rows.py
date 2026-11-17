@@ -33,7 +33,7 @@ NEW_SUBSETS = ["hotpotqa", "qdmatch_nq", "xabsence", "reorder", "strmatch", "gro
 #: the suite rows of the base ladder tasks graded through the ctc spec (--ctc-grade); rerank added
 #: 2026-10-25 (it is in the mt11 training mix but had no suite rows staged, so it was never scored)
 EXISTING_SUBSETS = ["nq", "outlier", "oolong", "contradiction_iid", "rerank"]
-RUNG_TOKENS = {"r2k": 2048, "r4k": 4096, "r8k": 8192, "r16k": 16384, "r32k": 32768}
+RUNG_TOKENS = {"r2k": 2048, "r4k": 4096, "r8k": 8192, "r16k": 16384, "r32k": 32768, "r64k": 65536}
 #: olmo-eval ROSTER rung_alias: the IID contradiction ladder starts one step up at r2k
 RUNG_ALIAS = {("contradiction_iid", "r2k"): 2560}
 #: reference manifest of the default fetch (11 subsets x r2k/r8k x 500 rows at HF_REVISION)
@@ -84,6 +84,8 @@ def main() -> None:
     ap.add_argument("--rows", type=int, default=500)
     ap.add_argument("--revision", default=HF_REVISION)
     ap.add_argument("--cache", default=None, help="parquet download dir (default <out>/.hf_parquet)")
+    ap.add_argument("--skip-missing", action="store_true",
+                    help="skip a (subset, rung) the dataset does not have (e.g. reorder r32k) instead of failing")
     args = ap.parse_args()
     if args.verify:
         raise SystemExit(1 if verify(args.verify, args.manifest) else 0)
@@ -100,8 +102,14 @@ def main() -> None:
     for sub in args.subsets:
         for rung in args.rungs:
             tokens = RUNG_ALIAS.get((sub, rung), RUNG_TOKENS[rung])
-            pq_path = hf_hub_download(HF_DATASET, f"data/{sub}/{rung}.parquet", repo_type="dataset",
-                                      revision=args.revision, local_dir=cache)
+            try:
+                pq_path = hf_hub_download(HF_DATASET, f"data/{sub}/{rung}.parquet", repo_type="dataset",
+                                          revision=args.revision, local_dir=cache)
+            except Exception as e:  # noqa: BLE001 -- huggingface_hub raises EntryNotFoundError
+                if not args.skip_missing or "EntryNotFound" not in type(e).__name__:
+                    raise
+                print(f"{sub}/{rung}: not in the dataset, skipped", flush=True)
+                continue
             pf = pq.ParquetFile(pq_path)
             rows = []
             for batch in pf.iter_batches(batch_size=min(args.rows, 256)):

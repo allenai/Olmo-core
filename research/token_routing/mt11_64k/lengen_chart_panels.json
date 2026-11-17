@@ -1,0 +1,5 @@
+{
+ "dense at ~f4 FLOPs": ["m16-dense-s380-lr5e-06", "m32-dense-s304-lr5e-06", "m64-dense-f4-lr5e-06"],
+ "universal recipe at ~f4-recipe FLOPs": ["m16-lora64r20to7f16-s380-lr5e-06", "m32-lora64r20to7f16-s304-lr5e-06", "m64-lora64r20to7f16-f4-lr5e-06"],
+ "dense at ~f2 FLOPs": ["m16-dense-s770-lr5e-06", "m32-dense-s610-lr5e-06", "m64-dense-f2-lr5e-06"]
+}

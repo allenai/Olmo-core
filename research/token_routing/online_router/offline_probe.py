@@ -34,7 +34,7 @@ import math
 import os
 import sys
 import time
-from typing import Dict, List
+from typing import Optional, Dict, List
 
 import numpy as np
 import torch
@@ -73,10 +73,24 @@ def log(m: str) -> None:
     print(f"[otr-probe] {m}", flush=True)
 
 
-def load_rows(shard: str, n_per_task: int, offset: int) -> List[Dict]:
+def shard_tasks(shard: str) -> List[str]:
+    """Task names in part order (t0, t1, ...) from the shard's metadata (``merged_from`` source basenames)."""
+    import ast
+
+    m = json.load(open(os.path.join(shard, "metadata.json")))
+    mf = m.get("merged_from")
+    if isinstance(mf, str):
+        mf = ast.literal_eval(mf)
+    return [x["src"].rstrip("/").split("/")[-1] for x in mf] if mf else list(TASKS)
+
+
+def load_rows(shard: str, n_per_task: int, offset: int, tasks: Optional[List[str]] = None) -> List[Dict]:
+    """``tasks``: task names to load (default: the mt4 ``TASKS``); part indices come from the shard's metadata."""
     gold_table = json.load(open(os.path.join(shard, "gold_fingerprints.json")))
     rows = []
-    for ti, task in enumerate(TASKS):
+    order = shard_tasks(shard) if tasks is not None else list(TASKS)
+    for task in tasks if tasks is not None else TASKS:
+        ti = order.index(task)
         ids = np.fromfile(os.path.join(shard, f"token_ids_part_t{ti}_000.npy"), dtype=np.uint32)
         lm = np.fromfile(os.path.join(shard, f"labels_mask_t{ti}_000.npy"), dtype=np.bool_)
         ends = np.nonzero(ids == EOS)[0]

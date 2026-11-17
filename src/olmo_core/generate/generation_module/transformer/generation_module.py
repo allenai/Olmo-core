@@ -1,6 +1,7 @@
 import json
 import logging
 import math
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -1210,6 +1211,14 @@ class TransformerGenerationModule(GenerationModule):
         log_or_print(log, f"{transformer_config}")
         log_or_print(log, f"{generation_config}")
         model = transformer_config.build()
+        if post_build_hook is None and os.environ.get("OLMO_CONFIG_BUILD_HOOK", "1") != "0":
+            # Callers that do not pass a hook (e.g. olmo-eval's olmo_core provider) still get the
+            # features recorded in config.json (early-LoRA adapters, ffn_moe/kv_route routers)
+            # plus the key guard; without it such a checkpoint loads silently as the bare backbone.
+            # OLMO_CONFIG_BUILD_HOOK=0 restores the old behaviour.
+            from olmo_core.nn.nested_ffn_moe import post_build_hook_from_config
+
+            post_build_hook = post_build_hook_from_config(str(checkpoint_dir))
         if post_build_hook is not None:
             # Runs BEFORE the checkpoint load, so a hook that adds parameters (e.g.
             # ``enable_nested_ffn_moe``'s router) has its keys present when the load happens --

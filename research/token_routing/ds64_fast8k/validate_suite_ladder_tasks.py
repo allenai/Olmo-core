@@ -224,6 +224,9 @@ def main() -> None:
                 "gold_answer_tokens_max_all_rows": max(ans_tok),
                 "gold_answer_tokens_mean_all_rows": round(sum(ans_tok) / len(ans_tok), 1),
                 "prefill_tokens_max": max(prefill_lens), "eval_size": len(exs),
+                "prefill_tokens_p50": sorted(prefill_lens)[len(prefill_lens) // 2],
+                "prefill_tokens_top5": sorted(prefill_lens)[-5:],
+                **{f"prefill_over_{c}": sum(x > c for x in prefill_lens) for c in (65536, 68608, 73728, 77000)},
                 "gold_text_example": golds[0][:160],
             }
             if task in native_fns:  # native grader beside the ctc one
