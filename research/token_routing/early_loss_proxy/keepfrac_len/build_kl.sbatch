@@ -16,6 +16,6 @@ export TMPDIR=/data/prasann/tmp HF_HOME=/data/prasann/early_loss_proxy/v2build/h
 cd "$CODE"
 for st in ${STAGES:-gen heldout tokenize build order}; do
   echo "=== $st $(date +%T)"
-  $PY research/token_routing/early_loss_proxy/keepfrac_len/build_kl_pools.py $st
+  $PY research/token_routing/early_loss_proxy/keepfrac_len/build_kl_pools.py $st --group ${GROUP:-long}
 done
 echo "=== KL_BUILD_DONE $(date +%T)"

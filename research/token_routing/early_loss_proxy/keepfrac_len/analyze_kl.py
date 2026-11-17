@@ -64,22 +64,24 @@ def gmean(xs):
     return math.exp(sum(math.log(x) for x in xs) / len(xs)) if xs else None
 
 
-def score(run, ref, rec, levels, key=None):
+def score(run, ref, rec, levels, key=None, lora=None):
     pfr, cer = (run["pf"], run["ce"]) if key is None else (run["pf"], run["by_task"][key])
+    g = lambda x: None if x is None else reach(x["pf"], x["ce"] if key is None else x["by_task"][key], lv)  # noqa: E731
     out = {}
     for lv in levels:
         a = reach(pfr, cer, lv)
-        r = reach(ref["pf"], ref["ce"] if key is None else ref["by_task"][key], lv)
-        c = reach(rec["pf"], rec["ce"] if key is None else rec["by_task"][key], lv) if rec else None
-        out[f"{lv:.4f}"] = {"pf": a, "x_ref": (r / a) if a and r else None, "x_rec": (c / a) if a and c else None}
+        r, c, o = g(ref), g(rec), g(lora)
+        out[f"{lv:.4f}"] = {"pf": a, "x_ref": (r / a) if a and r else None, "x_rec": (c / a) if a and c else None,
+                            "x_lora": (o / a) if a and o else None}
     return out
 
 
 def summarize(lv):
     xr = [v["x_ref"] for v in lv.values() if v["x_ref"]]
     xc = [v["x_rec"] for v in lv.values() if v["x_rec"]]
+    xo = [v["x_lora"] for v in lv.values() if v.get("x_lora")]
     deep = [v for v in lv.values() if v["x_ref"]]
-    return {"x_ref": gmean(xr), "x_rec": gmean(xc), "n_lv": len(xr), "deep_x_ref": deep[-1]["x_ref"] if deep else None,
+    return {"x_ref": gmean(xr), "x_rec": gmean(xc), "x_lora": gmean(xo), "n_lv": len(xr), "deep_x_ref": deep[-1]["x_ref"] if deep else None,
             "deep_x_rec": deep[-1]["x_rec"] if deep else None}
 
 
@@ -89,30 +91,34 @@ def main():
     ap.add_argument("--lens", default="16k,32k,64k")
     ap.add_argument("--level-from", type=float, default=0.25, help="levels = ref CE at probes past this share of its run")
     ap.add_argument("--out", default="")
+    ap.add_argument("--ref", default="dft", help="primary reference arm (dft = dense full fine-tune; ref = dense LoRA)")
+    ap.add_argument("--tag-prefix", default="kl", help="result folders / run names <prefix><L>")
     a = ap.parse_args()
     res = {"lens": {}}
     for L in a.lens.split(","):
         runs = {}
-        for p in sorted(glob.glob(f"{a.root}/kl{L}*/elp-kl{L}*-sd*.json")):
-            m = re.match(rf"elp-kl{L}\w*?-(\w+)-sd(\d+)\.json", os.path.basename(p))
+        P_ = f"{a.tag_prefix}{L}"
+        for p in sorted(glob.glob(f"{a.root}/{P_}*/elp-{P_}*-sd*.json")):
+            m = re.match(rf"elp-{P_}\w*?-(\w+)-sd(\d+)\.json", os.path.basename(p))
             if m:
                 runs.setdefault(m.group(1), {})[int(m.group(2))] = load(p)
-        if "ref" not in runs or "k20" not in runs:
-            print(f"[kl {L}] missing ref or k20: have {sorted(runs)}")
+        if a.ref not in runs or "k20" not in runs:
+            print(f"[kl {L}] missing {a.ref} or k20: have {sorted(runs)}")
             continue
-        ref, rec = runs["ref"][0], runs["k20"][0]
+        ref, rec = runs[a.ref][0], runs["k20"][0]
+        lora = runs.get("ref", {}).get(0) if a.ref != "ref" else None
         last = ref["steps"][-1]
         idx = [i for i, s in enumerate(ref["steps"]) if s >= a.level_from * last and s > 0]
         levels = sorted({round(ref["ce"][i], 4) for i in idx}, reverse=True)
         tasks = sorted(ref["by_task"])
         t_levels = {t: sorted({round(ref["by_task"][t][i], 4) for i in idx}, reverse=True) for t in tasks}
-        Lres = {"levels": levels, "ref_steps": ref["steps"], "ref_ce": ref["ce"], "task_levels": t_levels, "arms": {}}
+        Lres = {"reference": a.ref, "levels": levels, "ref_steps": ref["steps"], "ref_ce": ref["ce"], "task_levels": t_levels, "arms": {}}
         print(f"\n=== {L}: eval rows {ref['eval_rows']} {ref['rows_per_task']}; ref steps {ref['steps']}; levels {levels}")
         print(f"{'arm':9s} sd {'steps':>5s} {'x/dense':>7s} {'s/step':>6s} {'peakGiB':>7s} {'lastCE':>7s} "
-              f"{'x_ref':>6s} {'x_rec':>6s} {'n_lv':>4s} {'deep_ref':>8s} | worst-task x_ref (task) | per task x_ref")
-        for arm, seeds in sorted(runs.items(), key=lambda kv: (kv[0] != "ref", -KEEP.get(kv[0], (1, 1))[0], kv[0])):
+              f"{'x_ref':>6s} {'x_lora':>6s} {'x_rec':>6s} {'n_lv':>4s} {'deep_ref':>8s} | worst-task x_ref (task) | per task x_ref")
+        for arm, seeds in sorted(runs.items(), key=lambda kv: (kv[0] not in ("dft", "ref"), -KEEP.get(kv[0], (1, 1))[0], kv[0])):
             for sd, run in sorted(seeds.items()):
-                lv = score(run, ref, rec if arm != "k20" or sd != 0 else None, levels)
+                lv = score(run, ref, rec if arm != "k20" or sd != 0 else None, levels, lora=lora)
                 s = summarize(lv)
                 per_t = {}
                 for t in tasks:
@@ -126,7 +132,7 @@ def main():
                 Lres["arms"].setdefault(arm, {})[sd] = rec_
                 f = lambda x, n=6, d=2: f"{x:{n}.{d}f}" if isinstance(x, (int, float)) and x is not None else " " * (n - 1) + "-"
                 print(f"{arm:9s} {sd:2d} {run['n_steps']:5d} {f(run['x_dense_step'], 7, 3)} {f(run['s_per_step'], 6, 1)} "
-                      f"{f(run['peak_gib'], 7, 1)} {f(run['ce'][-1], 7, 4)} {f(s['x_ref'])} {f(s['x_rec'])} {s['n_lv']:4d} "
+                      f"{f(run['peak_gib'], 7, 1)} {f(run['ce'][-1], 7, 4)} {f(s['x_ref'])} {f(s['x_lora'])} {f(s['x_rec'])} {s['n_lv']:4d} "
                       f"{f(s['deep_x_ref'], 8)} | {f(per_t[wt]['x_ref'])} ({wt}) | "
                       + " ".join(f"{t[:6]}={f(per_t[t]['x_ref'], 4)}" for t in tasks))
         res["lens"][L] = Lres

@@ -48,7 +48,7 @@ LENS = {r: ALL_LENS[r] for r in GROUPS["long"]}  # set by --group
 ROWS = 1200
 HO_ROWS = 48
 GEN = {"contradiction": 1400, "outlier": 1400,
-       "qdmatch_nq": {"2k": 5000, "4k": 5000, "8k": 5000, "16k": 4500, "32k": 9000, "64k": 9000}}
+       "qdmatch_nq": {"2k": 7500, "4k": 7500, "8k": 7500, "16k": 7000, "32k": 9000, "64k": 9000}}
 KW = f"{P.WORK}/kl"
 SH = "/data/prasann/early_loss_proxy/shards"
 HO_FILES = {"long": "/data/prasann/early_loss_proxy/heldout_kl.npz", "short": "/data/prasann/early_loss_proxy/heldout_kls.npz"}
@@ -80,8 +80,8 @@ def gen_src(t, r):
 def _gen(job):
     t, r = job
     out = f"{KW}/gen/{t}_{r}"
-    if os.path.exists(gen_src(t, r)) and os.path.getsize(gen_src(t, r)):
-        return t, r, "cached", 0.0
+    if os.path.exists(gen_src(t, r)) and sum(1 for _ in open(gen_src(t, r))) >= gen_rows(t, r):
+        return t, r, "cached", 0.0  # a smaller earlier cell is regenerated (ctc's stream is prefix-stable)
     t0 = time.time()
     cmd = [sys.executable, f"{P.REPO}/recipes/data/ctc_sft/ctc_calibrated.py", "build", "--task", t, "--split", "train",
            "--rungs", r, "--train", str(gen_rows(t, r)), "--seed", str(P.SEED), "--out", out, "--pool", P.POOL[t]]
