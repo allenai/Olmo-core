@@ -118,5 +118,13 @@
   "what": "Tabulate where the recipe's FLOPs go at 4k-128k rows (the full-length attention of the early blocks is quadratic in length), then make that attention document-local during training so the early blocks' cost grows linearly with length.",
   "status": "running",
   "result": "agent started 12:00"
+ },
+ {
+  "id": "memscale",
+  "family": "scales with length",
+  "title": "Memory that stays flat at 256k-1M tokens",
+  "what": "Measure how peak training memory grows with row length (16k-256k) for dense LoRA and the recipe, then run the early blocks chunk by chunk (no-grad pass, later blocks on the kept tokens, second chunked pass with gradient) with a kept-token budget fixed in tokens, so the peak is one chunk plus the kept tokens instead of the whole row.",
+  "status": "running",
+  "result": "agent started 12:15"
  }
 ]

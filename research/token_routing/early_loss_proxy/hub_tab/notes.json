@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-17 12:15",
+   "text": "Memory goal restated by Prasann: not savings at 16k but algorithms that keep memory nearly flat at 256k, 1M tokens or longer. New agent: memory scaling law with length, then chunked early blocks with a fixed kept-token budget."
+  },
+  {
    "t": "11-17 12:00",
    "text": "Priority changed to the 16k held-out loss and to ideas that gain more as rows get longer. On the 16k rows alone (56 rows, noisy) the plain recipe is 2.1-2.7x vs dense LoRA and the short-heavy pools are only about 1.1-1.2x ahead of it (1.8-2.1x ahead at 4k). A larger 16k held-out set is being built (48 fresh in-range rows and 32 uncapped 16k-rung eval rows per task); references will be rerun on it. New idea started: per-length FLOP breakdown and document-local attention in the early blocks."
   },

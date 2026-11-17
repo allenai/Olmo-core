@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-17 11:39 PT",
+ "updated": "2026-11-17 11:44 PT",
  "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k), about 3.1-3.4x fewer training FLOPs than dense LoRA to reach held-out CE 0.125 (two seeds), against 1.9-2.2x for the plain recipe; in absolute terms one of its steps costs about 0.08x of a dense step on the main pool. Loss-per-cost sampling of task and length cells on the 50/50 pool gives 3.3x (one seed). Full-epoch curves show the plain recipe's advantage stays near 2x through the epoch and it ends above dense LoRA (0.086-0.093 vs 0.071 held-out CE) because it has used 3.4x fewer FLOPs on the same rows. Multi-question rows did not help. Nothing is near 10x; about 90 arms scored, eval_size 184. Next: 90% and 95% short pools, sampling stacked on the 80/20 pool, full-epoch runs on the mixed pools, generation-graded validation.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "From 11-17 12:00 the primary measure is the 16k held-out loss. Until the larger 16k set is in place, 16k readings come from 56 rows (8 for reorder) and are noisy."
  ],
  "log": [
+  {
+   "t": "11-17 12:15",
+   "text": "Memory goal restated by Prasann: not savings at 16k but algorithms that keep memory nearly flat at 256k, 1M tokens or longer. New agent: memory scaling law with length, then chunked early blocks with a fixed kept-token budget."
+  },
   {
    "t": "11-17 12:00",
    "text": "Priority changed to the 16k held-out loss and to ideas that gain more as rows get longer. On the 16k rows alone (56 rows, noisy) the plain recipe is 2.1-2.7x vs dense LoRA and the short-heavy pools are only about 1.1-1.2x ahead of it (1.8-2.1x ahead at 4k). A larger 16k held-out set is being built (48 fresh in-range rows and 32 uncapped 16k-rung eval rows per task); references will be rerun on it. New idea started: per-length FLOP breakdown and document-local attention in the early blocks."
@@ -186,6 +190,14 @@
    "what": "Tabulate where the recipe's FLOPs go at 4k-128k rows (the full-length attention of the early blocks is quadratic in length), then make that attention document-local during training so the early blocks' cost grows linearly with length.",
    "status": "running",
    "result": "agent started 12:00"
+  },
+  {
+   "id": "memscale",
+   "family": "scales with length",
+   "title": "Memory that stays flat at 256k-1M tokens",
+   "what": "Measure how peak training memory grows with row length (16k-256k) for dense LoRA and the recipe, then run the early blocks chunk by chunk (no-grad pass, later blocks on the kept tokens, second chunked pass with gradient) with a kept-token budget fixed in tokens, so the peak is one chunk plus the kept tokens instead of the whole row.",
+   "status": "running",
+   "result": "agent started 12:15"
   }
  ],
  "best_by_hour": [

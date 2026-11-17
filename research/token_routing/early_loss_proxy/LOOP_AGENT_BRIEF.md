@@ -113,5 +113,6 @@ to `launch_proxy.py`. Real runs use the defaults (new pool, 16,384).
   `gen16k` = fresh in-range 16k rows and `rung16k` = uncapped 16k-rung eval rows), then on all lengths.
 - The plain recipe is 2.1-2.7x vs dense LoRA at 16k; short-heavy pools add only ~1.2x there. Prefer levers whose
   saving grows with length (attention is quadratic in length; the kept-token share can fall as rows grow).
-- Memory: with activation checkpointing the step's transient memory at 16k is ~3 GiB against ~12 GiB of weights and
-  optimizer state, so memory does not limit context length at 16k; report `transient_gib` per 1k tokens instead.
+- Memory (Prasann 11-17 12:15): savings at 16k do not matter (transient ~3 GiB vs ~12 GiB of weights + optimizer
+  state). What matters is an algorithm whose peak stays nearly flat at 256k, 1M tokens or longer: report
+  `transient_gib` per 1k tokens and say what would hold the peak at 256k+.
