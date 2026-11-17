@@ -70,8 +70,10 @@ def build_callback(cfg: Dict[str, str]):
             raise SystemExit(f"held-out set {name} not in {cfg['heldout']}")
         for task in tasks_here:
             idx = [i for i in range(len(sets_arr)) if sets_arr[i] == name and tasks_arr[i] == task][:k]
-            if len(idx) < k:
-                raise SystemExit(f"held-out {name}/{task}: only {len(idx)} rows < {k}")
+            if not idx:
+                raise SystemExit(f"held-out {name}/{task}: no rows")
+            if len(idx) < k:  # e.g. suite16k/reorder: only 8 eval rows fit in 16,384 tokens
+                print(f"[dense-probe] held-out {name}/{task}: only {len(idx)} rows < {k}, using all", flush=True)
             for i in idx:
                 rows.append((name, task, ids_all[offs[i]:offs[i + 1]].astype(np.int64),
                              mask_all[offs[i]:offs[i + 1]].astype(bool)))
@@ -215,17 +217,20 @@ def build_callback(cfg: Dict[str, str]):
             ii = batch["input_ids"]
             self._hash = hashlib.sha1(ii.detach().cpu().numpy().tobytes()).hexdigest()[:12]
             torch.cuda.reset_peak_memory_stats()
+            self._base_mem = float(torch.cuda.memory_allocated())  # weights + optimizer state held before the step
             self._ntok = int(ii.numel())
 
         def post_step(self):
             torch.cuda.synchronize()
             dt = time.time() - self._t_step
             self._train_s += dt
-            pk = torch.tensor([float(torch.cuda.max_memory_allocated())], device="cuda", dtype=torch.float64)
+            pk0 = float(torch.cuda.max_memory_allocated())
+            # [peak, peak - pre-step baseline (the step's own transient: activations, gradients, temporaries)]
+            pk = torch.tensor([pk0, pk0 - self._base_mem], device="cuda", dtype=torch.float64)
             if dist.is_initialized():
                 dist.all_reduce(pk, op=dist.ReduceOp.MAX)
             self.res["steps"].append({"step": int(self.step), "train_s": dt, "lr": self._lrs(),
-                                      "peak_gib": float(pk) / 2**30,
+                                      "peak_gib": float(pk[0]) / 2**30, "transient_gib": float(pk[1]) / 2**30,
                                       "batch_hash_rank0": self._hash, "tokens_rank0": self._ntok,
                                       "flops": self._flops()})
             probed = self.step in steps
