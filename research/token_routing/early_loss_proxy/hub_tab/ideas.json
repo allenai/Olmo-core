@@ -4,16 +4,16 @@
   "family": "reference",
   "title": "Dense full fine-tune and dense LoRA at 4k-16k",
   "what": "Reference loss-vs-FLOPs curves (probes every 10 steps to step 100). Every speedup on this page is read against these.",
-  "status": "queued",
-  "result": ""
+  "status": "running",
+  "result": "training on the new pool"
  },
  {
   "id": "recipe",
   "family": "baseline",
   "title": "Current recipe (router, keep 20% after block 7, 7% after block 16)",
   "what": "The 8k recipe unchanged at 4k-16k on the new tasks, plus random keep at the same budget.",
-  "status": "queued",
-  "result": ""
+  "status": "running",
+  "result": "training on the new pool"
  },
  {
   "id": "prefix",

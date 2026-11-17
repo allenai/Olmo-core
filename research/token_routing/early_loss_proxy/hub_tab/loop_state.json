@@ -1,13 +1,23 @@
 {
- "updated": "2026-11-16 23:31 PT",
- "status": "Setting up. The 4k-16k pool (contradiction, outlier, reorder, qdmatch_nq) and its held-out probe rows are being built. Seven idea agents are implementing in parallel; Lambda and Beaker are being staged as extra run capacity. No 16k result yet: the pilot table at the bottom is the earlier 8k run on the old task set.",
+ "updated": "2026-11-17 00:25 PT",
+ "status": "Running, no scored 16k result yet. The 4k-16k pool is built (7,808 rows: contradiction, outlier, reorder, qdmatch_nq; 651/651/650 rows per task at about 4k / 8k / 14.5k tokens). Dense and dense-LoRA references (100 steps) and the recipe and random-keep baselines (200 steps) are training on sneetches; six idea agents are moving their runs to the new pool; the token-exit CPT base comparison is queued. Lambda and Beaker staging is in progress.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
-  "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k), eval_size 192.",
+  "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
   "Score = training FLOPs the dense reference needs to reach a loss level divided by the FLOPs the method needs to reach the same level, on the mean loss and on the worst task. Peak GPU memory is logged per step.",
-  "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals."
+  "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals.",
+  "Data caveats: the 16k training cells use fewer documents per row than the eval (contradiction 324 vs 379, outlier 96 vs 111, reorder 90 vs 116) so rows fit in 16,384 tokens; the 16k held-out rows are the short tail of the eval rung (70, 303, 8 and 497 of 500 rows fit for contradiction, outlier, reorder, qdmatch_nq). About 46% of the documents in a qdmatch_nq held-out row also occur in training rows (no gold overlap, no prompt overlap).",
+  "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part."
  ],
  "log": [
+  {
+   "t": "11-17 00:05",
+   "text": "CPT search: a usable token-exit CPT base (dropstruct, tokens leave from block 8, 64M CPT tokens) and its dense-CPT control exist and are staged; the 1B-token FFN-drop CPT base was deleted on 10-30."
+  },
+  {
+   "t": "11-17 00:25",
+   "text": "Pool mtb16k and held-out v2 final after one rebuild (16k cells regenerated with fewer documents so rows fit in 16,384 tokens). References and baselines launched on 6 GPUs; all 8 preemptive_high GPUs in use."
+  },
   {
    "t": "11-16 23:45",
    "text": "Seven idea agents started (no-grad prefix + early cuts, gold-aware stochastic keep, early-layer loss selection, detached context, FLOP-aware row sampling, FFN skip for context tokens, token-drop CPT base search). Staging agents started for Lambda and Beaker."
@@ -23,16 +33,16 @@
    "family": "reference",
    "title": "Dense full fine-tune and dense LoRA at 4k-16k",
    "what": "Reference loss-vs-FLOPs curves (probes every 10 steps to step 100). Every speedup on this page is read against these.",
-   "status": "queued",
-   "result": ""
+   "status": "running",
+   "result": "training on the new pool"
   },
   {
    "id": "recipe",
    "family": "baseline",
    "title": "Current recipe (router, keep 20% after block 7, 7% after block 16)",
    "what": "The 8k recipe unchanged at 4k-16k on the new tasks, plus random keep at the same budget.",
-   "status": "queued",
-   "result": ""
+   "status": "running",
+   "result": "training on the new pool"
   },
   {
    "id": "prefix",
@@ -64,7 +74,7 @@
    "title": "Detached context / reused context states",
    "what": "Context tokens run forward-only (or reuse cached states), gradient only through query and answer tokens; then drop context tokens aggressively in that no-grad pass.",
    "status": "running",
-   "result": "agent implementing; no run yet"
+   "result": "Implemented (context runs forward-only from block K, gradient only through query and answer). Smoke on the old 8k pool: 0.10x dense per step with drops; peak memory unchanged under activation checkpointing. Real run pending on the new pool."
   },
   {
    "id": "rows",
@@ -96,7 +106,7 @@
    "title": "Start from a base with token-drop continued pre-training",
    "what": "Look for existing drop-CPT checkpoints and test whether aggressive dropping loses less from such a base. No CPT runs inside the loop.",
    "status": "running",
-   "result": "agent implementing; no run yet"
+   "result": "Found: dropstruct token-exit CPT base (Qwen3.5-4B, tokens leave from block 8, 64M tokens of CPT) and its dense-CPT control, staged on mooney. Proxy runs from both bases queued for the new pool."
   },
   {
    "id": "hparams",
@@ -136,6 +146,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 521.9668327569962,
    "d_vs_ref": 0.0013288742998156522,
    "d_vs_ref_se": 0.00405169864819297,
@@ -166,6 +178,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 213.1025391817093,
    "d_vs_ref": 0.15278378263906234,
    "d_vs_ref_se": 0.016797263787088818,
@@ -196,6 +210,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 213.38594818115234,
    "d_vs_ref": 0.09718760782948266,
    "d_vs_ref_se": 0.01614892725698365,
@@ -226,6 +242,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 510.94018054008484,
    "d_vs_ref": 0.008418321657018168,
    "d_vs_ref_se": 0.004993113520901415,
@@ -256,6 +274,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 212.99453818798065,
    "d_vs_ref": 0.025568133167553242,
    "d_vs_ref_se": 0.009260599383471756,
@@ -286,6 +306,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 200.89530038833618,
    "d_vs_ref": 0.05357021559507302,
    "d_vs_ref_se": 0.011353052724706329,
@@ -316,6 +338,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 213.31581258773804,
    "d_vs_ref": 0.05615403821934706,
    "d_vs_ref_se": 0.011495651766584698,
@@ -346,6 +370,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 213.35687971115112,
    "d_vs_ref": 0.07553405596672746,
    "d_vs_ref_se": 0.010573480923030338,
@@ -376,6 +402,8 @@
    },
    "peak_gib": 0.0,
    "peak_vs_ref": null,
+   "transient_gib": null,
+   "transient_vs_ref": null,
    "train_s": 210.78524684906006,
    "d_vs_ref": 0.04902207139980419,
    "d_vs_ref_se": 0.009933295110864195,

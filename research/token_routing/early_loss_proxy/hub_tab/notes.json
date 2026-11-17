@@ -1,12 +1,22 @@
 {
- "status": "Setting up. The 4k-16k pool (contradiction, outlier, reorder, qdmatch_nq) and its held-out probe rows are being built. Seven idea agents are implementing in parallel; Lambda and Beaker are being staged as extra run capacity. No 16k result yet: the pilot table at the bottom is the earlier 8k run on the old task set.",
+ "status": "Running, no scored 16k result yet. The 4k-16k pool is built (7,808 rows: contradiction, outlier, reorder, qdmatch_nq; 651/651/650 rows per task at about 4k / 8k / 14.5k tokens). Dense and dense-LoRA references (100 steps) and the recipe and random-keep baselines (200 steps) are training on sneetches; six idea agents are moving their runs to the new pool; the token-exit CPT base comparison is queued. Lambda and Beaker staging is in progress.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
-  "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k), eval_size 192.",
+  "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
   "Score = training FLOPs the dense reference needs to reach a loss level divided by the FLOPs the method needs to reach the same level, on the mean loss and on the worst task. Peak GPU memory is logged per step.",
-  "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals."
+  "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals.",
+  "Data caveats: the 16k training cells use fewer documents per row than the eval (contradiction 324 vs 379, outlier 96 vs 111, reorder 90 vs 116) so rows fit in 16,384 tokens; the 16k held-out rows are the short tail of the eval rung (70, 303, 8 and 497 of 500 rows fit for contradiction, outlier, reorder, qdmatch_nq). About 46% of the documents in a qdmatch_nq held-out row also occur in training rows (no gold overlap, no prompt overlap).",
+  "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part."
  ],
  "log": [
+  {
+   "t": "11-17 00:05",
+   "text": "CPT search: a usable token-exit CPT base (dropstruct, tokens leave from block 8, 64M CPT tokens) and its dense-CPT control exist and are staged; the 1B-token FFN-drop CPT base was deleted on 10-30."
+  },
+  {
+   "t": "11-17 00:25",
+   "text": "Pool mtb16k and held-out v2 final after one rebuild (16k cells regenerated with fewer documents so rows fit in 16,384 tokens). References and baselines launched on 6 GPUs; all 8 preemptive_high GPUs in use."
+  },
   {
    "t": "11-16 23:45",
    "text": "Seven idea agents started (no-grad prefix + early cuts, gold-aware stochastic keep, early-layer loss selection, detached context, FLOP-aware row sampling, FFN skip for context tokens, token-drop CPT base search). Staging agents started for Lambda and Beaker."
