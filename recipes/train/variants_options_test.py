@@ -75,3 +75,19 @@ def test_no_variant_defines_a_method_twice():
                     dups.append(f"{cls.name}.{node.name}")
                 seen.add(node.name)
     assert not dups, dups
+
+
+def test_every_trainer_ffn_width_flag_is_an_ffnwidth_option_field():
+    flags = {f.replace("-", "_") for f in re.findall(r'"--(ffn-width-[a-z-]+)"', open(TRAINER).read())}
+    assert flags and flags <= _option_fields("FFNWidthOptions"), flags - _option_fields("FFNWidthOptions")
+
+
+def test_every_trainer_ffn_chunk_flag_is_an_ffnchunk_option_field():
+    flags = {f.replace("-", "_") for f in re.findall(r'"--(ffn-chunk-[a-z-]+)"', open(TRAINER).read())}
+    assert flags and flags <= _option_fields("FFNChunkOptions"), flags - _option_fields("FFNChunkOptions")
+
+
+def test_every_trainer_lora_flag_is_a_lora_option_field():
+    flags = {f.replace("-", "_") for f in re.findall(r'"--(lora-[a-z-]+)"', open(TRAINER).read())}
+    assert flags and flags <= _option_fields("LoRAOptions"), flags - _option_fields("LoRAOptions")
+

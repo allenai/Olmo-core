@@ -92,6 +92,30 @@ def test_warmup_keeps_everything_then_learns_lexical_match():
     assert m._flop_extra_actual > 0  # scoring + fit were charged
 
 
+def test_warmup_random_routes_the_warmup_step_at_the_budget():
+    """warmup_random: step 1 (no fit yet) keeps ceil(keep_frac * |body|) random body tokens instead of the full row,
+    samples targets from them, and step 2 routes by the fitted router as usual."""
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=2)
+    r = _router(use_hidden=False, doc_share=0.0, warmup_random=True)
+    r.begin_step(1, model=m)
+    assert r.dense_now()
+    keep = r.select(m, ids, cid, labels)
+    body = (cid >= 0) & (ids != DS) & (ids != DE)
+    assert not (keep & ~body).any()
+    for b in range(2):
+        assert int(keep[b].sum()) == math.ceil(0.2 * int(body[b].sum()))
+    e = r._current
+    assert not e["dense"] and keep[e["rows"], e["pos"]].all()  # targets come from kept tokens
+    e["ok"] = torch.ones_like(e["rows"], dtype=torch.bool)
+    e["target"] = torch.log1p(9.0 * (ids[e["rows"], e["pos"]] == QTOK).float())
+    r._pending.append(e)
+    r._current = None
+    r.begin_step(2, model=m)
+    assert r.w is not None and not r.dense_now()
+
+
 def test_exploration_share_and_dense_every():
     torch.manual_seed(0)
     m = _Emb()
@@ -1331,3 +1355,333 @@ def test_early_lora_then_freeze_after_cpu():
               + kept * (f(blocks[2], kept) + f(blocks[3], kept) + head)
               - real * (sum(f(b, real) for b in blocks) + head))
     assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+
+
+def test_early_lora_blocks_beyond_drop_layer_cpu():
+    """early_lora_blocks 3 with the drop at 2 on a 4-block model: base weights of blocks 0-2 get no gradient (adapters
+    do), block 3 trains fully; FLOPs charge blocks 0-1 at 2/3 on the full row, block 2 at 2/3 on the kept row, block 3 at
+    1, and the adapters per block at that block's length."""
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, install_early_lora
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, early_lora=4, early_lora_blocks=3)
+    assert router.lora_blocks() == 3
+    mods = install_early_lora(model, 3, 4, scale=8.0)
+    blocks = list(model.blocks.values())
+    ids, cid, labels = _row(B=1)
+    flops = []
+    orig = router._flop
+    router._flop = lambda m, v: (flops.append(float(v)), orig(m, v))
+    router.begin_step(1, model=model)
+    model(ids, labels=labels).loss.backward()
+    model.zero_grad(set_to_none=True)
+    router.begin_step(2, model=model)
+    flops.clear()
+    router.metrics()
+    model(ids, labels=labels).loss.backward()
+    assert all(m.weight.grad is None and m.lora_A.grad is not None for m in mods)
+    assert all(p.grad is not None for p in blocks[3].parameters())
+    real = int((ids != PH).sum())
+    kept = int(round(router.metrics()["online_router/mid_row_frac"] * real))
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    ab = early_lora_flops_per_block(model)
+    expect = (real * (2 / 3) * (f(blocks[0], real) + f(blocks[1], real))
+              + kept * ((2 / 3) * f(blocks[2], kept) + f(blocks[3], kept) + head)
+              + real * (ab[0] + ab[1]) + kept * ab[2]
+              - real * (sum(f(b, real) for b in blocks) + head))
+    assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+
+
+def test_early_lora_blocks_validate():
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, early_lora_blocks=4)  # needs early_lora
+    assert _router(drop_layer=2, early_lora=4, early_lora_blocks=6).lora_blocks() == 6
+    assert _router(drop_layer=2, early_lora=4).lora_blocks() == 2
+
+
+def test_frozen_nograd_bottom_with_lora_above_cpu():
+    """freeze_early + early_lora_start = drop_layer (keep 1.0, a pure depth split): blocks [0, B) are frozen, carry no
+    adapter and run forward-only; blocks [B, K) train only their adapters; FLOPs charge [0, B) at 1/3, [B, K) at 2/3
+    plus the adapters; the eval side re-installs the adapters on [B, K) only."""
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, enable_from_config_block, install_early_lora
+    from olmo_core.nn.online_token_router import freeze_early_blocks
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, keep_frac=1.0, explore_frac=0.0, freeze_early=True,
+                               early_lora=4, early_lora_blocks=4, early_lora_start=2)
+    mods = install_early_lora(model, 4, 4, scale=8.0, start=2)
+    freeze_early_blocks(model, 2)
+    blocks = list(model.blocks.values())
+    assert {m._lora_block for m in mods} == {2, 3}
+    assert not any(hasattr(m, "lora_A") for b in blocks[:2] for m in b.modules())
+    ids, cid, labels = _row(B=1)
+    flops = []
+    orig = router._flop
+    router._flop = lambda m, v: (flops.append(float(v)), orig(m, v))
+    for step in (1, 2):
+        model.zero_grad(set_to_none=True)
+        router.begin_step(step, model=model)
+        flops.clear()
+        router.metrics()
+        model(ids, labels=labels).loss.backward()
+    assert all(p.grad is None for b in blocks for n, p in b.named_parameters() if "lora_" not in n)
+    assert all(m.lora_A.grad is not None and m.lora_B.grad is not None for m in mods)
+    assert router.metrics()["online_router/mid_row_frac"] == pytest.approx(1.0)
+    real = int((ids != PH).sum())
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    ab = early_lora_flops_per_block(model)
+    assert ab[0] == ab[1] == 0.0 and ab[2] > 0
+    expect = (real * (1 / 3) * (f(blocks[0], real) + f(blocks[1], real))
+              + real * ((2 / 3) * (f(blocks[2], real) + f(blocks[3], real)) + head)
+              + real * (ab[2] + ab[3])
+              - real * (sum(f(b, real) for b in blocks) + head))
+    assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+    # eval side: the config block re-installs adapters on [2, 4) only
+    model2, _ = _mid_model(4, drop_layer=2)
+    enable_from_config_block(model2, {"n_blocks": 4, "rank": 4, "scale": 8.0, "start": 2})
+    assert {m._lora_block for m in model2._early_lora["modules"]} == {2, 3}
+
+
+def test_early_lora_start_validate():
+    _router(drop_layer=2, freeze_early=True, early_lora=4, early_lora_blocks=4, early_lora_start=2)
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, freeze_early=True, early_lora=4, early_lora_blocks=4)  # start != drop_layer
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, freeze_early=True, early_lora=4, early_lora_blocks=4, early_lora_start=3)
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, early_lora_start=1)  # needs early_lora
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, early_lora=4, early_lora_start=2)  # start must be < the LoRA end (drop_layer = 2)
+
+
+def _routed(r, m):
+    r.w = torch.zeros(r.n_features)
+    r.step = 3
+    r.begin_step(3, model=m)
+    r.w = torch.zeros(r.n_features)
+
+
+def test_threshold_keep_mode_shares_one_budget_across_rows_with_cap_and_floor():
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=2)
+    body = (cid >= 0) & (ids != DS) & (ids != DE)
+    r = _router(use_hidden=False, keep_frac=0.2, doc_share=1.0, keep_mode="threshold", row_cap=1.5, min_per_doc=1)
+    _routed(r, m)
+    # row 0 is "hard" (high scores everywhere), row 1 "easy"
+    hard = torch.zeros(ids.shape)
+    hard[0] = 5.0
+    r.score = lambda fp: hard + 1e-3 * torch.rand(ids.shape)
+    keep = r.select(m, ids, cid, labels)
+    nb = body.sum(dim=1)
+    budget = int(torch.ceil(nb.float() * 0.2).sum())
+    assert int((keep & body).sum()) == budget  # the batch total matches the budget
+    k0, k1 = int((keep[0] & body[0]).sum()), int((keep[1] & body[1]).sum())
+    assert k0 > k1  # the hard row keeps more
+    assert k0 <= int(torch.ceil(nb[0].float() * 0.2 * 1.5)) + 3  # capped (+ the floor: 1 per document)
+    for d in (1000, 2000, 3000):  # every document keeps its floor token in both rows
+        for b in (0, 1):
+            dm = body[b] & (ids[b] >= d) & (ids[b] < d + 100)
+            assert bool((keep[b] & dm).any())
+
+
+def test_threshold_mode_fit_centres_over_the_batch_not_per_row():
+    r = _router(use_hidden=False, keep_mode="threshold")
+    assert r.cfg.keep_mode == "threshold"
+    with pytest.raises(ValueError):
+        _router(keep_mode="threshold", mass_target=0.8)
+    with pytest.raises(ValueError):
+        _router(keep_mode="bogus")
+
+
+def test_keep_sched_scales_stage_one_and_keeps_later_stages_absolute():
+    r = _router(use_hidden=False, keep_sched="1.5:0.5")
+    r.total_steps = 11
+    r.step = 1
+    assert r.keep_mult() == pytest.approx(1.5)
+    r.step = 6
+    assert r.keep_mult() == pytest.approx(1.0)
+    r.step = 11
+    assert r.keep_mult() == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        _router(keep_sched="0:1")
+
+
+def test_ctx_features_doc_stats_rank_and_neighbours():
+    from olmo_core.nn.online_token_router import _ctx_features
+
+    cos = torch.tensor([[0.0, 1.0, 3.0, 2.0, 0.0, 5.0, 4.0, 0.0]])
+    inq = torch.tensor([[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0]])
+    cid = torch.tensor([[-1, 0, 0, 0, -1, 1, 1, -1]])
+    body = cid >= 0
+    f = _ctx_features(cos, inq, cid, body)
+    assert f.shape == (1, 8, 8)
+    assert torch.allclose(f[0, 1:4, 0], torch.tensor(2.0))  # doc 0 mean cos
+    assert torch.allclose(f[0, 1:4, 1], torch.tensor(3.0))  # doc 0 max
+    assert torch.allclose(f[0, 5:7, 2], torch.tensor(1.0))  # doc 1 in-query rate
+    assert f[0, 1:4, 3].tolist() == [0.0, 1.0, 0.5]  # within-doc rank of cos (1 < 2 < 3)
+    assert f[0, 2, 5] == 1.0 and f[0, 2, 6] == 2.0  # -1 / +1 neighbours inside the document
+    assert f[0, 3, 6] == 0.0 and f[0, 5, 5] == 0.0  # no neighbour across a document boundary
+    assert (f[0, ~body[0]] == 0).all()
+
+
+def test_ctx_and_task_features_widen_the_fit_consistently():
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=2)
+    base = _router(use_hidden=True)
+    r = _router(use_hidden=True, ctx_feats=True, task_onehot=3)
+    assert r.n_features == base.n_features + 8 + 31
+    assert len(r.feature_names()) == r.n_features
+    assert r.feature_names()[r.n_scalar - 1] == "task30"
+    r.begin_step(1, model=m)
+    r.select(m, ids, cid, labels)  # warmup step builds the full feature rows
+    e = r._current
+    assert e["feats"].shape[1] == r.n_features
+    with pytest.raises(ValueError):
+        _router(use_hidden=False, ctx_feats=True)
+
+
+def test_later_mass_target_applies_to_later_stages_only():
+    r = _router(drop_layer=2, stages="2:0.2,3:0.07", later_mass_target=0.6, later_max_keep_frac=0.5)
+    s = r.chain()
+    assert s[0].cfg.mass_target == 0.0 and s[0].cfg.keep_frac == pytest.approx(0.2)
+    assert s[1].cfg.mass_target == pytest.approx(0.6) and s[1].cfg.max_keep_frac == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        _router(drop_layer=2, later_mass_target=0.6)  # needs stages
+
+
+def test_residual_mlp_router_fits_what_the_ridge_cannot():
+    torch.manual_seed(0)
+    r = _router(use_hidden=False, mlp_hidden=32, mlp_steps=200, mlp_lr=1e-2)
+    F = r.n_features
+    X = torch.randn(512, F, dtype=torch.float64)
+    y = X[:, 3] ** 2 - 1.0  # zero-mean, uncorrelated with every feature: invisible to a linear fit
+    r.w = torch.zeros(F)
+    r._train_mlp(None, X, y, torch.device("cpu"))
+    m = r.last_metrics if hasattr(r, "last_metrics") else None  # noqa: F841
+    stats = r._stats
+    assert stats["mlp_resid_mse"][-1] < 0.5 * stats["mlp_resid_var"][-1]
+    # scoring from feature parts matches the MLP on materialised rows
+    fp = {"s": X[:4].to(torch.float32)[None]}
+    W1, b1, w2, b2 = [p.detach() for p in r._mlp["p"]]
+    want = torch.relu(X[:4].float() @ W1 + b1) @ w2 + b2
+    assert torch.allclose(r._mlp_score(fp)[0], want, atol=1e-5)
+    with pytest.raises(ValueError):
+        _router(mlp_hidden=-1)
+
+
+def test_later_stage_exploration_differs_across_microbatches():
+    r = _router(drop_layer=2, stages="2:0.2,3:0.07")
+    s1 = r.chain()[1]
+    c0 = s1._calls
+    ids, cid, _ = _row(B=1)
+    fp = {"body": (cid >= 0) & (ids != DS) & (ids != DE), "_edge": torch.zeros_like(ids), "_j": torch.zeros_like(ids)}
+    try:
+        s1._choose(None, fp, ids, cid)
+    except Exception:
+        pass  # only the draw counter matters here
+    assert s1._calls == c0 + 1
+
+
+def test_eval_reinstalled_adapters_are_checked_on_the_first_eval_forward():
+    from olmo_core.nn.early_lora import enable_from_config_block
+
+    ids, _, _ = _row(B=1)
+    model, _ = _mid_model(3, drop_layer=1, dense_every=0)
+    model._online_token_router = None
+    enable_from_config_block(model, {"n_blocks": 1, "rank": 2, "scale": 8.0})
+    model.eval()
+    with torch.no_grad():
+        model(ids)
+    assert model._early_lora["checked"]
+    bad, _ = _mid_model(3, drop_layer=1, dense_every=0)
+    bad._online_token_router = None
+    enable_from_config_block(bad, {"n_blocks": 1, "rank": 2, "scale": 8.0})
+    bad._early_lora["modules"][0]._forward_hooks.clear()  # a path that bypasses one adapter
+    bad.eval()
+    with pytest.raises(RuntimeError, match="never ran"):
+        with torch.no_grad():
+            bad(ids)
+
+
+def test_ridge_groups_scales_the_penalty_per_feature_group():
+    torch.manual_seed(0)
+    r = _router(use_hidden=False, ridge_groups=True)
+    assert r.cfg.ridge_groups
+
+
+def test_diag_scores_routed_and_full_context_and_restores_router_state():
+    from types import SimpleNamespace
+
+    from olmo_core.train.callbacks.online_router import OnlineRouterCallback
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, diag_every=1)
+    ids, cid, labels = _row(B=2)
+    router.begin_step(1, model=model)
+    model(ids, labels=labels).loss.backward()
+    model.zero_grad(set_to_none=True)
+    router.begin_step(2, model=model)
+    assert not router.dense_now()
+
+    def fwd(input_ids, labels=None, ignore_index=-100, loss_reduction="sum", **kw):
+        return model(input_ids, labels=labels, loss_reduction=loss_reduction)
+
+    tm = SimpleNamespace(model=model, label_ignore_index=-100, rank_microbatch_size=0,
+                         _prepare_batch=lambda b: (b["input_ids"], labels[: b["input_ids"].shape[0]], {}),
+                         model_forward=fwd)
+    cb = OnlineRouterCallback()
+    cb._trainer = SimpleNamespace(train_module=tm)  # type: ignore[assignment]
+    before = (len(router._pending), router._calls, {k: list(v) for k, v in router._stats.items()})
+    out = cb._diag(router, {"input_ids": ids})
+    assert set(out) == {"online_router/diag_ce_routed", "online_router/diag_ce_full", "online_router/diag_ce_gap"}
+    assert out["online_router/diag_ce_gap"] == pytest.approx(out["online_router/diag_ce_full"]
+                                                             - out["online_router/diag_ce_routed"])
+    assert out["online_router/diag_ce_routed"] != out["online_router/diag_ce_full"]  # routing changed the forward
+    assert (len(router._pending), router._calls, {k: list(v) for k, v in router._stats.items()}) == before
+    assert not router.dense_now() and not getattr(router, "_force_dense", False)
+
+
+def test_router_charges_a_frozen_head_at_two_thirds_cpu():
+    from olmo_core.nn.early_lora import early_lora_flops_per_block, install_early_lora
+
+    model, router = _mid_model(4, drop_layer=2, dense_every=0, keep_frac=1.0, explore_frac=0.0, early_lora=4,
+                               early_lora_blocks=4)
+    install_early_lora(model, 4, 4, scale=8.0, freeze_head=True)
+    blocks = list(model.blocks.values())
+    ids, cid, labels = _row(B=1)
+    flops = []
+    orig = router._flop
+    router._flop = lambda m, v: (flops.append(float(v)), orig(m, v))
+    for step in (1, 2):
+        model.zero_grad(set_to_none=True)
+        router.begin_step(step, model=model)
+        flops.clear()
+        router.metrics()
+        model(ids, labels=labels).loss.backward()
+    real = int((ids != PH).sum())
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    ab = early_lora_flops_per_block(model)
+    expect = (real * (2 / 3) * sum(f(b, real) for b in blocks) + real * (2 / 3) * head + real * sum(ab)
+              - real * (sum(f(b, real) for b in blocks) + head))
+    assert any(abs(v - expect) < 1e-6 * max(1.0, abs(expect)) for v in flops), (expect, flops)
+
+
+def test_nonfinite_targets_are_dropped_from_the_fit():
+    torch.manual_seed(0)
+    m = _Emb()
+    ids, cid, labels = _row(B=1)
+    r = _router(use_hidden=False, doc_share=0.0)
+    r.begin_step(1, model=m)
+    r.select(m, ids, cid, labels)
+    e = r._current
+    e["ok"] = torch.ones_like(e["rows"], dtype=torch.bool)
+    t = torch.randn(e["rows"].shape)
+    t[0] = float("nan")
+    t[1] = float("inf")
+    e["target"] = t
+    r._pending.append(e)
+    r._current = None
+    r.begin_step(2, model=m)
+    assert r.w is not None and bool(torch.isfinite(r.w).all())

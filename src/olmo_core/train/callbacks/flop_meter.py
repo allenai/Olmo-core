@@ -65,6 +65,7 @@ class FlopMeterCallback(Callback):
     _dense: float = 0.0
     _tokens: int = 0
     _real_tokens_this_step: Optional[int] = None
+    _supervised_this_step: Optional[int] = None
     _fpt_cache: Optional[Dict[int, int]] = None
     _examples: int = 0
 
@@ -120,10 +121,27 @@ class FlopMeterCallback(Callback):
         return float(v[0]), float(v[1]), int(v[2]), int(v[3])
 
     def pre_step(self, batch):
-        if self.pad_id is None:
-            return
         import torch
         import torch.distributed as dist
+
+        m = self._model()
+        if int(getattr(self.trainer, "global_step", 0)) <= 1:
+            # the trainer's dry-run batch ran before step 1: drop what it logged (router FLOP adjustments, example
+            # lengths) so it is not charged to step 1
+            if hasattr(m, "_flop_extra_actual"):
+                m._flop_extra_actual = 0.0
+            if getattr(m, "_flop_example_lens", None) is not None:
+                m._flop_example_lens = {"dense": [], "actual": []}
+        if getattr(getattr(m, "lm_head", None), "_sparse_loss_positions", False):
+            # --sparse-loss-positions: the LM head runs only at supervised positions (count them for post_step)
+            from olmo_core.data.utils import get_labels
+
+            ns = torch.tensor([int((get_labels(batch) != -100).sum().item())], device=batch["input_ids"].device)
+            if dist.is_available() and dist.is_initialized():
+                dist.all_reduce(ns, op=dist.ReduceOp.SUM)
+            self._supervised_this_step = int(ns.item())
+        if self.pad_id is None:
+            return
 
         ids = batch["input_ids"]
         n = torch.tensor([int((ids != self.pad_id).sum().item())], device=ids.device)
@@ -277,6 +295,31 @@ class FlopMeterCallback(Callback):
             if dense_flops > 0:
                 self.trainer.record_metric("flop_meter/step_actual_over_dense", actual / dense_flops)
 
+        fw = getattr(m, "_ffn_width", None)
+        otr = getattr(m, "_online_token_router", None)
+        if fw is not None and not (otr is not None and int(getattr(otr.cfg, "drop_layer", 0)) > 0):
+            # partial-MLP without a mid-stack router: every partial FFN ran at its fraction on every real token (the
+            # mid-stack router charges this credit itself, per document and at each block's length)
+            actual += tokens * sum(fw.credits_per_block(len(m.blocks)))
+        head_pos = tokens if self._supervised_this_step is None else self._supervised_this_step
+        if getattr(m, "_head_frozen", False) and otr is None:
+            # frozen LM head without the router (which charges it itself): no weight gradient at the positions it ran
+            actual -= (1.0 / 3.0) * float(m.lm_head.num_flops_per_token(self.seq_len)) * head_pos
+        if self._supervised_this_step is not None:
+            if otr is not None:
+                raise ValueError("FlopMeter: --sparse-loss-positions with the online router is not priced (the router "
+                                 "charges the LM head per kept token); refusing to guess")
+            # the head ran only at the supervised positions, not at every (real) token
+            head = float(m.lm_head.num_flops_per_token(self.seq_len))
+            actual -= head * max(0, tokens - self._supervised_this_step)
+            self.trainer.record_metric("flop_meter/supervised_frac", self._supervised_this_step / max(1, tokens))
+            self._supervised_this_step = None
+        if getattr(m, "_early_lora", None) and otr is None:
+            # LoRA without the online router (the --lora-rank modifier): frozen-base blocks skip their weight
+            # gradient, blocks below the adapters run forward-only, plus the adapters themselves
+            from olmo_core.nn.early_lora import lora_flop_adjust_per_token
+
+            actual += tokens * lora_flop_adjust_per_token(m, self.seq_len)
         if hasattr(m, "_flop_extra_actual"):
             # a method's own overhead outside the model forward/backward (the online token router's
             # prefix pass, scoring and ridge fit), accumulated per rank by the model this step

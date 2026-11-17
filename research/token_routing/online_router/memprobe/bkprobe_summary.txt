@@ -1,0 +1,101 @@
+pending after wait: 0
+== f8k-bkprobe-dense-T32768 01M5VD63MS2JKBQZQKR2SGQT7W
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r1: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r0: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[mem-probe] step 1 tokens/rank 32768 router_dense None fixed 14.35 GB fwdbwd_peak 30.72 GB optim_peak 64.91 GB after 32.39 GB reserved_max 67.24 GB
+[mem-probe] step 2 tokens/rank 32768 router_dense None fixed 32.39 GB fwdbwd_peak 48.75 GB optim_peak 64.91 GB after 32.39 GB reserved_max 67.24 GB
+[mem-probe] step 3 tokens/rank 32768 router_dense None fixed 32.39 GB fwdbwd_peak 48.75 GB optim_peak 64.91 GB after 32.39 GB reserved_max 67.24 GB
+== f8k-bkprobe-otr10M7de0-T32768 01M5VDF1YJ5P505107Y21TGRN7
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r0: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r1: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[mem-probe] step 1 tokens/rank 32768 router_dense True fixed 13.37 GB fwdbwd_peak 27.86 GB optim_peak 64.11 GB after 31.50 GB reserved_max 67.15 GB
+[mem-probe] step 2 tokens/rank 32768 router_dense False fixed 31.46 GB fwdbwd_peak 45.45 GB optim_peak 64.11 GB after 31.50 GB reserved_max 67.17 GB
+[mem-probe] step 3 tokens/rank 32768 router_dense False fixed 31.46 GB fwdbwd_peak 45.76 GB optim_peak 64.11 GB after 31.50 GB reserved_max 67.17 GB
+== f8k-bkprobe-dense-T65536 01M5VDRCR4FCZKGADX9EGF968S
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r0: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r1: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[mem-probe] step 1 tokens/rank 65536 router_dense None fixed 19.63 GB fwdbwd_peak 48.35 GB optim_peak 70.18 GB after 37.66 GB reserved_max 71.15 GB
+[mem-probe] step 2 tokens/rank 65536 router_dense None fixed 37.66 GB fwdbwd_peak 66.38 GB optim_peak 70.18 GB after 37.66 GB reserved_max 70.56 GB
+[mem-probe] step 3 tokens/rank 65536 router_dense None fixed 37.66 GB fwdbwd_peak 66.38 GB optim_peak 70.18 GB after 37.66 GB reserved_max 70.56 GB
+== f8k-bkprobe-otr10M7de0-T65536 01M5VE1GKKQA4YCH3BJF735ZAR
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r0: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r1: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[mem-probe] step 1 tokens/rank 65536 router_dense True fixed 18.85 GB fwdbwd_peak 45.99 GB optim_peak 69.59 GB after 36.97 GB reserved_max 71.13 GB
+[mem-probe] step 2 tokens/rank 65536 router_dense False fixed 36.93 GB fwdbwd_peak 59.40 GB optim_peak 69.59 GB after 36.97 GB reserved_max 70.88 GB
+[mem-probe] step 3 tokens/rank 65536 router_dense False fixed 36.93 GB fwdbwd_peak 59.46 GB optim_peak 69.59 GB after 36.97 GB reserved_max 70.88 GB
+== f8k-bkprobe-r20to7M7de0-T32768 01M5VEAH12Q64J1J3Y7HGN490A
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r0: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r1: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[mem-probe] step 1 tokens/rank 32768 router_dense True fixed 9.57 GB fwdbwd_peak 24.76 GB optim_peak 61.01 GB after 28.40 GB reserved_max 64.06 GB
+[mem-probe] step 2 tokens/rank 32768 router_dense False fixed 28.40 GB fwdbwd_peak 42.43 GB optim_peak 61.09 GB after 28.48 GB reserved_max 64.14 GB
+[mem-probe] step 3 tokens/rank 32768 router_dense False fixed 28.40 GB fwdbwd_peak 42.74 GB optim_peak 61.09 GB after 28.48 GB reserved_max 64.14 GB
+== f8k-bkprobe-otr20M7de0-T32768 01M5VEM0M2Y8P893KJ4G0E1700
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r1: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[long-rows] 8 rows of <= 32768 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T32768_r0: [25244, 25442, 32658, 24628, 26658, 25872, 25351, 24754]
+[mem-probe] step 1 tokens/rank 32768 router_dense True fixed 9.37 GB fwdbwd_peak 25.01 GB optim_peak 61.26 GB after 28.64 GB reserved_max 64.30 GB
+[mem-probe] step 2 tokens/rank 32768 router_dense False fixed 28.64 GB fwdbwd_peak 42.63 GB optim_peak 61.30 GB after 28.68 GB reserved_max 64.34 GB
+[mem-probe] step 3 tokens/rank 32768 router_dense False fixed 28.64 GB fwdbwd_peak 42.94 GB optim_peak 61.30 GB after 28.68 GB reserved_max 64.36 GB
+== f8k-bkprobe-r20to7M7de0-T65536 01M5VEX89Z5A41B8RGRAZTR7ZT
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r0: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r1: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[mem-probe] step 1 tokens/rank 65536 router_dense True fixed 9.69 GB fwdbwd_peak 33.82 GB optim_peak 61.90 GB after 29.29 GB reserved_max 64.96 GB
+[mem-probe] step 2 tokens/rank 65536 router_dense False fixed 29.29 GB fwdbwd_peak 51.80 GB optim_peak 61.98 GB after 29.37 GB reserved_max 65.04 GB
+[mem-probe] step 3 tokens/rank 65536 router_dense False fixed 29.29 GB fwdbwd_peak 51.86 GB optim_peak 61.98 GB after 29.37 GB reserved_max 65.04 GB
+== f8k-bkprobe-otr20M7de0-T65536 01M5VF5Y6H6ZRV1MZN3AC4VPY7
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r0: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[long-rows] 8 rows of <= 65536 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T65536_r1: [58845, 58327, 60694, 58641, 60373, 59867, 59481, 59573]
+[mem-probe] step 1 tokens/rank 65536 router_dense True fixed 9.49 GB fwdbwd_peak 34.67 GB optim_peak 62.75 GB after 30.13 GB reserved_max 65.78 GB
+[mem-probe] step 2 tokens/rank 65536 router_dense False fixed 30.13 GB fwdbwd_peak 52.60 GB optim_peak 62.79 GB after 30.17 GB reserved_max 65.84 GB
+[mem-probe] step 3 tokens/rank 65536 router_dense False fixed 30.13 GB fwdbwd_peak 52.67 GB optim_peak 62.79 GB after 30.17 GB reserved_max 65.84 GB
+== f8k-bkprobe-r20to7M7de0-T131072 01M5VFFGYRYD4GF65FKC0NZKPE
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r1: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r0: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[mem-probe] step 1 tokens/rank 131072 router_dense True fixed 9.94 GB fwdbwd_peak 52.83 GB optim_peak 63.76 GB after 31.15 GB reserved_max 66.81 GB
+[mem-probe] step 2 tokens/rank 131072 router_dense False fixed 31.15 GB fwdbwd_peak 69.87 GB optim_peak 63.84 GB after 31.22 GB reserved_max 63.90 GB
+[mem-probe] step 3 tokens/rank 131072 router_dense False fixed 31.15 GB fwdbwd_peak 70.06 GB optim_peak 63.84 GB after 31.22 GB reserved_max 68.63 GB
+== f8k-bkprobe-otr20M7de0-T131072 01M5VFRA73HSCR7PASHRXW4PXQ
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r0: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r1: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[mem-probe] step 1 tokens/rank 131072 router_dense True fixed 9.74 GB fwdbwd_peak 54.96 GB optim_peak 65.90 GB after 33.28 GB reserved_max 68.94 GB
+2026-10-26T06:57:26.368Z OutOfMemoryError: CUDA out of memory. Tried to allocate 2.17 GiB. GPU 1 has a total capacity of 79.19 GiB of which 1.35 GiB is free. Including non-PyTorch memory, this process has 77.83 GiB memory in use. 
+2026-10-26T06:57:26.371Z OutOfMemoryError: CUDA out of memory. Tried to allocate 2.17 GiB. GPU 0 has a total capacity of 79.19 GiB of which 1.35 GiB is free. Including non-PyTorch memory, this process has 77.83 GiB memory in use. 
+[mem-snapshot] OOM during step 2 (allocated 54.67 GB, peak 69.01 GB); attribution of the trace so far:
+== f8k-bkprobex-r20to7M7de0-T131072 01M5VG148JN17QFEXE2ZT9T037
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r0: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r1: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[mem-probe] step 1 tokens/rank 131072 router_dense True fixed 9.94 GB fwdbwd_peak 40.64 GB optim_peak 64.29 GB after 31.68 GB reserved_max 67.36 GB
+[mem-probe] step 2 tokens/rank 131072 router_dense False fixed 31.68 GB fwdbwd_peak 58.14 GB optim_peak 64.37 GB after 31.76 GB reserved_max 67.46 GB
+[mem-probe] step 3 tokens/rank 131072 router_dense False fixed 31.68 GB fwdbwd_peak 58.25 GB optim_peak 64.37 GB after 31.76 GB reserved_max 67.81 GB
+== f8k-bkprobex-otr20M7de0-T131072 01M5VGA5QC9Z800S9W3YG5PRA2
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r0: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[long-rows] 8 rows of <= 131072 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T131072_r1: [126077, 127380, 128871, 126627, 130744, 126958, 123121, 126007]
+[mem-probe] step 1 tokens/rank 131072 router_dense True fixed 9.74 GB fwdbwd_peak 39.93 GB optim_peak 63.58 GB after 30.96 GB reserved_max 66.64 GB
+[mem-probe] step 2 tokens/rank 131072 router_dense False fixed 30.96 GB fwdbwd_peak 57.39 GB optim_peak 63.62 GB after 31.00 GB reserved_max 66.70 GB
+[mem-probe] step 3 tokens/rank 131072 router_dense False fixed 30.96 GB fwdbwd_peak 57.50 GB optim_peak 63.62 GB after 31.00 GB reserved_max 66.84 GB
+== f8k-bkprobex-r20to7M7de0-T196608 01M5VGK8VHWNYM3K6YS39MPZ0A
+[long-rows] 8 rows of <= 196608 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T196608_r1: [194010, 196470, 191610, 192715, 191419, 191632, 194990, 191258]
+[long-rows] 8 rows of <= 196608 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T196608_r0: [194010, 196470, 191610, 192715, 191419, 191632, 194990, 191258]
+[mem-probe] step 1 tokens/rank 196608 router_dense True fixed 10.19 GB fwdbwd_peak 51.49 GB optim_peak 66.11 GB after 33.49 GB reserved_max 69.18 GB
+[mem-probe] step 2 tokens/rank 196608 router_dense False fixed 33.49 GB fwdbwd_peak 69.66 GB optim_peak 66.19 GB after 33.57 GB reserved_max 70.29 GB
+2026-10-26T07:13:00.996Z OutOfMemoryError: CUDA out of memory. Tried to allocate 960.00 MiB. GPU 1 has a total capacity of 79.19 GiB of which 905.06 MiB is free. Including non-PyTorch memory, this process has 78.30 GiB memory in u
+[mem-snapshot] OOM during step 3 (allocated 63.40 GB, peak 69.54 GB); attribution of the trace so far:
+== f8k-bkprobex-otr20M7de0-T196608 01M5VGX0TE97FR5699HQHK0T7C
+[long-rows] 8 rows of <= 196608 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T196608_r0: [194010, 196470, 191610, 192715, 191419, 191632, 194990, 191258]
+[long-rows] 8 rows of <= 196608 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T196608_r1: [194010, 196470, 191610, 192715, 191419, 191632, 194990, 191258]
+[mem-probe] step 1 tokens/rank 196608 router_dense True fixed 9.99 GB fwdbwd_peak 49.34 GB optim_peak 63.96 GB after 31.34 GB reserved_max 67.05 GB
+[mem-probe] step 2 tokens/rank 196608 router_dense False fixed 31.34 GB fwdbwd_peak 67.47 GB optim_peak 64.00 GB after 31.38 GB reserved_max 69.24 GB
+[mem-probe] step 3 tokens/rank 196608 router_dense False fixed 31.34 GB fwdbwd_peak 67.51 GB optim_peak 64.00 GB after 31.38 GB reserved_max 69.43 GB
+== f8k-bkprobex-r20to7M7de0-T262144 01M5VH5NN93ENE6MY06ZEXZW6T
+[long-rows] 8 rows of <= 262144 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T262144_r1: [253457, 255498, 257702, 256866, 253801, 258324, 256095, 261255]
+[long-rows] 8 rows of <= 262144 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T262144_r0: [253457, 255498, 257702, 256866, 253801, 258324, 256095, 261255]
+[mem-probe] step 1 tokens/rank 262144 router_dense True fixed 10.44 GB fwdbwd_peak 59.44 GB optim_peak 64.64 GB after 32.02 GB reserved_max 68.69 GB
+2026-10-26T07:22:58.253Z OutOfMemoryError: CUDA out of memory. Tried to allocate 128.00 MiB. GPU 1 has a total capacity of 79.19 GiB of which 3.06 MiB is free. Including non-PyTorch memory, this process has 79.18 GiB memory in use
+2026-10-26T07:22:58.394Z OutOfMemoryError: CUDA out of memory. Tried to allocate 128.00 MiB. GPU 0 has a total capacity of 79.19 GiB of which 59.06 MiB is free. Including non-PyTorch memory, this process has 79.12 GiB memory in us
+[mem-snapshot] OOM during step 2 (allocated 65.72 GB, peak 70.36 GB); attribution of the trace so far:
+== f8k-bkprobex-otr20M7de0-T262144 01M5VHF026DQH54PZGBGFVKRME
+[long-rows] 8 rows of <= 262144 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T262144_r0: [253457, 255498, 257702, 256866, 253801, 258324, 256095, 261255]
+[long-rows] 8 rows of <= 262144 tokens from /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1464 -> /tmp/long_rows_T262144_r1: [253457, 255498, 257702, 256866, 253801, 258324, 256095, 261255]
+[mem-probe] step 1 tokens/rank 262144 router_dense True fixed 10.24 GB fwdbwd_peak 61.51 GB optim_peak 66.70 GB after 34.09 GB reserved_max 67.11 GB
+2026-10-26T07:28:35.739Z OutOfMemoryError: CUDA out of memory. Tried to allocate 256.00 MiB. GPU 1 has a total capacity of 79.19 GiB of which 227.06 MiB is free. Including non-PyTorch memory, this process has 78.96 GiB memory in u
+2026-10-26T07:28:35.787Z OutOfMemoryError: CUDA out of memory. Tried to allocate 256.00 MiB. GPU 0 has a total capacity of 79.19 GiB of which 163.06 MiB is free. Including non-PyTorch memory, this process has 79.02 GiB memory in u
+[mem-snapshot] OOM during step 2 (allocated 65.55 GB, peak 70.27 GB); attribution of the trace so far:

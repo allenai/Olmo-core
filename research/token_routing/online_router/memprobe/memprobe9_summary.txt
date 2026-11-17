@@ -1,0 +1,88 @@
+queue empty after 2 checks
+== f8k-memprobe9-dense-T131072-lam
+[mem-probe] step 1 tokens/rank 131072 router_dense None fixed 9.52 GB fwdbwd_peak 50.23 GB optim_peak 60.09 GB after 27.57 GB reserved_max 65.27 GB
+[mem-probe] step 2 tokens/rank 131072 router_dense None fixed 27.57 GB fwdbwd_peak 68.26 GB optim_peak 60.09 GB after 27.57 GB reserved_max 60.45 GB2026-10-25 10:35:02.869	lambda-hyperplane02:1	olmo_core.train.callbacks.gpu_memory_monitor:64	WARNING	2 CUDA memory allocation retries.
+[mem-probe] step 3 tokens/rank 131072 router_dense None fixed 27.57 GB fwdbwd_peak 68.26 GB optim_peak 60.09 GB after 27.57 GB reserved_max 77.71 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log:[mem-snapshot] peak live 40.69 GB in 87 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]    19.38 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     9.60 GB  C++ torch::cuda::(anonymous namespace)::gather_with_cpp()
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     3.75 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     1.88 GB  layer_norm.py:312 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     1.25 GB  rope.py:513 _apply_rotary_pos_emb
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     1.01 GB  flash_attn_api.py:118 dispatch_flash_attn
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     1.00 GB  C++ at::Tensor torch::autograd::generated::details::mul_tensor_backward<at::Tensor>(at::Tensor const&, at::Tensor,
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     0.62 GB  model.py:2974 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     0.62 GB  layer_norm.py:315 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     0.62 GB  C++ torch::autograd::generated::details::slice_backward_wrapper(at::Tensor const&, c10::ArrayRef<c10::SymInt> cons
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T131072-lam_114716.log-[mem-snapshot]     0.62 GB  C++ torch::autograd::generated::details::mm_mat1_backward(at::Tensor const&, at::Tensor const&, c10::ArrayRef<c10:
+== f8k-memprobe9-dense-T163840-lam
+[mem-probe] step 1 tokens/rank 163840 router_dense None fixed 9.64 GB fwdbwd_peak 59.49 GB optim_peak 60.21 GB after 27.69 GB reserved_max 75.23 GB
+[mem-probe] step 2 tokens/rank 163840 router_dense None fixed 27.69 GB fwdbwd_peak 77.53 GB optim_peak 60.21 GB after 27.69 GB reserved_max 68.61 GB2026-10-25 10:36:03.961	lambda-hyperplane02:1	olmo_core.train.callbacks.gpu_memory_monitor:64	WARNING	10 CUDA memory allocation retries.
+[mem-probe] step 3 tokens/rank 163840 router_dense None fixed 27.69 GB fwdbwd_peak 77.53 GB optim_peak 60.21 GB after 27.69 GB reserved_max 70.88 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log:[mem-snapshot] peak live 49.83 GB in 87 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]    24.22 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]    10.98 GB  C++ torch::cuda::(anonymous namespace)::gather_with_cpp()
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     4.69 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     2.34 GB  layer_norm.py:312 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     1.56 GB  rope.py:513 _apply_rotary_pos_emb
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     1.26 GB  flash_attn_api.py:118 dispatch_flash_attn
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     1.25 GB  C++ at::Tensor torch::autograd::generated::details::mul_tensor_backward<at::Tensor>(at::Tensor const&, at::Tensor,
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     0.78 GB  model.py:2974 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     0.78 GB  layer_norm.py:315 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     0.78 GB  C++ torch::autograd::generated::details::slice_backward_wrapper(at::Tensor const&, c10::ArrayRef<c10::SymInt> cons
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-dense-T163840-lam_114717.log-[mem-snapshot]     0.78 GB  C++ torch::autograd::generated::details::mm_mat1_backward(at::Tensor const&, at::Tensor const&, c10::ArrayRef<c10:
+== f8k-memprobe9-otr10M7de0-T196608-lam
+[mem-probe] step 1 tokens/rank 196608 router_dense True fixed 9.99 GB fwdbwd_peak 46.13 GB optim_peak 60.75 GB after 28.13 GB reserved_max 63.79 GB
+[mem-probe] step 2 tokens/rank 196608 router_dense False fixed 28.09 GB fwdbwd_peak 64.22 GB optim_peak 60.75 GB after 28.13 GB reserved_max 75.23 GB
+[mem-probe] step 3 tokens/rank 196608 router_dense False fixed 28.09 GB fwdbwd_peak 64.26 GB optim_peak 60.75 GB after 28.13 GB reserved_max 76.19 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log:[mem-snapshot] peak live 36.16 GB in 191 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     7.22 GB  C++ torch::cuda::(anonymous namespace)::gather_with_cpp()
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     5.49 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     5.21 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     2.93 GB  recurrent.py:346 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     2.40 GB  recurrent.py:579 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     1.83 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     1.46 GB  flash_linear_attn_api.py:201 dispatch_causal_conv1d
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     1.46 GB  recurrent.py:506 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     1.46 GB  recurrent.py:507 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     1.46 GB  recurrent.py:553 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T196608-lam_114718.log-[mem-snapshot]     1.46 GB  recurrent.py:576 forward
+== f8k-memprobe9-otr10M7de0-T229376-lam
+[mem-probe] step 1 tokens/rank 229376 router_dense True fixed 10.12 GB fwdbwd_peak 51.55 GB optim_peak 60.87 GB after 28.26 GB reserved_max 63.90 GB
+[mem-probe] step 2 tokens/rank 229376 router_dense False fixed 28.22 GB fwdbwd_peak 68.82 GB optim_peak 60.87 GB after 28.26 GB reserved_max 74.82 GB
+[mem-probe] step 3 tokens/rank 229376 router_dense False fixed 28.22 GB fwdbwd_peak 69.94 GB optim_peak 60.87 GB after 28.26 GB reserved_max 71.50 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log:[mem-snapshot] peak live 41.72 GB in 207 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     7.22 GB  C++ torch::cuda::(anonymous namespace)::gather_with_cpp()
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     6.54 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     6.21 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     3.49 GB  recurrent.py:346 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     2.86 GB  recurrent.py:579 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     2.18 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     1.74 GB  flash_linear_attn_api.py:201 dispatch_causal_conv1d
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     1.74 GB  recurrent.py:506 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     1.74 GB  recurrent.py:507 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     1.74 GB  recurrent.py:553 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-otr10M7de0-T229376-lam_114719.log-[mem-snapshot]     1.74 GB  recurrent.py:576 forward
+== f8k-memprobe9-recipe-T327680-lam
+[mem-probe] step 1 tokens/rank 327680 router_dense True fixed 10.75 GB fwdbwd_peak 67.99 GB optim_peak 49.57 GB after 23.75 GB reserved_max 71.93 GB
+[mem-snapshot] OOM during step 2 (allocated 72.72 GB, peak 76.74 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 2 (allocated 73.09 GB, peak 77.15 GB); attribution of the trace so far:
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr19/logs/f8k-memprobe9-recipe-T327680-lam_114720.log:[mem-snapshot] peak live 0.00 GB in 0 blocks; top sites:
+CUDA out of memory. Tried to allocate 2.46 GiB. GPU 1 has a total capacity of 79.25 GiB of which 992.31 MiB is free. Including non-PyTorch memory, this process has 78.26 GiB memo
+OutOfMemoryError: CUDA out of memory. Tried to allocate 2.46 GiB. GPU 1 has a total capacity of 79.25 GiB of which 992.31 MiB is free. Including non-PyTorch memory, this process has 78.26 GiB memory i
+OutOfMemoryError: CUDA out of memory. Tried to allocate 2.48 GiB. GPU 0 has a total capacity of 79.25 GiB of which 572.31 MiB is free. Including non-PyTorch memory, this process has 78.67 GiB memory i

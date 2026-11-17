@@ -1,0 +1,80 @@
+queue empty after 3 checks
+== f8k-memprobe4-otr10M7de0-T131072-lam
+[mem-probe] step 1 tokens/rank 131072 router_dense True fixed 9.74 GB fwdbwd_peak 49.57 GB optim_peak 60.50 GB after 27.88 GB reserved_max 63.53 GB
+[mem-probe] step 2 tokens/rank 131072 router_dense False fixed 27.84 GB fwdbwd_peak 66.53 GB optim_peak 60.50 GB after 27.88 GB reserved_max 73.98 GB
+[mem-probe] step 3 tokens/rank 131072 router_dense False fixed 27.84 GB fwdbwd_peak 66.72 GB optim_peak 60.50 GB after 27.88 GB reserved_max 74.37 GB
+[mem-snapshot]    15.05 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     6.54 GB  feed_forward.py:171 forward
+[mem-snapshot]     4.84 GB  layer_norm.py:308 forward
+[mem-snapshot]     2.91 GB  __init__.py:2251 _apply_gate
+[mem-snapshot]     2.42 GB  layer_norm.py:312 forward
+[mem-snapshot]     1.82 GB  residual_stream.py:19 forward
+== f8k-memprobe4-recipe-T131072-lam
+[mem-probe] step 1 tokens/rank 131072 router_dense True fixed 10.00 GB fwdbwd_peak 48.25 GB optim_peak 48.82 GB after 23.00 GB reserved_max 55.43 GB
+[mem-probe] step 2 tokens/rank 131072 router_dense False fixed 22.92 GB fwdbwd_peak 60.07 GB optim_peak 48.82 GB after 23.00 GB reserved_max 66.93 GB
+[mem-probe] step 3 tokens/rank 131072 router_dense False fixed 22.92 GB fwdbwd_peak 60.25 GB optim_peak 48.82 GB after 23.00 GB reserved_max 67.20 GB
+[mem-snapshot]    14.38 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     7.40 GB  early_lora.py:44 _lora_hook
+[mem-snapshot]     3.63 GB  residual_stream.py:19 forward
+[mem-snapshot]     3.44 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+[mem-snapshot]     2.42 GB  layer_norm.py:308 forward
+[mem-snapshot]     2.18 GB  feed_forward.py:171 forward
+== f8k-memprobe4-loraall-T131072-lam
+[mem-probe] step 1 tokens/rank 131072 router_dense True fixed 10.20 GB fwdbwd_peak 43.08 GB optim_peak 19.10 GB after 13.23 GB reserved_max 50.50 GB
+[mem-probe] step 2 tokens/rank 131072 router_dense False fixed 13.15 GB fwdbwd_peak 44.92 GB optim_peak 19.10 GB after 13.23 GB reserved_max 52.34 GB
+[mem-probe] step 3 tokens/rank 131072 router_dense False fixed 13.15 GB fwdbwd_peak 45.11 GB optim_peak 19.10 GB after 13.23 GB reserved_max 52.53 GB
+[mem-snapshot]     9.01 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]     7.40 GB  early_lora.py:44 _lora_hook
+[mem-snapshot]     3.63 GB  residual_stream.py:19 forward
+[mem-snapshot]     3.44 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+[mem-snapshot]     2.42 GB  layer_norm.py:308 forward
+[mem-snapshot]     2.18 GB  feed_forward.py:171 forward
+== f8k-memprobe4-otr10M7de0-T196608-lam
+[mem-probe] step 1 tokens/rank 196608 router_dense True fixed 9.99 GB fwdbwd_peak 64.59 GB optim_peak 60.75 GB after 28.13 GB reserved_max 73.42 GB
+[mem-snapshot] OOM during step 2 (allocated 71.48 GB, peak 76.59 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 2 (allocated 71.96 GB, peak 77.14 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 3.29 GiB. GPU 0 has a total capacity of 79.25 GiB of which 1.87 GiB is free. Including non-PyTorch memory, this process has 77.36 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 3.29 GiB. GPU 0 has a total capacity of 79.25 GiB of which 1.87 GiB is free. Including non-PyTorch memory, this process has 77.36 GiB memory in 
+OutOfMemoryError: CUDA out of memory. Tried to allocate 3.33 GiB. GPU 1 has a total capacity of 79.25 GiB of which 1.32 GiB is free. Including non-PyTorch memory, this process has 77.90 GiB memory in 
+== f8k-memprobe4-recipe-T196608-lam
+[mem-probe] step 1 tokens/rank 196608 router_dense True fixed 10.25 GB fwdbwd_peak 62.84 GB optim_peak 49.07 GB after 23.25 GB reserved_max 71.75 GB
+[mem-probe] step 2 tokens/rank 196608 router_dense False fixed 23.17 GB fwdbwd_peak 75.74 GB optim_peak 49.07 GB after 23.25 GB reserved_max 77.12 GB2026-10-25 08:26:28.294	lambda-hyperplane02:1	olmo_core.train.callbacks.gpu_memory_monitor:64	WARNING	7 CUDA memory allocation retries.
+[mem-probe] step 3 tokens/rank 196608 router_dense False fixed 23.17 GB fwdbwd_peak 75.81 GB optim_peak 49.07 GB after 23.25 GB reserved_max 77.42 GB
+[mem-snapshot]    18.02 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]    11.18 GB  early_lora.py:44 _lora_hook
+[mem-snapshot]     5.49 GB  residual_stream.py:19 forward
+[mem-snapshot]     5.19 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+[mem-snapshot]     3.66 GB  layer_norm.py:308 forward
+[mem-snapshot]     3.29 GB  feed_forward.py:171 forward
+== f8k-memprobe4-loraall-T196608-lam
+[mem-probe] step 1 tokens/rank 196608 router_dense True fixed 10.45 GB fwdbwd_peak 57.67 GB optim_peak 19.35 GB after 13.48 GB reserved_max 67.36 GB
+[mem-probe] step 2 tokens/rank 196608 router_dense False fixed 13.40 GB fwdbwd_peak 60.60 GB optim_peak 19.35 GB after 13.48 GB reserved_max 69.88 GB
+[mem-probe] step 3 tokens/rank 196608 router_dense False fixed 13.40 GB fwdbwd_peak 60.66 GB optim_peak 19.35 GB after 13.48 GB reserved_max 69.92 GB
+[mem-snapshot]    12.65 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]    11.18 GB  early_lora.py:44 _lora_hook
+[mem-snapshot]     5.49 GB  residual_stream.py:19 forward
+[mem-snapshot]     5.19 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+[mem-snapshot]     3.66 GB  layer_norm.py:308 forward
+[mem-snapshot]     3.29 GB  feed_forward.py:171 forward
+== f8k-memprobe4-otr10M7de0-T262144-lam
+[mem-snapshot] OOM during step 1 (allocated 57.11 GB, peak 75.93 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 1 (allocated 56.76 GB, peak 75.40 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 4.40 GiB. GPU 1 has a total capacity of 79.25 GiB of which 1.73 GiB is free. Including non-PyTorch memory, this process has 77.50 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 4.40 GiB. GPU 1 has a total capacity of 79.25 GiB of which 1.73 GiB is free. Including non-PyTorch memory, this process has 77.50 GiB memory in 
+OutOfMemoryError: CUDA out of memory. Tried to allocate 4.36 GiB. GPU 0 has a total capacity of 79.25 GiB of which 2.28 GiB is free. Including non-PyTorch memory, this process has 76.95 GiB memory in 
+== f8k-memprobe4-recipe-T262144-lam
+[mem-snapshot] OOM during step 1 (allocated 63.56 GB, peak 75.91 GB); attribution of the trace so far:
+[mem-snapshot] OOM during step 1 (allocated 63.98 GB, peak 76.44 GB); attribution of the trace so far:
+CUDA out of memory. Tried to allocate 4.36 GiB. GPU 0 has a total capacity of 79.25 GiB of which 4.11 GiB is free. Including non-PyTorch memory, this process has 75.12 GiB memory
+OutOfMemoryError: CUDA out of memory. Tried to allocate 4.36 GiB. GPU 0 has a total capacity of 79.25 GiB of which 4.11 GiB is free. Including non-PyTorch memory, this process has 75.12 GiB memory in 
+OutOfMemoryError: CUDA out of memory. Tried to allocate 4.40 GiB. GPU 1 has a total capacity of 79.25 GiB of which 3.66 GiB is free. Including non-PyTorch memory, this process has 75.57 GiB memory in 
+== f8k-memprobe4-loraall-T262144-lam
+[mem-probe] step 1 tokens/rank 262144 router_dense True fixed 10.70 GB fwdbwd_peak 72.68 GB optim_peak 19.60 GB after 13.73 GB reserved_max 77.65 GB2026-10-25 08:29:19.878	lambda-hyperplane02:1	olmo_core.train.callbacks.gpu_memory_monitor:64	WARNING	3 CUDA memory allocation retries.
+[mem-probe] step 2 tokens/rank 262144 router_dense False fixed 13.65 GB fwdbwd_peak 77.37 GB optim_peak 19.60 GB after 13.73 GB reserved_max 70.54 GB2026-10-25 08:30:08.609	lambda-hyperplane02:1	olmo_core.train.callbacks.gpu_memory_monitor:64	WARNING	9 CUDA memory allocation retries.
+[mem-probe] step 3 tokens/rank 262144 router_dense False fixed 13.65 GB fwdbwd_peak 76.71 GB optim_peak 19.60 GB after 13.73 GB reserved_max 77.86 GB
+[mem-snapshot]    16.41 GB  ??:0 torch::unwind::unwind()
+[mem-snapshot]    15.07 GB  early_lora.py:44 _lora_hook
+[mem-snapshot]     7.40 GB  residual_stream.py:19 forward
+[mem-snapshot]     7.00 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+[mem-snapshot]     4.93 GB  layer_norm.py:308 forward
+[mem-snapshot]     4.44 GB  feed_forward.py:171 forward

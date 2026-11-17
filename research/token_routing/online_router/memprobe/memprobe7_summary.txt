@@ -1,0 +1,22 @@
+queue empty after 3 checks
+== f8k-memprobe7-recipe-T196608-lam
+[mem-probe] step 1 tokens/rank 196608 router_dense True fixed 10.25 GB fwdbwd_peak 57.31 GB optim_peak 49.07 GB after 23.25 GB reserved_max 61.93 GB
+[mem-probe] step 2 tokens/rank 196608 router_dense False fixed 23.17 GB fwdbwd_peak 70.21 GB optim_peak 49.07 GB after 23.25 GB reserved_max 75.52 GB
+[mem-probe] step 3 tokens/rank 196608 router_dense False fixed 23.17 GB fwdbwd_peak 70.27 GB optim_peak 49.07 GB after 23.25 GB reserved_max 76.01 GB
+grep: of: No such file or directory
+grep: the: No such file or directory
+grep: forward: No such file or directory
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log:[mem-snapshot] peak live 47.09 GB in 145 blocks; top sites:
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]    28.69 GB  C++ torch::cuda::(anonymous namespace)::gather_with_cpp()
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     5.49 GB  ffn_chunk.py:51 _chunked_forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     3.73 GB  flash_linear_attn_api.py:75 dispatch_chunk_gated_delta_rule
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     3.04 GB  early_lora.py:44 _lora_hook
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     1.83 GB  layer_norm.py:308 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     1.46 GB  flash_linear_attn_api.py:201 dispatch_causal_conv1d
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     0.91 GB  model.py:2987 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     0.91 GB  layer_norm.py:315 forward
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     0.91 GB  C++ torch::autograd::generated::details::slice_backward_wrapper(at::Tensor const&, c10::ArrayRef<c10::SymInt> cons
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     0.08 GB  online_token_router.py:730 full_features
+/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-otr18/logs/f8k-memprobe7-recipe-T196608-lam_114693.log-[mem-snapshot]     0.02 GB  recurrent.py:351 forward
+[mem-snapshot]   stack of C++ torch::cuda::(anonymous namespace)::gather_with_cpp() (28.69 GB): torch::cuda::(anonymous namespace)::gather_with_cpp() <- torch::autograd::THPVariable_new_empty(_object*, _object*, _object*) <- method_vectorcall_VARARGS_KEYWORDS <- chunk_gated_delta_rule_fwd_h <- chunk_gated_delta_rule_bwd <- start_thread <- clone3 <- backward <- decorate_bwd <- wrapper <- apply
+[mem-snapshot]   stack of C++ torch::autograd::generated::details::slice_backward_wrap (0.91 GB): torch::cuda::(anonymous namespace)::gather_with_cpp() <- start_thread <- clone3
