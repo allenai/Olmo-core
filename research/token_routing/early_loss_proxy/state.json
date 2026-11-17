@@ -158,6 +158,56 @@
    "gpus": 2,
    "qos": "preemptive_high",
    "custom": []
+  },
+  "5200946": {
+   "node": "sneetches",
+   "tag": "rows",
+   "runs": [
+    "elp-rows-dl_cut5k-sd0",
+    "elp-rows-dl_pow1-sd0",
+    "elp-rows-dl_gb8lr2-sd0",
+    "elp-rows-dl_trunc-sd0"
+   ],
+   "steps": "25,50,100,150,200,300",
+   "sets": "suite4k:16,suite8k:16,suite16k:16",
+   "code": "/data/prasann/early_loss_proxy/code_c020beb40",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/data/prasann/early_loss_proxy/shards/mtb16k",
+   "seq_len": 16384,
+   "gpus": 2,
+   "qos": "preemptive_high",
+   "custom": [
+    "dl_cut5k=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --row-len-keep cut:5120:0.07",
+    "dl_pow1=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --row-len-keep pow:4096:1",
+    "dl_gb8lr2=full,2e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --global-batch 8",
+    "dl_trunc=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --row-len-keep trunc:0.1:0.5"
+   ]
+  },
+  "5200947": {
+   "node": "sneetches",
+   "tag": "rows",
+   "runs": [
+    "elp-rows-r_pow1-sd0",
+    "elp-rows-r_cut5k-sd0",
+    "elp-rows-r_gb8lr2-sd0",
+    "elp-rows-r_pow1gb8lr2-sd0"
+   ],
+   "steps": "25,50,100,150,200,300",
+   "sets": "suite4k:16,suite8k:16,suite16k:16",
+   "code": "/data/prasann/early_loss_proxy/code_c020beb40",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/data/prasann/early_loss_proxy/shards/mtb16k",
+   "seq_len": 16384,
+   "gpus": 2,
+   "qos": "preemptive_high",
+   "custom": [
+    "r_cut5k=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --row-len-keep cut:5120:0.07",
+    "r_pow1=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --row-len-keep pow:4096:1",
+    "r_gb8lr2=softtoken,2e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --global-batch 8",
+    "r_pow1gb8lr2=softtoken,2e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --global-batch 8 --row-len-keep pow:4096:1"
+   ]
   }
  }
 }
