@@ -1,2 +1,3 @@
 state.json.tmp
 launch_logs/*.dry.log
+logs/
