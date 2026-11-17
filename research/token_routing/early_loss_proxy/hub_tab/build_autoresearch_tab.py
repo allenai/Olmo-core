@@ -144,6 +144,60 @@ def add_length_metrics(st):
 
 add_length_metrics(STATE)
 
+# ---- where the gain comes from: like-for-like ratios between arms (decisions.json) -----------------------------------------
+# Two views, both read off the same per-length held-out CE curves as the speedups above, but against another ARM instead of the
+# dense-LoRA reference: ratio at a level = (PF the base arm needs to reach its own loss at probe step k) / (PF this arm needs).
+#   ladder:  base = dense full fine-tune; each rung adds one decision on top of the previous one (LoRA, random drop, router, data).
+#   groups:  base = the plain recipe; each item changes ONE decision (random tokens, keep fraction, LR, short rows, ...).
+DEC_METRICS = ["w", "s16k", "s8k", "s4k", "all"]
+
+
+def _ratios(curves, arm, base, m):
+    per = []
+    for c in [c for c in curves if c["tag"] == arm[0] and c["arm"] == arm[1]]:
+        x = _xlevels(c, [base], m)
+        if x is not None:
+            per.append(x)
+    if not per:
+        return None
+    lv = sorted({k for q in per for k in q}, key=int)
+    return {k: (sum(q[k] for q in per) / len(per) if all(q.get(k) for q in per) else None) for k in lv}
+
+
+def add_decisions(st):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decisions.json")
+    if not os.path.exists(path):
+        return
+    D, curves = json.load(open(path, encoding="utf-8")), st.get("curves") or []
+    pick = lambda t: [c for c in curves if c["tag"] == t[0] and c["arm"] == t[1]]
+    lb, rb = pick(D["ladder_base"]), pick(D["base"])
+    if not lb or not rb:
+        print("note: decisions.json base arms missing from the state; skipping the breakdown")
+        return
+    lb, rb = lb[0], rb[0]
+    out = {"base": D["base"], "ladder": [], "groups": []}
+    boardce = {(b["tag"], b["arm"]): b for b in st.get("board") or []}
+    for i, rung in enumerate(D["ladder"]):
+        r = {}
+        for m in DEC_METRICS:
+            alts = [_ratios(curves, a, lb, m) for a in rung["alts"]]
+            lv = sorted({k for a in alts if a for k in a}, key=int)
+            r[m] = {k: max([a[k] for a in alts if a and a.get(k)] or [None]) for k in lv}
+            if i == 0:
+                r[m] = {k: 1.0 for k in lv}
+        out["ladder"].append({"label": rung["label"], "what": rung["what"], "arms": ["/".join(a) for a in rung["alts"]], "r": r})
+    for g in D["groups"]:
+        items = []
+        for it in g["items"]:
+            b = boardce.get(tuple(it["arm"])) or {}
+            items.append({"label": it["label"], "arm": "/".join(it["arm"]), "steps": b.get("steps"), "ce": b.get("ce_last"),
+                          "seeds": len(b.get("seeds") or []) or None, "r": {m: _ratios(curves, it["arm"], rb, m) for m in DEC_METRICS}})
+        out["groups"].append({"name": g["name"], "items": items})
+    st["dec"] = out
+
+
+add_decisions(STATE)
+
 PS, PE = "<!-- AR:PART:START -->", "<!-- AR:PART:END -->"
 SS, SE = "<!-- AR:SCRIPT:START -->", "<!-- AR:SCRIPT:END -->"
 
@@ -181,6 +235,18 @@ PART = PS + '''
 .glance .gr { position: absolute; top: -2px; bottom: -2px; border-left: 2px dashed var(--dense); opacity: .75; }
 .glance .gax { display: grid; grid-template-columns: minmax(180px, 42%) minmax(0, 1fr); gap: 0 14px; padding: 4px 4px 0; } .glance .gax > div { position: relative; height: 14px; font: .68rem var(--mono); color: var(--muted); } .glance .gax span { position: absolute; transform: translateX(-50%); }
 @media (max-width: 640px) { .glance details.gi > summary, .glance .gax { grid-template-columns: minmax(0, 1fr); } .glance .gax > div:first-child { display: none; } }
+/* where the gain comes from */
+.dec { display: grid; grid-template-columns: minmax(190px, 40%) minmax(0, 1fr); gap: 2px 14px; align-items: center; font-size: .82rem; max-width: 980px; }
+.dec .dl { line-height: 1.3; min-width: 0; text-align: right; } .dec .dl small { display: block; color: var(--muted); font-size: .72rem; }
+.dec .dh { grid-column: 1 / -1; margin: 12px 0 2px; font: 600 .72rem/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+.dec .dt { position: relative; height: 22px; background: color-mix(in srgb, var(--rule) 35%, transparent); }
+.dec .db { position: absolute; top: 3px; bottom: 3px; background: var(--c3); } .dec .db.dn { background: var(--c1); } .dec .db.sh { opacity: .45; }
+.dec .dw { position: absolute; top: 10px; height: 2px; background: var(--fg); opacity: .55; } .dec .dw::before, .dec .dw::after { content: ""; position: absolute; top: -3px; height: 8px; width: 1px; background: var(--fg); } .dec .dw::after { right: 0; }
+.dec .d1 { position: absolute; top: -2px; bottom: -2px; border-left: 2px dashed var(--dense); opacity: .8; }
+.dec .dv.nr { background: var(--bg); }
+.dec .dv { position: absolute; top: 0; line-height: 22px; font: .72rem var(--mono); white-space: nowrap; padding: 0 5px; }
+.dec .dax { grid-column: 2; position: relative; height: 14px; font: .68rem var(--mono); color: var(--muted); } .dec .dax span { position: absolute; transform: translateX(-50%); }
+@media (max-width: 640px) { .dec { grid-template-columns: minmax(0, 1fr); } .dec .dl { text-align: left; } .dec .dax { grid-column: 1; } }
 /* implementation note: steps, flags, diagrams */
 .impl { display: grid; gap: 8px; padding: 4px 6px 12px 22px; min-width: 0; } .impl p { margin: 0; max-width: 100ch; font-size: .86rem; }
 .impl ol { margin: 0; padding-left: 1.25em; max-width: 100ch; font-size: .84rem; line-height: 1.45; } .impl ol li { margin: 2px 0; }
@@ -220,9 +286,16 @@ ul.ql details.more[open] > summary { border-bottom: 0; }
 <div class="figs"><figure style="grid-column: 1 / -1"><div class="chart" style="height:230px"><canvas id="arBestChart" aria-label="best FLOP speedup over time"></canvas></div><figcaption>Best FLOP speedup over the dense reference found so far, by time of the loop (hover a point for the method).</figcaption></figure></div>
 <details class="more" id="arBestBox"><summary>Every new best, as a table <span class="mh" id="arBestN"></span></summary><div id="arBest"></div></details>
 <details class="more" id="arStatusBox"><summary>Full status text <span class="mh">from the loop</span></summary><p class="note" id="arStatus" style="margin:10px 12px 12px"></p></details>''', True) + bar("ar-glance", "Every idea at a glance", '''
-<p class="note">Best FLOP speedup any arm of the idea reached, against dense LoRA at the same held-out loss (at a level the arm actually reached; the dashed line is the plain recipe). Ideas with no bar reached no comparison level. Colour is the idea's status. ⚠ eval_size 184, below 500: differences under about two paired SEs are noise. <b>Click an idea</b> to see what it does, how it is implemented (with a diagram of which tokens or rows are used) and its result.</p>
+<p class="note">Best FLOP speedup any arm of the idea reached, against dense LoRA at the same held-out loss (at a level the arm actually reached; the dashed line is the plain recipe). Ideas with no bar reached no comparison level. Colour is the idea's status. ⚠ eval_size 184, below 500: differences under about two paired SEs are noise. The bar is the best over every arm of the idea and every reference level, so it favours a lucky shallow level; the next section compares like for like. <b>Click an idea</b> to see what it does, how it is implemented (with a diagram of which tokens or rows are used) and its result.</p>
 <div class="aropt"><span>Notes</span><button type="button" id="arGOpenAll">Open all</button><button type="button" id="arGCloseAll">Close all</button></div>
-<div id="arGlance" class="glance"></div>''', True) + bar("ar-ideas", "Ideas, with their verdicts", '''
+<div id="arGlance" class="glance"></div>''', True) + bar("ar-decisions", "Where the gain comes from", '''
+<p class="note" id="arDecNote"></p>
+<h3 style="margin-top:6px">1 · Build-up: what each decision adds, stacked</h3>
+<p class="note" id="arLadNote"></p>
+<div id="arLadder" class="dec"></div>
+<h3 style="margin-top:22px">2 · One change at a time, against the plain recipe</h3>
+<p class="note" id="arAblNote"></p>
+<div id="arAbl" class="dec"></div>''', True) + bar("ar-ideas", "Ideas, with their verdicts", '''
 <div class="aropt"><span>Group by</span><button type="button" id="arGO" aria-pressed="true">Outcome</button><button type="button" id="arGF" aria-pressed="false">Family</button></div>
 <p class="note" id="arFamNote">One line per idea: its verdict first. "Details and arms" opens what was tried and the arms (scored runs) of that idea, with all their columns.</p>
 <div id="arFam"></div>''', True, "arIdeasN") + bar("ar-depth", "FLOPs to reach a held-out loss", '''
@@ -354,9 +427,18 @@ JS = SS + r'''
         if (how.flags) { p.appendChild(el("b", "flags ")); p.appendChild(document.createTextNode(how.flags)); } box.appendChild(p); } }
     else if (i.what) { const p = el("p"); p.appendChild(el("b", "What it does: ")); p.appendChild(document.createTextNode(i.what)); box.appendChild(p); }
     else box.appendChild(el("p", u.arms.length + " arm" + (u.arms.length === 1 ? "" : "s") + " of family " + u.family + " with no queue entry, so no description.", "note"));
+    const bi = withResult && u.best != null ? bestInfo(u) : null;
+    if (bi) { const r = el("div", null, "iresult"); r.appendChild(el("b", "What the bar is: "));
+      r.appendChild(document.createTextNode("arm " + bi.r.arm + (bi.r.desc ? " (" + bi.r.desc + ")" : "") + " at the loss dense LoRA reached at step " + bi.k + ": " + f(bi.v, 2) + "×" +
+        (bi.kd !== bi.k ? ". At the deepest level it reached (step " + bi.kd + ") the same arm is " + f(bi.vd, 2) + "×." : ". That is also its deepest level.") +
+        " The bar takes the best over all " + u.arms.filter(q => !q.is_ref).length + " arms and levels, and the arm includes every decision of the recipe, not only this idea; see the next section for what each decision adds.")); box.appendChild(r); }
     if (withResult && i.result) { const r = el("div", null, "iresult"); r.appendChild(el("b", "Result so far: ")); r.appendChild(document.createTextNode(lead(i.result, 320)));
       const a = el("a", " full verdict and arms ↓"); a.href = "#ar-ideas"; r.appendChild(a); box.appendChild(r); }
     return box; };
+  const bestInfo = u => { let best = null;
+    u.arms.filter(r => !r.is_ref).forEach(r => { const o = xOf(r), ks = Object.keys(o).filter(k => o[k] != null).sort((a, b) => a - b); if (!ks.length) return;
+      const kb = ks.reduce((a, k) => o[k] > o[a] ? k : a, ks[0]); if (!best || o[kb] > best.v) best = { r, k: kb, v: o[kb], kd: ks[ks.length - 1], vd: o[ks[ks.length - 1]] }; });
+    return best; };
   const oneOf = u => { const i = u.idea || {}; return (i.how && i.how.one) || (i.what ? lead(i.what, 130) : ""); };
 
   /* every idea at a glance */
@@ -376,6 +458,46 @@ JS = SS + r'''
   const ax = el("div", null, "gax"), axi = el("div"); ax.appendChild(el("div")); ax.appendChild(axi);
   [1, 2, 3, 4, 6, 8].filter(v => v < mx).forEach(v => { const s = el("span", v + "×"); s.style.left = (v / mx * 100) + "%"; axi.appendChild(s); }); G.insertBefore(ax, G.firstChild); };
   $("arGOpenAll").onclick = () => G.querySelectorAll("details.gi").forEach(d => { d.open = true; }); $("arGCloseAll").onclick = () => G.querySelectorAll("details.gi").forEach(d => { d.open = false; });
+
+  /* where the gain comes from: ladder (dense -> best) and one-change-at-a-time against the recipe */
+  const DEC = ST.dec, LAD = $("arLadder"), ABL = $("arAbl");
+  const lpos = (v, lo, hi) => Math.max(0, Math.min(100, (Math.log(v) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)) * 100));
+  const keysOf = o => Object.keys(o || {}).filter(k => o[k] != null).sort((a, b) => a - b);
+  const fx = v => (v >= 10 ? f(v, 0) : f(v, 2)) + "×";
+  const axisRow = (host, lo, hi, ticks) => { host.appendChild(el("div")); const a = el("div", null, "dax");
+    ticks.filter(v => v >= lo && v <= hi).forEach(v => { const sp = el("span", v + "×"); sp.style.left = lpos(v, lo, hi) + "%"; a.appendChild(sp); }); host.appendChild(a); };
+  const track = (lo, hi) => { const t = el("div", null, "dt"), one = el("div", null, "d1"); one.style.left = lpos(1, lo, hi) + "%"; t.appendChild(one); return t; };
+  const decLabel = (host, text, small) => { const l = el("div", null, "dl"); l.appendChild(document.createTextNode(text)); if (small) l.appendChild(el("small", small)); host.appendChild(l); };
+  const decText = (t, txt, a, b, lo, hi) => { const v = el("span", txt, "dv"), right = lpos(b, lo, hi);
+    if (right > 72) { v.style.right = (100 - lpos(a, lo, hi)) + "%"; } else v.style.left = right + "%"; t.appendChild(v); };
+  const drawDecisions = () => { const box = $("arLadder").closest("details"); if (!DEC) { if (box) box.style.display = "none"; return; }
+    $("arDecNote").textContent = "The bars above give each idea's best speedup over dense LoRA, and every arm there contains the whole recipe (LoRA, router, two cuts), so a bar mixes the decisions. These two charts take it apart with the same per-length held-out curves, measured at: " + mlab() + ". The dashed line is 1×.";
+    LAD.textContent = ""; ABL.textContent = "";
+    /* 1 ladder */
+    const R = DEC.ladder.map(r => (r.r || {})[M] || {}), common = keysOf(R[0]).filter(k => +k >= 20 && R.every(o => o[k] != null)), nt = $("arLadNote");
+    if (!common.length) nt.textContent = "Not enough per-length curves to stack these arms at " + mlab() + ".";
+    else { const L = common[common.length - 1], cum = R.map(o => o[L]), mn = R.map(o => Math.min(...common.map(k => o[k]))), mx2 = R.map(o => Math.max(...common.map(k => o[k])));
+      const hi = Math.max(...mx2) * 1.14, lo = Math.min(0.85, ...mn) * 0.9;
+      nt.textContent = "Each row adds one decision to the row above. The bar spans from the previous row's speedup to this row's, over a dense full fine-tune at the same held-out loss, taken at the loss dense reached at its step " + L + " (the deepest level every row reaches). Whiskers: the range over the levels from step " + common[0] + " to " + L + "; a step that fits inside the whiskers is not a clear effect. One seed per row. In short: " + DEC.ladder.slice(1).map((rg, i) => rg.label.replace(/^\+ /, "") + " ×" + f(cum[i + 1] / cum[i], 2)).join(", ") + ", for " + fx(cum[cum.length - 1]) + " in all.";
+      axisRow(LAD, lo, hi, [1, 2, 3, 4, 6, 8]);
+      DEC.ladder.forEach((rg, i) => { decLabel(LAD, rg.label, rg.what); const t = track(lo, hi), prev = i ? cum[i - 1] : 1, cur = cum[i], a = Math.min(prev, cur), b = Math.max(prev, cur);
+        const br = el("div", null, "db" + (cur < prev ? " dn" : "")); br.style.left = lpos(a, lo, hi) + "%"; br.style.width = (i ? lpos(b, lo, hi) - lpos(a, lo, hi) : 0.6) + "%"; t.appendChild(br);
+        const w = el("div", null, "dw"); w.style.left = lpos(mn[i], lo, hi) + "%"; w.style.width = (lpos(mx2[i], lo, hi) - lpos(mn[i], lo, hi)) + "%"; t.appendChild(w);
+        decText(t, i ? "×" + f(cur / prev, 2) + " → " + fx(cur) + " total" : "1× (reference)", Math.min(a, mn[i]), Math.max(b, mx2[i]), lo, hi); LAD.appendChild(t); }); }
+    /* 2 one change at a time */
+    const items = []; DEC.groups.forEach(g => g.items.forEach(it => { if (keysOf((it.r || {})[M]).length) items.push(it); }));
+    let lo2 = 0.25, hi2 = 2.6; items.forEach(it => keysOf(it.r[M]).forEach(k => { hi2 = Math.max(hi2, it.r[M][k] * 1.2); lo2 = Math.min(lo2, it.r[M][k] * 0.9); }));
+    $("arAblNote").textContent = "Each row changes one decision in the recipe and shows its efficiency relative to the plain recipe at the same held-out loss: right of 1× needs fewer FLOPs than the recipe, left needs more. The bar is the deepest loss level the run reached (the recipe's loss at step N; deeper is the harder comparison; faded bars only reached step 25-50). The whisker is the range over the levels it reached. One seed each, eval_size 184.";
+    axisRow(ABL, lo2, hi2, [0.25, 0.5, 1, 2, 3]);
+    DEC.groups.forEach(g => { ABL.appendChild(el("div", g.name, "dh"));
+      g.items.forEach(it => { const o = (it.r || {})[M] || {}, ks = keysOf(o);
+        decLabel(ABL, it.label, ks.length ? "vs the recipe's loss at step " + ks[ks.length - 1] + " · " + (it.steps || "?") + " steps run" : "");
+        const t = track(lo2, hi2);
+        if (!ks.length) { const v = el("span", it.ce != null ? "never reached the recipe's step-25 loss (final CE " + f(it.ce, 3) + ")" : "n/a at " + mlab(), "dv nr"); v.style.left = "0"; t.appendChild(v); ABL.appendChild(t); return; }
+        const k = ks[ks.length - 1], v = o[k], a = Math.min(1, v), b = Math.max(1, v), vals = ks.map(q => o[q]), mnv = Math.min(...vals), mxv = Math.max(...vals);
+        const br = el("div", null, "db" + (v < 1 ? " dn" : "") + (+k < 50 ? " sh" : "")); br.style.left = lpos(a, lo2, hi2) + "%"; br.style.width = (lpos(b, lo2, hi2) - lpos(a, lo2, hi2)) + "%"; t.appendChild(br);
+        if (ks.length > 1) { const w = el("div", null, "dw"); w.style.left = lpos(mnv, lo2, hi2) + "%"; w.style.width = (lpos(mxv, lo2, hi2) - lpos(mnv, lo2, hi2)) + "%"; t.appendChild(w); }
+        decText(t, fx(v), Math.min(a, mnv), Math.max(b, mxv), lo2, hi2); ABL.appendChild(t); }); }); };
 
   /* ideas list, PAIL style */
   const famNote = $("arFamNote");
@@ -413,7 +535,7 @@ JS = SS + r'''
       : M === "all" ? "The loop's own metric: held-out CE averaged over all lengths and tasks." : "Held-out CE on the " + mlab() + " rows only (eval_size below 500, so noisy), then FLOPs to reach the dense-LoRA loss.";
     $("arMetricNote").textContent = base + (M === "all" ? "" : " Recomputed here from the per-length CE curves; it reproduces the loop's published speedups on " + MT.check[0] + " of " + (MT.check[0] + MT.check[1]) + " levels. " + nok + " of " + BH.length + " hourly entries can be traced to an arm on the board; the others are left out of the chart.");
     if (last) { const sr = bhSeries(), lv = sr[sr.length - 1]; $("arBestNote").textContent = lv == null ? "No hourly entry can be traced to an arm with this measurement." : "Latest best at " + mlab() + ": " + xs(lv) + (M === "all" ? " (" + last.arm + ", " + last.idea + "), found " + last.t + "." : "."); }
-    drawStrip(); drawGlance(); drawIdeas(BYV); drawBestTable();
+    drawStrip(); drawGlance(); drawDecisions(); drawIdeas(BYV); drawBestTable();
     if (bestChart) { bestChart.data.datasets[0].data = bhSeries(); bestChart.options.scales.y.title.text = "FLOP speedup (×), " + mlab(); bestChart.update(); } };
   const mbar = $("arMetric"); mbar.appendChild(el("span", "Gains at context length"));
   MT.metrics.forEach(m => { const b = el("button", m.label); b.type = "button"; b.dataset.m = m.id; b.setAttribute("aria-pressed", m.id === M); b.onclick = () => { M = m.id; mbar.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === M)); renderMetric(); }; mbar.appendChild(b); });
