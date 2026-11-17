@@ -158,6 +158,62 @@
    "gpus": 2,
    "qos": "preemptive_high",
    "custom": []
+  },
+  "5200949": {
+   "node": "sneetches",
+   "tag": "detach",
+   "runs": [
+    "elp-detach-cd0d-sd0",
+    "elp-detach-cd0dfe4-sd0",
+    "elp-detach-cd0dt1k-sd0",
+    "elp-detach-cd0dA-sd0",
+    "elp-detach-cd7d-sd0"
+   ],
+   "steps": "25,50,100,150,200",
+   "sets": "suite4k:16,suite8k:16,suite16k:16",
+   "code": "/data/prasann/early_loss_proxy/code_66cb09b31",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/data/prasann/early_loss_proxy/shards/mtb16k",
+   "seq_len": 16384,
+   "gpus": 2,
+   "qos": "preemptive_high",
+   "custom": [
+    "cd0d=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 0 --ctx-detach-stages 7:0.2,16:0.07",
+    "cd0dfe4=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 0 --ctx-detach-stages 7:0.2,16:0.07 --ctx-detach-full-every 4",
+    "cd0dt1k=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 0 --ctx-detach-stages 7:0.2,16:0.07 --ctx-detach-tail 1024",
+    "cd0dA=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 0 --ctx-detach-stages 4:0.2,10:0.07,20:0.03",
+    "cd7d=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 7 --ctx-detach-stages 7:0.2,16:0.07"
+   ]
+  },
+  "5200950": {
+   "node": "sneetches",
+   "tag": "detach",
+   "runs": [
+    "elp-detach-acn_cd0d-sd0",
+    "elp-detach-acn_sdl-sd0",
+    "elp-detach-cd0dB-sd0",
+    "elp-detach-cd0-sd0",
+    "elp-detach-cd7-sd0",
+    "elp-detach-cd16-sd0"
+   ],
+   "steps": "25,50,100,150,200",
+   "sets": "suite4k:16,suite8k:16,suite16k:16",
+   "code": "/data/prasann/early_loss_proxy/code_66cb09b31",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/data/prasann/early_loss_proxy/shards/mtb16k",
+   "seq_len": 16384,
+   "gpus": 2,
+   "qos": "preemptive_high",
+   "custom": [
+    "acn_cd0d=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 0 --ctx-detach-stages 7:0.2,16:0.07 --activation-checkpointing none --max-steps 4",
+    "acn_sdl=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --activation-checkpointing none --max-steps 4",
+    "cd0dB=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 0 --ctx-detach-stages 2:0.3,7:0.1,16:0.03",
+    "cd0=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 0",
+    "cd7=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 7",
+    "cd16=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --sparse-loss-positions --ctx-detach-layer 16"
+   ]
   }
  }
 }
