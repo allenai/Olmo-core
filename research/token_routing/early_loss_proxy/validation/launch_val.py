@@ -70,7 +70,7 @@ RUNS = {
 #: eval: launcher task key per suite task; rungs; prefill cap (>= the longest 16k-rung prompt + answer)
 EVAL_TASKS = {"contradiction": "contra", "outlier": "outlier", "reorder": "reorder", "qdmatch_nq": "qdmatch_nq"}
 EVAL_RUNGS = os.environ.get("ELPV_EVAL_RUNGS", "4k,8k,16k")
-EVAL_MAX_LENGTH = os.environ.get("ELPV_EVAL_MAX_LENGTH", "24576")
+EVAL_MAX_LENGTH = os.environ.get("ELPV_EVAL_MAX_LENGTH", "40960")
 EVAL_ENV = ["LADDER_GEN_BATCH=32", "LADDER_GEN_BATCH_TOKENS=196608", "KEEP_RESPONSES=1"]
 
 
