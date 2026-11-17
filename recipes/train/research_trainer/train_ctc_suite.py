@@ -1249,6 +1249,7 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             opts.data, opts.alloc_mode, opts.alloc_a, opts.alloc_b, opts.alloc_floor,
             opts.alloc_ema, opts.alloc_task_weights, opts.seed, get_rank() // cp_deg,
             world_size // cp_deg, opts.alloc_warmup_steps, opts.alloc_rung_weights,
+            opts.alloc_short_share, opts.alloc_short_rungs,
         )
         train_module._row_alloc = {"row_pow": opts.loss_row_pow}
         trainer_config = trainer_config.with_callback(
@@ -2337,6 +2338,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--alloc-warmup-steps", type=int, default=2, help="ema mode: pool composition for N steps")
     ap.add_argument("--alloc-task-weights", default="", help="static mode: task=w,... (default 1)")
     ap.add_argument("--alloc-rung-weights", default="", help="static mode: rung=w,... (default 1), e.g. 16k=2")
+    ap.add_argument("--alloc-short-share", type=float, default=-1.0,
+                    help="fix the share of short-rung cells (pool composition among them); the alloc rule sets the "
+                         "long cells only (-1 = off)")
+    ap.add_argument("--alloc-short-rungs", default="1k,2k", help="rungs counted as short for --alloc-short-share")
     ap.add_argument("--alloc-log", action="store_true", help="log per-cell train CE without changing anything else")
     ap.add_argument("--loss-row-pow", type=float, default=0.0,
                     help="per-row loss weight n_r^-p (n_r = row's answer tokens), renormalised so the rank's "

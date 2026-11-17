@@ -35,7 +35,7 @@ from olmo_core.train.callbacks.callback import Callback
 class CellSampler:
     def __init__(self, data_dir: str, mode: str, a: float, b: float, floor: float, ema: float,
                  task_weights: str, seed: int, rank: int, world: int, warmup_steps: int,
-                 rung_weights: str = ""):
+                 rung_weights: str = "", short_share: float = -1.0, short_rungs: str = "1k,2k"):
         rows = [json.loads(l) for l in open(os.path.join(data_dir, "row_info.jsonl"))]
         parts = sorted(glob.glob(os.path.join(data_dir, "token_ids_part_*.npy")))
         # rows per part from row_info (row_info covers every row)
@@ -76,6 +76,9 @@ class CellSampler:
         rw = dict((kv.split("=")[0], float(kv.split("=")[1])) for kv in rung_weights.split(",") if kv)
         self.tw = np.array([tw.get(n.split("@")[0], 1.0) * rw.get(n.split("@")[1], 1.0)
                             for n in self.cell_names])
+        sr = set(short_rungs.split(","))
+        self.is_short = np.array([n.split("@")[1] in sr for n in self.cell_names])
+        self.short_share = short_share
         self.ema = np.full(C, np.nan)
         self.seed, self.rank, self.world = seed, rank, world
         self.counter = [0] * C
@@ -95,7 +98,13 @@ class CellSampler:
             q = self.pi.copy()
         q = q / q.sum()
         p = (1.0 - self.floor) * q + self.floor * self.pi
-        return p / p.sum()
+        p = p / p.sum()
+        if self.short_share >= 0 and self.is_short.any() and (~self.is_short).any():
+            # fixed minority of short cells (pool composition among them); the rule above sets the long cells
+            ps = np.where(self.is_short, self.pi, 0.0)
+            pl = np.where(self.is_short, 0.0, p)
+            p = self.short_share * ps / ps.sum() + (1.0 - self.short_share) * pl / pl.sum()
+        return p
 
     def draw(self, idx: int) -> int:
         u = random.Random(f"alloc-draw:{self.seed}:{self.rank}:{idx}").random()
