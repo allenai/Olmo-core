@@ -3,10 +3,20 @@
   "t": "11-17 00:55",
   "arm": "recipe",
   "idea": "baseline",
-  "x": 1.9217661688479457,
+  "x": 1.7100690808299743,
   "level": 100,
-  "xw": 1.3046492682413429,
+  "xw": 1.3956801855128962,
   "mem": 1.2373929997423052,
-  "note": "First 16k results. Worst-task speedup is at the 70-step level (the deepest level every task reached). One seed, eval_size 184."
+  "note": "First 16k results; recomputed against the tuned reference (dense LoRA at LR 2e-5 is slightly better than at 1e-5). Worst-task speedup is at the 80-step level. One seed, eval_size 184."
+ },
+ {
+  "t": "11-17 01:45",
+  "arm": "recipe on the 50/50 short/long pool (rc-mix50)",
+  "idea": "short rows",
+  "x": 2.353545205672506,
+  "level": "own final loss 0.159 (between the 50- and 60-step levels)",
+  "xw": null,
+  "mem": 1.2023616853701615,
+  "note": "Matched-loss ratio vs dense LoRA; 1.25x the recipe at that loss. Stopped by the 12-minute cap at step 143; a deeper two-seed confirmation is running. One seed, eval_size 184."
  }
 ]

@@ -1,5 +1,5 @@
 {
- "status": "27 arms scored at 16k (one seed, eval_size 184). The recipe is still the best: 1.9x fewer FLOPs than dense LoRA to the 100-step loss level (1.3x on the worst task). Every cheaper arm so far is behind the recipe at matched loss: random keep 0.54x of the recipe's efficiency, keep 10%/3.5% 0.71x, LR 2e-5 0.85x, 8 rows/step 0.74x, no-grad prefix 0.34-0.41x, early-loss selection 0.25-0.60x, FFN skip 0.12-0.58x, gold-aware keep 0.75-0.89x. Two gold-aware arms on Lambda are ahead (1.5-1.6x the recipe) but only at a shallow 50-step level where the comparison is unreliable. Short-row pools, detached context and the drop-CPT bases are running.",
+ "status": "About 55 arms scored at 16k (one seed, eval_size 184). Best so far: the recipe trained on a pool that mixes 1k-2k-token rows with the 4k-16k rows, 2.35x fewer FLOPs than dense LoRA at matched loss and 1.25x the plain recipe; a gold-aware keep arm is 1.26x the recipe; rows <= 5k 1.35x at a shallow level. Deeper two-seed confirmations are running. The reference is now the cheaper of dense LoRA at LR 1e-5 and 2e-5, which lowers the recipe to 1.7x at the 100-step level (1.4x on the worst task). Closed as negative: frozen no-grad prefix, earlier cuts, FFN skip, early-exit-loss selection, detached context, input-level token exit (with or without the drop-CPT base), higher LR, 8 rows/step, keep below 20%/7%, random keep. Nothing is near 10x: every idea that touches blocks 0-6 or the context's gradient loses more per step than it saves.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -10,6 +10,14 @@
   "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps."
  ],
  "log": [
+  {
+   "t": "11-17 01:30",
+   "text": "First larger validation started: full-epoch dense LoRA (three FLOP budgets), recipe (two seeds) and dense full FT on mtb16k with generation-graded evals at 4k / 8k / 16k; plus full-epoch dense-loss curves for dense LoRA and the recipe."
+  },
+  {
+   "t": "11-17 01:45",
+   "text": "Short-row pools: recipe on the 50/50 and 80/20 mixes is 1.25x the recipe at matched loss; short rows alone 0.74x; dense LoRA on any of them is behind the recipe. Detached context: negative (context forward-only without drops 0.15x of the recipe's efficiency; every 4th step dense 0.44x). Early-exit-loss selection: negative (ridge router is better at equal keep). Input-level token exit at ratio 0.05-0.10 does not train from the standard or the drop-CPT base. Dense LoRA at LR 2e-5 is a slightly better reference (0.126 vs 0.131 at step 100); LR 4e-5 is worse."
+  },
   {
    "t": "11-17 01:25",
    "text": "Two ideas closed as negative: frozen no-grad prefix with earlier cuts, and FFN skip for context tokens. Both show that blocks 0-6 need every token, every FFN and their own gradient."

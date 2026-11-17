@@ -53,12 +53,13 @@ JS = S + r'''
   const BH = ST.best_by_hour || [];
   if (!BH.length) empty($("arBest"), "No 16k result yet"); else
     $("arBest").appendChild(table(["time", "method", "idea", "FLOP speedup", "worst task", "transient memory vs dense LoRA", "note"],
-      BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level != null ? " @ step " + r.level : ""), xs(r.xw), r.mem == null ? "" : f(r.mem, 2) + "×", r.note]), [3, 4, 5]));
+      BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level == null || r.level === "" ? "" : (isNaN(r.level) ? " @ " : " @ step ") + r.level), r.xw == null ? "n/a" : xs(r.xw), r.mem == null ? "" : f(r.mem, 2) + "×", r.note]), [3, 4, 5]));
   if (!BH.length) { const fg = $("arBestChart"); if (fg) fg.closest("figure").style.display = "none"; }
   // leaderboard
   const tg = r => { const s = el("span"); s.appendChild(document.createTextNode(f(r.transient_gib, 1))); if (r.peak_gib != null && r.peak_gib !== "") s.appendChild(el("span", " (" + f(r.peak_gib, 1) + ")", "note")); return s; };
+  function HIDE(r) { return r.tag + "/" + r.arm === "hp/denselora-lr2e5" || r.tag === "hp/denselora-lr2e5" || r.arm === "hp/denselora-lr2e5"; }
   const rk = r => r.arm === "recipe" ? 0 : r.is_ref ? 1 : 2, ir = r => r.iso_rec == null ? -Infinity : r.iso_rec;
-  const B = (ST.board || []).map((r, i) => [r, i]).sort((a, b) => rk(a[0]) - rk(b[0]) || ir(b[0]) - ir(a[0]) || a[1] - b[1]).map(x => x[0]), lv = new Set();
+  const B = (ST.board || []).filter(r => !HIDE(r)).map((r, i) => [r, i]).sort((a, b) => rk(a[0]) - rk(b[0]) || ir(b[0]) - ir(a[0]) || a[1] - b[1]).map(x => x[0]), lv = new Set();
   const iso = r => r.iso == null ? "n/a" : (r.iso_lb ? ">= " : "") + f(r.iso, 1) + "×", isr = r => r.iso_rec == null ? "n/a" : f(r.iso_rec, 2) + "×";
   B.forEach(r => Object.keys(r.x || {}).forEach(k => lv.add(k)));
   const levels = [...lv].sort((a, b) => a - b), deep = levels[levels.length - 1];
@@ -108,7 +109,7 @@ JS = S + r'''
     new Chart($("arBestChart"), { type: "line", data: { labels: BH.map(r => r.t), datasets: [{ label: "best FLOP speedup", data: BH.map(r => r.x), borderColor: css("--c1"), backgroundColor: css("--c1"), tension: 0, pointRadius: 3 }] },
       options: { ...base, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => BH[c.dataIndex].arm + ": " + f(c.raw, 1) + "×" } } }, scales: { x: { ticks: { color: mu, maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: axis("FLOP speedup (×)", { beginAtZero: true }) } } });
   }
-  const C = ST.curves || [];
+  const C = (ST.curves || []).filter(c => !HIDE(c));
   if ($("arCurves")) {
     if (!C.length) { $("arCurves").closest("figure").style.display = "none"; empty($("arCurves").closest("section"), "No curves yet."); }
     else {

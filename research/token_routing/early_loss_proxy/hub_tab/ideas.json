@@ -5,7 +5,7 @@
   "title": "Dense full fine-tune and dense LoRA at 4k-16k",
   "what": "Reference loss-vs-FLOPs curves (probes every 10 steps to step 100). Every speedup on this page is read against these.",
   "status": "done",
-  "result": "Held-out CE at step 50 / 100: dense full FT 0.176 / 0.135, dense LoRA 0.170 / 0.131 (dense LoRA costs 0.74x dense per step). A higher-LR dense-LoRA check is running."
+  "result": "Held-out CE at step 50 / 100: dense full FT 0.176 / 0.135, dense LoRA LR 1e-5 0.170 / 0.131, dense LoRA LR 2e-5 0.126 at step 100 (dense LoRA costs 0.74x dense per step). The reference is the cheaper of the three at each loss level."
  },
  {
   "id": "recipe",
@@ -13,7 +13,7 @@
   "title": "Current recipe (router, keep 20% after block 7, 7% after block 16)",
   "what": "The 8k recipe unchanged at 4k-16k on the new tasks, plus random keep at the same budget.",
   "status": "done",
-  "result": "Recipe: 0.22x dense per step, 1.9x fewer FLOPs than dense LoRA to the 100-step level, 1.3x on the worst task. Random keep at the same budget: 0.54x of the recipe's efficiency; keep 10%/3.5%: 0.71x; keep 2%/1%: 0.27x."
+  "result": "Recipe: 0.22x dense per step, 1.7x fewer FLOPs than the tuned dense-LoRA reference to the 100-step level, 1.4x on the worst task. Random keep at the same budget: 0.54x of the recipe's efficiency; random keep 9%: 0.42x; keep 10%/3.5%: 0.71x; 5%/2%: 0.55x; 2%/1%: 0.27x."
  },
  {
   "id": "prefix",
@@ -29,23 +29,23 @@
   "title": "Gold-aware stochastic keep",
   "what": "Per-document keep probability raised for gold documents but never 1 and never 0 for distractors, so the kept set does not reveal the answer; drop before block 0 as well as mid-stack.",
   "status": "running",
-  "result": "Eight arms at 0.07-0.12x dense per step: 0.75-0.89x of the recipe's efficiency at matched loss on jsteinhardt runs; two Lambda arms 1.5-1.6x at a shallow 50-step level, to be confirmed with longer runs."
+  "result": "Ten arms. Best: grJ, 0.133x dense per step, 0.172 held-out CE at step 108, 1.26x the recipe at matched loss. Others 0.75-0.89x; two 50-step Lambda arms 1.5-1.6x at a shallow level. Now being run deeper and on the mixed-length pools."
  },
  {
   "id": "earlyloss",
   "family": "early-layer signal",
   "title": "Loss and backward through the first few blocks only",
   "what": "An early-exit answer loss after block k gives true per-token gradients at full length for the cost of k blocks; use them to pick tokens and to train the early blocks.",
-  "status": "running",
-  "result": "First arms: 0.25-0.60x of the recipe's efficiency at matched loss. Still iterating."
+  "status": "dropped",
+  "result": "Negative. Selecting tokens by the gradient of an early-exit answer loss is worse than the ridge router at the recipe's keep (0.213 vs 0.175 held-out CE at step 75) and at 10%/3% (0.237 vs 0.224); it only wins at a very aggressive cut after block 2 (0.584 vs 0.763 at step 40), far from any reference level. The auxiliary early loss slows training; training the early blocks by the early loss alone fails (0.503). The frozen head at block 7 gives an early-exit CE near uniform, so its gradient is weak. Branch loop/earlyloss."
  },
  {
   "id": "detach",
   "family": "KV reuse",
   "title": "Detached context / reused context states",
   "what": "Context tokens run forward-only (or reuse cached states), gradient only through query and answer tokens; then drop context tokens aggressively in that no-grad pass.",
-  "status": "running",
-  "result": "Implemented; 11-arm screen (incl. memory with activation checkpointing off) running on Beaker."
+  "status": "dropped",
+  "result": "Negative for FLOPs. Context forward-only from block 0, no drops: 0.30x dense per step but 0.312 held-out CE at step 128 (0.15x of the recipe's efficiency); with the recipe's drops inside the no-grad pass 0.10x per step and 0.546 at step 168; every 4th step dense: 0.44x of the recipe. The context's own gradient carries most of the learning. Memory arms with activation checkpointing off still to read. Branch loop/detach."
  },
  {
   "id": "rows",
@@ -53,7 +53,7 @@
   "title": "FLOP-aware row sampling and row skipping",
   "what": "Sample rows by expected loss decrease per FLOP (short rows more often, a tail of 16k rows), skip rows a cheap early-exit loss marks as solved.",
   "status": "running",
-  "result": "First arms (rows <= 5k with 8 rows/step and LR 2e-5; truncated rows): 0.80-0.98x of the recipe's efficiency. Short-row pools (1k-2k rows) now running separately."
+  "result": "Recipe on rows <= 5k: 1.35x the recipe at matched loss at step 66; with 8 rows/step and LR 2e-5 0.98x; truncated rows 0.80x; dense LoRA on rows <= 5k 0.78x. Next: deeper runs, token-budget batches, length curriculum."
  },
  {
   "id": "subproblem",
@@ -61,7 +61,7 @@
   "title": "Label-consistent sub-problems",
   "what": "Train on a random subset of a row's documents with the answer rewritten for the subset (reorder, qdmatch), mixed with a few full rows.",
   "status": "running",
-  "result": "Running as short-row pools: 1k-2k-token versions of the four tasks from the same generator, alone and mixed 80/20 and 50/50 with the long rows."
+  "result": "Recipe on the 50/50 short/long pool: 0.159 held-out CE for 78 PF, 1.25x the recipe at matched loss; 80/20 pool 1.24x; short rows only 0.74x. Dense LoRA on the same pools is behind the recipe (0.66-0.90x). Deeper two-seed runs in progress."
  },
  {
   "id": "ffnskip",
@@ -84,14 +84,30 @@
   "family": "optimisation",
   "title": "LR, batch size and schedule per FLOP",
   "what": "Cheap arms can afford more, smaller steps: rows per step, LR and warmup tuned per FLOP rather than per step.",
-  "status": "running",
-  "result": "Recipe at LR 2e-5: 0.85x; at 8 rows/step: 0.74x of the recipe's efficiency at matched loss. Dense-LoRA LR check still running."
+  "status": "done",
+  "result": "Recipe at LR 2e-5: 0.85x; LR 4e-5: 0.61x; 8 rows/step: 0.74x; 8 rows/step at LR 2e-5: 0.62x of the recipe's efficiency at matched loss. Dense LoRA: LR 2e-5 slightly better than 1e-5 (0.126 vs 0.131 at step 100), LR 4e-5 worse (0.170)."
  },
  {
   "id": "cptnative",
   "family": "base model",
   "title": "Drop-CPT bases fine-tuned in their own token-exit format",
   "what": "Token exit at block 8 and at the input (first+last rule), from the matching CPT base and from the standard base, at fixed compression 0.2 / 0.1 / 0.05.",
+  "status": "running",
+  "result": "Input-level token exit (ratio 0.05-0.10) does not train from the standard base or the drop-CPT base (held-out CE 0.78-0.87 after 130 steps, at or above the starting loss). Block-8 arms still running."
+ },
+ {
+  "id": "multiq",
+  "family": "more supervision per context",
+  "title": "Multi-question rows",
+  "what": "Each row keeps its original question and answer, then appends 8-32 short sub-questions derived from its gold (which passage follows X, which document matches query j, which claim contradicts claim i, is document i an outlier). The context is paid for once; the extra answers cost only their own tokens.",
+  "status": "running",
+  "result": "pool being built"
+ },
+ {
+  "id": "alloc",
+  "family": "cross-row",
+  "title": "Loss-proportional task and length sampling",
+  "what": "Sample the next rows by each task-and-length cell's running training loss per FLOP instead of uniformly (reorder holds 5x the loss of the other tasks); row-level backward skipping; per-row vs per-token loss averaging.",
   "status": "running",
   "result": "agent implementing"
  }

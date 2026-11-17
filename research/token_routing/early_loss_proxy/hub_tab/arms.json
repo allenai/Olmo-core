@@ -146,5 +146,93 @@
  "a50": {
   "idea": "early layers",
   "desc": "body tokens skip the FFN in blocks 0-6 with probability 0.5"
+ },
+ "rc-mix50": {
+  "idea": "short rows",
+  "desc": "recipe on the 50/50 short/long pool"
+ },
+ "rc-mix80": {
+  "idea": "short rows",
+  "desc": "recipe on the 80/20 short/long pool"
+ },
+ "rc-short": {
+  "idea": "short rows",
+  "desc": "recipe on 1k-2k rows only"
+ },
+ "dl-mix50": {
+  "idea": "short rows",
+  "desc": "dense LoRA on the 50/50 pool"
+ },
+ "dl-mix80": {
+  "idea": "short rows",
+  "desc": "dense LoRA on the 80/20 pool"
+ },
+ "dl-short": {
+  "idea": "short rows",
+  "desc": "dense LoRA on 1k-2k rows only"
+ },
+ "denselora2e5": {
+  "idea": "reference",
+  "desc": "dense LoRA, LR 2e-5"
+ },
+ "r_cut5k": {
+  "idea": "cross-row",
+  "desc": "recipe on rows <= 5k only"
+ },
+ "dl_cut5k": {
+  "idea": "cross-row",
+  "desc": "dense LoRA on rows <= 5k only"
+ },
+ "grJ": {
+  "idea": "gold + randomness",
+  "desc": "gold-aware stochastic keep, variant J"
+ },
+ "grE": {
+  "idea": "gold + randomness",
+  "desc": "variant E"
+ },
+ "cd0": {
+  "idea": "KV reuse",
+  "desc": "context forward-only from block 0, no drops"
+ },
+ "cd0d": {
+  "idea": "KV reuse",
+  "desc": "context forward-only with the recipe's drops"
+ },
+ "cd0dB": {
+  "idea": "KV reuse",
+  "desc": "context forward-only, drops from block 2"
+ },
+ "cd0dfe4": {
+  "idea": "KV reuse",
+  "desc": "cd0d with every 4th step dense LoRA"
+ },
+ "rt10": {
+  "idea": "early-layer signal",
+  "desc": "ridge router at keep 10%/3% (control)"
+ },
+ "ee10": {
+  "idea": "early-layer signal",
+  "desc": "early-exit selection at keep 10%/3%"
+ },
+ "ee7aux": {
+  "idea": "early-layer signal",
+  "desc": "ee7 plus the early loss as an auxiliary loss"
+ },
+ "ee7det": {
+  "idea": "early-layer signal",
+  "desc": "early blocks trained by the early loss only"
+ },
+ "sL0r10": {
+  "idea": "base model",
+  "desc": "standard base, token exit at the input, ratio 0.10"
+ },
+ "sL0r05": {
+  "idea": "base model",
+  "desc": "standard base, token exit at the input, ratio 0.05"
+ },
+ "cL0r10": {
+  "idea": "base model",
+  "desc": "drop-CPT base, token exit at the input, ratio 0.10"
  }
 }
