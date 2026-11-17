@@ -35,6 +35,105 @@ H = args[0]
 h = open(H, encoding="utf-8").read()
 STATE = json.load(open(state_path, encoding="utf-8"))
 
+# ---- per-context-length speedups (computed here from the per-length held-out CE curves in `curves[i].by`) -------------------
+# The loop publishes one speedup per arm and level, on the mean CE over all lengths (`board[i].x`). This adds `board[i].xm[m]` for
+# m in s4k / s8k / s16k (CE on the 4k / 8k / 16k held-out sets) and w (weighted CE, WEIGHTS), by the same method as score.py: the
+# FLOPs the cheapest dense reference needs to reach its own step-k loss, divided by the arm's FLOPs to reach that loss, for
+# k = the reference's probe steps. Reference pool = the `v2` tag's reference curves (this reproduces `board[i].x` exactly).
+LENSETS = [("s4k", "set/suite4k", "4k", 0.2), ("s8k", "set/suite8k", "8k", 0.3), ("s16k", "set/suite16k", "16k", 0.5)]
+
+
+def _reach(pf, ls, loss):
+    run, m = [], float("inf")
+    for v in ls:
+        m = min(m, v)
+        run.append(m)
+    if loss >= run[0]:
+        return 0.0
+    for i in range(1, len(run)):
+        if run[i] <= loss:
+            if run[i - 1] == run[i]:
+                return pf[i]
+            w = (run[i - 1] - loss) / (run[i - 1] - run[i])
+            return pf[i - 1] + w * (pf[i] - pf[i - 1])
+    return None
+
+
+def _series(c, m):
+    if m == "all":
+        return [p[2] for p in c["pts"]]
+    by = c.get("by") or {}
+    if m == "w":
+        if not all(k in by and len(by[k]) == len(c["pts"]) for _, k, _, _ in LENSETS):
+            return None
+        return [sum(w * by[k][i] for _, k, _, w in LENSETS) for i in range(len(c["pts"]))]
+    k = {a: b for a, b, _, _ in LENSETS}[m]
+    return by.get(k) if by.get(k) and len(by[k]) == len(c["pts"]) else None
+
+
+def _xlevels(c, refs, m):
+    sr = [x for x in refs if x["seed"] == c["seed"]] or refs
+    sr = [x for x in sr if _series(x, m) is not None]
+    mine = _series(c, m)
+    if not sr or mine is None:
+        return None
+    best = min(sr, key=lambda x: _series(x, m)[-1])
+    sb, out, mpf = _series(best, m), {}, [p[1] for p in c["pts"]]
+    for i, p in enumerate(best["pts"][1:], 1):
+        lvl = min(sb[: i + 1])
+        need = [n for n in (_reach([q[1] for q in x["pts"]], _series(x, m), lvl) for x in sr) if n is not None]
+        mn = _reach(mpf, mine, lvl) if need else None
+        out[str(p[0])] = (min(need) / mn) if need and mn else None
+    return out
+
+
+def _bestx(d):
+    v = [q for q in (d or {}).values() if q is not None]
+    return max(v) if v else None
+
+
+def add_length_metrics(st):
+    curves = st.get("curves") or []
+    refs = [c for c in curves if c.get("is_ref") and c.get("tag") == "v2"] or [c for c in curves if c.get("is_ref")]
+    ok = bad = 0
+    for b in st.get("board") or []:
+        if b.get("is_ref"):
+            continue
+        cs = [c for c in curves if c["tag"] == b["tag"] and c["arm"] == b["arm"]]
+        b["xm"] = {}
+        for m in ["all", "w"] + [a for a, _, _, _ in LENSETS]:
+            per = [_xlevels(c, refs, m) for c in cs] if cs and refs else []
+            if not per or any(q is None for q in per):
+                continue
+            lv = sorted({k for q in per for k in q}, key=int)
+            b["xm"][m] = {k: (sum(q[k] for q in per) / len(per) if all(q.get(k) for q in per) else None) for k in lv}
+        for k, v in (b.get("x") or {}).items():          # self-check against the loop's own speedups
+            mv = (b["xm"].get("all") or {}).get(k)
+            if (v is None) == (mv is None) and (v is None or abs(v - mv) <= 0.02 * max(1.0, v)):
+                ok += 1
+            else:
+                bad += 1
+        b["xm"].pop("all", None)
+    for row in st.get("best_by_hour") or []:             # resolve each hourly entry to its board arm, when it can be told
+        arm, row["xm"] = row.get("arm", ""), {}
+        cand = [b for b in st["board"] if b["arm"] == arm and not b.get("is_ref")]
+        if not cand:
+            mm = re.search(r"\(([A-Za-z0-9_.-]+)\)\s*$", arm)
+            cand = [b for b in st["board"] if mm and b["arm"] == mm.group(1) and not b.get("is_ref")]
+        cand = [b for b in cand if _bestx(b.get("x")) is not None and row.get("x") and "full epoch" not in arm]   # full-epoch results come from depth runs, not the board
+        if cand:
+            b = min(cand, key=lambda b: abs(_bestx(b["x"]) - row["x"]))
+            if abs(_bestx(b["x"]) - row["x"]) <= 0.15 * row["x"]:
+                row["xm"] = {m: _bestx(v) for m, v in b["xm"].items()}
+    st["meta"] = {"default": "w", "check": [ok, bad], "weights": {a: w for a, _, _, w in LENSETS},
+                  "metrics": [{"id": "w", "label": "Weighted, 16k-heavy"}, {"id": "s16k", "label": "16k"}, {"id": "s8k", "label": "8k"},
+                              {"id": "s4k", "label": "4k"}, {"id": "all", "label": "All lengths, mean CE (as scored)"}]}
+    if ok + bad and bad / (ok + bad) > 0.05:
+        print("WARNING: recomputed speedups match the loop's on only %d of %d levels" % (ok, ok + bad))
+
+
+add_length_metrics(STATE)
+
 PS, PE = "<!-- AR:PART:START -->", "<!-- AR:PART:END -->"
 SS, SE = "<!-- AR:SCRIPT:START -->", "<!-- AR:SCRIPT:END -->"
 
@@ -78,6 +177,8 @@ ul.ql details.more[open] > summary { border-bottom: 0; }
 .arlog td:first-child { white-space: nowrap; } .arwide td:last-child { min-width: 22rem; } .arwide td:nth-child(2) { min-width: 11rem; }
 </style>
 <div class="parthead"><span class="eyebrow">Tried · was tab 8d · live</span><h2 class="ptitle">Auto-research loop: FLOPs to reach the dense loss at 4k-16k</h2><p class="verdict" id="arVerdict"></p><p class="note" id="arUpdated"></p></div>
+<div class="aropt" id="arMetric" role="group" aria-label="Context length the gains are measured at"></div>
+<p class="note" id="arMetricNote"></p>
 <div class="tiles" id="arStrip"></div>
 ''' + bar("ar-progress", "Best so far, over time", '''
 <div id="arBestNote" class="note"></div>
@@ -126,11 +227,14 @@ JS = SS + r'''
   /* best by hour */
   const BH = ST.best_by_hour || [];
   if (!BH.length) { empty($("arBest"), "No 16k result yet"); $("arBestChart").closest("figure").style.display = "none"; } else {
-    $("arBest").appendChild(table(["time", "method", "idea", "FLOP speedup", "worst task", "transient memory vs dense LoRA", "note"],
-      BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level == null || r.level === "" ? "" : (isNaN(r.level) ? " @ " : " @ step ") + r.level), r.xw == null ? "n/a" : xs(r.xw), r.mem == null ? "n/a" : f(r.mem, 2) + "×", r.note]), [4, 5], "arwide"));
     $("arBestN").textContent = BH.length + " rows"; }
+  const MT = ST.meta || { default: "all", metrics: [{ id: "all", label: "All lengths, mean CE (as scored)" }], weights: {}, check: [0, 0] };
+  let M = MT.default || "all"; const mlab = () => (MT.metrics.find(m => m.id === M) || {}).label || M;
+  const xOf = r => M === "all" ? (r.x || {}) : ((r.xm || {})[M] || {});
+  const bestOfRow = r => { const v = Object.values(xOf(r)).filter(q => q != null); return v.length ? Math.max(...v) : null; };
+  const bhVal = r => M === "all" ? r.x : (r.xm || {})[M];
+  const bhSeries = () => { let cur = null; return BH.map(r => { const v = bhVal(r); if (v != null && (cur == null || v > cur)) cur = v; return cur; }); };
   const last = BH[BH.length - 1];
-  if (last) $("arBestNote").textContent = "Latest best: " + xs(last.x) + " (" + last.arm + ", " + last.idea + "), found " + last.t + ".";
 
   /* board rows -> ideas -> families */
   function HIDE(r) { return r.tag + "/" + r.arm === "hp/denselora-lr2e5" || r.tag === "hp/denselora-lr2e5" || r.arm === "hp/denselora-lr2e5"; }
@@ -147,11 +251,11 @@ JS = SS + r'''
   const lv = new Set(); B.forEach(r => Object.keys(r.x || {}).forEach(k => lv.add(k)));
   const levels = [...lv].sort((a, b) => a - b), deep = levels[levels.length - 1];
   const iso = r => r.iso == null ? "n/a" : (r.iso_lb ? ">= " : "") + f(r.iso, 1) + "×", isr = r => r.iso_rec == null ? "n/a" : f(r.iso_rec, 2) + "×";
-  const bestx = r => { const v = Object.values(r.x || {}).filter(q => q != null); return v.length ? Math.max(...v) : null; };
-  const armsTable = rows => { const head = ["method", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l), ["× vs dense LoRA at own loss", "× vs recipe at own loss", "worst task @ step " + deep, "train s"]);
+  const bestx = bestOfRow;
+  const armsTable = rows => { const head = ["method", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l + (M === "all" ? "" : " (" + mlab() + ")")), ["× vs dense LoRA at own loss", "× vs recipe at own loss", "worst task @ step " + deep, "train s"]);
     const body = rows.map(r => { const ce = r.ce_last == null ? "" : f(r.ce_last, 3) + (r.d_vs_ref_se != null && !r.is_ref ? "  (Δ " + f(r.d_vs_ref, 3) + " ±" + f(r.d_vs_ref_se, 3) + ")" : "");
       return [two((r.is_ref ? "[ref] " : "") + r.arm, r.desc), (r.seeds || []).length, r.steps, ce, r.pf_per_step_vs_dense == null ? "" : f(r.pf_per_step_vs_dense, 2) + "×"]
-        .concat(levels.map(l => xs((r.x || {})[l])), [iso(r), isr(r), xs((r.xw || {})[deep]), f(r.train_s, 0)]); });
+        .concat(levels.map(l => xs(xOf(r)[l])), [iso(r), isr(r), xs((r.xw || {})[deep]), f(r.train_s, 0)]); });
     const nc = [1, 2, 3, 4].concat(levels.map((_, i) => 5 + i), [5 + levels.length, 6 + levels.length, 7 + levels.length, 8 + levels.length]);
     const t = table(head, body, nc); [...t.querySelectorAll("tr")].slice(1).forEach((tr, i) => { if (rows[i].is_ref) { tr.style.background = "var(--surface)"; tr.style.fontStyle = "italic"; } }); return t; };
 
@@ -161,9 +265,10 @@ JS = SS + r'''
   B.forEach(r => { const i = ideaOf(r); let u = i ? unitBy[i.id] : null;
     if (!u) { const k = "fam:" + famOf(r); u = unitBy[k] = unitBy[k] || (units.push({ key: k, idea: null, family: famOf(r), status: "done", title: famOf(r) === "unassigned" ? "Arms not tied to an idea" : cap(famOf(r)) + " (arms with no queue entry)", arms: [] }), units[units.length - 1]); }
     u.arms.push(r); });
-  units.forEach(u => { const non = u.arms.filter(r => !r.is_ref).map(bestx).filter(v => v != null); u.best = non.length ? Math.max(...non) : null; });
+  const calcBest = () => units.forEach(u => { const non = u.arms.filter(r => !r.is_ref).map(bestx).filter(v => v != null); u.best = non.length ? Math.max(...non) : null; });
+  calcBest();
   const SR = { running: 0, done: 1, queued: 2, dropped: 3, failed: 4 }, OUT = { running: "Running", done: "Done: measured or kept", queued: "Queued", dropped: "Dropped: no gain", failed: "Failed" };
-  const refUnit = unitBy.recipe, refX = refUnit ? refUnit.best : null;
+  const refUnit = unitBy.recipe; let refX = refUnit ? refUnit.best : null;
 
   /* stat strip */
   const cnt = {}; ideasAll.forEach(i => { cnt[i.status] = (cnt[i.status] || 0) + 1; });
@@ -171,15 +276,18 @@ JS = SS + r'''
   const es = [...new Set(B.map(r => r.eval_size).filter(v => v != null))];
   const tile = (b, s) => { const t = el("div", null, "tile"); t.appendChild(el("b", b)); t.appendChild(el("span", s)); return t; };
   const strip = $("arStrip");
-  if (last) strip.appendChild(tile(xs(last.x), "best FLOP speedup so far vs dense LoRA (" + last.arm + ")"));
-  strip.appendChild(tile(String(ideasAll.length), "ideas: " + cntTxt));
-  strip.appendChild(tile(String(B.length), "arms scored" + (es.length ? " · ⚠ eval_size " + es.join(" / ") + " (below 500)" : "")));
-  if (ST.updated) strip.appendChild(tile(ST.updated.replace(/^\d{4}-/, ""), "last update (Pacific time)"));
+  const drawStrip = () => { strip.textContent = ""; const sr = bhSeries(), lv = sr.length ? sr[sr.length - 1] : null;
+    if (last) strip.appendChild(tile(lv == null ? "n/a" : xs(lv), "best FLOP speedup so far vs dense LoRA, " + mlab() + (M === "all" ? " (" + last.arm + ")" : "")));
+    strip.appendChild(tile(String(ideasAll.length), "ideas: " + cntTxt));
+    strip.appendChild(tile(String(B.length), "arms scored" + (es.length ? " · ⚠ eval_size " + es.join(" / ") + " (below 500)" : "")));
+    if (ST.updated) strip.appendChild(tile(ST.updated.replace(/^\d{4}-/, ""), "last update (Pacific time)")); };
 
   /* every idea at a glance */
-  const G = $("arGlance"), gu = units.filter(u => !(u.arms.length && u.arms.every(r => r.is_ref)));
+  const G = $("arGlance"), gnote = G.previousElementSibling, gbase = gnote.textContent;
+  const drawGlance = () => { G.textContent = ""; const gu = units.filter(u => !(u.arms.length && u.arms.every(r => r.is_ref)));
   gu.sort((a, b) => (b.best == null ? -1 : b.best) - (a.best == null ? -1 : a.best));
   const mx = Math.max(4, ...gu.map(u => u.best || 0), refX || 0) * 1.06;
+  gnote.textContent = gbase + " Measured at: " + mlab() + "." + (refX != null ? " Plain recipe: " + f(refX, 2) + "×." : "");
   gu.forEach(u => { const lab = el("div", null, "gl"); const a = el("a", u.title); a.href = "#ar-ideas"; lab.appendChild(a); G.appendChild(lab);
     const t = el("div", null, "gt"); if (u.best != null) { const b = el("div", null, "gb s-" + u.status); b.style.width = (u.best / mx * 100) + "%"; t.appendChild(b);
       const na = u.arms.filter(r => !r.is_ref).length, pc = u.best / mx * 100, v = el("span", f(u.best, 2) + "× · " + na + (na === 1 ? " arm" : " arms"), "gv");
@@ -187,8 +295,7 @@ JS = SS + r'''
     else { const v = el("span", u.arms.length ? "no comparison level reached (" + u.arms.length + " arms)" : "no arms scored yet", "gv"); v.style.left = "0"; t.appendChild(v); }
     if (refX != null) { const r = el("div", null, "gr"); r.style.left = (refX / mx * 100) + "%"; t.appendChild(r); }
     G.appendChild(t); });
-  if (refX != null) { const nn = G.previousElementSibling; if (nn) nn.textContent += " Plain recipe: " + f(refX, 2) + "×."; }
-  const ax = el("div", null, "gax"); [1, 2, 3, 4, 6, 8].filter(v => v < mx).forEach(v => { const s = el("span", v + "×"); s.style.left = (v / mx * 100) + "%"; ax.appendChild(s); }); G.appendChild(ax);
+  const ax = el("div", null, "gax"); [1, 2, 3, 4, 6, 8].filter(v => v < mx).forEach(v => { const s = el("span", v + "×"); s.style.left = (v / mx * 100) + "%"; ax.appendChild(s); }); G.appendChild(ax); };
 
   /* ideas list, PAIL style */
   const famNote = $("arFamNote");
@@ -208,11 +315,29 @@ JS = SS + r'''
     const names = Object.keys(groups).sort((a, b) => by === "family" ? (a === "Reference" ? -1 : b === "Reference" ? 1 : a === "Baseline" ? -1 : b === "Baseline" ? 1 : 0) : (SR[a] ?? 9) - (SR[b] ?? 9));
     names.forEach(n => { const us = groups[n].slice().sort((a, b) => (SR[a.status] ?? 9) - (SR[b.status] ?? 9) || (b.best || 0) - (a.best || 0));
       const d = fold([by === "family" ? n : (OUT[n] || cap(n)), mh(us.length + (us.length === 1 ? " idea" : " ideas"))], true, "qg"); const ul = el("ul", null, "ql"); us.forEach(u => ul.appendChild(itemOf(u))); d.appendChild(ul); host.appendChild(d); }); };
-  drawIdeas("outcome");
-  const sw = by => { $("arGO").setAttribute("aria-pressed", by === "outcome"); $("arGF").setAttribute("aria-pressed", by === "family"); drawIdeas(by); };
+  let BYV = "outcome";
+  const sw = by => { BYV = by; $("arGO").setAttribute("aria-pressed", by === "outcome"); $("arGF").setAttribute("aria-pressed", by === "family"); drawIdeas(by); };
   $("arGO").onclick = () => sw("outcome"); $("arGF").onclick = () => sw("family");
   setN("arIdeasN", ideasAll.length + " ideas · " + cntTxt + (units.length > ideasAll.length ? " · " + (units.length - ideasAll.length) + " arm groups with no queue entry" : "") + " · " + B.length + " arms listed");
   if (es.length) famNote.textContent += " ⚠ eval_size " + es.join(" / ") + " held-out rows (16 per task and length; below 500, so differences under about two paired SEs are noise). Arm tables: italic rows are references, sorted by speedup over the recipe at the same loss. Memory columns were removed on 11-17: the logged values were wrong; valid memory measurements are in the log and the idea results.";
+
+  /* the context-length tabs drive the strip, the hero chart, the glance bars, the idea list and the arm tables */
+  let bestChart = null;
+  const drawBestTable = () => { const box = $("arBest"); if (!BH.length) return; box.textContent = "";
+    box.appendChild(table(["time", "method", "idea", "FLOP speedup (as logged)", "× at " + mlab(), "worst task", "transient memory vs dense LoRA", "note"],
+      BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level == null || r.level === "" ? "" : (isNaN(r.level) ? " @ " : " @ step ") + r.level), bhVal(r) == null ? "n/a" : xs(bhVal(r)), r.xw == null ? "n/a" : xs(r.xw), r.mem == null ? "n/a" : f(r.mem, 2) + "×", r.note]), [5, 6], "arwide")); };
+  const renderMetric = () => { calcBest(); refX = refUnit ? refUnit.best : null;
+    const nok = BH.filter(r => bhVal(r) != null).length, wts = MT.weights || {};
+    const base = M === "w" ? "Held-out CE averaged with weights " + Object.keys(wts).map(k => k.replace("s", "") + " " + Math.round(wts[k] * 100) + "%").join(" · ") + ", then FLOPs to reach the dense-LoRA loss, as in the published speedups."
+      : M === "all" ? "The loop's own metric: held-out CE averaged over all lengths and tasks." : "Held-out CE on the " + mlab() + " rows only (eval_size below 500, so noisy), then FLOPs to reach the dense-LoRA loss.";
+    $("arMetricNote").textContent = base + (M === "all" ? "" : " Recomputed here from the per-length CE curves; it reproduces the loop's published speedups on " + MT.check[0] + " of " + (MT.check[0] + MT.check[1]) + " levels. " + nok + " of " + BH.length + " hourly entries can be traced to an arm on the board; the others are left out of the chart.");
+    if (last) { const sr = bhSeries(), lv = sr[sr.length - 1]; $("arBestNote").textContent = lv == null ? "No hourly entry can be traced to an arm with this measurement." : "Latest best at " + mlab() + ": " + xs(lv) + (M === "all" ? " (" + last.arm + ", " + last.idea + "), found " + last.t + "." : "."); }
+    drawStrip(); drawGlance(); drawIdeas(BYV); drawBestTable();
+    if (bestChart) { bestChart.data.datasets[0].data = bhSeries(); bestChart.options.scales.y.title.text = "FLOP speedup (×), " + mlab(); bestChart.update(); } };
+  const mbar = $("arMetric"); mbar.appendChild(el("span", "Gains at context length"));
+  MT.metrics.forEach(m => { const b = el("button", m.label); b.type = "button"; b.dataset.m = m.id; b.setAttribute("aria-pressed", m.id === M); b.onclick = () => { M = m.id; mbar.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === M)); renderMetric(); }; mbar.appendChild(b); });
+  if (MT.metrics.length < 2) mbar.style.display = "none";
+  renderMetric();
 
   /* FLOPs to reach a held-out loss */
   const DP = ST.depth;
@@ -259,8 +384,8 @@ JS = SS + r'''
   const base = { responsive: true, maintainAspectRatio: false, animation: false };
   const axis = (lab, extra) => Object.assign({ title: { display: true, text: lab, color: mu }, ticks: { color: mu }, grid: { color: ru } }, extra || {});
   if (BH.length && $("arBestChart")) {
-    new Chart($("arBestChart"), { type: "line", data: { labels: BH.map(r => r.t), datasets: [{ label: "best FLOP speedup", data: BH.map(r => r.x), borderColor: css("--c1"), backgroundColor: css("--c1"), tension: 0, stepped: "before", pointRadius: 4 }] },
-      options: { ...base, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => BH[c.dataIndex].arm + ": " + f(c.raw, 1) + "×", afterLabel: c => lead(BH[c.dataIndex].note, 160) } } }, scales: { x: { ticks: { color: mu, maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: axis("FLOP speedup (×)", { beginAtZero: true }) } } });
+    bestChart = new Chart($("arBestChart"), { type: "line", data: { labels: BH.map(r => r.t), datasets: [{ label: "best FLOP speedup", data: bhSeries(), borderColor: css("--c1"), backgroundColor: css("--c1"), tension: 0, stepped: "before", pointRadius: 4 }] },
+      options: { ...base, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => (M === "all" ? BH[c.dataIndex].arm + ": " : "best so far: ") + f(c.raw, 1) + "×", afterLabel: c => lead(BH[c.dataIndex].note, 160) } } }, scales: { x: { ticks: { color: mu, maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: axis("FLOP speedup (×), " + mlab(), { beginAtZero: true }) } } });
   }
   const C = (ST.curves || []).filter(c => !HIDE(c));
   if ($("arCurves")) {

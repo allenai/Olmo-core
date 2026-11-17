@@ -47,7 +47,7 @@ then `node --check` the inline scripts and publish HUB.html to the same artifact
 version exists, run the builder on that version, never force). The builder replaces the blocks between
 `<!-- AR:PART:START -->`/`END` and `<!-- AR:SCRIPT:START -->`/`END` in place (first run: part before `provenance`, script at the
 end; legacy `AUTORESEARCH` blocks are stripped). It is idempotent, does not touch the navigation, and also fills the
-overview's "Running now" box. Layout (PAIL style): verdict line and stat strip; "Best so far, over time" (step chart, table folded);
+overview's "Running now" box. Context-length tabs (Weighted 16k-heavy by default, 16k, 8k, 4k, all-lengths mean) drive the stat strip, hero chart, glance bars, idea list and arm tables; the per-length speedups are recomputed by the builder from `curves[i].by` (reference pool = the `v2` tag, weights 4k 20% / 8k 30% / 16k 50% in `LENSETS`), the same method as `score.py`, and the builder checks them against `board[i].x` (1100 of 1100 levels match). Layout (PAIL style): verdict line and stat strip; "Best so far, over time" (step chart, table folded);
 "Every idea at a glance" (one bar per idea: best FLOP speedup, dashed line = plain recipe); "Ideas, with their verdicts" (one line per
 idea, grouped by outcome or by family, details and arms folded); FLOPs to reach a held-out loss; loss vs FLOPs (references, top arms and
 a selector for one idea's arms); validation runs; how it is scored; log newest first; 8k pilot. Every section is a bar with counts.
