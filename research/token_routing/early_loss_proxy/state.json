@@ -142,26 +142,22 @@
    "extra": "",
    "lr_mult": 1.0
   },
-  "5197409": {
+  "5195580": {
    "node": "mooney",
-   "tag": "smoke-prefix",
+   "tag": "smoke2",
    "runs": [
-    "elp-smoke-prefix-ng7-sd0",
-    "elp-smoke-prefix-ng7p-sd0"
+    "elp-smoke2-recipe-sd0"
    ],
    "steps": "2,4",
    "sets": "suite8k:8",
-   "code": "/data/prasann/early_loss_proxy/code_36242f94a",
+   "code": "/data/prasann/early_loss_proxy/code_8ba2e2302",
    "extra": "",
    "lr_mult": 1.0,
    "data": "/data/prasann/oracle/shards/mt4f1952",
    "seq_len": 12288,
    "gpus": 2,
    "qos": "preemptive_high",
-   "custom": [
-    "ng7=softtoken,1e-5,--st-otr-nograd-until 7 --st-otr-early-lora-start 7",
-    "ng7p=softtoken,1e-5,--st-otr-stages 2:0.5,4:0.25,7:0.1,16:0.04 --st-otr-drop-layer 2 --st-otr-nograd-until 7 --st-otr-early-lora-start 7"
-   ]
+   "custom": []
   }
  }
 }
