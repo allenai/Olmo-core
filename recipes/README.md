@@ -51,7 +51,7 @@ train from the repaired copy. `prep` (below) re-runs the audit read-only.
 
 Two arms of one recipe (amandab's validated dense 256k SFT): `32k` (examples longer than 32,768
 tokens dropped, not truncated) and `256k` (everything). Both: 1,048,576 tokens/step, LR 4e-5, one
-epoch, one 8×H100 node, unallocated + urgent on jupiter, pinned to a pushed commit.
+epoch, one 8×H100 node, urgent on jupiter (allocated via oe-scaling), pinned to a pushed commit.
 
 ```bash
 L=recipes/train/setA/launch_setA_sft.py

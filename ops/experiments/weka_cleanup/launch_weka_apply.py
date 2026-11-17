@@ -5,7 +5,7 @@
   python3 launch_weka_apply.py MANIFEST.tsv --tag 20261030 --apply  # delete
 
 Uploads weka_apply.py + the manifest as a Beaker dataset (mounted at /input), runs urgent with
-minRuntime 1h from ai2/flex2 / ai2/oe-other (unallocated), and writes the per-path JSON to the
+minRuntime 1h from ai2/flex2 / ai2/oe-other (allocated via oe-scaling), and writes the per-path JSON to the
 job's result dataset. Prints the experiment id.
 """
 import argparse, json, os, re, shutil, subprocess, tempfile, time

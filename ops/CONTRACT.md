@@ -51,6 +51,7 @@ Rows are *events*. Readers fold rows by `run_id` in file order (later non-null f
 | `command` | str\|null | launcher argv |
 | `expected_minutes` | number\|null | declared at launch; status flags OVERRUN at > 2x |
 | `final_state` | `"done"`\|`"failed"`\|`"cancelled"`\|null | only via update events |
+| `runtime_minutes` | number\|null | actual run time of the finished job, written with `final_state=done` by `ops status --record`; its history median is the default expected runtime for minRuntime (`opslib/runtime.py`) |
 | `state_source` | str\|null | where final_state came from |
 | `launched_at` / `ts` | ISO-8601 UTC | `ts` = when this row was written |
 | `launched_by` | str | session id, `manual`, or `backfill` |

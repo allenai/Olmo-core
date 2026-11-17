@@ -1,0 +1,3 @@
+# bulky raw pulls (sacct all-users ~30 MB, Beaker per-job JSON); regenerate with the commands in README.md
+raw/
+page/

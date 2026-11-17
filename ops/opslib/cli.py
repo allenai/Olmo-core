@@ -3,7 +3,7 @@ import argparse
 import importlib
 import sys
 
-MODULES = ["registry", "results", "backfill", "jobs", "guard", "experiments"]
+MODULES = ["registry", "results", "backfill", "jobs", "capacity", "guard", "experiments"]
 
 
 def main(argv=None):

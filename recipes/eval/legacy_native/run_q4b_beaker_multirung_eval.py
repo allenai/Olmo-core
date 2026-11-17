@@ -172,7 +172,7 @@ def build_eval_launch_config(
     xlong_rungs,
     cot_mode,
     tokenizer="",
- dc_rung_files: str = "", dc_rungs: str = "", extra_env=()):
+ dc_rung_files: str = "", dc_rungs: str = "", extra_env=(), expected_minutes=None):
     # `cluster` may be a comma list for any-of placement (build_launch_config splits it the same
     # way). The weka root is identical across the weka-tagged clusters, so resolve it from the first
     # -- get_root_dir() takes ONE cluster name and 404s on a comma list.
@@ -216,10 +216,19 @@ def build_eval_launch_config(
     launch_config.torchrun = False  # the runner issues its own torchrun(s)
     launch_config.allow_dirty = True  # ship the (uncommitted) launcher via an ephemeral ref
     launch_config.priority = priority
-    # Beaker minRuntime (2026-10-19): on jupiter, urgent jobs with minRuntime=0 effectively never
-    # schedule (0 of ~2,250 urgent 1-7-GPU jobs scheduled in 3 days had it). Override with
-    # BEAKER_MIN_RUNTIME (empty or "0" = always-preemptible).
-    _mr = os.environ.get("BEAKER_MIN_RUNTIME", "1h")
+    # Beaker minRuntime: min(4h, 1.3 x expected runtime), 1h when unknown (Prasann, 2026-11-10;
+    # ops/opslib/runtime.py). Expected = --expected-minutes, else the registry's median for similar
+    # finished eval passes. Beaker preempts us by allocation balance right after minRuntime, and urgent
+    # minRuntime=0 jobs effectively never schedule on jupiter. BEAKER_MIN_RUNTIME overrides (a duration,
+    # or empty / "0" = always-preemptible).
+    _mr = os.environ.get("BEAKER_MIN_RUNTIME", "auto")
+    if _mr == "auto":
+        ops = _ops()
+        sug = (ops.suggest_min_runtime(run_id=name, expected_minutes=expected_minutes,
+                                       launcher="run_q4b_beaker_multirung_eval.py", kind="eval")
+               if ops is not None else {"min_runtime": "1h", "source": "fallback (ops unavailable)"})
+        _mr = sug["min_runtime"]
+        print(f"[eval] minRuntime={_mr} ({sug.get('source')})", flush=True)
     launch_config.min_runtime = None if _mr in ("", "0", "0s") else _mr
     launch_config.step_soft_timeout = (
         None  # we submit with follow=False (don't block on many evals);
@@ -439,6 +448,7 @@ def main():
             dc_rung_files=dc_rung_files,
             dc_rungs=dc_rungs,
             extra_env=extra_env,
+            expected_minutes=args.expected_minutes,
         )
         # Each eval pass is its own ops run; the driver writes this id into the result's _meta.
         run_id = eval_pass_id(lc)

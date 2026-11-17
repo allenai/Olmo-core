@@ -40,6 +40,7 @@ Real run (via ``run_ctc_local.sbatch``; ``--variant chunked-mix`` forces ``--no-
 """
 
 import argparse
+from dataclasses import dataclass
 import datetime
 import functools
 import json
@@ -91,6 +92,37 @@ from olmo_core.train.train_module import (
     TransformerTrainModuleConfig,
 )
 from olmo_core.utils import seed_all
+
+
+@dataclass
+class ResumePointCheckpointer(CheckpointerCallback):
+    """``--resume-interval N``: one rolling ephemeral checkpoint every N steps, for preemptible queues.
+
+    Beaker preempts our jobs once they pass minRuntime and a preempted job reruns the same command, so
+    the trainer's fit() reloads the newest checkpoint in the save folder and the run continues instead
+    of restarting from step 0. Only the newest resume point is kept (the parent class removes the older
+    ephemeral one when it saves the next), no step-0 checkpoint is written, and with
+    ``--no-final-checkpoint`` the full end-of-run save is skipped too. ``drop_resume_points()`` deletes
+    the leftover one after the post-fit model-only export.
+    """
+
+    skip_final_save: bool = False
+
+    def post_train(self):
+        if self.skip_final_save:
+            if self.enabled:
+                self._await_last_checkpoint()
+            return
+        super().post_train()
+
+    def drop_resume_points(self):
+        if not self.enabled:
+            return
+        self._await_last_checkpoint()
+        for path in list(self._ephemeral_checkpoints) + list(self._checkpoints_to_remove):
+            self._remove_checkpoint(path)
+        self._ephemeral_checkpoints.clear()
+        self._checkpoints_to_remove.clear()
 
 try:  # package import (repo root on sys.path) or same-directory fallback (torchrun on the file path)
     from recipes.train.research_trainer.llama_configs import (
@@ -1102,7 +1134,17 @@ def build_and_fit(opts: argparse.Namespace) -> None:
         # on this callback (see the note above).
         .with_callback(
             "checkpointer",
-            CheckpointerCallback(
+            # --resume-interval: rolling resume point (works with --no-final-checkpoint, which would
+            # otherwise disable the callback and silently drop --save-interval too).
+            ResumePointCheckpointer(
+                save_interval=opts.save_interval,
+                ephemeral_save_interval=opts.resume_interval,
+                pre_train_checkpoint=False,
+                skip_final_save=opts.no_final_checkpoint,
+                max_checkpoints=(opts.max_checkpoints or None),
+            )
+            if opts.resume_interval
+            else CheckpointerCallback(
                 save_interval=opts.save_interval,
                 enabled=not opts.no_final_checkpoint,
                 # default 3 = keep only the newest three permanent checkpoints; 0 = keep all (decay-branch
@@ -1299,6 +1341,10 @@ def build_and_fit(opts: argparse.Namespace) -> None:
         save_model_and_optim_state(
             f"{save_folder}/model_and_optim", train_module.model, save_overwrite=True
         )
+        # the export exists now, so the rolling resume point (~55G at 4B) is no longer needed
+        cb = trainer.callbacks.get("checkpointer")
+        if isinstance(cb, ResumePointCheckpointer):
+            cb.drop_resume_points()
         if get_rank() == 0:
             model_dict = plan["model_config"].as_config_dict()
             if opts.attn_backend == "torch":
@@ -2136,6 +2182,15 @@ def parse_args() -> argparse.Namespace:
         help="steps between mid-run model+optim checkpoints. Default None = none written (eval only "
         "needs the post-fit model-only save, and at 4B each mid-run checkpoint costs ~55G). Set an "
         "integer to get resume points for a long run on a preemptible queue.",
+    )
+    ap.add_argument(
+        "--resume-interval",
+        type=int,
+        default=None,
+        help="steps between ROLLING resume checkpoints (only the newest is kept; deleted after the "
+        "post-fit export; no step-0 or final full save). For runs that can outlast Beaker's minRuntime: "
+        "a preempted job reruns the same command and fit() resumes from it. Unlike --save-interval it "
+        "also works with --no-final-checkpoint. Must be < --save-interval when both are set.",
     )
     ap.add_argument(
         "--max-checkpoints",

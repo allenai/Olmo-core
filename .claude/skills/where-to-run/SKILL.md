@@ -52,6 +52,19 @@ Beaker saturn/prometheus) when an H100/H200/B200 can fit at all, and every A100 
 by `normal` jobs as free (`● NOW`, "preempt normal-QOS … (always fine)"). No need to ask or
 hesitate. (Preempting `preemptive` holders at `preemptive_high*` is also fine; it shows as `◐`.)
 
+**Spill rule (Prasann, 2026-11-10): small, short jobs go wherever they start soonest.** A job of
+≤ 2 GPUs and ≤ 2 h (`-g 1`/`-g 2`, `--hours ≤ 2`) whose best pick is a Beaker queue with an expected
+wait over 30 min goes to jsteinhardt instead (the pick then says `SPILL RULE`): at `preemptive_high`
+while our 8-GPU cap has room, else at `preemptive` on GPUs that are free or held at `normal`. The
+jsteinhardt cap is **8 GPUs at `preemptive_high` only**; more may run at `preemptive` when capacity is
+available (Prasann, 2026-11-10). `preemptive` bumps `normal` and is bumped by `preemptive_high`, so
+only restartable work goes there (evals, requeue-safe jobs). The LOCAL SLURM header shows what all of
+our sessions hold at each of the two QOS right now, split by experiment from the run registry. The LAMBDA line does the same
+for its 8 + 8 caps. Before an actual slurm or Lambda start, `ops capacity --would-preempt ...`
+names any other user's job it would preempt (see the launch-run skill). Evidence: over 2026-10-20 →
+11-10, jsteinhardt ran at 23% of the cap while Beaker jobs spent 60% of their lifetime pending
+(`records/gpu-usage-workflow-audit-2026-11.md`). Tests: `python3 test_spill.py` in this directory.
+
 ## Reading it
 
 - **BEST PLACE PER REQUEST SIZE** — the pick plus two runners-up. The `where` string is directly

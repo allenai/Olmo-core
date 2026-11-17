@@ -19,7 +19,7 @@ The 32k arm trains on a strict subset of the 256k arm's data, so it takes fewer 
 
 ## Reproduce
 
-Every step runs on Beaker and is pinned to a pushed commit. The jobs are unallocated (workspace
+Every step runs on Beaker and is pinned to a pushed commit. The jobs are allocated via the oe-scaling group (workspace
 `ai2/flex2`, budget `ai2/oe-other`), run at priority `urgent`, and use jupiter H100s.
 
 ```bash

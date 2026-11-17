@@ -22,7 +22,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from opslib import paths, registry, results
+from opslib import paths, registry, results, runtime
 
 STABLE_OPS = "/accounts/projects/berkeleynlp/prasann/bin/ops"
 
@@ -168,3 +168,16 @@ def record_results(json_path, check: bool = True, **defaults) -> list | None:
     except Exception as e:  # noqa: BLE001
         _warn(f"recording results from {json_path}", e)
         return None
+
+
+def suggest_min_runtime(run_id: str | None = None, expected_minutes=None, launcher: str | None = None,
+                        kind: str = "train") -> dict:
+    """Beaker minRuntime for a launch: min(4 h, 1.3 x expected), expected from the caller or the
+    registry's history median (``opslib.runtime.suggest``); ``{"min_runtime": "1h", ...}`` on any error."""
+    try:
+        runs = registry.load_runs(state_dir() / "runs.jsonl") if expected_minutes in (None, "") and run_id else None
+        return runtime.suggest(run_id=run_id, expected_minutes=expected_minutes, runs=runs, launcher=launcher, kind=kind)
+    except Exception as e:  # noqa: BLE001 - never fail a launch
+        _warn("minRuntime suggestion", e)
+        return {"min_runtime": "1h", "min_runtime_minutes": 60, "expected_minutes": None,
+                "source": "fallback (ops error)", "resume": False}
