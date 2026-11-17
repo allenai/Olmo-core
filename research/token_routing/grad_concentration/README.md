@@ -17,3 +17,7 @@ How many tokens carry the summed (minibatch) parameter update of dense SFT, and 
 
 Results: node-local `/data/prasann/gradconc/results/<label>/` (sneetches) or Beaker `/results`; copied to `results/`
 here (gitignored) for `analyze.py`. Writeup: `records/grad-concentration.md`.
+
+Gradient maps (2026-11-04): `gradmap.py` (per-token x per-block weight-grad energy and ||dL/dh||, dense + the recipe's
+routed pass) → `gradmap_plot.py` (maps, zooms, routed pairs, summaries); `run_gradmap.sbatch`, `build_2k_rows.sbatch`
+(fresh 2k-rung rows), `run_gradmap_plot.sbatch` (all node-local on mooney). Figures + `findings.md` in `gradmaps/`.

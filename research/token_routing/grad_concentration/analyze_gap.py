@@ -143,10 +143,14 @@ def metrics_from_blocks(M, B):
             return xy / math.sqrt(xx * yy) if xx > 0 and yy > 0 else float("nan")
         v["exp_cos_attr"] = ecos("A", "D")
         v["exp_cos_routed"] = ecos("R", "D")
-        v["exp_norm_ratio_routed"] = math.sqrt(eip("R", "R") / eip("D", "D")) if eip("R", "R") > 0 else float("nan")
-        v["exp_norm_ratio_attr"] = math.sqrt(eip("A", "A") / eip("D", "D")) if eip("A", "A") > 0 else float("nan")
-        v["exp_proj_routed"] = eip("R", "D") / eip("D", "D")
-        v["exp_proj_attr"] = eip("A", "D") / eip("D", "D")
+        # The debiased ||E[D]||^2 can come out <= 0 when the dense mean is below the per-step noise floor; then the
+        # expected ratios are undefined (nan) and exp_dense_sq says so.
+        dd = eip("D", "D")
+        v["exp_dense_sq"] = dd
+        v["exp_norm_ratio_routed"] = math.sqrt(eip("R", "R") / dd) if eip("R", "R") > 0 and dd > 0 else float("nan")
+        v["exp_norm_ratio_attr"] = math.sqrt(eip("A", "A") / dd) if eip("A", "A") > 0 and dd > 0 else float("nan")
+        v["exp_proj_routed"] = eip("R", "D") / dd if dd > 0 else float("nan")
+        v["exp_proj_attr"] = eip("A", "D") / dd if dd > 0 else float("nan")
         for nm_, X in (("dense", "D"), ("res_true", "Rt"), ("res_attr", "Ra"), ("routed", "R")):
             v[f"bias_share_{nm_}"] = eip(X, X) / float(dg(X, X).mean())
             v[f"pair_cos_{nm_}"] = ms(xcos(X, X))

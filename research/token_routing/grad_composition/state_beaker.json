@@ -1,0 +1,93 @@
+{
+ "bk-mt4rows-base": {
+  "ex": "01M5KXQF0FQFBFHBZSMNZQGJ4M",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/bases/q35-4b-base-markerfix/model_and_optim",
+  "steps": 0,
+  "commit": "93ab99635f9ffe4861f7e62e3efed70d7e5ac5ed",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1952 --row-offset 1464 --rows 64 --tasks contradiction,nq,outlier,oolong --dump-dir none"
+ },
+ "bk-mt4rows-mt4-st31": {
+  "ex": "01M5KXRAEGZQCDHA37ZZR9R31P",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-s488st31-tdc-lr5e-06",
+  "steps": 31,
+  "commit": "93ab99635f9ffe4861f7e62e3efed70d7e5ac5ed",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1952 --row-offset 1464 --rows 64 --tasks contradiction,nq,outlier,oolong --dump-dir none"
+ },
+ "bk-mt4rows-mt4-st61": {
+  "ex": "01M5KXS4SPVF2MAF38G6H4TPDF",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-s488st61-tdc-lr5e-06",
+  "steps": 61,
+  "commit": "93ab99635f9ffe4861f7e62e3efed70d7e5ac5ed",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1952 --row-offset 1464 --rows 64 --tasks contradiction,nq,outlier,oolong --dump-dir none"
+ },
+ "bk-mt4rows-mt4-st122": {
+  "ex": "01M5KXT100AVD3HCM0DS7GK60C",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-s488-tdc-lr5e-06",
+  "steps": 122,
+  "commit": "93ab99635f9ffe4861f7e62e3efed70d7e5ac5ed",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1952 --row-offset 1464 --rows 64 --tasks contradiction,nq,outlier,oolong --dump-dir none"
+ },
+ "bk-mt4rows-mt4-st366": {
+  "ex": "01M5KXTTV2E2GBV5CFY8Y17Z88",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-s1464-tdc-lr5e-06",
+  "steps": 366,
+  "commit": "93ab99635f9ffe4861f7e62e3efed70d7e5ac5ed",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1952 --row-offset 1464 --rows 64 --tasks contradiction,nq,outlier,oolong --dump-dir none"
+ },
+ "bk-mt4rows-mt4-st366-lr2e-6": {
+  "ex": "01M5KXVVR4P685J28G6Z1XSEG6",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-dense-s1464-tdc-lr2e-06",
+  "steps": 366,
+  "commit": "93ab99635f9ffe4861f7e62e3efed70d7e5ac5ed",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1952 --row-offset 1464 --rows 64 --tasks contradiction,nq,outlier,oolong --dump-dir none"
+ },
+ "bk-mt4rows-mt4-otr10M8-st366": {
+  "ex": "01M5KXWNM8R7F8GEAYCBDWWC48",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt4-otr10M8-s1464-tdb-lr2e-06",
+  "steps": 366,
+  "commit": "93ab99635f9ffe4861f7e62e3efed70d7e5ac5ed",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt4s1952 --row-offset 1464 --rows 64 --tasks contradiction,nq,outlier,oolong --dump-dir none"
+ },
+ "bk-mt11rows-base": {
+  "ex": "01M5KXXFWDC9XSN41K6TDEDDK8",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/bases/q35-4b-base-markerfix/model_and_optim",
+  "steps": 0,
+  "commit": "611eff5d9ef3c1006483248ae4843f92b1665492",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt11s960 --row-offset 832 --rows 128 --dump-dir none"
+ },
+ "bk-mt11rows-mt11-st165": {
+  "ex": "01M5KXYCQDM4TMPS0PRK5T98T0",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-dense-s240-tdc-lr2e-06",
+  "steps": 165,
+  "commit": "611eff5d9ef3c1006483248ae4843f92b1665492",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt11s960 --row-offset 832 --rows 128 --dump-dir none"
+ },
+ "bk-mt11rows-mt11-st330": {
+  "ex": "01M5KXZC9MXP0WGMNJ9SPJYVF9",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-dense-s480-tdc-lr2e-06",
+  "steps": 330,
+  "commit": "611eff5d9ef3c1006483248ae4843f92b1665492",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt11s960 --row-offset 832 --rows 128 --dump-dir none"
+ },
+ "bk-mt11rows-mt11-st495": {
+  "ex": "01M5KY074YYN2X0PYTJHKXMMTX",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-dense-s720-tdc-lr2e-06",
+  "steps": 495,
+  "commit": "611eff5d9ef3c1006483248ae4843f92b1665492",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt11s960 --row-offset 832 --rows 128 --dump-dir none"
+ },
+ "bk-mt11rows-mt11-otr10M8-st330": {
+  "ex": "01M5KY1058K821TPXD3NH8T9DQ",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-otr10M8-s480-tdb-lr2e-06",
+  "steps": 330,
+  "commit": "611eff5d9ef3c1006483248ae4843f92b1665492",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt11s960 --row-offset 832 --rows 128 --dump-dir none"
+ },
+ "bk-mt11rows-mt11-otr10M8-st495": {
+  "ex": "01M5KY1ST7A9HK24DHJ8VX7Q9R",
+  "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/f8k-mt11-otr10M8-s720-tdb-lr2e-06",
+  "steps": 495,
+  "commit": "611eff5d9ef3c1006483248ae4843f92b1665492",
+  "extra": "--shard /weka/oe-training-default/ai2-llm/checkpoints/prasanns/ds64/fast8k/shards/mt11s960 --row-offset 832 --rows 128 --dump-dir none"
+ }
+}

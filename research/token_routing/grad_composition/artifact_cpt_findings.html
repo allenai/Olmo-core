@@ -1,0 +1,17 @@
+<p class="lede">Prasann asked why token dropping keeps losing in CPT. Setup: 48 dev rows of 32,768 tokens <span class="tag warn">eval_size = 48 rows</span>,
+scored on the CPT start (stage 2), dense CPT after 12–480 steps (LR 2e-5), the online router OTR10M7 after 310 steps, and OLMo's own stage 3. A second backward with every
+attention layer's keys and values detached separates each token's own-label gradient from what it receives for serving as context.</p>
+<div class="verdict" style="padding:16px 18px"><ul>
+<li><b>Importance is flat after CPT, so a 10% keep cannot hold the gradient.</b> After 12 or more dense steps the top 10% of tokens hold 0.62 of block 24's
+gradient energy and the top 30% hold 0.90 (SFT: 0.90+ in the top 10%). A per-row top 10% by G<sub>7</sub> holds 0.37 of G<sub>24</sub>² (random 0.11), and the 50/10/3 pyramid holds 0.29.
+The rankings themselves are stable (ρ(G<sub>7</sub>, G<sub>24</sub>) = 0.66, higher than SFT's 0.34). It is the budget that fails: any routed keep needs about 30%.</li>
+<li><b>Early blocks learn from serving as context; late blocks learn from their own label.</b> The context share of a token's gradient is 0.95 at block 0, 0.80 at block 8,
+0.42 at 16 and 0.21 at 24 after CPT, crossing 0.5 at about block 14. Dropping a token from block 7 on also removes 0.6–0.8 of the gradient its early-mid blocks would get as context.
+<b>KV-only dropping from about block 20 on is the cut CPT tolerates best</b> (context share ≤ 0.27 there).</li>
+<li><b>The early stack's parameter-gradient share drops in the first 12 steps and then stays put.</b> Blocks 0–6 hold 0.42 → 0.20 → 0.16 (base, 12 steps, 480 steps). In the base a
+few recurring tokens dominate the gradient (the top 1% hold 0.74–0.80) and norm parameters take 0.29 of it. Twelve dense steps remove both, and the LM head's share triples (0.11 → 0.30).
+OLMo's stage 3 keeps the base pattern. Freezing blocks 0–6 after warmup gives up about 1/6 of the gradient energy.</li>
+<li><b>The dev-CE gain is mostly local copying, not long context.</b> Dense 480 gains +0.169 in the first 4k and +0.167 at 16–32k. Of the gain at positions ≥ 4k, 56–66%
+comes from targets that repeat a 4-gram seen within the last 4,096 tokens (22.5% of targets, +0.35 to +0.41 each). Only 6–7% needs reach beyond every sliding window (3.3% of targets).</li>
+<li><b>The CPT router checkpoint looks like dense</b> on every statistic, loss 1.645 vs 1.620. Unlike the SFT router, it shows no adaptation to its own drop.</li>
+</ul></div>
