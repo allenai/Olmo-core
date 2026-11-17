@@ -40,6 +40,9 @@ SAVE_EVERY = 242  # 242 x 16 x 32,257 = 124.9M tokens
 EPHEMERAL_EVERY = 121
 LR = 2e-5
 
+#: SMOKE_NOTE (2026-11-17): with beaker_ctc_suite's default --no-final-checkpoint the trainer builds the checkpointer
+#: with enabled=False unless --ephemeral-save-interval is set, and --save-interval alone then writes NOTHING (the first
+#: smoke ran 20 steps with --save-interval 10 and saved no step checkpoint). Production always passes both.
 RECIPE = ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 "
           "--st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 "
           "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
@@ -51,7 +54,8 @@ SMOKE_TOKENS = 30 * ROWS_PER_STEP * SEQ_LEN
 
 
 def run_name(arm, smoke):
-    return f"rcpt-q35-4b-{arm}-u1B" + ("-smoke" if smoke else "")
+    # smoke2: the first smoke (-smoke, 11-17) wrote no mid-run checkpoint -- see SMOKE_NOTE
+    return f"rcpt-q35-4b-{arm}-u1B" + ("-smoke2" if smoke else "")
 
 
 def main():
@@ -69,7 +73,9 @@ def main():
         name = run_name(arm, a.smoke)
         common = f"--save-interval {SAVE_EVERY if not a.smoke else 10} --max-checkpoints 0 --scheduler wsd --wsd-decay-fraction 0.1"
         if a.smoke:
-            common += f" --max-tokens {SMOKE_TOKENS} --warmup-fraction 0.04"
+            # the ephemeral interval is REQUIRED: beaker_ctc_suite passes --no-final-checkpoint, and the trainer then
+            # disables the checkpointer (so --save-interval is silently ignored) unless an ephemeral interval is set
+            common += f" --max-tokens {SMOKE_TOKENS} --warmup-fraction 0.04 --ephemeral-save-interval 5"
             if a.smoke == "A":
                 common += " --max-steps 20"
             else:
