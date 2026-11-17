@@ -141,6 +141,27 @@
    "code": "/data/prasann/early_loss_proxy/code_281e228c2",
    "extra": "",
    "lr_mult": 1.0
+  },
+  "5197640": {
+   "node": "mooney",
+   "tag": "smoke-rows",
+   "runs": [
+    "elp-smoke-rows-dlcut-sd0",
+    "elp-smoke-rows-rcpgb8-sd0"
+   ],
+   "steps": "2,4",
+   "sets": "suite8k:8",
+   "code": "/data/prasann/early_loss_proxy/code_82c0969af",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/data/prasann/oracle/shards/mt4f1952",
+   "seq_len": 12288,
+   "gpus": 2,
+   "qos": "preemptive_high",
+   "custom": [
+    "dlcut=full,1e-5,--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --row-len-keep cut:5120:0.1",
+    "rcpgb8=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --global-batch 8 --row-len-keep pow:4096:1"
+   ]
   }
  }
 }
