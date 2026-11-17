@@ -876,6 +876,8 @@ def resolve_plan(opts: argparse.Namespace, world_size: int) -> Dict[str, Any]:
         global_batch_size=opts.global_batch * opts.seq_len,
         seed=34521 + opts.seed,
         num_workers=opts.num_workers,
+        # --row-len-keep curr:...: the subset is written in curriculum order, so the loader must not reshuffle it
+        **({"shuffle": False} if "curr:" in (getattr(opts, "row_len_keep", "") or "") else {}),
     )
     return dict(
         meta=meta,

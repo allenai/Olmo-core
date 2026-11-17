@@ -5,6 +5,8 @@ kept independently with a probability that depends only on its token length:
 
 * ``pow:L0:a``  keep prob = min(1, (len / L0) ** -a)   -> rows drawn ~ len^-a above L0 (no duplicates)
 * ``cut:L:p``   keep prob = 1 if len <= L else p      -> short rows plus a random tail of long rows
+* ``curr:L0:L1:S:GB`` length curriculum: ONE part file in curriculum order (row cap L0 -> L1 linearly over the first
+  S steps of GB rows), and the trainer turns the loader's shuffle off.
 * ``trunc:lo:hi`` (combinable with ``+``) truncated rows: outlier / contradiction rows keep every gold document plus a
   U(lo, hi) fraction of their distractors (original printed ids, so the answer stays valid; needs ``row_info.jsonl``
   beside the pool); the length rule above is applied to the ORIGINAL row length.
@@ -65,6 +67,31 @@ def truncate_row(ids, lab, info, lo, hi, rng):
     return out_i, out_l
 
 
+def curriculum_order(lens, l0, l1, n_steps, gb, rng):
+    """Row order for a length curriculum: step s (``gb`` rows) draws uniformly at random among the remaining rows of
+    length <= cap(s) = l0 + (l1 - l0) * min(1, s / n_steps); once no row fits (or after the ramp) the rest follow in
+    random order. Returned as an index list; the loader must NOT reshuffle (``--row-len-keep curr:...`` turns its
+    shuffle off)."""
+    gb = int(gb)
+    used = np.zeros(len(lens), bool)
+    order, s = [], 0
+    while len(order) < len(lens):
+        cap = l0 + (l1 - l0) * min(1.0, s / max(1.0, n_steps))
+        free = np.flatnonzero(~used)
+        if cap >= lens.max():
+            order.extend(rng.permutation(free).tolist())
+            break
+        ok = free[lens[free] <= cap]
+        pick = rng.choice(ok, size=min(gb, len(ok)), replace=False).tolist() if len(ok) else []
+        if len(pick) < gb:  # not enough short rows left: fill the step with the shortest remaining
+            rest = free[~np.isin(free, pick)]
+            pick += rest[np.argsort(lens[rest], kind="stable")[:gb - len(pick)]].tolist()
+        used[pick] = True
+        order.extend(pick)
+        s += 1
+    return order
+
+
 def build(src: str, out_root: str, spec: str, seed: int = 0) -> str:
     """Build (once, atomically) the subset of ``src`` for ``spec``; returns its directory."""
     meta = json.load(open(os.path.join(src, "metadata.json")))
@@ -81,6 +108,10 @@ def build(src: str, out_root: str, spec: str, seed: int = 0) -> str:
     len_specs = [s for s in spec.split("+") if not s.startswith("trunc:")]
     trunc = [tuple(float(v) for v in s.split(":")[1:3]) for s in spec.split("+") if s.startswith("trunc:")]
     trunc = trunc[0] if trunc else None
+    curr = [tuple(float(v) for v in s.split(":")[1:5]) for s in spec.split("+") if s.startswith("curr:")]
+    curr = curr[0] if curr else None
+    len_specs = [s for s in len_specs if not s.startswith("curr:")]
+    curr_rows = []
     info = {}
     if trunc:
         with open(os.path.join(src, "row_info.jsonl")) as fh:
@@ -103,10 +134,13 @@ def build(src: str, out_root: str, spec: str, seed: int = 0) -> str:
         if trunc:
             t = int(part.split("_t")[1].split("_")[0])
             rows = [truncate_row(a, b, info[(t, int(i))], trunc[0], trunc[1], rng) for (a, b), i in zip(rows, sel)]
-        np.concatenate([a for a, _ in rows]).astype(dtype).tofile(os.path.join(tmp, part))
-        lsel = np.concatenate([b for _, b in rows]).astype(mdtype)
-        lsel.tofile(os.path.join(tmp, part.replace("token_ids_part_", "labels_mask_")))
-        n_loss += int(lsel.sum())
+        if curr is None:
+            np.concatenate([a for a, _ in rows]).astype(dtype).tofile(os.path.join(tmp, part))
+            lsel = np.concatenate([b for _, b in rows]).astype(mdtype)
+            lsel.tofile(os.path.join(tmp, part.replace("token_ids_part_", "labels_mask_")))
+            n_loss += int(lsel.sum())
+        else:
+            curr_rows.extend(rows)
         new_lens = np.array([len(a) for a, _ in rows])
         all_lens.append(new_lens)
         bins = [0, 6144, 12288, 1 << 30]
@@ -114,6 +148,17 @@ def build(src: str, out_root: str, spec: str, seed: int = 0) -> str:
                        "kept_by_len<=6k|<=12k|>12k": np.histogram(new_lens, bins)[0].tolist(),
                        "in_by_len<=6k|<=12k|>12k": np.histogram(lens, bins)[0].tolist(),
                        "mean_len_in": float(lens.mean()), "mean_len_kept": float(new_lens.mean())}
+    if curr is not None:
+        order = curriculum_order(np.array([len(a) for a, _ in curr_rows]), *curr, rng)
+        np.concatenate([curr_rows[i][0] for i in order]).astype(dtype).tofile(
+            os.path.join(tmp, "token_ids_part_t0_000.npy"))
+        lsel = np.concatenate([curr_rows[i][1] for i in order]).astype(mdtype)
+        lsel.tofile(os.path.join(tmp, "labels_mask_t0_000.npy"))
+        n_loss += int(lsel.sum())
+        ol = np.array([len(curr_rows[i][0]) for i in order])
+        gb = int(curr[3])
+        stats["curriculum_step_maxlen"] = [int(ol[k:k + gb].max()) for k in range(0, min(len(ol), 400 * gb), 10 * gb)]
+        stats["curriculum_step_meanlen"] = [float(ol[k:k + gb].mean()) for k in range(0, min(len(ol), 400 * gb), 10 * gb)]
     lens = np.concatenate(all_lens)
     m = {k: v for k, v in meta.items() if k != "merged_from"}
     m.update(num_instances=int(len(lens)), num_tokens=int(lens.sum()), max_example_len=int(lens.max()),
