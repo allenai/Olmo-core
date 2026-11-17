@@ -1685,3 +1685,66 @@ def test_nonfinite_targets_are_dropped_from_the_fit():
     r._current = None
     r.begin_step(2, model=m)
     assert r.w is not None and bool(torch.isfinite(r.w).all())
+
+
+@pytest.mark.parametrize("floor", [0, 1, 2])
+def test_pyramid_per_row_budget_with_floor_cpu(floor):
+    """Per-row allocation (doc_share 0) on the two-stage recipe path ("1:0.2,2:0.07"): the floor holds at BOTH stages
+    (every document keeps >= K of its tokens after each cut), each stage keeps its budget (floor counted against it),
+    and the last stage logs the absolute per-document leak / keep on the original rows."""
+    from olmo_core.config import DType
+    from olmo_core.nn.attention.gold_grad_mask import content_fingerprint_from_row
+    from olmo_core.nn.transformer import TransformerConfig
+
+    def doc(n, base):
+        return [DS] + [base + i for i in range(n)] + [DE]
+
+    row = [1, 2, 3] + sum((doc(60, 1000 + 100 * d) for d in range(6)), []) + [7, 1005, 9] + [50, 51, EOS]
+    ids = torch.tensor([row])
+    T = ids.shape[1]
+    labels = torch.full_like(ids, -100)
+    labels[:, T - 4 : T - 1] = ids[:, T - 3 :]
+    gold = {content_fingerprint_from_row(row, EOS): [2]}
+    torch.manual_seed(0)
+    model = TransformerConfig.olmo2_190M(vocab_size=9100, n_layers=4, fused_ops=False, dtype=DType.float32).build(
+        init_device="cpu")
+    D = int(model.embeddings.weight.shape[1])
+    cfg = OnlineRouterConfig(keep_frac=0.2, explore_frac=0.1, samples_per_row=64, dense_every=0, doc_share=0.0,
+                             stages="1:0.2,2:0.07", min_per_doc=floor)
+    router = OnlineTokenRouter(cfg, doc_start_id=DS, doc_end_id=DE, eos_id=EOS, d_model=D, gold_table=gold)
+    model.enable_pooled_soft_tokens(DS, DE, EOS, placeholder_id=PH, keep_prob=0.0, keep_seed=0, detach_soft_kv=True,
+                                    drop_slots=True, keep_token_rule="online", keep_token_k=0.2, online_router=router)
+    model.train()
+    chain = router.chain()
+    assert [r.cfg.min_per_doc for r in chain] == [floor, floor] and [r.cfg.doc_share for r in chain] == [0.0, 0.0]
+    seen = {}
+    for i, r in enumerate(chain):
+        orig = r._choose
+
+        def wrap(model_, fp, ids_, cid_, _o=orig, _i=i):
+            keep, entry = _o(model_, fp, ids_, cid_)
+            seen[_i] = (keep.clone(), cid_.clone(), fp["body"].clone())
+            return keep, entry
+
+        r._choose = wrap
+    for n in (1, 2, 3):
+        model.zero_grad(set_to_none=True)
+        for r in chain:
+            r.begin_step(n, model=model)
+            r.metrics()
+        out = model(ids, labels=labels)
+        out.loss.backward()
+    assert all(r.w is not None for r in chain)
+    m0, m1 = chain[0].metrics(), chain[1].metrics()
+    n_body = 6 * 60
+    k0 = math.ceil(0.2 * n_body)
+    k1 = math.ceil((0.07 / 0.2) * k0)
+    for i, kk in ((0, k0), (1, k1)):
+        keep, cid_, body = seen[i]
+        per_doc = [int((keep[0] & body[0] & (cid_[0] == d)).sum()) for d in range(6)]
+        assert sum(per_doc) == kk, (i, per_doc, kk)  # floor (6 x K <= budget) is counted against the budget
+        assert min(per_doc) >= floor, (i, per_doc)
+    assert m0["online_router/keep_frac"] == pytest.approx(k0 / n_body)
+    assert m1["online_router/s1_keep_frac_abs"] == pytest.approx(k1 / n_body)
+    for v in (m0["online_router/leak_auc"], m1["online_router/s1_leak_auc_abs"]):
+        assert 0.0 <= v <= 1.0
