@@ -1,3 +1,6 @@
+# PAUSED by Prasann at 13:15 on 2026-11-17 ("pause for now"). Heartbeat cron deleted. Do not launch runs or republish the hub tab until he says to resume.
+# Tab conflict to fix on resume: the 13:13 republish used a stale copy of the tab builder and reverted layout changes the hub-reorg session had made (it restored them as v113). Use hub_live/build_autoresearch_tab.py from the main checkout directly, never the copy in hub_tab/.
+
 # Auto-research loop: state file (updated 2026-11-17 12:05 PT)
 
 PRIORITY (Prasann 11-17 12:00): 16k held-out loss first; ideas that gain more as rows get longer. Heartbeat cron 13,43 * * * * restarts the loop.
