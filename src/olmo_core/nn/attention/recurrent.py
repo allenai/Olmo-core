@@ -346,6 +346,12 @@ class GatedDeltaNet(SequenceMixer):
         """
         del kwargs  # Ignore any extra kwargs passed from attention interface
         B, T_og, _ = x.shape
+        # context forward-only training (olmo_core.nn.ctx_detach): "record" = prefix pass (right-padded rows, valid
+        # on [0, lens)): no state write past lens, keep the final state + conv window; "use" = suffix pass from them
+        _cd = getattr(self, "_ctx_detach_state", None) if self.training else None
+        _cd_mode = _cd["mode"] if _cd is not None else None
+        if _cd_mode == "record":
+            block_keep = torch.arange(T_og, device=x.device)[None, :] < _cd["lens"].to(x.device)[:, None]
 
         # Positions strictly before a row's left-padding length are pad; ``None`` once there is
         # nothing to mask, so the unpadded path stays allocation-free and bit-identical.
@@ -513,7 +519,34 @@ class GatedDeltaNet(SequenceMixer):
                     cache.conv_state_q.copy_(self.q_conv1d.prefill_state(q))
                     cache.conv_state_k.copy_(self.k_conv1d.prefill_state(k))
                     cache.conv_state_v.copy_(self.v_conv1d.prefill_state(v))
-            if soft_keep is not None:
+            if _cd_mode is not None:
+                full = qkv if qkv is not None else torch.cat([q, k, v], dim=-1)
+                convs = [self.qkv_conv1d] if self.fuse_qkv else [self.q_conv1d, self.k_conv1d, self.v_conv1d]
+                W = convs[0].state_width
+                if _cd_mode == "record":
+                    lens = _cd["lens"].to(x.device)
+                    idx = lens[:, None] - W + torch.arange(W, device=x.device)[None, :]
+                    ok = (idx >= 0).unsqueeze(-1)
+                    win = full.gather(1, idx.clamp(min=0).unsqueeze(-1).expand(-1, -1, full.shape[-1]))
+                    _cd["conv"] = (win * ok.to(win.dtype)).transpose(1, 2).contiguous().detach()
+                if _cd_mode == "use":
+                    st_all = _cd["conv"].clone()
+                    if self.fuse_qkv:
+                        qkv = self.qkv_conv1d.forward_with_state(full, st_all)
+                        q, k, v = qkv.split([self.key_dim, self.key_dim, self.value_dim], dim=-1)
+                    else:
+                        kd = self.key_dim
+                        q = self.q_conv1d.forward_with_state(full[..., :kd], st_all[:, :kd].contiguous())
+                        k = self.k_conv1d.forward_with_state(full[..., kd : 2 * kd], st_all[:, kd : 2 * kd].contiguous())
+                        v = self.v_conv1d.forward_with_state(full[..., 2 * kd :], st_all[:, 2 * kd :].contiguous())
+                elif self.fuse_qkv:
+                    qkv = self.qkv_conv1d(x=full, cu_seqlens=cu_doc_lens)
+                    q, k, v = qkv.split([self.key_dim, self.key_dim, self.value_dim], dim=-1)
+                else:
+                    q = self.q_conv1d(x=q, cu_seqlens=cu_doc_lens)
+                    k = self.k_conv1d(x=k, cu_seqlens=cu_doc_lens)
+                    v = self.v_conv1d(x=v, cu_seqlens=cu_doc_lens)
+            elif soft_keep is not None:
                 # removal-aware conv: each window holds the previous KEPT tokens (exact at p in {0,1})
                 sk = soft_keep.to(device=x.device)
                 if self.fuse_qkv:
@@ -582,6 +615,8 @@ class GatedDeltaNet(SequenceMixer):
             initial_state = (
                 cache.recurrent_state if (continue_prefill and cache is not None) else None
             )
+            if _cd_mode == "use":
+                initial_state = _cd["state"]
             seg = int(getattr(self, "_gdn_segment_tokens", 0))
             if (seg > 0 and self.training and torch.is_grad_enabled() and cu_doc_lens is None
                     and cache is None and initial_state is None and q.size(1) > seg):
@@ -608,9 +643,11 @@ class GatedDeltaNet(SequenceMixer):
                     beta=beta,
                     cu_seqlens=cu_doc_lens,
                     initial_state=initial_state,
-                    output_final_state=cache is not None,
+                    output_final_state=cache is not None or _cd_mode == "record",
                     use_qk_l2norm_in_kernel=True,
                 )
+                if _cd_mode == "record":
+                    _cd["state"] = new_state.detach()
 
         if cache is not None:
             cache.recurrent_state = new_state

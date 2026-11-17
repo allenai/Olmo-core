@@ -1730,6 +1730,15 @@ class Attention(SequenceMixer):
         local_k_slice: Optional[slice] = None,
         cache_leftpad: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        _cd = getattr(self, "_ctx_detach_state", None) if self.training else None
+        if _cd is not None:
+            # context forward-only training (olmo_core.nn.ctx_detach): record the prefix K/V, or read them
+            if _cd["mode"] == "record":
+                _cd["k"], _cd["v"] = k.detach(), v.detach()
+            else:
+                from ..ctx_detach import attn_varlen_with_prefix
+
+                return attn_varlen_with_prefix(q, k, v, _cd["k"], _cd["v"], _cd["lens"], self.backend.scale)
         if self.kv_cache_manager is not None:
             self.kv_cache_manager.record_leftpad(cache_leftpad)
         # shape: (batch_size, seq_len, n_heads, head_dim)

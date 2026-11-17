@@ -1207,6 +1207,14 @@ def build_and_fit(opts: argparse.Namespace) -> None:
     )
     for variant, vopts in active:
         variant.post_build_model(model, vopts, vctx)
+    if opts.ctx_detach_layer >= 0:
+        # context forward-only training (olmo_core.nn.ctx_detach, early-loss-proxy idea "detach", 2026-11-16)
+        stg = {int(a): float(b) for a, b in (x.split(":") for x in opts.ctx_detach_stages.split(",") if x)}
+        model._ctx_detach = {"layer": opts.ctx_detach_layer, "stages": stg, "doc_start_id": ids.doc_start,
+                             "doc_end_id": ids.doc_end, "pad_id": ids.eos, "seed": opts.seed, "_calls": 0}
+        model._flop_extra_actual = 0.0
+        print(f"[ctc-suite] ctx detach: context forward-only from block {opts.ctx_detach_layer}, "
+              f"prefix drops {stg or 'none'}", flush=True)
     train_module = train_module_config.build(model)
     for variant, vopts in active:
         variant.post_build_train_module(train_module, vopts, vctx)
@@ -1569,6 +1577,13 @@ def parse_args() -> argparse.Namespace:
                     help="sequence-chunked FFN sublayer in training: h + FFN(norm(h)) over chunks of this many tokens, "
                     "each under its own activation checkpoint (exact; cuts the long-row recompute peak). 0 = off")
     # ---- LoRA on any arm (olmo_core.nn.early_lora; no online-router path) ----
+    ap.add_argument("--ctx-detach-layer", type=int, default=-1,
+                    help="context forward-only training (olmo_core.nn.ctx_detach): context tokens (up to the last "
+                    "doc-close marker) run blocks >= K under no_grad as constant K/V + GDN state; only the suffix "
+                    "(query + answer) keeps a gradient path there. -1 = off")
+    ap.add_argument("--ctx-detach-stages", default="",
+                    help="--ctx-detach-layer: random prefix-pass drops, 'block:keep_frac,...' of each row's document "
+                    "body tokens (nested; markers / non-document tokens always kept), e.g. 7:0.2,16:0.07")
     ap.add_argument("--lora-rank", type=int, default=0,
                     help="frozen base + rank-R LoRA adapters on blocks [--lora-start, --lora-blocks) on any arm (e.g. "
                     "the dense one); embeddings frozen; exported as config.json's early_lora block. 0 = off")

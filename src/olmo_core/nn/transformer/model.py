@@ -2689,6 +2689,17 @@ class Transformer(nn.Module):
 
             lens = example_lengths(input_ids, kwargs.get("doc_lens"), self._flop_pad_id)
             self._record_example_lens(lens, lens)
+        if getattr(self, "_ctx_detach", None) is not None:
+            from ..ctx_detach import clear as _cd_clear, ctx_detach_forward
+
+            _cd_clear(self)
+            if self.training and not input_ids.is_floating_point() and input_embeddings is None:
+                # context forward-only training (olmo_core.nn.ctx_detach): context tokens run blocks >= K without grad
+                return ctx_detach_forward(
+                    self, input_ids, labels, ignore_index=ignore_index, loss_reduction=loss_reduction,
+                    z_loss_multiplier=z_loss_multiplier, loss_div_factor=loss_div_factor,
+                    return_logits=return_logits, **kwargs,
+                )
         # Token exit: keep the FULL row (and its kwargs) for blocks [0, L); the soft-token
         # compaction below decides which tokens survive past block L.
         tx_full: Optional[Tuple[torch.Tensor, Dict[str, Any]]] = None
