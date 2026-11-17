@@ -52,7 +52,7 @@ JS = S + r'''
   // best by hour
   const BH = ST.best_by_hour || [];
   if (!BH.length) empty($("arBest"), "No 16k result yet"); else
-    $("arBest").appendChild(table(["time", "method", "idea", "FLOP speedup", "worst task", "transient memory vs dense", "note"],
+    $("arBest").appendChild(table(["time", "method", "idea", "FLOP speedup", "worst task", "transient memory vs dense LoRA", "note"],
       BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level != null ? " @ step " + r.level : ""), xs(r.xw), r.mem == null ? "" : f(r.mem, 2) + "×", r.note]), [3, 4, 5]));
   if (!BH.length) { const fg = $("arBestChart"); if (fg) fg.closest("figure").style.display = "none"; }
   // leaderboard
@@ -61,7 +61,7 @@ JS = S + r'''
   B.forEach(r => Object.keys(r.x || {}).forEach(k => lv.add(k)));
   const levels = [...lv].sort((a, b) => a - b), deep = levels[levels.length - 1];
   if (!B.length) empty($("arBoard"), "No scored methods yet."); else {
-    const head = ["method", "idea", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l), ["worst task @ step " + deep, "transient GiB (peak)", "transient vs dense", "train s"]);
+    const head = ["method", "idea", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l), ["worst task @ step " + deep, "transient GiB (peak)", "transient vs dense LoRA", "train s"]);
     const rows = B.map(r => { const ce = r.ce_last == null ? "" : f(r.ce_last, 3) + (r.d_vs_ref_se != null && !r.is_ref ? "  (Δ " + f(r.d_vs_ref, 3) + " ±" + f(r.d_vs_ref_se, 3) + ")" : "");
       const m = two((r.is_ref ? "[ref] " : "") + r.arm, r.desc);
       return [m, r.idea, (r.seeds || []).length, r.steps, ce, r.pf_per_step_vs_dense == null ? "" : f(r.pf_per_step_vs_dense, 2) + "×"]

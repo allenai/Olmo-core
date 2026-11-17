@@ -119,7 +119,7 @@ def main():
         ref_last = min(x["curve"][-1]["all"] for x in rs)
         ref_last_pf = min((x["curve"][-1]["pf"] for x in rs if x["curve"][-1]["all"] <= ref_last + 1e-12))
         ref_peak = max(x["peak_gib"] for x in rs)
-        ref_tr = max(x["transient_gib"] for x in rs)
+        ref_tr = min(x["transient_gib"] for x in rs)  # the leaner reference (dense LoRA)
         need = [pf_to_reach(x["curve"], la) for x in rs]
         need = [n for n in need if n is not None]
         lb = not need

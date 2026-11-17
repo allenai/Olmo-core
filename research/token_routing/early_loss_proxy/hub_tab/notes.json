@@ -1,5 +1,5 @@
 {
- "status": "Running, no scored 16k result yet. The 4k-16k pool is built (7,808 rows: contradiction, outlier, reorder, qdmatch_nq; 651/651/650 rows per task at about 4k / 8k / 14.5k tokens). Dense and dense-LoRA references (100 steps) and the recipe and random-keep baselines (200 steps) are training on sneetches; six idea agents are moving their runs to the new pool; the token-exit CPT base comparison is queued. Lambda and Beaker staging is in progress.",
+ "status": "First 16k results (one seed, eval_size 184). The current recipe reaches the dense-LoRA reference's 100-step loss with 1.9x fewer training FLOPs (1.3x if every task must reach its own reference level, at the 70-step level); its transient memory is 1.24x dense LoRA's, so it saves no memory under activation checkpointing. The first gold-aware stochastic-keep arms (0.08-0.12x dense per step) fall well short of the reference loss. About 25 more runs are in progress on jsteinhardt, Beaker and Lambda.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -9,6 +9,14 @@
   "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part."
  ],
  "log": [
+  {
+   "t": "11-17 00:40",
+   "text": "Lambda (2 x A100 per run) and Beaker (2 x H100 per run) staged and verified: step-0 loss matches Berkeley. Six Beaker jobs launched (LR and rows-per-step sweeps, dense-LoRA reference LR check, keep ladder down to 2% / 1%)."
+  },
+  {
+   "t": "11-17 00:55",
+   "text": "References done: dense full FT 0.135 and dense LoRA 0.131 held-out CE at step 100; recipe 0.125 at step 200 for 0.22x dense per step. Reorder dominates the mean loss (about 0.33 for all three; the other tasks 0.04-0.11)."
+  },
   {
    "t": "11-17 00:05",
    "text": "CPT search: a usable token-exit CPT base (dropstruct, tokens leave from block 8, 64M CPT tokens) and its dense-CPT control exist and are staged; the 1B-token FFN-drop CPT base was deleted on 10-30."

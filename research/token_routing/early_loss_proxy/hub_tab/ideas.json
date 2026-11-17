@@ -4,16 +4,16 @@
   "family": "reference",
   "title": "Dense full fine-tune and dense LoRA at 4k-16k",
   "what": "Reference loss-vs-FLOPs curves (probes every 10 steps to step 100). Every speedup on this page is read against these.",
-  "status": "running",
-  "result": "training on the new pool"
+  "status": "done",
+  "result": "Held-out CE at step 50 / 100: dense full FT 0.176 / 0.135, dense LoRA 0.170 / 0.131 (dense LoRA costs 0.74x dense per step). A higher-LR dense-LoRA check is running."
  },
  {
   "id": "recipe",
   "family": "baseline",
   "title": "Current recipe (router, keep 20% after block 7, 7% after block 16)",
   "what": "The 8k recipe unchanged at 4k-16k on the new tasks, plus random keep at the same budget.",
-  "status": "running",
-  "result": "training on the new pool"
+  "status": "done",
+  "result": "Recipe: 0.22x dense per step, 1.9x fewer FLOPs than dense LoRA to the 100-step loss level, 1.3x on the worst task. Keep ladder and random-keep controls running."
  },
  {
   "id": "prefix",
@@ -29,7 +29,7 @@
   "title": "Gold-aware stochastic keep",
   "what": "Per-document keep probability raised for gold documents but never 1 and never 0 for distractors, so the kept set does not reveal the answer; drop before block 0 as well as mid-stack.",
   "status": "running",
-  "result": "agent implementing; no run yet"
+  "result": "First two arms (0.12x and 0.08x dense per step) reach only the 10-20 step reference levels: 0.225 and 0.259 held-out CE after 112-124 steps vs recipe 0.161 at step 100. More arms running."
  },
  {
   "id": "earlyloss",
@@ -84,7 +84,7 @@
   "family": "optimisation",
   "title": "LR, batch size and schedule per FLOP",
   "what": "Cheap arms can afford more, smaller steps: rows per step, LR and warmup tuned per FLOP rather than per step.",
-  "status": "queued",
-  "result": ""
+  "status": "running",
+  "result": "LR 2e-5 / 4e-5 and 8 rows/step on the recipe running on Beaker"
  }
 ]

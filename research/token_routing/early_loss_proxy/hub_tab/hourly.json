@@ -1,1 +1,12 @@
-[]
+[
+ {
+  "t": "11-17 00:55",
+  "arm": "recipe",
+  "idea": "baseline",
+  "x": 1.9217661688479457,
+  "level": 100,
+  "xw": 1.3046492682413429,
+  "mem": 1.2373929997423052,
+  "note": "First 16k results. Worst-task speedup is at the 70-step level (the deepest level every task reached). One seed, eval_size 184."
+ }
+]

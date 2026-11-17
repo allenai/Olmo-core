@@ -1,0 +1,19 @@
+{
+ "dense": {"idea": "reference", "desc": "dense full fine-tune, LR 5e-6"},
+ "denselora": {"idea": "reference", "desc": "dense forward, LoRA r64 on all blocks, LR 1e-5"},
+ "recipe": {"idea": "baseline", "desc": "router, keep 20% after block 7, 7% after block 16, LoRA r64"},
+ "rnd19": {"idea": "baseline", "desc": "random keep 19% after block 7 (one cut)"},
+ "rnd9": {"idea": "baseline", "desc": "random keep 9% after block 7 (one cut)"},
+ "wtsS1": {"idea": "baseline", "desc": "recipe with sampled (not top-k) keep, no dense warm-up step"},
+ "agg1": {"idea": "keep ladder", "desc": "recipe at keep 10% / 3.5%"},
+ "agg2": {"idea": "keep ladder", "desc": "recipe at keep 5% / 2%"},
+ "agg3": {"idea": "keep ladder", "desc": "recipe at keep 2% / 1%"},
+ "recipe-lr2e5": {"idea": "optimisation", "desc": "recipe, LR 2e-5"},
+ "recipe-lr4e5": {"idea": "optimisation", "desc": "recipe, LR 4e-5"},
+ "recipe-gb8": {"idea": "optimisation", "desc": "recipe, 8 rows/step"},
+ "recipe-gb8-lr2e5": {"idea": "optimisation", "desc": "recipe, 8 rows/step, LR 2e-5"},
+ "denselora-lr2e5": {"idea": "reference (LR check)", "desc": "dense LoRA, LR 2e-5"},
+ "denselora-lr4e5": {"idea": "reference (LR check)", "desc": "dense LoRA, LR 4e-5"},
+ "grB": {"idea": "gold + randomness", "desc": "gold-aware stochastic keep, variant B (agent arm; flags in its report)"},
+ "grC": {"idea": "gold + randomness", "desc": "gold-aware stochastic keep, variant C (agent arm; flags in its report)"}
+}
