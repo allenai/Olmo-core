@@ -179,3 +179,33 @@ The npz format is the same as v2.
   - qdmatch_nq 2,665 / 2,625 (generated 8,500 each)
 - **New exclusion:** short rows are also excluded against heldout_v3's gen16k gold documents and books, in addition to every eval rung.
 - **Gold check:** 20/20 rows per task pass.
+
+## Long-row pool `mtb64k` + `heldout_v4` (`build_long_pools.py`, 2026-11-17)
+**Pool:** `/data/prasann/early_loss_proxy/shards/mtb64k` (mooney + sneetches + weka, Beaker job 01M7NQ62YQSQ3GCC01YF3GMKCM).
+- Parts t0..t2 are contradiction, outlier, qdmatch_nq. Reorder is left out because the suite has no reorder rows past 16k.
+- 320 rows per task per rung, 1,920 rows in total, 84.26M tokens. Every row is at most 65,536 tokens.
+- The converter ran with `--seq-len 131072`, so it dropped no rows.
+
+| task | 32k: documents per row, mean tokens (range) | 64k: documents per row, mean tokens (range) |
+|---|---|---|
+| contradiction | 651 docs, 29,126 (27,155-31,483) | 1,304 docs, 58,625 (55,670-61,736) |
+| outlier | 194 docs, 29,223 (28,193-30,307) | 388 docs, 58,382 (56,971-60,123) |
+| qdmatch_nq | 324 docs, 29,314 (28,763-29,758) | 650 docs, 58,651 (57,998-59,417) |
+
+- **Exclusions:** gold documents are checked against the suite's r2k-r64k eval rungs (HF revision 04ab8600; r128k and longer were not fetched), heldout_v2, heldout_v3 gen16k, and every heldout_v4 candidate.
+  - qdmatch_nq: generated 2,400 rows per rung; 391 / 411 were eligible.
+  - contradiction and outlier: 450 generated per rung, all eligible.
+- **Gold check:** 10 rows per new cell. All checks pass, except the text match in one qdmatch_nq@32k row.
+- **First 800 rows of a seed-0 run** (rung counts, read with a 65,536-token sequence length):
+  - contradiction 132 / 145
+  - outlier 137 / 125
+  - qdmatch_nq 126 / 135
+
+**`heldout_v4.npz`** (336 rows; same locations as the pool):
+- **`gen32k` / `gen64k`:** 24 rows per task each, at the same document counts as the training cells.
+  - contradiction and outlier come from ctc's EVAL split (eval seed 99).
+  - qdmatch_nq comes from `--split train` with seed 7777, because ctc's qdmatch eval split re-used training gold pairs (only 3 / 6 of 120 rows were clean). Only 168 / 157 of 6,000 generated rows were gold-disjoint from all training pools.
+- **`gen16k`:** copied from v3, 48 rows per task, all four tasks.
+- **Overlap:** prompt-hash hits are 0 in every set, and no held-out gold document is a gold document in any training pool.
+  - contradiction: 23 of 24 rows have a gold claim that appears among training filler claims, and 99% of their documents occur in training.
+  - qdmatch_nq: every row's gold queries appear as training distractors.
