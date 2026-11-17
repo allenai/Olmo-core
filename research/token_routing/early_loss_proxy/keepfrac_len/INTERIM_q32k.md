@@ -1,4 +1,4 @@
-# Interim: quick 32k read (tag q32k), scored 2026-11-17 15:40 PT
+# Interim: quick 32k read (tag q32k), scored 2026-11-17 15:20 PT
 
 **Verdict (provisional, one seed, 40 steps, eval_size 72):** at 32k there is no sign that the best keep falls
 below the recipe. 40%/14% and 20%/7% tie (held-out CE 0.370 vs 0.380 at step 40, ±0.015 each) and are the only router

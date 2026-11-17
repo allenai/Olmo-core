@@ -112,7 +112,7 @@ def main():
         levels = sorted({round(ref["ce"][i], 4) for i in idx}, reverse=True)
         tasks = sorted(ref["by_task"])
         t_levels = {t: sorted({round(ref["by_task"][t][i], 4) for i in idx}, reverse=True) for t in tasks}
-        Lres = {"reference": a.ref, "levels": levels, "ref_steps": ref["steps"], "ref_ce": ref["ce"], "task_levels": t_levels, "arms": {}}
+        Lres = {"eval_size": ref["eval_rows"], "rows_per_task": ref["rows_per_task"], "reference": a.ref, "levels": levels, "ref_steps": ref["steps"], "ref_ce": ref["ce"], "task_levels": t_levels, "arms": {}}
         print(f"\n=== {L}: eval rows {ref['eval_rows']} {ref['rows_per_task']}; ref steps {ref['steps']}; levels {levels}")
         print(f"{'arm':9s} sd {'steps':>5s} {'x/dense':>7s} {'s/step':>6s} {'peakGiB':>7s} {'lastCE':>7s} "
               f"{'x_ref':>6s} {'x_lora':>6s} {'x_rec':>6s} {'n_lv':>4s} {'deep_ref':>8s} | worst-task x_ref (task) | per task x_ref")

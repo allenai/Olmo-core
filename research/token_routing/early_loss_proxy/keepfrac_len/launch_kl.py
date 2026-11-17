@@ -17,6 +17,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ELP = os.path.dirname(HERE)
 W = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy"
 LENS = {"2k": 2048, "4k": 4096, "8k": 8192, "16k": 16384, "32k": 32768, "64k": 65536}
+# Trainer --seq-len per length: the short pools are rung-labelled and overshoot their label (max row 3,367 / 5,354 /
+# 9,819 tokens at 2k / 4k / 8k; means 2,215 / 4,092 / 8,246), and the trainer refuses rows longer than --seq-len.
+SEQ = {"2k": 4096, "4k": 6144, "8k": 10240, "16k": 16384, "32k": 32768, "64k": 65536}
 SHORT = ("2k", "4k", "8k")  # held-out sets kl2k/kl4k/kl8k live in heldout_kls.npz, kl16k/32k/64k in heldout_kl.npz
 L_ROOT = "/data/prasann/early_loss_proxy"  # node-local copies (mooney) for --local
 LORA = "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2"
@@ -93,7 +96,7 @@ def main():
                 names = [arm for s, arm in grp if s == seed]
                 cmd = [sys.executable, f"{ELP}/launch_proxy.py", "--tag", tag, "--seeds", seed, "--arms", ",".join(names),
                        "--steps", a.steps, "--sets", f"kl{L}:{a.ho_rows}", "--heldout", f"{L_ROOT}/{ho}",
-                       "--data", f"{L_ROOT}/shards/kl{L}", "--seq-len", str(LENS[L]), "--gpus", str(a.gpus),
+                       "--data", f"{L_ROOT}/shards/kl{L}", "--seq-len", str(SEQ[L]), "--gpus", str(a.gpus),
                        "--code", a.local, "--node", a.node, "--qos", a.qos, "--minutes", str(a.minutes * len(names))]
                 for arm in names:
                     v, lr, flags = A[arm]
@@ -109,7 +112,7 @@ def main():
             v, lr, flags = A[arm]
             cmd = [sys.executable, f"{ELP}/launch_proxy_beaker.py", "--tag", tag, "--seeds", seed, "--arms", arm,
                    "--custom", f"{arm}={v},{lr:g},{flags}", "--steps", a.steps, "--sets", f"kl{L}:{a.ho_rows}",
-                   "--heldout", f"{W}/{ho}", "--data", f"{W}/shards/kl{L}", "--seq-len", str(LENS[L]),
+                   "--heldout", f"{W}/{ho}", "--data", f"{W}/shards/kl{L}", "--seq-len", str(SEQ[L]),
                    "--micro", str(micro), "--gpus", str(a.gpus), "--minutes", str(a.minutes)]
             if a.dry_run:
                 cmd.append("--dry-run")
