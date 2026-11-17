@@ -3,6 +3,7 @@
 # jsteinhardt srun ON that node (never the login node, never /net as I/O), (2) S3 -> weka in a CPU Beaker job.
 #   bash stage_to_weka.sh <node> <rel> [<rel> ...]      rel = path under /data/prasann/early_loss_proxy (file or dir)
 #   e.g. bash stage_to_weka.sh mooney shards/mtb16k heldout_v2.npz
+# Short --time (STAGE_TIME, default 20 min) lets slurm backfill the CPU-only srun on a node whose GPUs are queued.
 # -> /weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/<rel>. The CPU job runs s3sync.py from
 # the PUSHED commit of this branch (push first). Prints the Beaker experiment id; register it with ops.
 set -eo pipefail
@@ -14,7 +15,7 @@ S3=s3://ai2-llm/checkpoints/prasanns/early_loss_proxy
 WK=/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy
 NPY=/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python  # node-local env, has boto3
 for REL in "$@"; do
-  srun --partition=jsteinhardt --qos=preemptive_high --nodelist="$NODE" --cpus-per-task=4 --mem=8G --time=01:00:00 \
+  srun --partition=jsteinhardt --qos=preemptive_high --nodelist="$NODE" --cpus-per-task=4 --mem=8G --time=${STAGE_TIME:-00:20:00} \
     bash -c "P=$L/$REL; if [ -f \$P ]; then D=$S3/\$(dirname $REL); D=\${D%/.}; else D=$S3/$REL; fi; \
              AWS_PROFILE=S3 $NPY - up \$P \$D" < "$HERE/s3sync.py"
 done
