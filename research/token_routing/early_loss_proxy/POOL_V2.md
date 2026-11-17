@@ -57,3 +57,34 @@ Eval rung files (HF `PrasannSinghal/ctc-suite-eval` at olmo-eval's pinned revisi
 - **Outlier length gap:** at 8k, body tokens per document are 147.7 in training vs 142.6 in eval (raw characters 613 vs 615).
 - **16k rung document counts:** the pool's 16k documents per row for contradiction, outlier and reorder are below the eval's 16k rung (because of the 16,384 cap). The held-out suite16k rows use the eval's full document count but only its shortest rows.
 - **qdmatch prompt layout:** the converter's qdmatch template puts part of the instruction before the documents even with query AFTER.
+
+## Short-row pools (built 2026-11-17 by `build_short_pools.py`, then `build_pool_v2.py order`)
+- **Paths:** `/data/prasann/early_loss_proxy/shards/{mtbshort,mtbmix80,mtbmix50}`, each with `<pool>_stats.json` and `<pool>_order_seed0.json`. They are on mooney and copied to sneetches (same folder).
+- **Layout:** same as mtb16k, 7,808 rows (1,952 per task).
+- **New cells:** same generator, split, converter flags and exclusion rules as mtb16k, plus the suite's r2k eval rungs (`v2build/suite_rows_r2k`). Long rows are mtb16k's own rows.
+- **Gold check:** 20 short rows per task per pool, all 20/20 on every check.
+
+| pool | rows per task (1k / 2k / 4k / 8k / 16k) | total tokens | mean row length |
+|---|---|---|---|
+| mtbshort | 976 / 976 / - / - / - | 12.59M | 1,612 |
+| mtbmix80 | 781 / 781 / 130 / 130 / 130 | 24.35M | 3,118 |
+| mtbmix50 | 488 / 488 / 325 / 325 / 326 | 42.06M | 5,386 |
+| (mtb16k) | - / - / 651 / 651 / 650 | 71.42M | 9,147 |
+
+**Short cells:** documents per row and tokens per row (mtbshort rows). 2k uses the eval calibration's document count; 1k uses the tokens-per-document fit to ~1,000 tokens (outlier raised to 7 so the majority beats 3 outliers).
+- contradiction: 1k = 21 docs, 1,053 tokens (777-1,573); 2k = 56 docs, **2,590** (2,011-3,367). The eval's own 2k rung is labelled 2,560.
+- outlier: 1k = 7 docs, 1,175 (1,003-1,453); 2k = 14 docs, 2,201 (1,913-2,904)
+- reorder: 1k = 6 docs, 1,044 (874-1,990); 2k = 12 docs, 2,001 (1,694-3,314)
+- qdmatch_nq: 1k = 8 docs, 971 (871-1,071); 2k = 18 docs, 1,862 (1,737-2,006)
+
+**Drops (generated -> eligible):**
+- reorder: 1k 1,000 -> 983, 2k 1,000 -> 991 (rows sharing a book with an eval rung)
+- qdmatch_nq: 1k 4,500 -> 1,458, 2k 4,500 -> 1,410 (gold pair in an eval rung)
+- no other task dropped any rows
+
+**First 800 rows of a seed-0 run:** by task, 188 / 197 / 213 / 202 (contradiction / outlier / reorder / qdmatch_nq) in all three pools. By rung:
+- mtbshort: 1k 376, 2k 424
+- mtbmix80: 1k 303, 2k 347, 4k 57, 8k 53, 16k 40
+- mtbmix50: 1k 202, 2k 174, 4k 154, 8k 143, 16k 127
+
+**Caveat:** the long rows (from mtb16k) were filtered against the 4k-16k eval rungs only, not the r2k rung.
