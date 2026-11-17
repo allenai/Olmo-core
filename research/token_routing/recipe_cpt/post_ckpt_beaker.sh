@@ -22,7 +22,7 @@ OUT=$WEKA/recipe_cpt/devloss
 read -r -d '' WORK <<EOF
 set -uo pipefail
 export PYTHONWARNINGS=ignore PATH=/opt/conda/bin:\$PATH
-PYB=/opt/conda/bin/python; \$PYB -m pip install -q -e '.[all]' 2>&1 | tail -1
+PYB=/opt/conda/bin/python; \$PYB -m pip install -q --no-deps -e . 2>&1 | tail -1
 \$PYB -c "import torch, fla, olmo_core; print(torch.__version__)" || { echo "!!! deps missing"; exit 1; }
 W=0; until [ -f $CKP/.metadata ]; do
   [ \$W -ge ${WAITMAX:-0} ] && { echo "!!! no checkpoint $CKP (WAITMAX=${WAITMAX:-0}s)"; exit 2; }
@@ -44,6 +44,6 @@ echo "=== DONE $NAME ==="
 EOF
 gantry run --name "rcpt-post-$NAME-$(date +%m%d%H%M)" -w ai2/flex2 -b ai2/oe-other \
   --cluster 'ai2/jupiter*' --gpus 1 --cpus 16 --memory 240GiB --priority urgent --min-runtime "${MINRT:-1h}" \
-  --beaker-image tylerr/olmo-core-tch291cu128-2025-11-25 --install false --branch "$BRANCH" --allow-dirty \
+  --beaker-image akshitab/olmo-core-tch2130cu129-sm80-2026-09-11 --install false --branch "$BRANCH" --allow-dirty \
   --weka oe-training-default:/weka/oe-training-default \
   --timeout 0 --yes -- bash -c "$WORK"
