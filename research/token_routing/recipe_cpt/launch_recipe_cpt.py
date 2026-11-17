@@ -48,12 +48,16 @@ RECIPE = ("--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-o
           "--st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 "
           "--st-otr-early-lora-blocks 32")
 CPT_EXTRA = "--st-gold-blind --st-otr-no-query --attn-backend flash_2"
-ARMS = {"recipe": ("softtoken", f"{RECIPE} {CPT_EXTRA}"), "dense": ("full", "--attn-backend flash_2")}
+ARMS = {"recipe": ("softtoken", f"{RECIPE} {CPT_EXTRA}"), "dense": ("full", "--attn-backend flash_2"),
+        # diagnostic only (probe): whole-model LoRA r64 / scale 32 on the full context, no routing
+        "loradense": ("full", "--lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2")}
 #: smoke: a complete 30-step schedule (warmup 1 step); A stops at 20 with saves at 10/20, B resumes 20 -> 30
 SMOKE_TOKENS = 30 * ROWS_PER_STEP * SEQ_LEN
 
 
-def run_name(arm, smoke):
+def run_name(arm, smoke, probe_lr=None):
+    if probe_lr is not None:  # LR probe: smoke-A geometry (20 of a 30-step schedule), own folder per (arm, LR)
+        return f"rcpt-q35-4b-{arm}-u1B-probe-lr{probe_lr:g}"
     # smoke2: the first smoke (-smoke, 11-17) wrote no mid-run checkpoint -- see SMOKE_NOTE
     return f"rcpt-q35-4b-{arm}-u1B" + ("-smoke2" if smoke else "")
 
@@ -67,10 +71,14 @@ def main():
     ap.add_argument("--min-runtime", default="1h")
     ap.add_argument("--expected-minutes", type=float, default=None)
     ap.add_argument("--wandb-group", default="rcpt-q35-4b")
+    ap.add_argument("--probe-lr", type=float, default=None, help="LR probe: smoke-A run at this LR in its own folder")
     a = ap.parse_args()
     for arm in a.arms.split(","):
         variant, extra = ARMS[arm]
-        name = run_name(arm, a.smoke)
+        if a.probe_lr is not None:
+            a.smoke = "A"
+        name = run_name(arm, a.smoke, a.probe_lr)
+        lr = a.probe_lr if a.probe_lr is not None else LR
         common = f"--save-interval {SAVE_EVERY if not a.smoke else 10} --max-checkpoints 0 --scheduler wsd --wsd-decay-fraction 0.1"
         if a.smoke:
             # the ephemeral interval is REQUIRED: beaker_ctc_suite passes --no-final-checkpoint, and the trainer then
@@ -85,7 +93,7 @@ def main():
         cmd = [sys.executable, "-u", LAUNCHER, "--task", "cpt", "--variant", variant,
                "--model-family", "qwen3_5", "--model-scale", "4b", "--data-root", SHARD,
                "--run-name", name, "--exact-run-name", "--num-nodes", "1", "--num-gpus", str(GPUS),
-               "--epochs", "1", "--lr", str(LR), "--cluster", CLUSTER, "--wandb-group", a.wandb_group,
+               "--epochs", "1", "--lr", str(lr), "--cluster", CLUSTER, "--wandb-group", a.wandb_group,
                "--no-follow", "--no-compile", "--seq-len", str(SEQ_LEN), "--global-batch", str(ROWS_PER_STEP),
                "--micro-batch-instances", "1", "--base-checkpoint", BASE, "--experiment", "recipe_cpt",
                "--arm", arm, "--min-runtime", a.min_runtime, "--priority", "urgent",
