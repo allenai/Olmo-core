@@ -163,3 +163,19 @@ The npz format is the same as v2.
 - Held-out gold documents found among training gold documents: 0.
 - Held-out gold documents found among training distractors: qdmatch_nq queries in gen16k 48/48 and rung16k 32/32; rung16k contradiction 5, outlier 1.
 - gen16k contradiction rows share 89% of their non-gold (filler) claims with training, because the filler pool is shared.
+
+## `mtbmix80x3` (2026-11-17): the 80/20 recipe with 3x the rows
+- **Rows:** 5,856 per task (23,424 total): 2,342 at 1k, 2,343 at 2k, and 390 / 390 / 391 at 4k / 8k / 16k.
+- **Long rows** are the first rows of the mtb16k cells, with no repeats.
+- **Locations:** on mooney + sneetches, and on weka via Beaker job 01M7NK5Z16MM5B0FR8QEAC71RA.
+- **Size:** 73.10M tokens, mean row 3,121 tokens.
+- **Short cells were regenerated larger.** The seed is unchanged and the earlier rows are byte-identical as a prefix:
+  - contradiction / outlier / reorder: 2,700 rows each
+  - qdmatch_nq: 8,500 rows
+- **Eligible rows at 1k / 2k after exclusions:**
+  - contradiction 2,700 / 2,700
+  - outlier 2,700 / 2,699
+  - reorder 2,634 / 2,631
+  - qdmatch_nq 2,665 / 2,625 (generated 8,500 each)
+- **New exclusion:** short rows are also excluded against heldout_v3's gen16k gold documents and books, in addition to every eval rung.
+- **Gold check:** 20/20 rows per task pass.
