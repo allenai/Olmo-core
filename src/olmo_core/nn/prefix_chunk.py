@@ -117,7 +117,16 @@ def run_prefix_chunked(
     kw = dict(all_block_kwargs)
     if kw.get("position_ids") is None:
         kw["position_ids"] = torch.arange(T, device=h.device)[None, :].expand(B, T)
-    bounds = [(s, min(s + chunk, T)) for s in range(0, T, chunk)]
+    # the SAME number of chunks on every rank (FSDP all-gathers once per block call; rows differ in length across
+    # ranks): n = max over ranks of ceil(T / chunk), and the row is split into n near-equal chunks (each <= chunk)
+    n = -(-T // chunk)
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        nt = torch.tensor([n], device=h.device)
+        torch.distributed.all_reduce(nt, op=torch.distributed.ReduceOp.MAX)
+        n = int(nt.item())
+    n = max(1, min(n, T))
+    cuts = [i * T // n for i in range(n + 1)]
+    bounds = [(cuts[i], cuts[i + 1]) for i in range(n)]
     run: Dict[str, Any] = {"B": B, "T": T, "device": h.device, "dtype": h.dtype, "gdn": {}, "kv": {},
                            "n_chunks": len(bounds)}
     blocks = [model.blocks[str(i)] for i in range(n_prefix)]

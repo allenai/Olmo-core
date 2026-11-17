@@ -1769,7 +1769,7 @@ class Transformer(nn.Module):
             from ..prefix_chunk import prefix_chunk_size, run_prefix_chunked
 
             pc = prefix_chunk_size()
-            if pc > 0 and h.shape[1] > pc:
+            if pc > 0:  # every rank (the chunk count is agreed across ranks inside)
                 # memscale: blocks [0, otr_layer) chunk by chunk, so the checkpointed backward recomputes one
                 # (block, chunk) at a time; same FLOPs as the unchunked path (olmo_core.nn.prefix_chunk)
                 h = run_prefix_chunked(self, h, all_block_kwargs, per_block_kwargs, otr_layer, pc)
