@@ -40,6 +40,10 @@ def prefix_chunk_size() -> int:
     return int(os.environ.get("OLMO_OTR_PREFIX_CHUNK", "0") or 0)
 
 
+def _call_plain(module, *args, **kwargs):
+    return module(*args, **kwargs)
+
+
 def _inner(block):
     return getattr(block, "_checkpoint_wrapped_module", block)
 
@@ -94,14 +98,16 @@ def run_prefix_chunked(
     from .attention.recurrent import GatedDeltaNet, GatedDeltaNetStateCache
 
     B, T, D = h.shape
-    blocks = [_inner(model.blocks[str(i)]) for i in range(n_prefix)]
+    # the OUTER blocks (FSDP2 unshard / reduce-scatter hooks live there); their per-block activation checkpoint
+    # is bypassed inside a chunk (_no_block_ac), the inner modules give the mixers
+    blocks = [model.blocks[str(i)] for i in range(n_prefix)]
     kw = dict(all_block_kwargs)
     if kw.get("position_ids") is None:
         kw["position_ids"] = torch.arange(T, device=h.device)[None, :].expand(B, T)
     gdn: List[Tuple[Any, Any]] = []
     attn: List[Tuple[Any, _PrefixKV]] = []
     for blk in blocks:
-        mix = getattr(blk, "attention", None)
+        mix = getattr(_inner(blk), "attention", None)
         if isinstance(mix, GatedDeltaNet):
             if mix.state_cache is not None:
                 raise RuntimeError("prefix_chunk: GatedDeltaNet already has a state cache")
@@ -133,7 +139,12 @@ def run_prefix_chunked(
                 cache.conv_state_q, cache.conv_state_k, cache.conv_state_v = (t.clone() for t in sn[:3])
                 cache.recurrent_state = sn[3].clone()
                 cache.has_state = True
+        saved_fn = []
         try:
+            for blk in blocks:  # no per-block activation checkpoint inside a chunk (stateful mixers)
+                if "checkpoint_fn" in blk.__dict__ or hasattr(blk, "checkpoint_fn"):
+                    saved_fn.append((blk, blk.__dict__.get("checkpoint_fn")))
+                    object.__setattr__(blk, "checkpoint_fn", _call_plain)
             for mix, cache in gdn:
                 object.__setattr__(mix, "state_cache", cache)
             for mix, pkv in attn:
@@ -143,6 +154,11 @@ def run_prefix_chunked(
             for i, blk in enumerate(blocks):
                 x = blk(x, **kwc, **_slice_kwargs(per_block_kwargs.get(i, {}), B, T, s, e))
         finally:
+            for blk, fn in saved_fn:
+                if fn is None:
+                    del blk.__dict__["checkpoint_fn"]
+                else:
+                    object.__setattr__(blk, "checkpoint_fn", fn)
             for mix, _ in gdn:
                 object.__setattr__(mix, "state_cache", None)
             for mix, _ in attn:

@@ -40,6 +40,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -1092,6 +1093,12 @@ class OnlineTokenRouter:
             m_ = self.keep_mult()
             kf = min(1.0, kf * m_) if self.stage_idx == 0 else min(1.0, kf / m_)
             self._stat("keep_mult", m_)
+        keep_cap = int(os.environ.get("OLMO_OTR_KEEP_CAP", "0") or 0) if self.stage_idx == 0 else 0
+        if keep_cap > 0 and int(n_body.max()) > 0:
+            # memscale: a kept-token BUDGET fixed in tokens (first cut only; the later stages keep a share of these),
+            # so the blocks after the cut see a width that does not grow with the row (--st-otr-keep-cap)
+            kf = min(kf, keep_cap / float(n_body.max()))
+            self._stat("keep_cap_frac", kf)
         if dense and c.dense_keep_frac < 1.0 and self.w is not None and self.step > c.warmup_steps:
             # the periodic "dense" step routes at dense_keep_frac instead of the full context (bounded peak memory)
             dense, kf = False, c.dense_keep_frac

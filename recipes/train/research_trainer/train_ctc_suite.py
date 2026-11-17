@@ -2449,7 +2449,12 @@ def parse_args() -> argparse.Namespace:
                     "olmo_core.nn.prefix_chunk). 0 = off")
     ap.add_argument("--prefix-chunk-verify", action="store_true",
                     help="--prefix-chunk: on the first chunked forward, print max |diff| vs the unchunked prefix")
+    ap.add_argument("--st-otr-keep-cap", dest="otr_keep_cap", type=int, default=0,
+                    help="memscale: online router first cut keeps at most N body tokens per row (a fixed budget; "
+                    "the keep fraction falls as rows grow). 0 = off")
     opts = ap.parse_args()
+    if opts.otr_keep_cap:
+        os.environ["OLMO_OTR_KEEP_CAP"] = str(opts.otr_keep_cap)
     if opts.prefix_chunk:
         os.environ["OLMO_OTR_PREFIX_CHUNK"] = str(opts.prefix_chunk)
     if opts.prefix_chunk_verify:
