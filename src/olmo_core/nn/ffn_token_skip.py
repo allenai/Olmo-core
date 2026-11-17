@@ -8,8 +8,10 @@ Query, answer, prompt and marker tokens always run the FFN. The FFN runs on the 
 matmuls really shrink. Pad tokens skip it too (they are not charged anyway; rows are padded with EOS, so ``pad_id`` = EOS as in the FLOP meter).
 
 - Eval / generation (``model.training == False``) runs every FFN on every token (the dense held-out probe).
-- The body mask is computed from ``input_ids`` in a forward pre-hook on the model; a block whose FFN input does not
-  have the ids' shape (e.g. above an online-router compaction) runs the FFN dense and is charged dense.
+- The body mask comes from the forward's ids (the online router's trimmed rows when it is on, else ``input_ids``
+  from a forward pre-hook), mapped to the FFN input's layout (plain / right-trimmed rows or one packed varlen row)
+  at the first listed FFN; a later block whose FFN input has another layout (above an online-router compaction)
+  runs the FFN dense and is charged dense.
 - The draw is seeded by (seed, step, forward counter, layer) and stored per forward, so the activation-checkpoint
   recompute sees the same mask.
 - FLOPs: the holder is installed as ``model._ffn_width`` and duck-types :class:`~olmo_core.nn.ffn_width.FFNWidthHolder`
@@ -71,6 +73,9 @@ class FFNTokenSkipHolder:
         self._acc: Dict[int, List[float]] = {}  # layer -> [ran, real] summed over this step's forwards (local rank)
         self.ffn_fpt: Dict[int, float] = {}
         self.lora_factor: Dict[int, float] = {}  # set by the meter path: per-block frozen-base share (no router)
+        self.model: Any = None
+        self._ids: Optional[torch.Tensor] = None
+        self._logged = False
 
     def set_step(self, step: int) -> None:
         if int(step) != self.step:
@@ -78,23 +83,67 @@ class FFNTokenSkipHolder:
             self._acc = {}
 
     def begin_forward(self, input_ids: torch.Tensor) -> None:
-        """Draw this forward's run masks (training forwards only)."""
+        """A new training forward: remember its ids; the masks are drawn lazily at the first listed FFN, in the
+        layout of the FFN's input (plain rows, right-trimmed rows, or one packed varlen row)."""
         self._fwd += 1
-        ids = input_ids
-        dev = ids.device
+        self._ids = input_ids
+        self.masks = {}
+        self.shape = None
+
+    def _layout(self, xshape) -> Optional[tuple]:
+        """``(cand, real)`` (both shaped ``xshape``): skip-eligible tokens and real tokens, or None if unknown."""
+        m = self.model
+        otr = getattr(m, "_online_token_router", None) if m is not None else None
+        st = getattr(otr, "_mid", None) if otr is not None else None
+        if st is not None:
+            ids, cid = st["ids"], st["cid"]
+            real = cid != -2
+        else:
+            ids = self._ids
+            if ids is None:
+                return None
+            real = torch.ones_like(ids, dtype=torch.bool) if self.pad_id is None else ids != self.pad_id
         is_s, is_e = ids == self.doc_start_id, ids == self.doc_end_id
         depth = torch.cumsum(is_s.to(torch.int32), dim=-1) - torch.cumsum(is_e.to(torch.int32), dim=-1)
-        body = (depth > 0) & ~is_s
-        real = torch.ones_like(body) if self.pad_id is None else ids != self.pad_id
-        if self.skip_all_tokens:
-            body = real.clone()
+        body = ((depth > 0) & ~is_s & real) if not self.skip_all_tokens else real.clone()
+        B, T = ids.shape
+        xb, xt = int(xshape[0]), int(xshape[1])
+        if (xb, xt) == (B, T):
+            return body, real
+        if xb == B:  # right-trimmed / right-padded rows: columns beyond the ids are pad
+            if xt <= T:
+                if bool(real[:, xt:].any()):
+                    return None
+                return body[:, :xt], real[:, :xt]
+            pad = torch.zeros(B, xt - T, dtype=torch.bool, device=ids.device)
+            return torch.cat([body, pad], 1), torch.cat([real, pad], 1)
+        if xb == 1:  # one packed row: each row's real tokens (left-aligned) concatenated in row order
+            n = int(real.sum())
+            if xt < n:
+                return None
+            pb, pr = body[real], torch.ones(n, dtype=torch.bool, device=ids.device)
+            if xt > n:
+                z = torch.zeros(xt - n, dtype=torch.bool, device=ids.device)
+                pb, pr = torch.cat([pb, z]), torch.cat([pr, z])
+            return pb[None], pr[None]
+        return None
+
+    def masks_for(self, xshape, device) -> bool:
+        """Draw this forward's run masks in the layout ``xshape`` (once per forward; the AC recompute reuses them)."""
+        if self.masks and self.shape == tuple(xshape):
+            return True
+        if self.masks:  # a different layout later in the stack (e.g. above a compaction): run dense
+            return False
+        lay = self._layout(xshape)
+        if lay is None:
+            return False
+        body, real = lay
         cand = body | ~real
-        g = torch.Generator(device=dev)
-        self.masks = {}
+        g = torch.Generator(device=device)
         nreal = float(real.sum())
         for i in sorted(self.probs):
             g.manual_seed((self.seed * 1_000_003 + self.step * 7919 + self._fwd * 131 + i * 104_729) % (2**62))
-            skip = cand & (torch.rand(ids.shape, generator=g, device=dev) < self.probs[i])
+            skip = cand & (torch.rand(tuple(xshape), generator=g, device=device) < self.probs[i])
             run = ~skip
             self.masks[i] = run
             ran = float((run & real).sum())
@@ -102,7 +151,12 @@ class FFNTokenSkipHolder:
             a = self._acc.setdefault(i, [0.0, 0.0])
             a[0] += ran
             a[1] += nreal
-        self.shape = ids.shape
+        self.shape = tuple(xshape)
+        if not self._logged:
+            self._logged = True
+            log.info("[ffn-skip] first masks: layout %s, body share of real %.3f, run share %s", tuple(xshape),
+                     float((body & real).sum()) / max(1.0, nreal), {i: round(self.last[i], 3) for i in self.last})
+        return True
 
     def frac_of(self, layer: int, step_avg: bool = False) -> float:
         if layer not in self.layers:
@@ -120,11 +174,11 @@ class FFNTokenSkipHolder:
 def _skip_ffn_forward(self, x: torch.Tensor) -> torch.Tensor:
     st = self._ffnskip
     holder: FFNTokenSkipHolder = st["holder"]
-    run = holder.masks.get(st["layer"]) if self.training else None
-    if run is None or tuple(x.shape[:-1]) != tuple(run.shape):
-        if run is not None:
+    if not self.training or x.dim() != 3 or not holder.masks_for(tuple(x.shape[:-1]), x.device):
+        if self.training:
             holder.last[st["layer"]] = 1.0  # ran dense: charged dense
         return st["orig"](x)
+    run = holder.masks[st["layer"]]
     D = x.shape[-1]
     xf = x.reshape(-1, D)
     idx = run.reshape(-1).nonzero(as_tuple=True)[0]
@@ -149,13 +203,17 @@ def install_ffn_token_skip(model: Any, spec: str, *, doc_start_id: int, doc_end_
         ff.forward = MethodType(_skip_ffn_forward, ff)
         holder.ffn_fpt[i] = float(ff.num_flops_per_token(0))
 
+    holder.model = model
+
     def _pre(mod, args, kwargs):
         if not mod.training:
             holder.masks = {}
+            holder._ids = None
             return None
         ids = args[0] if args else kwargs.get("input_ids")
         if ids is None or ids.is_floating_point():
             holder.masks = {}
+            holder._ids = None
             return None
         holder.begin_forward(ids)
         return None
