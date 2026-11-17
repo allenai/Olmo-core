@@ -1207,6 +1207,22 @@ def build_and_fit(opts: argparse.Namespace) -> None:
     )
     for variant, vopts in active:
         variant.post_build_model(model, vopts, vctx)
+    if opts.longpos_stretch_max > 0 or opts.longpos_docsub_keep >= 0:
+        # olmo_core.nn.longpos: training-forward-only position stretching / position-preserving doc subsampling
+        lp_gold: Dict[str, Any] = {}
+        if opts.longpos_docsub_keep >= 0:
+            with open(opts.longpos_sidecar or os.path.join(opts.data, "gold_fingerprints.json")) as f:
+                lp_gold = json.load(f)
+        model._longpos = {
+            "eos_id": vctx.ids.eos, "doc_start_id": vctx.ids.doc_start, "doc_end_id": vctx.ids.doc_end,
+            "max_pos": int(opts.seq_len), "seed": int(opts.seed), "rank": get_rank(),
+            "stretch_max": min(int(opts.longpos_stretch_max), int(opts.seq_len)),
+            "stretch_short_max": int(opts.longpos_stretch_short_max), "stretch_prob": float(opts.longpos_stretch_prob),
+            "docsub_keep": float(opts.longpos_docsub_keep), "docsub_min_len": int(opts.longpos_docsub_min_len),
+            "gold_table": lp_gold, "log_every": 50,
+        }
+        print(f"[longpos] enabled: { {k: v for k, v in model._longpos.items() if k != 'gold_table'} } "
+              f"gold fingerprints={len(lp_gold)}", flush=True)
     train_module = train_module_config.build(model)
     for variant, vopts in active:
         variant.post_build_train_module(train_module, vopts, vctx)
@@ -2231,6 +2247,18 @@ def parse_args() -> argparse.Namespace:
         default=0.1,
         help="--scheduler wsd: final fraction of max_duration that decays linearly to 0",
     )
+    ap.add_argument("--longpos-stretch-max", type=int, default=0,
+                    help="longpos: stretch the position ids of short rows to span U[L, this] (0 = off; training only)")
+    ap.add_argument("--longpos-stretch-short-max", type=int, default=3500,
+                    help="longpos stretching: only rows with real length <= this are stretched")
+    ap.add_argument("--longpos-stretch-prob", type=float, default=1.0,
+                    help="longpos stretching: probability a short row is stretched")
+    ap.add_argument("--longpos-docsub-keep", type=float, default=-1.0,
+                    help="longpos: position-preserving doc subsampling of long rows; mean share of NON-gold documents "
+                    "kept (row share ~ U[k/2, min(1, 1.5k)]); gold documents always kept. < 0 = off")
+    ap.add_argument("--longpos-docsub-min-len", type=int, default=12000,
+                    help="longpos doc subsampling: only rows with real length >= this are subsampled")
+    ap.add_argument("--longpos-sidecar", default=None, help="longpos gold sidecar (default <data>/gold_fingerprints.json)")
     ap.add_argument(
         "--branch-from",
         default=None,

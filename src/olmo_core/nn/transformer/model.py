@@ -2686,6 +2686,21 @@ class Transformer(nn.Module):
                 "would misalign the hidden states."
             )
 
+        # longpos (olmo_core.nn.longpos): training-only position stretching of short rows /
+        # position-preserving document subsampling of long rows, before anything else sees the row.
+        lp_pid: Optional[torch.Tensor] = None
+        lp_cfg = getattr(self, "_longpos", None)
+        if (
+            lp_cfg is not None
+            and self.training
+            and input_embeddings is None
+            and not input_ids.is_floating_point()
+            and kwargs.get("doc_lens") is None
+            and kwargs.get("position_ids") is None
+        ):
+            from ..longpos import apply_longpos
+
+            input_ids, labels, lp_pid = apply_longpos(input_ids, labels, lp_cfg, ignore_index)
         # Soft-token document pooling ("B1"): during training, compact the sequence (pooled docs ->
         # one placeholder each) BEFORE anything else sees it. Eval/generation forwards untouched.
         soft_inject: Optional[Tuple] = None
@@ -2936,6 +2951,17 @@ class Transformer(nn.Module):
         if self._block_skip is not None:
             self._block_skip["holder"].begin_forward(collect_loss=labels is not None)
 
+        if lp_pid is not None:
+            if tx_full is not None:
+                raise NotImplementedError("longpos does not support token exit")
+            cpos = kwargs.get("position_ids")
+            if cpos is not None:
+                # a soft-token compaction re-keyed the row to its own columns: map them to longpos positions
+                cpos = cpos.to(lp_pid.device).long().clamp(max=lp_pid.shape[1] - 1)
+                kwargs["position_ids"] = torch.gather(lp_pid, 1, cpos)
+            else:
+                assert lp_pid.shape == input_ids.shape, (tuple(lp_pid.shape), tuple(input_ids.shape))
+                kwargs["position_ids"] = lp_pid
         (
             input_ids,
             labels,
