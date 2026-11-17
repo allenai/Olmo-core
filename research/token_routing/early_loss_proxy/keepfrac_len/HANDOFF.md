@@ -8,6 +8,19 @@
   steps 10-40, seed 0, micro 1, code_7c6b5d877, mooney preemptive_high, 4 x 2 GPUs: slurm 5201918 (dft,k5),
   5201919 (ref,k10), 5201920 (k40,k2p5), 5201921 (k20,k1p25). Results mooney results/q64k/.
   Score: copy to <dir>/q64k, `analyze_kl.py --root <dir> --lens 64k --tag-prefix q --ref dft`.
+- FULL WAVES (seed 0, 225 steps = one epoch, probes 10,25,...,225, held-out 48 rows/task = eval_size 144, Beaker
+  2 x H100 unless noted, results weka/S3 `early_loss_proxy/results/kl<L>/`, fetch `../fetch_beaker_results.sh kl<L>`;
+  ops run ids `elp-kl<L>-bk<last 8 of exp id>`, see `ops runs --experiment tokdrop_lr`):
+  - 32k: dft (relaunched micro 1 after an OOM at micro 2: elp-kl32k-bk7Q0HNJB8), ref, k40, k20, grJ, grJc, k10, k5, k2p5.
+  - 16k: dft, ref, k70, k40, k20, k10, k5, k2p5.
+  - 64k: k40, k20, k10, k5, k2p5, k1p25, grJ, grJc (2 GPUs, micro 1); dft + ref on 8 GPUs (2 GPUs OOM / > 4 h:
+    dft at 64k reserves 78 GiB on an H200 at 76 s/step): elp-kl64k-bkW1T679MP, elp-kl64k-bkZZEQ26K6.
+  - 2k/4k/8k: first launch failed (trainer refuses rows > --seq-len; the short pools overshoot their label, max row
+    3,367 / 5,354 / 9,819), marked failed in ops; relaunched with seq-len 4096 / 6144 / 10240 (wave 4), arms dft,
+    ref, k70, k40, k20, k10, k5, k2p5.
+- Score: fetch each tag into one dir, `analyze_kl.py --root <dir> --lens 2k,...,64k --ref dft --out kl_results.json`,
+  then `summarize_kl.py --scored kl_results.json --out-json kl_summary.json --png keepfrac_vs_length.png`.
+- Next: seeds 1 on the deciding arms per length (best router arm and its neighbours + dft), record, ops result add.
 
 ## previous session (2026-11-17 ~15:10 PT, usage limit)
 
