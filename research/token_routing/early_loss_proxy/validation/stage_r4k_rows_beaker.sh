@@ -17,6 +17,7 @@ GANTRY="${GANTRY:-/scratch/users/prasann/conda/envs/corpus-reasoning-olmo/bin/ga
 set -uo pipefail
 PYB=/opt/conda/bin/python
 $PYB -m pip install -q -e ctc/ 2>&1 | tail -1
+$PYB -m pip install -q -e . 2>&1 | tail -1
 $PYB -c "import pyarrow, huggingface_hub, ctc" || pip install -q pyarrow huggingface_hub
 F=research/token_routing/ds64_fast8k/fetch_suite_eval_rows.py
 TMP=/tmp/suite_elpv; rm -rf $TMP
