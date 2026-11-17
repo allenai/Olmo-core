@@ -339,6 +339,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_early_lora_start: int = 0
     st_otr_early_lora_freeze_head: bool = False
     st_doclocal_blocks: str = ""
+    st_doclocal_pattern: str = "chunked"
     st_otr_route_min_len: int = 0
     st_otr_warmup_random: bool = False
     st_otr_keep_mode: str = "topk"
@@ -1418,7 +1419,8 @@ class SoftToken(Variant):
         if o.st_doclocal_blocks:
             from olmo_core.nn.attention.doclocal import enable_doclocal
 
-            idx = enable_doclocal(model, [int(x) for x in o.st_doclocal_blocks.split(",") if x.strip()])
+            idx = enable_doclocal(model, [int(x) for x in o.st_doclocal_blocks.split(",") if x.strip()],
+                                  o.st_doclocal_pattern)
             print(f"[variants] doclocal: training-only document-local attention in blocks {idx}", flush=True)
         if online and o.st_otr_freeze_early:
             from olmo_core.nn.online_token_router import freeze_early_blocks

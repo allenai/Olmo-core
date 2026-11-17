@@ -25,7 +25,7 @@ __all__ = ["enable_doclocal", "gather_roles", "pairs_saved", "doclocal_attention
 _CACHE: dict = {}
 
 
-def enable_doclocal(model, blocks: Iterable[int]) -> List[int]:
+def enable_doclocal(model, blocks: Iterable[int], pattern: str = "chunked") -> List[int]:
     """Mark the listed blocks' attention for training-only document-local masking; returns the sorted indices."""
     from . import Attention
 
@@ -39,7 +39,11 @@ def enable_doclocal(model, blocks: Iterable[int]) -> List[int]:
         if type(att) is not Attention:
             raise ValueError(f"doclocal: block {i} is {type(att).__name__}, not a full-attention block")
         att._doclocal = True
+        att._doclocal_pattern = pattern
+    if pattern not in ("chunked", "standard"):
+        raise ValueError(f"doclocal pattern {pattern!r}: chunked | standard (backend control: plain causal via flex)")
     model._doclocal_blocks = frozenset(idx)
+    model._doclocal_pattern = pattern
     return idx
 
 
@@ -72,21 +76,52 @@ def pairs_saved(roles: torch.Tensor) -> torch.Tensor:
     return L * (L + 1.0) / 2.0 - allowed.sum(dim=1)
 
 
-def _block_mask(roles: torch.Tensor, T: int, block_size: int = 128):
+def _block_mask(roles: torch.Tensor, T: int, pattern: str = "chunked", block_size: int = 128):
     from torch.nn.attention.flex_attention import create_block_mask
 
-    key = (id(roles), roles.data_ptr(), roles._version, tuple(roles.shape), T)
+    key = (id(roles), roles.data_ptr(), roles._version, tuple(roles.shape), T, pattern)
     hit = _CACHE.get("cur")
     if hit is not None and hit[0] == key:
         return hit[1]
-    mm = build_chunked_mask_mod(AttentionPattern(name="chunked"), roles)
+    mm = build_chunked_mask_mod(AttentionPattern(name=pattern), roles)
     bm = create_block_mask(mm, roles.shape[0], None, T, T, device=roles.device, BLOCK_SIZE=(block_size, block_size))
     _CACHE["cur"] = (key, bm)
     return bm
 
 
+_CHECKS = {"n": 0}
+
+
+@torch.no_grad()
+def _self_check(q, k, v, roles, out, scale, pattern, P=1024):
+    """First few calls: compare the flex output on the causal prefix [0, P) of row 0 with a dense masked SDPA, and
+    log allowed-key counts per query role (free queries must see every real earlier key)."""
+    import logging
+
+    from .chunked_mask import build_chunked_allowed_mask
+
+    P = min(P, q.shape[1])
+    r = roles[:1, :P]
+    allowed = build_chunked_allowed_mask(AttentionPattern(name=pattern), r).reshape(1, P, P)
+    qq, kk, vv = (t[:1, :P].transpose(1, 2).float() for t in (q, k, v))
+    ref = torch.nn.functional.scaled_dot_product_attention(qq, kk, vv, attn_mask=allowed[:, None], scale=scale)
+    diff = (ref.transpose(1, 2) - out[:1, :P].float()).abs().max().item()
+    T = roles.shape[1]
+    real = roles[0] != PAD_CHUNK_ID
+    free_q = (roles[0, :P] == FREE_CHUNK_ID)
+    cnt = allowed[0].sum(1).float()
+    causal_real = torch.cumsum(real[:P].float(), 0)
+    msg = (f"[doclocal-check] call {_CHECKS['n']} T={T} pattern={pattern} prefix={P}: max|flex - dense|={diff:.3e} "
+           f"(|out| max {out[:1, :P].abs().max().item():.3e}); roles: real={int(real.sum())} free={int((roles[0] == FREE_CHUNK_ID).sum())} "
+           f"doc={int((roles[0] >= 0).sum())} n_docs={int(roles[0].max()) + 1}; prefix free queries see "
+           f"{cnt[free_q].sum().item():.0f}/{causal_real[free_q].sum().item():.0f} causal real keys, doc queries "
+           f"{cnt[roles[0, :P] >= 0].mean().item() if bool((roles[0, :P] >= 0).any()) else 0:.1f} keys on average")
+    logging.getLogger(__name__).warning(msg)
+    print(msg, flush=True)
+
+
 def doclocal_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, roles: torch.Tensor,
-                       scale: float) -> torch.Tensor:
+                       scale: float, pattern: str = "chunked") -> torch.Tensor:
     """``q`` (B, T, H, D), ``k``/``v`` (B, T, H_kv, D) -> (B, T, H, D) under the chunked document-local mask."""
     from .document_chunked import _flex_attention
 
@@ -97,7 +132,11 @@ def doclocal_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, roles:
     if rep > 1:
         k = k.repeat_interleave(rep, dim=2)
         v = v.repeat_interleave(rep, dim=2)
-    bm = _block_mask(roles, T)
+    bm = _block_mask(roles, T, pattern)
     out = _flex_attention(q.transpose(1, 2).contiguous(), k.transpose(1, 2).contiguous(),
                           v.transpose(1, 2).contiguous(), block_mask=bm, scale=scale)
-    return out.transpose(1, 2).contiguous()
+    out = out.transpose(1, 2).contiguous()
+    if _CHECKS["n"] < 12 and torch.is_grad_enabled():
+        _self_check(q, k, v, roles, out, scale, pattern)
+        _CHECKS["n"] += 1
+    return out

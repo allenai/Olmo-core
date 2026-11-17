@@ -2170,7 +2170,8 @@ class Attention(SequenceMixer):
                 from .doclocal import doclocal_attention
 
                 sc = getattr(self.backend, "scale", None)
-                att = doclocal_attention(q, k, v, doclocal_roles, sc if sc is not None else self.head_dim**-0.5)
+                att = doclocal_attention(q, k, v, doclocal_roles, sc if sc is not None else self.head_dim**-0.5,
+                                         getattr(self, "_doclocal_pattern", "chunked"))
             elif self._use_position_window(position_ids, cu_doc_lens, cu_doc_lens_q, local_k_slice):
                 # Compacted row (dropped tokens, survivors keep their original positions): the
                 # backends window by INDEX, which after dropping reaches ~W / keep original tokens

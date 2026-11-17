@@ -2033,6 +2033,9 @@ def parse_args() -> argparse.Namespace:
                     "document-local mask (a document token attends to its own document + the free prompt / query / "
                     "answer tokens; free tokens attend everything; FlexAttention). Blocks past a router cut use the "
                     "compacted row's roles. The meter is charged only the attended pairs. Empty = off")
+    ap.add_argument("--st-doclocal-pattern", type=str, default="chunked", choices=["chunked", "standard"],
+                    help="lenscale: mask of the --st-doclocal-blocks (standard = plain causal on the same flex path, a "
+                    "backend control; charged as causal)")
     ap.add_argument("--st-otr-early-lora-scale", type=float, default=32.0,
                     help="early LoRA output scale (acts as the adapters' LR multiplier under Adam; default 32)")
     ap.add_argument("--st-otr-target-layer", type=int, default=0,

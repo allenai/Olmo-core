@@ -1847,7 +1847,7 @@ class Transformer(nn.Module):
                                        f"block {block_idx}")
                 from ..attention.doclocal import pairs_saved
 
-                if torch.is_grad_enabled():
+                if torch.is_grad_enabled() and getattr(self, "_doclocal_pattern", "chunked") == "chunked":
                     # charge only the attended pairs: the meter / router priced this block's attention causally
                     am = block.attention
                     fac = otr._block_factors(len(self.blocks))[block_idx] if otr is not None else 1.0
