@@ -126,3 +126,18 @@ to `launch_proxy.py`. Real runs use the defaults (new pool, 16,384).
   there, and whether the loss was still falling when the run ended.
 - A short screen may kill an idea; a surviving idea must be rerun long enough (more rows, more steps) to reach the dense
   final loss before it is called a gain. Dense full fine-tuning is the stronger reference on generation evals.
+
+## Screening budget (Prasann, 2026-11-17 15:20): equal FLOPs, not equal steps
+- Every arm gets the FLOPs of 50 dense steps and as many steps as that buys (a 0.22x arm gets about 230 steps, a
+  0.1x arm about 500). Reference numbers on `mtb16k`: 50 dense full-FT steps = 203 PF (held-out CE 0.176 there);
+  dense LoRA at 203 PF = 0.151-0.166; plain recipe at 203 PF = 0.114-0.127 (heldout_v2, eval_size 184).
+- Launch with `--max-pf 203 --pf-points 50,100,150 --steps 2000` (the run stops, after a final probe, when the flop
+  meter's cumulative actual PF reaches the budget; `--steps` only has to be a last step that is not reached first).
+  Drop `--max-train-s`: a cheap arm legitimately needs more wall-clock (the recipe needs ~16 min on 2 H200).
+- Report the held-out CE at 203 PF (all lengths and the 16k sets) next to the dense numbers; an arm is ahead only if
+  it is lower at the same PF. This is the SCREEN. The headline for a survivor is still the ratio at the deepest
+  dense loss (section above), from a longer run.
+- An arm that needs more than one epoch of the pool (488 steps on `mtb16k`) must use a larger pool or `--epochs 2+`
+  in its flags, and say which. Open choice, not yet decided: the LR schedule still spans the pool's epoch, so a
+  cheap arm is further down the decay at the budget than dense is at step 50.
+- Code added 2026-11-17 while the loop was paused and NOT yet run: smoke-test `--max-pf` once before relying on it.

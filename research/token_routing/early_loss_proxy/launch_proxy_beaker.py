@@ -79,6 +79,8 @@ def main():
     ap.add_argument("--global-batch", type=int, default=16)
     ap.add_argument("--stop-ce", type=float, default=0.0)
     ap.add_argument("--max-train-s", type=float, default=0.0)
+    ap.add_argument("--max-pf", type=float, default=0.0, help="stop a run (after a final probe) once its cumulative flop-meter PF reaches this (FLOP-matched budget; 50 dense full-FT steps on mtb16k = 203 PF, 50 dense-LoRA steps = 155 PF). Give --steps a last step high enough not to stop first")
+    ap.add_argument("--pf-points", default="", help="also probe when the cumulative PF first crosses each of these (comma list), e.g. 50,100,150")
     ap.add_argument("--custom", action="append", default=[], metavar="NAME=VARIANT,LR,FLAGS")
     ap.add_argument("--tag", default="v2")
     ap.add_argument("--lr-mult", type=float, default=1.0)
@@ -126,6 +128,7 @@ def main():
     env = {"TAG": a.tag, "STEPS": a.steps, "SETS": a.sets, "HELDOUT": a.heldout, "DATA": a.data, "BASE": a.base,
            "SEQLEN": str(a.seq_len), "NGPU": str(a.gpus), "GB": str(a.global_batch), "MICRO": str(a.micro),
            "STOPCE": str(a.stop_ce) if a.stop_ce else "", "MAXTRAIN": str(a.max_train_s) if a.max_train_s else "",
+           "MAXPF": str(a.max_pf) if a.max_pf else "", "PFPOINTS": a.pf_points,
            "FORCE": "1" if a.force else "", "SPEC_B64": base64.b64encode(spec.encode()).decode()}
     cfg = build_launch_config(name=f"elp-{a.tag}", cmd=["bash", PAYLOAD], cluster=a.cluster, workspace="ai2/flex2",
                               budget="ai2/oe-other", num_nodes=1, num_gpus=a.gpus)
