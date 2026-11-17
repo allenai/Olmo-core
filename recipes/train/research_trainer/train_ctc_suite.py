@@ -875,7 +875,7 @@ def resolve_plan(opts: argparse.Namespace, world_size: int) -> Dict[str, Any]:
         work_dir=opts.work_dir or WORK_DIR,
         global_batch_size=opts.global_batch * opts.seq_len,
         seed=34521 + opts.seed,
-        num_workers=opts.num_workers,
+        num_workers=0 if getattr(opts, "alloc_mode", "off") != "off" else opts.num_workers,
     )
     return dict(
         meta=meta,
@@ -1229,10 +1229,46 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             seq_len=opts.seq_len, pad_id=ids.eos, per_example=opts.flop_per_example
         ),  # rows are padded with EOS (see pad_token_id above)
     )
+    # Loss allocation (early_loss_proxy idea "alloc"; off by default): see alloc_sampler.py.
+    alloc_sampler = None
+    if opts.alloc_mode != "off" or opts.loss_row_pow != 0.0 or opts.alloc_log:
+        try:
+            from recipes.train.research_trainer.alloc_sampler import (
+                AllocCallback,
+                CellSampler,
+                install_sampler,
+            )
+        except ImportError:
+            from alloc_sampler import (  # type: ignore[no-redef]
+                AllocCallback,
+                CellSampler,
+                install_sampler,
+            )
+        cp_deg = opts.cp_degree if opts.cp_degree and opts.cp_degree > 1 else 1
+        alloc_sampler = CellSampler(
+            opts.data, opts.alloc_mode, opts.alloc_a, opts.alloc_b, opts.alloc_floor,
+            opts.alloc_ema, opts.alloc_task_weights, opts.seed, get_rank() // cp_deg,
+            world_size // cp_deg, opts.alloc_warmup_steps, opts.alloc_rung_weights,
+        )
+        train_module._row_alloc = {"row_pow": opts.loss_row_pow}
+        trainer_config = trainer_config.with_callback(
+            "alloc",
+            AllocCallback(
+                alloc_sampler if opts.alloc_mode != "off" else None,
+                alloc_sampler.row_cell, len(alloc_sampler.cell_names), alloc_sampler.cell_names,
+            ),
+        )
+        print(f"[alloc] mode={opts.alloc_mode} a={opts.alloc_a} b={opts.alloc_b} floor={opts.alloc_floor} "
+              f"ema={opts.alloc_ema} row_pow={opts.loss_row_pow} tw={opts.alloc_task_weights!r} "
+              f"cells={alloc_sampler.cell_names} pi={[round(x, 3) for x in alloc_sampler.pi]} "
+              f"L={[int(x) for x in alloc_sampler.L]} p0={[round(x, 3) for x in alloc_sampler.p]}",
+              flush=True)
     source = plan["instance_source_config"].build(plan["data_loader_config"].work_dir)
     data_loader = plan["data_loader_config"].build(
         source, dp_process_group=train_module.dp_process_group
     )
+    if alloc_sampler is not None and opts.alloc_mode != "off":
+        install_sampler(data_loader, alloc_sampler)
     if opts.mem_snapshot:
         # Peak-memory attribution from inside the real (FSDP) trainer: record the allocator
         # history through the dry-run + first step, replay it to the peak, print the live set at
@@ -2291,6 +2327,20 @@ def parse_args() -> argparse.Namespace:
         "throughput knob (grad accumulation is exact); cannot exceed --global-batch / world_size",
     )
     ap.add_argument("--num-workers", type=int, default=2, help="dataloader workers per rank")
+    ap.add_argument("--alloc-mode", choices=["off", "static", "ema"], default="off",
+                    help="loss-allocated (task, rung) cell sampling (alloc_sampler.py); needs row_info.jsonl "
+                         "in --data and forces --num-workers 0")
+    ap.add_argument("--alloc-a", type=float, default=1.0, help="ema mode: exponent on the cell's EMA train CE")
+    ap.add_argument("--alloc-b", type=float, default=0.0, help="ema mode: exponent on the cell's mean row length")
+    ap.add_argument("--alloc-floor", type=float, default=0.2, help="mix this share of the pool composition in")
+    ap.add_argument("--alloc-ema", type=float, default=0.9, help="EMA decay per step of the cell train CE")
+    ap.add_argument("--alloc-warmup-steps", type=int, default=2, help="ema mode: pool composition for N steps")
+    ap.add_argument("--alloc-task-weights", default="", help="static mode: task=w,... (default 1)")
+    ap.add_argument("--alloc-rung-weights", default="", help="static mode: rung=w,... (default 1), e.g. 16k=2")
+    ap.add_argument("--alloc-log", action="store_true", help="log per-cell train CE without changing anything else")
+    ap.add_argument("--loss-row-pow", type=float, default=0.0,
+                    help="per-row loss weight n_r^-p (n_r = row's answer tokens), renormalised so the rank's "
+                         "total weight is unchanged: 0 = per-token mean (default), 1 = per-row mean")
     ap.add_argument("--max-steps", type=int, default=0, help="hard-stop after N steps (0 = full)")
     ap.add_argument(
         "--no-flop-per-example",

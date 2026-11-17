@@ -265,6 +265,25 @@ class LMHead(nn.Module):
         B = x.shape[0]
         loss_implementation = self.loss_implementation
 
+        # Row-level loss allocation (research, opt-in; off unless a train module sets ``_row_alloc``):
+        # per-row loss weights and per-row CE capture, computed on the supervised positions only.
+        row_alloc = getattr(self, "_row_alloc", None)
+        if (
+            row_alloc is not None
+            and labels is not None
+            and loss_reduction == "sum"
+            and return_logits is not True
+            and isinstance(logits_to_keep, int)
+            and logits_to_keep == 0
+            and not self.tp_enabled
+            and not self.cp_enabled
+            and labels.dim() == 2
+            and labels.shape[0] == B
+        ):
+            return self._row_alloc_forward(
+                x, labels, row_alloc, ignore_index, z_loss_multiplier, loss_div_factor
+            )
+
         # Sparse-label fast path. When the loss is masked to a small set of positions, the head
         # only has to run there: the final norm and the vocabulary projection are both position-
         # wise, so gathering before them is exact rather than an approximation, and the fused CE
@@ -387,6 +406,46 @@ class LMHead(nn.Module):
                 )
             ),
         )
+
+    def _row_alloc_forward(
+        self,
+        x: torch.Tensor,
+        labels: torch.Tensor,
+        row_alloc: dict,
+        ignore_index: int,
+        z_loss_multiplier: Optional[float],
+        loss_div_factor: Optional[Union[torch.Tensor, float]],
+    ) -> LMOutputWithLoss:
+        """Exact loss at the supervised positions with an optional per-row weight ``row_alloc["w"]``
+        (shape ``(B,)``); appends detached per-row (CE sum, label count) to ``row_alloc["out"]``.
+        The returned ``ce_loss`` is the unweighted CE (for logging); ``loss`` carries the weights."""
+        Bx, S = labels.shape
+        lab = labels.reshape(-1)
+        keep = lab != ignore_index
+        row_id = torch.arange(Bx, device=labels.device).repeat_interleave(S)[keep]
+        xs = x.reshape(-1, x.shape[-1])[keep]
+        h = self.norm(xs) if self.norm is not None else xs
+        logits = self.w_out(h).float()
+        ce = nn.functional.cross_entropy(logits, lab[keep], reduction="none")
+        w = row_alloc.get("w")
+        wt = w.to(device=ce.device, dtype=ce.dtype)[row_id] if w is not None else None
+        loss = (ce * wt).sum() if wt is not None else ce.sum()
+        z_sum = None
+        if z_loss_multiplier is not None:
+            z = z_loss_multiplier * torch.logsumexp(logits, dim=-1).pow(2)
+            loss = loss + ((z * wt).sum() if wt is not None else z.sum())
+            z_sum = z.detach().sum()
+        ced = ce.detach()
+        sums = torch.zeros(Bx, device=ce.device, dtype=torch.float32).index_add_(0, row_id, ced)
+        cnt = torch.bincount(row_id, minlength=Bx)
+        row_alloc.setdefault("out", []).append((sums, cnt))
+        if loss_div_factor is not None:
+            loss = loss / loss_div_factor
+            ce_sum = ced.sum() / loss_div_factor
+            z_sum = None if z_sum is None else z_sum / loss_div_factor
+        else:
+            ce_sum = ced.sum()
+        return LMOutputWithLoss(logits=None, loss=loss, ce_loss=ce_sum, z_loss=z_sum)
 
     def _finalize_loss(
         self,

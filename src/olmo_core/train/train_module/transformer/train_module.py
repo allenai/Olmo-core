@@ -447,12 +447,34 @@ class TransformerTrainModule(TrainModule):
                 k: (v[order.to(v.device)] if torch.is_tensor(v) and v.dim() >= 1 and v.shape[0] == n_rows else v)
                 for k, v in batch.items()
             }
+        # Row-level loss allocation (research, opt-in via ``self._row_alloc``; None = unchanged).
+        row_alloc = getattr(self, "_row_alloc", None)
+        ra_head = getattr(self.model, "lm_head", None) if row_alloc is not None else None
+        ra_w: Optional[torch.Tensor] = None
+        if ra_head is not None:
+            assert row_alloc is not None
+            n_r = (batch["labels"] != self.label_ignore_index).sum(dim=1).float()
+            p = float(row_alloc.get("row_pow", 0.0))
+            if p != 0.0:
+                wr = n_r.clamp(min=1.0).pow(-p)
+                ra_w = wr * n_r.sum() / (wr * n_r).sum().clamp(min=1.0)  # sum_r w_r n_r = N_rank
+            row_alloc["rows"] = []
         micro_batches = split_batch(batch, self.rank_microbatch_size // seq_len)
         num_micro_batches = len(micro_batches)
+        ra_ws = (
+            list(ra_w.split(self.rank_microbatch_size // seq_len)) if ra_w is not None else None
+        )
 
         # Train one micro-batch at a time.
         for micro_batch_idx, micro_batch in enumerate(micro_batches):
             with self._train_microbatch_context(micro_batch_idx, num_micro_batches):
+                if ra_head is not None:
+                    assert row_alloc is not None
+                    mb_index = micro_batch.get("index")
+                    ra_head._row_alloc = {
+                        "w": None if ra_ws is None else ra_ws[micro_batch_idx],
+                        "out": [],
+                    }
                 input_ids, labels, model_kwargs = self._prepare_batch(micro_batch)
 
                 # Run forward pass, get losses.
@@ -466,6 +488,17 @@ class TransformerTrainModule(TrainModule):
                     return_logits=False,
                     **model_kwargs,
                 )
+
+                if ra_head is not None:
+                    assert row_alloc is not None
+                    outs = ra_head._row_alloc["out"]
+                    ra_head._row_alloc = None
+                    if outs and mb_index is not None:
+                        sums = sum(o[0] for o in outs)
+                        cnt = sum(o[1] for o in outs)
+                        row_alloc["rows"].append(
+                            (mb_index.detach().cpu(), sums.cpu(), cnt.cpu(), len(outs))
+                        )
 
                 # Update total batch CE and Z loss.
                 ce_batch_loss += get_local_tensor(ce_loss.detach())
