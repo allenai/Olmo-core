@@ -6,12 +6,24 @@
   "Score = training FLOPs the dense reference needs to reach a loss level divided by the FLOPs the method needs to reach the same level, on the mean loss and on the worst task. Peak GPU memory is logged per step.",
   "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals.",
   "Data caveats: the 16k training cells use fewer documents per row than the eval (contradiction 324 vs 379, outlier 96 vs 111, reorder 90 vs 116) so rows fit in 16,384 tokens; the 16k held-out rows are the short tail of the eval rung (70, 303, 8 and 497 of 500 rows fit for contradiction, outlier, reorder, qdmatch_nq). About 46% of the documents in a qdmatch_nq held-out row also occur in training rows (no gold overlap, no prompt overlap).",
-  "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part.",
   "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps.",
   "Deep comparisons (from 11-17 11:30) use the full-epoch dense-LoRA curve (488 steps, probes every 50) as the reference and give the FLOP ratio at fixed held-out CE levels 0.160 / 0.140 / 0.125 / 0.115 / 0.105 / 0.095.",
-  "From 11-17 12:00 the primary measure is the 16k held-out loss. Until the larger 16k set is in place, 16k readings come from 56 rows (8 for reorder) and are noisy."
+  "From 11-17 12:00 the primary measure is the 16k held-out loss. Until the larger 16k set is in place, 16k readings come from 56 rows (8 for reorder) and are noisy.",
+  "Memory: the proxy's logged transient memory was wrong until 11-17 12:25 (the peak was reset before being read). Valid memory numbers are in the memory-scaling entries of the log; the leaderboard's memory columns should be ignored."
  ],
  "log": [
+  {
+   "t": "11-17 12:40",
+   "text": "Loss-per-cost sampling closed: level with the plain recipe on the same pool at 16k, 1.0-1.3x on all lengths, no stacking on the 80/20 pool."
+  },
+  {
+   "t": "11-17 12:30",
+   "text": "Length-scaling breakdown: the recipe's cost vs dense falls from 0.217 at 16k to 0.189 at 64k and 0.168 at 128k; blocks 0-6 hold a single full-attention block (block 3), whose attention is 4% of the recipe's step at 16k and 25% at 128k. The floor is the linear per-token cost of blocks 0-6 (0.118x dense). A fixed kept-token budget plus local early attention is estimated (not measured) at 0.07-0.09x dense at 128k."
+  },
+  {
+   "t": "11-17 12:25",
+   "text": "Memory scaling measured (1 H200, micro-batch 1, one step, activation checkpointing on; transient above a 24.5 GiB baseline): dense LoRA 10.8 / 16.7 / 28.5 / 52.0 GiB at 16k / 32k / 64k / 128k tokens (0.37 GiB per 1k tokens), out of memory at 256k; recipe 8.3 / 10.9 / 18.6 / 34.1 GiB (0.24 GiB per 1k), its peak is the full-row backward of an early block. With checkpointing off both run out of memory at 32k. CORRECTION: the transient-memory column logged by the proxy so far (2.9-3.6 GiB) is wrong; a memory monitor reset the peak before it was read. Treat every memory number in the leaderboard as invalid until rerun. Chunked early blocks: forward exact; with 8k chunks the gradient's cosine to the exact gradient is 0.996 overall and 0.982 in blocks 0-6."
+  },
   {
    "t": "11-17 11:55",
    "text": "Variants of the recipe on the 80/20 pool (partial, one seed): keep 30%/10% is level with the standard keep per FLOP (0.127 at 108 PF); keep 10%/3.5%, 32 rows/step and LR 2e-5 are behind. Note: log entries stamped 12:00-12:15 above this one were written between 11:35 and 11:50."

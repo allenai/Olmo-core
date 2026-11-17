@@ -108,8 +108,8 @@
   "family": "cross-row",
   "title": "Loss-proportional task and length sampling",
   "what": "Sample the next rows by each task-and-length cell's running training loss per FLOP instead of uniformly (reorder holds 5x the loss of the other tasks); row-level backward skipping; per-row vs per-token loss averaging.",
-  "status": "running",
-  "result": "Loss-per-cost sampling of task and length cells (EMA of training loss divided by cell tokens): 2.3-2.6x vs dense LoRA on the main pool (plain recipe 1.9-2.2x) and 3.2-3.7x on the 50/50 pool, one seed. Loss-only sampling and a static reorder-heavy mix are level with the recipe. Now stacking on the 80/20 pool with two seeds."
+  "status": "done",
+  "result": "No gain at 16k. Loss-per-cost sampling of task and length cells is level with the plain recipe on the same pool on the 16k held-out rows (1.0x on the 80/20 pool with two seeds, 0.9-1.0x on the 50/50 pool); its all-lengths gain is 1.0-1.3x and does not stack on the 80/20 pool. A stronger cost term (0.22 PF per step) stops the 16k loss tracking (0.90x). A 16k-targeted rule is level with the recipe at matched FLOPs. Loss-only sampling and a static reorder-heavy mix are level; per-row loss averaging starves reorder. No task is starved by the loss-per-cost rules. Branch loop/alloc."
  },
  {
   "id": "lenscale",
@@ -117,7 +117,7 @@
   "title": "Length-scaling breakdown and document-local attention in the early blocks",
   "what": "Tabulate where the recipe's FLOPs go at 4k-128k rows (the full-length attention of the early blocks is quadratic in length), then make that attention document-local during training so the early blocks' cost grows linearly with length.",
   "status": "running",
-  "result": "agent started 12:00"
+  "result": "FLOP breakdown done (flop meter's own formulas; the model has 32 blocks, 8 full attention at blocks 3, 7, ..., 31 and 24 Gated DeltaNet). Recipe cost vs dense: 0.227 / 0.217 / 0.189 / 0.168 at 4k / 16k / 64k / 128k. The only early full-attention block is block 3: its full-length attention is 4% of the recipe's step at 16k, 15% at 64k, 25% at 128k; making it document-local would give 1.04x / 1.17x / 1.33x at 16k / 64k / 128k. The floor is the length-independent per-token cost of blocks 0-6 (FFN, GDN, projections): 0.118x dense, 54% of the recipe's step at 16k. Proxy runs with document-local attention (block 3; blocks 3-15; all attention blocks) are running. Proxy at 16k (one seed): local attention in block 3 only trains normally and is 0.01-0.02 held-out CE behind the recipe per step (0.246 / 0.181 / 0.163 / 0.143 vs 0.229 / 0.172 / 0.140 / 0.124) for a 2% FLOP saving; local attention also in blocks 7, 11, 15 stalls training (0.773 / 0.762 / 0.570 / 0.390). A causal-mask control of the same attention path is running to rule out a bug in the later blocks."
  },
  {
   "id": "memscale",
@@ -125,6 +125,6 @@
   "title": "Memory that stays flat at 256k-1M tokens",
   "what": "Measure how peak training memory grows with row length (16k-256k) for dense LoRA and the recipe, then run the early blocks chunk by chunk (no-grad pass, later blocks on the kept tokens, second chunked pass with gradient) with a kept-token budget fixed in tokens, so the peak is one chunk plus the kept tokens instead of the whole row.",
   "status": "running",
-  "result": "agent started 12:15"
+  "result": "Scaling law measured (transient above a 24.5 GiB baseline, one H200, micro-batch 1): dense LoRA 0.37 GiB per 1k tokens (52 GiB at 128k, out of memory at 256k); recipe 0.24 GiB per 1k (34 GiB at 128k). Chunked early blocks with 8k chunks: forward exact, gradient cosine 0.996 overall and 0.982 in blocks 0-6. Proxy runs and the memory sweep of the chunked method are next."
  }
 ]
