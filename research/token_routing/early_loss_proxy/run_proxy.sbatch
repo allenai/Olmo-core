@@ -38,7 +38,7 @@ while IFS=$'\t' read -r NAME VARIANT LR SEED FLAGS; do
   # shellcheck disable=SC2086
   "$PY" -m torch.distributed.run --nproc_per_node=$NGPU --master_port=$((29000 + RANDOM % 1000)) \
     research/token_routing/early_loss_proxy/dense_probe.py \
-    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" ${STOPCE:+--probe-stop-ce $STOPCE} ${MAXTRAIN:+--probe-max-train-s $MAXTRAIN} -- \
+    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" ${STOPCE:+--probe-stop-ce $STOPCE} ${MAXTRAIN:+--probe-max-train-s $MAXTRAIN} ${MEMTRACE:+--probe-memtrace $MEMTRACE} -- \
     --task mt4 --variant "$VARIANT" --model-family qwen3_5 --model-scale 4b \
     --run-name "$NAME" --base-checkpoint "$BASE" --data "$DATA" --work-dir "$ROOT/work_${SLURM_JOB_ID}" \
     --save-folder "$SAVE" --seq-len $SEQLEN --epochs 1 --lr "$LR" --global-batch $GB --micro-batch-instances $MICRO \
