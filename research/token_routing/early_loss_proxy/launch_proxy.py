@@ -74,9 +74,14 @@ def main():
     ap.add_argument("--arms", default="dense,recipe")
     ap.add_argument("--seeds", default="0")
     ap.add_argument("--steps", default="1,2,5,10")
-    ap.add_argument("--sets", default="suite8k:16,suite2k:16,train:16")
-    ap.add_argument("--heldout", default="/data/prasann/early_loss_proxy/heldout_v1.npz")
-    ap.add_argument("--tag", default="v1", help="result folder results/<tag>/")
+    ap.add_argument("--sets", default="suite4k:16,suite8k:16,suite16k:16")
+    ap.add_argument("--heldout", default="/data/prasann/early_loss_proxy/heldout_v2.npz")
+    ap.add_argument("--data", default="/data/prasann/early_loss_proxy/shards/mtb16k", help="training pool on the node")
+    ap.add_argument("--seq-len", type=int, default=16384)
+    ap.add_argument("--gpus", type=int, default=2)
+    ap.add_argument("--custom", action="append", default=[], metavar="NAME=VARIANT,LR,FLAGS",
+                    help="an arm not in ARMS (repeatable): name=variant,lr,trainer flags; add its name to --arms")
+    ap.add_argument("--tag", default="v2", help="result folder results/<tag>/")
     ap.add_argument("--lr-mult", type=float, default=1.0, help="constant-LR / LR variants: multiply each arm's LR")
     ap.add_argument("--extra", default="", help="appended to every arm's trainer flags (e.g. --warmup-fraction 0)")
     ap.add_argument("--code", required=True, help="staged code dir on the node (stage_code.sh)")
@@ -84,6 +89,10 @@ def main():
     ap.add_argument("--qos", default="preemptive_high")
     ap.add_argument("--minutes", type=int, default=0)
     a = ap.parse_args()
+    for c in a.custom:
+        name, _, rest = c.partition("=")
+        variant, lr, flags = rest.split(",", 2)
+        ARMS[name] = (variant, float(lr), flags.strip(), None, "custom")
     lines = []
     for seed in a.seeds.split(","):
         for arm in a.arms.split(","):
@@ -93,9 +102,11 @@ def main():
     job_dir = f"/data/prasann/early_loss_proxy/jobs"
     spec = "\n".join(lines) + "\n"
     minutes = a.minutes or max(10, 4 * len(lines))
-    env = dict(os.environ, CODE=a.code, STEPS=a.steps, SETS=a.sets, HELDOUT=a.heldout, TAG=a.tag,
+    env = dict(os.environ, CODE=a.code, STEPS=a.steps, SETS=a.sets, HELDOUT=a.heldout, TAG=a.tag, DATA=a.data,
+               SEQLEN=str(a.seq_len), NGPU=str(a.gpus),
                SPEC_B64=__import__("base64").b64encode(spec.encode()).decode())
     cmd = ["sbatch", "-w", a.node, f"--qos={a.qos}", "-J", f"elp-{a.tag}", f"--time={minutes + 20}",
+           f"--gres=gpu:{a.gpus}",
            f"{HERE}/run_proxy.sbatch"]
     out = subprocess.run(cmd, env=env, capture_output=True, text=True)
     print(out.stdout.strip(), out.stderr.strip()[-400:])
@@ -104,8 +115,10 @@ def main():
     jid = out.stdout.strip().split()[-1]
     st = json.load(open(STATE)) if os.path.exists(STATE) else {"jobs": {}}
     st["jobs"][jid] = {"node": a.node, "tag": a.tag, "runs": [ln.split("\t")[0] for ln in lines], "steps": a.steps,
-                       "sets": a.sets, "code": a.code, "extra": a.extra, "lr_mult": a.lr_mult}
-    json.dump(st, open(STATE, "w"), indent=1)
+                       "sets": a.sets, "code": a.code, "extra": a.extra, "lr_mult": a.lr_mult, "data": a.data,
+                       "seq_len": a.seq_len, "gpus": a.gpus, "qos": a.qos, "custom": a.custom}
+    json.dump(st, open(STATE + f".{jid}", "w"), indent=1)  # atomic: several launchers may run at once
+    os.replace(STATE + f".{jid}", STATE)
     subprocess.run([OPS, "register", "--run-id", f"elp-{a.tag}-job{jid}", "--experiment", "tokdrop_lr",
                     "--cluster", "slurm", "--job-id", jid, "--expected-minutes", str(minutes), "--git", REPO])
     print(f"job {jid}: {len(lines)} arm runs -> {a.node}:/data/prasann/early_loss_proxy/results/{a.tag}/")

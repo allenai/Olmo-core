@@ -65,7 +65,10 @@ def build_callback(cfg: Dict[str, str]):
     for spec in cfg.get("sets", "suite8k:16").split(","):
         name, _, k = spec.partition(":")
         k = int(k or 16)
-        for task in ("contradiction", "nq", "outlier", "oolong"):
+        tasks_here = list(dict.fromkeys(str(t) for i, t in enumerate(tasks_arr) if sets_arr[i] == name))
+        if not tasks_here:
+            raise SystemExit(f"held-out set {name} not in {cfg['heldout']}")
+        for task in tasks_here:
             idx = [i for i in range(len(sets_arr)) if sets_arr[i] == name and tasks_arr[i] == task][:k]
             if len(idx) < k:
                 raise SystemExit(f"held-out {name}/{task}: only {len(idx)} rows < {k}")
@@ -73,6 +76,14 @@ def build_callback(cfg: Dict[str, str]):
                 rows.append((name, task, ids_all[offs[i]:offs[i + 1]].astype(np.int64),
                              mask_all[offs[i]:offs[i + 1]].astype(bool)))
     out_path = cfg["out"]
+    # step-0 cache: the dense loss of the untrained base is the same for every arm (LoRA B = 0), so it is scored once
+    # per (held-out file, sets, base) and reused; each rank still scores ONE row and the run falls back to a full
+    # step-0 probe if that row disagrees with the cache (an arm that changes the model at init).
+    cache_path = cfg.get("step0_cache", "")
+    cache_key = hashlib.sha1(json.dumps([cfg["heldout"], os.path.getmtime(cfg["heldout"]), cfg.get("sets"),
+                                         cfg.get("base", "")]).encode()).hexdigest()[:16]
+
+    cache_off: List[int] = []
 
     class DenseProbeCallback(Callback):
         """See the module docstring."""
@@ -104,6 +115,15 @@ def build_callback(cfg: Dict[str, str]):
             return {"actual_pf": float(getattr(fm, "_actual", 0.0)) / 1e15,
                     "dense_pf": float(getattr(fm, "_dense", 0.0)) / 1e15}
 
+        def _cached0(self):
+            if cache_off or not cache_path or not os.path.exists(cache_path):
+                return None
+            try:
+                c = json.load(open(cache_path)).get(cache_key)
+            except Exception:
+                return None
+            return c if c and len(c["ce"]) == len(rows) else None
+
         @torch.no_grad()
         def _probe(self, step: int):
             model = self.trainer.train_module.model
@@ -114,6 +134,9 @@ def build_callback(cfg: Dict[str, str]):
             rank, ws = self._rank(), self._ws()
             n = len(rows)
             per = -(-n // ws)
+            cached = self._cached0() if step == 0 else None
+            if cached is not None:
+                per = 1  # verify one row per rank against the cache
             ce = torch.zeros(n, device="cuda", dtype=torch.float64)
             ce_sum = torch.zeros(n, device="cuda", dtype=torch.float64)
             # every rank runs the same number of forwards (FSDP all-gathers per forward); a rank's spare
@@ -134,11 +157,35 @@ def build_callback(cfg: Dict[str, str]):
             if dist.is_initialized():
                 dist.all_reduce(ce)
                 dist.all_reduce(ce_sum)
+            src = "scored"
+            if cached is not None:
+                ref = torch.as_tensor(cached["ce"], device="cuda", dtype=torch.float64)
+                k = min(ws, n)
+                bad = float((ce[:k] - ref[:k]).abs().max())
+                if bad > 5e-3:  # this arm's step-0 model is not the cached base: score everything
+                    if rank == 0:
+                        print(f"[dense-probe] step-0 cache MISMATCH (max |diff| {bad:.4f} on {k} rows): full probe",
+                              flush=True)
+                    self.res["step0_cache"] = f"mismatch {bad:.4f}"
+                    cache_off.append(1)
+                    model.train(was)
+                    return self._probe(0)
+                ce, ce_sum = ref, torch.as_tensor(cached["ce_sum"], device="cuda", dtype=torch.float64)
+                src = "cache"
+            elif step == 0 and cache_path and rank == 0 and not cache_off:
+                try:
+                    c = json.load(open(cache_path)) if os.path.exists(cache_path) else {}
+                    c[cache_key] = {"ce": ce.cpu().tolist(), "ce_sum": ce_sum.cpu().tolist()}
+                    json.dump(c, open(cache_path + f".{os.getpid()}", "w"))
+                    os.replace(cache_path + f".{os.getpid()}", cache_path)
+                except Exception as e:  # the cache is an optimisation only
+                    print(f"[dense-probe] step-0 cache write failed: {e}", flush=True)
             model.train(was)
+            torch.cuda.reset_peak_memory_stats()
             torch.cuda.synchronize()
             dt = time.time() - t0
             rec = {"step": step, "ce": ce.cpu().tolist(), "ce_sum": ce_sum.cpu().tolist(), "lr": self._lrs(),
-                   "flops": self._flops(), "probe_s": dt, "train_s_cum": self._train_s,
+                   "flops": self._flops(), "probe_s": dt, "train_s_cum": self._train_s, "src": src,
                    "wall_s": time.time() - T_START}
             self.res["probes"].append(rec)
             if rank == 0:
@@ -165,13 +212,18 @@ def build_callback(cfg: Dict[str, str]):
             self._t_step = time.time()
             ii = batch["input_ids"]
             self._hash = hashlib.sha1(ii.detach().cpu().numpy().tobytes()).hexdigest()[:12]
+            torch.cuda.reset_peak_memory_stats()
             self._ntok = int(ii.numel())
 
         def post_step(self):
             torch.cuda.synchronize()
             dt = time.time() - self._t_step
             self._train_s += dt
+            pk = torch.tensor([float(torch.cuda.max_memory_allocated())], device="cuda", dtype=torch.float64)
+            if dist.is_initialized():
+                dist.all_reduce(pk, op=dist.ReduceOp.MAX)
             self.res["steps"].append({"step": int(self.step), "train_s": dt, "lr": self._lrs(),
+                                      "peak_gib": float(pk) / 2**30,
                                       "batch_hash_rank0": self._hash, "tokens_rank0": self._ntok,
                                       "flops": self._flops()})
             if self.step in steps:
@@ -185,6 +237,8 @@ def build_callback(cfg: Dict[str, str]):
 def main():
     cfg, rest = _pop_args(sys.argv[1:])
     steps = sorted({int(s) for s in cfg.get("steps", "1,2,5,10").split(",") if s})
+    if "--base-checkpoint" in rest:
+        cfg["base"] = rest[len(rest) - 1 - rest[::-1].index("--base-checkpoint") + 1]  # argparse: last one wins
     if "--max-steps" not in rest:
         rest += ["--max-steps", str(max(steps))]
     sys.argv = [os.path.join(REPO, "recipes/train/research_trainer/train_ctc_suite.py")] + rest
