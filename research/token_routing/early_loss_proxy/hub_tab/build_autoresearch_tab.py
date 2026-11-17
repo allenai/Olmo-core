@@ -34,6 +34,16 @@ if "--state" in args:
 H = args[0]
 h = open(H, encoding="utf-8").read()
 STATE = json.load(open(state_path, encoding="utf-8"))
+# plain-language implementation notes per idea (make_idea_impl.py writes idea_impl.json); a `how` the loop wrote itself wins
+_impl = os.path.join(os.path.dirname(os.path.abspath(__file__)), "idea_impl.json")
+if os.path.exists(_impl):
+    _H = json.load(open(_impl, encoding="utf-8"))
+    for _i in STATE.get("ideas", []):
+        if not _i.get("how") and _i["id"] in _H:
+            _i["how"] = _H[_i["id"]]
+    _miss = [_i["id"] for _i in STATE.get("ideas", []) if not _i.get("how")]
+    if _miss:
+        print("note: no implementation notes for ideas:", ", ".join(_miss), "(add them to make_idea_impl.py)")
 
 # ---- per-context-length speedups (computed here from the per-length held-out CE curves in `curves[i].by`) -------------------
 # The loop publishes one speedup per arm and level, on the mean CE over all lengths (`board[i].x`). This adds `board[i].xm[m]` for
@@ -154,15 +164,40 @@ PART = PS + '''
 .aropt button { font: 500 .78rem/1 var(--body); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); cursor: pointer; }
 .aropt button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .aropt select { font: .85rem var(--body); padding: 6px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); color: var(--fg); max-width: 100%; }
-/* every idea at a glance: one bar per idea */
-.glance { display: grid; grid-template-columns: minmax(120px, 30%) minmax(0, 1fr); gap: 3px 10px; align-items: center; font-size: .82rem; max-width: 900px; }
-.glance .gl { text-align: right; line-height: 1.25; } .glance .gl a { color: var(--fg); text-decoration: none; } .glance .gl a:hover { color: var(--c2); }
+/* every idea at a glance: one bar per idea, each folds open to a plain-language implementation note */
+.glance { display: grid; gap: 0; font-size: .82rem; max-width: 980px; }
+.glance details.gi { border-top: 1px solid var(--rule); }
+.glance details.gi > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(180px, 42%) minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 7px 4px; }
+.glance details.gi > summary::-webkit-details-marker { display: none; }
+.glance details.gi > summary:hover { background: color-mix(in srgb, var(--rule) 30%, transparent); }
+.glance details.gi > summary:focus-visible { outline: 2px solid var(--c2); outline-offset: -2px; }
+.glance .gl { line-height: 1.3; min-width: 0; } .glance .gl b { font-size: .88rem; display: block; }
+.glance .gl b::before { content: "▸"; display: inline-block; width: 1em; color: var(--muted); transition: transform .12s; } .glance details[open] .gl b::before { transform: rotate(90deg); }
+.glance .gl span.gd { display: block; color: var(--muted); font-size: .76rem; line-height: 1.35; padding-left: 1em; }
 .glance .gt { position: relative; height: 18px; background: color-mix(in srgb, var(--rule) 45%, transparent); }
 .glance .gb { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 2px 2px 0; background: var(--muted); }
 .glance .gb.s-running { background: var(--c1); } .glance .gb.s-done { background: var(--c3); } .glance .gb.s-dropped { background: var(--muted); opacity: .75; }
 .glance .gv { position: absolute; top: 0; line-height: 18px; font: .72rem var(--mono); white-space: nowrap; padding-left: 5px; color: var(--fg); }
 .glance .gr { position: absolute; top: -2px; bottom: -2px; border-left: 2px dashed var(--dense); opacity: .75; }
-.glance .gax { grid-column: 2; position: relative; height: 14px; font: .68rem var(--mono); color: var(--muted); } .glance .gax span { position: absolute; transform: translateX(-50%); }
+.glance .gax { display: grid; grid-template-columns: minmax(180px, 42%) minmax(0, 1fr); gap: 0 14px; padding: 4px 4px 0; } .glance .gax > div { position: relative; height: 14px; font: .68rem var(--mono); color: var(--muted); } .glance .gax span { position: absolute; transform: translateX(-50%); }
+@media (max-width: 640px) { .glance details.gi > summary, .glance .gax { grid-template-columns: minmax(0, 1fr); } .glance .gax > div:first-child { display: none; } }
+/* implementation note: steps, flags, diagrams */
+.impl { display: grid; gap: 8px; padding: 4px 6px 12px 22px; min-width: 0; } .impl p { margin: 0; max-width: 100ch; font-size: .86rem; }
+.impl ol { margin: 0; padding-left: 1.25em; max-width: 100ch; font-size: .84rem; line-height: 1.45; } .impl ol li { margin: 2px 0; }
+.impl .iflags { font: .74rem/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; } .impl .iflags b { font-weight: 600; color: var(--fg); }
+.impl .iresult { font-size: .84rem; border-left: 3px solid var(--rule); padding: 2px 0 2px 10px; max-width: 100ch; }
+.impl .idiag { display: grid; gap: 6px; min-width: 0; } .impl .idiag h5 { margin: 0; font: 600 .74rem var(--body); color: var(--muted); }
+.impl .idiag svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.dg-g { fill: var(--c2); } .dg-n { fill: var(--c6); opacity: .5; } .dg-f { fill: var(--c4); opacity: .55; } .dg-c { fill: var(--c5); opacity: .75; }
+.dg-ghost { fill: none; stroke: var(--rule); stroke-dasharray: 2 2; } .dg-t { font: 9px var(--mono); fill: var(--muted); } .dg-m { font: 600 9px var(--body); fill: var(--fg); }
+.dg-att { fill: var(--dense); } .dg-line { stroke: var(--muted); stroke-width: 1; }
+.dlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .72rem; color: var(--muted); } .sw-g { background: var(--c2); } .sw-n { background: var(--c6); opacity: .5; } .sw-f { background: var(--c4); opacity: .55; } .sw-c { background: var(--c5); opacity: .75; }
+.dlegend i { display: inline-block; width: 10px; height: 10px; vertical-align: -1px; margin-right: 4px; border-radius: 2px; }
+.rowd { display: flex; gap: 2px; max-width: 640px; min-width: 0; } .rowd > div { min-width: 0; font: .66rem/1.2 var(--mono); padding: 5px 3px; text-align: center; border-radius: 3px; overflow: hidden; color: var(--fg); background: color-mix(in srgb, var(--c6) 25%, transparent); white-space: nowrap; text-overflow: ellipsis; }
+.rowd .k-p { background: color-mix(in srgb, var(--c6) 40%, transparent); } .rowd .k-G { background: color-mix(in srgb, var(--c3) 55%, transparent); } .rowd .k-d { background: color-mix(in srgb, var(--c2) 28%, transparent); }
+.rowd .k-q { background: color-mix(in srgb, var(--c1) 50%, transparent); } .rowd .k-a { background: color-mix(in srgb, var(--c7) 40%, transparent); } .rowd .k-s { background: color-mix(in srgb, var(--c4) 40%, transparent); }
+.rowd .k-x { background: none; border: 1px dashed var(--rule); color: var(--muted); } .rowd .k-gap { background: none; border: 1px dotted var(--muted); color: var(--muted); }
+.rowd .k-t { background: color-mix(in srgb, var(--c2) 35%, transparent); } .rowd .k-u { background: color-mix(in srgb, var(--c3) 40%, transparent); } .rowd .k-v { background: color-mix(in srgb, var(--c5) 45%, transparent); }
 /* idea lists, PAIL style: one line per idea, details folded */
 details.qg { border: 0; background: transparent; } details.qg > summary { padding: 6px 0; font-weight: 600; } details.qg[open] > summary { border-bottom: 0; }
 ul.ql { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
@@ -185,7 +220,8 @@ ul.ql details.more[open] > summary { border-bottom: 0; }
 <div class="figs"><figure style="grid-column: 1 / -1"><div class="chart" style="height:230px"><canvas id="arBestChart" aria-label="best FLOP speedup over time"></canvas></div><figcaption>Best FLOP speedup over the dense reference found so far, by time of the loop (hover a point for the method).</figcaption></figure></div>
 <details class="more" id="arBestBox"><summary>Every new best, as a table <span class="mh" id="arBestN"></span></summary><div id="arBest"></div></details>
 <details class="more" id="arStatusBox"><summary>Full status text <span class="mh">from the loop</span></summary><p class="note" id="arStatus" style="margin:10px 12px 12px"></p></details>''', True) + bar("ar-glance", "Every idea at a glance", '''
-<p class="note">Best FLOP speedup any arm of the idea reached, against dense LoRA at the same held-out loss (at a level the arm actually reached; the dashed line is the plain recipe). Ideas with no bar reached no comparison level. Colour is the idea's status. ⚠ eval_size 184, below 500: differences under about two paired SEs are noise.</p>
+<p class="note">Best FLOP speedup any arm of the idea reached, against dense LoRA at the same held-out loss (at a level the arm actually reached; the dashed line is the plain recipe). Ideas with no bar reached no comparison level. Colour is the idea's status. ⚠ eval_size 184, below 500: differences under about two paired SEs are noise. <b>Click an idea</b> to see what it does, how it is implemented (with a diagram of which tokens or rows are used) and its result.</p>
+<div class="aropt"><span>Notes</span><button type="button" id="arGOpenAll">Open all</button><button type="button" id="arGCloseAll">Close all</button></div>
 <div id="arGlance" class="glance"></div>''', True) + bar("ar-ideas", "Ideas, with their verdicts", '''
 <div class="aropt"><span>Group by</span><button type="button" id="arGO" aria-pressed="true">Outcome</button><button type="button" id="arGF" aria-pressed="false">Family</button></div>
 <p class="note" id="arFamNote">One line per idea: its verdict first. "Details and arms" opens what was tried and the arms (scored runs) of that idea, with all their columns.</p>
@@ -241,6 +277,8 @@ JS = SS + r'''
   const ALIAS = { rowsbk: "rows", "goldrand-lam": "goldrand", grmix50: "goldrand", prefixl: "prefix", "ffnskip-lam": "ffnskip", "earlyloss-lam": "earlyloss", hp: "hparams", mq: "multiq" };
   const ideasAll = ST.ideas || [], byId = {}; ideasAll.forEach(i => { byId[i.id] = i; });
   const famIdeas = {}; ideasAll.forEach(i => { (famIdeas[i.family] = famIdeas[i.family] || []).push(i); });
+  const FAMALIAS = { "short rows": "subproblem", "keep ladder": "recipe" };
+  Object.keys(FAMALIAS).forEach(k => { if (byId[FAMALIAS[k]] && !famIdeas[k]) famIdeas[k] = [byId[FAMALIAS[k]]]; });
   const ideaOf = r => { if (r.idea_id && byId[r.idea_id]) return byId[r.idea_id];
     const t = ALIAS[r.tag] || r.tag, c = byId[t]; if (c && (!r.idea || c.family === r.idea)) return c;
     if (byId[r.arm] && (!r.idea || byId[r.arm].family === r.idea)) return byId[r.arm];
@@ -282,20 +320,62 @@ JS = SS + r'''
     strip.appendChild(tile(String(B.length), "arms scored" + (es.length ? " · ⚠ eval_size " + es.join(" / ") + " (below 500)" : "")));
     if (ST.updated) strip.appendChild(tile(ST.updated.replace(/^\d{4}-/, ""), "last update (Pacific time)")); };
 
+  /* implementation notes: plain text, flags and a small diagram per idea (idea.how, from idea_impl.json) */
+  const NS = "http://www.w3.org/2000/svg", ATTN = [3, 7, 11, 15, 19, 23, 27, 31];
+  const sv = (tag, at, txt) => { const e = document.createElementNS(NS, tag); for (const k in at) e.setAttribute(k, at[k]); if (txt != null) e.textContent = txt; return e; };
+  const MODE = { g: "trained (gradient)", n: "forward-only, no gradient", f: "attention / GDN only, FFN skipped", c: "run in chunks" };
+  const depthSvg = d => { const W = 520, L = 4, cw = 16, H = 64, top = (d.marks && d.marks.length) ? 18 : 12, base = top + H;
+    const svg = sv("svg", { viewBox: "0 0 " + W + " " + (base + 26), role: "img", "aria-label": d.name });
+    for (let b = 0; b < 32; b++) svg.appendChild(sv("rect", { x: L + b * cw, y: top, width: cw - 2, height: H, class: "dg-ghost" }));
+    const bars = (segs, cls) => (segs || []).forEach(sg => { const h = Math.max(1.5, H * sg[2]);
+      for (let b = sg[0]; b < sg[1]; b++) svg.appendChild(sv("rect", { x: L + b * cw, y: base - h, width: cw - 2, height: h, class: cls || "dg-" + sg[3] })); });
+    bars(d.segs); bars(d.overlay, "dg-att");
+    (d.segs || []).forEach(sg => { if (sg[1] - sg[0] >= 3) svg.appendChild(sv("text", { x: L + (sg[0] + sg[1]) * cw / 2 - 1, y: Math.max(9, base - H * sg[2] - 3), "text-anchor": "middle", class: "dg-t" }, Math.round(sg[2] * 100) + "%")); });
+    ATTN.forEach(b => svg.appendChild(sv("path", { d: "M" + (L + b * cw + 1) + "," + (base + 9) + " l5,-7 l5,7 z", class: "dg-att" })));
+    [0, 8, 16, 24, 31].forEach(b => svg.appendChild(sv("text", { x: b === 0 ? L : L + b * cw + 6, y: base + 23, "text-anchor": b === 0 ? "start" : "middle", class: "dg-t" }, b === 0 ? "block 0" : String(b))));
+    (d.marks || []).forEach(m => { const x = L + m[0] * cw + 6, late = x + m[1].length * 5.2 > W - 4;
+      svg.appendChild(sv("line", { x1: x, x2: x, y1: 12, y2: top + 2, class: "dg-line" }));
+      svg.appendChild(sv("text", { x: x + (late ? 3 : -3), y: 9, "text-anchor": late ? "end" : "start", class: "dg-m" }, m[1])); });
+    return svg; };
+  const rowDiv = d => { const r = el("div", null, "rowd"); r.setAttribute("role", "img"); r.setAttribute("aria-label", d.name);
+    d.segs.forEach(sg => { const c = el("div", sg[2] || (sg[1] === "x" ? "·" : ""), "k-" + sg[1]); c.style.flex = sg[0] + " 1 0"; if (sg[2]) c.title = sg[2]; r.appendChild(c); }); return r; };
+  const diagrams = how => { const ds = how.diagrams || [], host = el("div", null, "idiag"), modes = new Set(); let depth = false;
+    ds.forEach(d => { const h = el("div"); h.appendChild(el("h5", d.name));
+      if (d.kind === "depth") { depth = true; (d.segs || []).forEach(sg => modes.add(sg[3])); h.appendChild(depthSvg(d)); } else h.appendChild(rowDiv(d));
+      if (d.note) h.appendChild(el("p", d.note, "note")); host.appendChild(h); });
+    if (depth) { const lg = el("div", null, "dlegend"); [...modes].forEach(m => { const s = el("span"), i = el("i"); i.className = "sw-" + m; s.appendChild(i); s.appendChild(document.createTextNode(MODE[m] || m)); lg.appendChild(s); });
+      lg.appendChild(el("span", "▲ full-attention block (the rest are Gated DeltaNet) · dashed box = dense: every token")); host.appendChild(lg); }
+    return host; };
+  const implPanel = (u, withResult) => { const i = u.idea || {}, how = i.how, box = el("div", null, "impl");
+    if (how) { if (how.does) { const p = el("p"); p.appendChild(el("b", "What it does: ")); p.appendChild(document.createTextNode(how.does)); box.appendChild(p); }
+      if ((how.steps || []).length) { box.appendChild(el("p", "How it is implemented", "note")); const ol = el("ol"); how.steps.forEach(t => ol.appendChild(el("li", t))); box.appendChild(ol); }
+      if ((how.diagrams || []).length) box.appendChild(diagrams(how));
+      if (how.flags || how.branch) { const p = el("p", null, "iflags"); if (how.branch) { p.appendChild(el("b", "branch ")); p.appendChild(document.createTextNode(how.branch + (how.flags ? " · " : ""))); }
+        if (how.flags) { p.appendChild(el("b", "flags ")); p.appendChild(document.createTextNode(how.flags)); } box.appendChild(p); } }
+    else if (i.what) { const p = el("p"); p.appendChild(el("b", "What it does: ")); p.appendChild(document.createTextNode(i.what)); box.appendChild(p); }
+    else box.appendChild(el("p", u.arms.length + " arm" + (u.arms.length === 1 ? "" : "s") + " of family " + u.family + " with no queue entry, so no description.", "note"));
+    if (withResult && i.result) { const r = el("div", null, "iresult"); r.appendChild(el("b", "Result so far: ")); r.appendChild(document.createTextNode(lead(i.result, 320)));
+      const a = el("a", " full verdict and arms ↓"); a.href = "#ar-ideas"; r.appendChild(a); box.appendChild(r); }
+    return box; };
+  const oneOf = u => { const i = u.idea || {}; return (i.how && i.how.one) || (i.what ? lead(i.what, 130) : ""); };
+
   /* every idea at a glance */
-  const G = $("arGlance"), gnote = G.previousElementSibling, gbase = gnote.textContent;
-  const drawGlance = () => { G.textContent = ""; const gu = units.filter(u => !(u.arms.length && u.arms.every(r => r.is_ref)));
+  const G = $("arGlance"), gnote = G.previousElementSibling.previousElementSibling, gbase = gnote.textContent;
+  const drawGlance = () => { const wasOpen = new Set([...G.querySelectorAll("details.gi[open]")].map(d => d.dataset.k)); G.textContent = ""; const gu = units.filter(u => !(u.arms.length && u.arms.every(r => r.is_ref)));
   gu.sort((a, b) => (b.best == null ? -1 : b.best) - (a.best == null ? -1 : a.best));
   const mx = Math.max(4, ...gu.map(u => u.best || 0), refX || 0) * 1.06;
-  gnote.textContent = gbase + " Measured at: " + mlab() + "." + (refX != null ? " Plain recipe: " + f(refX, 2) + "×." : "");
-  gu.forEach(u => { const lab = el("div", null, "gl"); const a = el("a", u.title); a.href = "#ar-ideas"; lab.appendChild(a); G.appendChild(lab);
+  gnote.textContent = gbase.replace(/ Measured at: .*$/, "") + " Measured at: " + mlab() + "." + (refX != null ? " Plain recipe: " + f(refX, 2) + "×." : "");
+  gu.forEach(u => { const d = el("details", null, "gi"); d.dataset.k = u.key; if (wasOpen.has(u.key)) d.open = true; const sm = el("summary");
+    const lab = el("div", null, "gl"); lab.appendChild(el("b", u.title)); lab.appendChild(el("span", oneOf(u), "gd")); sm.appendChild(lab);
     const t = el("div", null, "gt"); if (u.best != null) { const b = el("div", null, "gb s-" + u.status); b.style.width = (u.best / mx * 100) + "%"; t.appendChild(b);
       const na = u.arms.filter(r => !r.is_ref).length, pc = u.best / mx * 100, v = el("span", f(u.best, 2) + "× · " + na + (na === 1 ? " arm" : " arms"), "gv");
       if (pc > 55) { v.style.right = (100 - pc) + "%"; v.style.paddingRight = "5px"; v.style.color = "var(--bg)"; } else v.style.left = pc + "%"; t.appendChild(v); }
     else { const v = el("span", u.arms.length ? "no comparison level reached (" + u.arms.length + " arms)" : "no arms scored yet", "gv"); v.style.left = "0"; t.appendChild(v); }
     if (refX != null) { const r = el("div", null, "gr"); r.style.left = (refX / mx * 100) + "%"; t.appendChild(r); }
-    G.appendChild(t); });
-  const ax = el("div", null, "gax"); [1, 2, 3, 4, 6, 8].filter(v => v < mx).forEach(v => { const s = el("span", v + "×"); s.style.left = (v / mx * 100) + "%"; ax.appendChild(s); }); G.appendChild(ax); };
+    sm.appendChild(t); d.appendChild(sm); d.appendChild(implPanel(u, true)); G.appendChild(d); });
+  const ax = el("div", null, "gax"), axi = el("div"); ax.appendChild(el("div")); ax.appendChild(axi);
+  [1, 2, 3, 4, 6, 8].filter(v => v < mx).forEach(v => { const s = el("span", v + "×"); s.style.left = (v / mx * 100) + "%"; axi.appendChild(s); }); G.insertBefore(ax, G.firstChild); };
+  $("arGOpenAll").onclick = () => G.querySelectorAll("details.gi").forEach(d => { d.open = true; }); $("arGCloseAll").onclick = () => G.querySelectorAll("details.gi").forEach(d => { d.open = false; });
 
   /* ideas list, PAIL style */
   const famNote = $("arFamNote");
@@ -305,7 +385,8 @@ JS = SS + r'''
     if (u.idea && u.idea.result) li.appendChild(el("div", lead(u.idea.result, 230), "res"));
     const open = u.status === "running", d = fold(["Details and arms"], open);
     const body = el("div", null, "ideabody");
-    if (u.idea && u.idea.what) { const p = el("p"); p.appendChild(el("b", "What: ")); p.appendChild(document.createTextNode(u.idea.what)); body.appendChild(p); }
+    body.appendChild(implPanel(u, false));
+    if (u.idea && u.idea.what) { const p = el("p"); p.appendChild(el("b", "What (as queued by the loop): ")); p.appendChild(document.createTextNode(u.idea.what)); body.appendChild(p); }
     if (u.idea && u.idea.result) { const p = el("p"); p.appendChild(el("b", "Result: ")); p.appendChild(document.createTextNode(u.idea.result)); body.appendChild(p); }
     if (u.arms.length) { const a = fold(["Arms of this idea", mh(u.arms.length + " rows")], false); a.appendChild(armsTable(u.arms)); body.appendChild(a); }
     d.appendChild(body); li.appendChild(d); return li; };
