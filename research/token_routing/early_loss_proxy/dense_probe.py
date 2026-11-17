@@ -92,6 +92,7 @@ def build_callback(cfg: Dict[str, str]):
     # (GiB, minus the pre-step baseline) after every block forward (incl. activation-checkpoint recomputes), when the
     # gradient reaches each block output, and after the LM head; stored as res["memtrace"][step] and printed.
     trace_steps = {int(s) for s in cfg.get("memtrace", "").split(",") if s}
+    grad_ref = cfg.get("grad_ref", "")
 
     class DenseProbeCallback(Callback):
         """See the module docstring."""
@@ -257,11 +258,59 @@ def build_callback(cfg: Dict[str, str]):
                 self._tracing = int(self.step) in trace_steps
                 self._trace = []
 
+        def _grad_ref(self):
+            # --probe-grad-ref PATH (memscale): at step 1, if PATH does not exist save every trainable grad there (bf16);
+            # if it does, print the cosine of this run's grads against it (all, blocks < 7, blocks >= 7, per block)
+            import re
+            model = self.trainer.train_module.model
+            cur = {}
+            for n, p in model.named_parameters():
+                if p.grad is None:
+                    continue
+                g = p.grad
+                g = g.full_tensor() if hasattr(g, "full_tensor") else g
+                cur[n.replace("_checkpoint_wrapped_module.", "").replace("_fsdp_wrapped_module.", "")] = g.detach()
+            path = grad_ref
+            if self._rank() != 0:
+                return
+            if not os.path.exists(path):
+                torch.save({k: v.to(torch.bfloat16).cpu() for k, v in cur.items()}, path)
+                print(f"[grad-ref] saved {len(cur)} grads -> {path}", flush=True)
+                return
+            ref = torch.load(path)
+            acc: Dict[str, List[float]] = {}
+            for k, v in cur.items():
+                if k not in ref:
+                    continue
+                a, b = v.float().flatten(), ref[k].to(v.device).float().flatten()
+                m = re.search(r"blocks\.(\d+)\.", k)
+                grp = ["all"] + ([f"b{int(m.group(1))}", "pre" if int(m.group(1)) < 7 else "post"] if m else ["other"])
+                for gname in grp:
+                    t = acc.setdefault(gname, [0.0, 0.0, 0.0])
+                    t[0] += float((a * b).sum())
+                    t[1] += float((a * a).sum())
+                    t[2] += float((b * b).sum())
+            cos = {g: t[0] / max(1e-30, (t[1] * t[2]) ** 0.5) for g, t in acc.items()}
+            nrm = {g: (t[1] / max(1e-30, t[2])) ** 0.5 for g, t in acc.items()}
+            self.res["grad_cos"] = {"cos": cos, "norm_ratio": nrm, "ref": path}
+            print("[grad-ref] cosine vs ref: " + " ".join(f"{g}={cos[g]:.4f}(x{nrm[g]:.3f})" for g in
+                  ["all", "pre", "post"] + [f"b{i}" for i in range(40) if f"b{i}" in cos]), flush=True)
+
+        def pre_optim_step(self):
+            if grad_ref and int(self.step) == 1:
+                self._grad_ref()
+            # forward + backward peak, read BEFORE post_step: GPUMemoryMonitorCallback.post_step (and the online
+            # router callback) reset the allocator's peak, and this callback's post_step runs last (priority -100),
+            # so a peak read there only saw what was allocated after the reset (memscale, 2026-11-17)
+            torch.cuda.synchronize()
+            self._fb_peak = float(torch.cuda.max_memory_allocated())
+
         def post_step(self):
             torch.cuda.synchronize()
             dt = time.time() - self._t_step
             self._train_s += dt
-            pk0 = float(torch.cuda.max_memory_allocated())
+            pk0 = max(float(torch.cuda.max_memory_allocated()), float(getattr(self, "_fb_peak", 0.0)))
+            self._fb_peak = 0.0
             # [peak, peak - pre-step baseline (the step's own transient: activations, gradients, temporaries)]
             pk = torch.tensor([pk0, pk0 - self._base_mem], device="cuda", dtype=torch.float64)
             if dist.is_initialized():

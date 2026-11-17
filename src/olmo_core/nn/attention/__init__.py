@@ -1730,6 +1730,9 @@ class Attention(SequenceMixer):
         local_k_slice: Optional[slice] = None,
         cache_leftpad: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        pkv = self.__dict__.get("_prefix_kv")
+        if pkv is not None:  # chunked online-router prefix (olmo_core.nn.prefix_chunk): earlier chunks' K/V + causal
+            return pkv.attend(self, q, k, v)
         if self.kv_cache_manager is not None:
             self.kv_cache_manager.record_leftpad(cache_leftpad)
         # shape: (batch_size, seq_len, n_heads, head_dim)

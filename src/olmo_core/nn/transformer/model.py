@@ -1764,8 +1764,24 @@ class Transformer(nn.Module):
         grad_was = torch.is_grad_enabled()
         if otr_nograd:
             torch.set_grad_enabled(False)
+        prefix_done = 0
+        if otr_layer > 0 and not otr_nograd and token_exit is None and capture_layers is None and not ld_skip:
+            from ..prefix_chunk import prefix_chunk_size, run_prefix_chunked
+
+            pc = prefix_chunk_size()
+            if pc > 0 and h.shape[1] > pc:
+                # memscale: blocks [0, otr_layer) chunk by chunk (one chunk's activations at a time); the extra
+                # forward of those blocks (the per-chunk recompute) is charged as 1/3 of their forward + backward
+                h = run_prefix_chunked(self, h, all_block_kwargs, per_block_kwargs, otr_layer, pc)
+                prefix_done = otr_layer
+                T_pc = int(h.shape[1]) * int(h.shape[0])
+                blocks_pc = list(self.blocks.values())[:otr_layer]
+                self._flop_extra_actual = float(getattr(self, "_flop_extra_actual", 0.0)) + sum(
+                    float(b.num_flops_per_token(int(h.shape[1]))) for b in blocks_pc) * T_pc / 3.0
         for block_key, block in self.blocks.items():
             block_idx = int(block_key)
+            if block_idx < prefix_done:
+                continue
             if otr_nograd and block_idx == otr_nograd_end:
                 torch.set_grad_enabled(grad_was)
                 # a fresh leaf: the router's target hook at the split reads dL/dh at or above here

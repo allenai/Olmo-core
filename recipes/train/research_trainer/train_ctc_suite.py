@@ -2443,7 +2443,17 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="--dry-run only: pretend the shard has this many examples (0 = use metadata)",
     )
+    ap.add_argument("--prefix-chunk", type=int, default=0,
+                    help="memscale: online router, run blocks [0, drop_layer) in chunks of N tokens (one chunk's "
+                    "activations at a time; gradient paths across chunk boundaries inside those blocks are cut; "
+                    "olmo_core.nn.prefix_chunk). 0 = off")
+    ap.add_argument("--prefix-chunk-verify", action="store_true",
+                    help="--prefix-chunk: on the first chunked forward, print max |diff| vs the unchunked prefix")
     opts = ap.parse_args()
+    if opts.prefix_chunk:
+        os.environ["OLMO_OTR_PREFIX_CHUNK"] = str(opts.prefix_chunk)
+    if opts.prefix_chunk_verify:
+        os.environ["OLMO_OTR_PREFIX_VERIFY"] = "1"
     opts._mix_total_forwards = 0
     # Resolve the model family (explicit or auto from the shard) and rebind opts.model_family to
     # the concrete family, so every downstream function keys off it deterministically.
