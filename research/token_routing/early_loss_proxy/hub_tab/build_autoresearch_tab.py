@@ -57,20 +57,22 @@ JS = S + r'''
   if (!BH.length) { const fg = $("arBestChart"); if (fg) fg.closest("figure").style.display = "none"; }
   // leaderboard
   const tg = r => { const s = el("span"); s.appendChild(document.createTextNode(f(r.transient_gib, 1))); if (r.peak_gib != null && r.peak_gib !== "") s.appendChild(el("span", " (" + f(r.peak_gib, 1) + ")", "note")); return s; };
-  const B = ST.board || [], lv = new Set();
+  const rk = r => r.arm === "recipe" ? 0 : r.is_ref ? 1 : 2, ir = r => r.iso_rec == null ? -Infinity : r.iso_rec;
+  const B = (ST.board || []).map((r, i) => [r, i]).sort((a, b) => rk(a[0]) - rk(b[0]) || ir(b[0]) - ir(a[0]) || a[1] - b[1]).map(x => x[0]), lv = new Set();
+  const iso = r => r.iso == null ? "n/a" : (r.iso_lb ? ">= " : "") + f(r.iso, 1) + "×", isr = r => r.iso_rec == null ? "n/a" : f(r.iso_rec, 2) + "×";
   B.forEach(r => Object.keys(r.x || {}).forEach(k => lv.add(k)));
   const levels = [...lv].sort((a, b) => a - b), deep = levels[levels.length - 1];
   if (!B.length) empty($("arBoard"), "No scored methods yet."); else {
-    const head = ["method", "idea", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l), ["worst task @ step " + deep, "transient GiB (peak)", "transient vs dense LoRA", "train s"]);
+    const head = ["method", "idea", "seeds", "steps", "held-out CE", "cost / step vs dense"].concat(levels.map(l => "× @ step " + l), ["× vs dense LoRA at own loss", "× vs recipe at own loss", "worst task @ step " + deep, "transient GiB (peak)", "transient vs dense LoRA", "train s"]);
     const rows = B.map(r => { const ce = r.ce_last == null ? "" : f(r.ce_last, 3) + (r.d_vs_ref_se != null && !r.is_ref ? "  (Δ " + f(r.d_vs_ref, 3) + " ±" + f(r.d_vs_ref_se, 3) + ")" : "");
       const m = two((r.is_ref ? "[ref] " : "") + r.arm, r.desc);
       return [m, r.idea, (r.seeds || []).length, r.steps, ce, r.pf_per_step_vs_dense == null ? "" : f(r.pf_per_step_vs_dense, 2) + "×"]
-        .concat(levels.map(l => xs((r.x || {})[l])), [xs((r.xw || {})[deep]), tg(r), r.transient_vs_ref == null ? "" : f(r.transient_vs_ref, 2) + "×", f(r.train_s, 0)]); });
-    const t = table(head, rows, [2, 3, 4, 5].concat(levels.map((_, i) => 6 + i), [6 + levels.length, 7 + levels.length, 8 + levels.length, 9 + levels.length]));
+        .concat(levels.map(l => xs((r.x || {})[l])), [iso(r), isr(r), xs((r.xw || {})[deep]), tg(r), r.transient_vs_ref == null ? "" : f(r.transient_vs_ref, 2) + "×", f(r.train_s, 0)]); });
+    const t = table(head, rows, [2, 3, 4, 5].concat(levels.map((_, i) => 6 + i), [6 + levels.length, 7 + levels.length, 8 + levels.length, 9 + levels.length, 10 + levels.length, 11 + levels.length]));
     [...t.querySelectorAll("tr")].slice(1).forEach((tr, i) => { if (B[i].is_ref) tr.style.background = "var(--surface)"; if (B[i].is_ref) tr.style.fontStyle = "italic"; });
     $("arBoard").appendChild(t);
     const es = [...new Set(B.map(r => r.eval_size).filter(v => v != null))];
-    $("arBoardNote").textContent = es.length ? "eval_size " + es.join(" / ") + " held-out rows (16 per task and length); below 500, so differences under about two paired SEs are noise. Italic rows are references." : "";
+    $("arBoardNote").textContent = es.length ? "eval_size " + es.join(" / ") + " held-out rows (16 per task and length); below 500, so differences under about two paired SEs are noise. Italic rows are references; sorted with references and the recipe first, then by speedup over the recipe at the same loss." : "";
   }
   // idea queue
   const ORD = { running: 0, done: 1, queued: 2, dropped: 3, failed: 4 };

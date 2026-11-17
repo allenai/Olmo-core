@@ -1,14 +1,23 @@
 {
- "status": "First 16k results (one seed, eval_size 184). The current recipe reaches the dense-LoRA reference's 100-step loss with 1.9x fewer training FLOPs (1.3x if every task must reach its own reference level, at the 70-step level); its transient memory is 1.24x dense LoRA's, so it saves no memory under activation checkpointing. The first gold-aware stochastic-keep arms (0.08-0.12x dense per step) fall well short of the reference loss. About 25 more runs are in progress on jsteinhardt, Beaker and Lambda.",
+ "status": "27 arms scored at 16k (one seed, eval_size 184). The recipe is still the best: 1.9x fewer FLOPs than dense LoRA to the 100-step loss level (1.3x on the worst task). Every cheaper arm so far is behind the recipe at matched loss: random keep 0.54x of the recipe's efficiency, keep 10%/3.5% 0.71x, LR 2e-5 0.85x, 8 rows/step 0.74x, no-grad prefix 0.34-0.41x, early-loss selection 0.25-0.60x, FFN skip 0.12-0.58x, gold-aware keep 0.75-0.89x. Two gold-aware arms on Lambda are ahead (1.5-1.6x the recipe) but only at a shallow 50-step level where the comparison is unreliable. Short-row pools, detached context and the drop-CPT bases are running.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
   "Score = training FLOPs the dense reference needs to reach a loss level divided by the FLOPs the method needs to reach the same level, on the mean loss and on the worst task. Peak GPU memory is logged per step.",
   "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals.",
   "Data caveats: the 16k training cells use fewer documents per row than the eval (contradiction 324 vs 379, outlier 96 vs 111, reorder 90 vs 116) so rows fit in 16,384 tokens; the 16k held-out rows are the short tail of the eval rung (70, 303, 8 and 497 of 500 rows fit for contradiction, outlier, reorder, qdmatch_nq). About 46% of the documents in a qdmatch_nq held-out row also occur in training rows (no gold overlap, no prompt overlap).",
-  "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part."
+  "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part.",
+  "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps."
  ],
  "log": [
+  {
+   "t": "11-17 01:25",
+   "text": "Two ideas closed as negative: frozen no-grad prefix with earlier cuts, and FFN skip for context tokens. Both show that blocks 0-6 need every token, every FFN and their own gradient."
+  },
+  {
+   "t": "11-17 01:20",
+   "text": "Short-row pools built (mean row 1.6k / 3.1k / 5.4k tokens vs 9.1k) and running on Beaker with dense LoRA and the recipe. Detached-context screen moved to Beaker. Reorder is the task every cheap arm loses on (0.45-0.60 vs 0.33)."
+  },
   {
    "t": "11-17 00:40",
    "text": "Lambda (2 x A100 per run) and Beaker (2 x H100 per run) staged and verified: step-0 loss matches Berkeley. Six Beaker jobs launched (LR and rows-per-step sweeps, dense-LoRA reference LR check, keep ladder down to 2% / 1%)."
