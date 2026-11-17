@@ -331,6 +331,7 @@ class SoftTokenOptions(VariantOptions):
     st_gdd_whole_frac: float = 0.0
     st_gdd_thin_range: str = ""
     st_gdd_thin_keep_first: int = 8
+    st_gdd_only_fps: str = ""
     st_otr_target: str = "gnorm"
     st_otr_ridge: float = 0.1
     st_otr_decay: float = 0.9
@@ -1419,7 +1420,8 @@ class SoftToken(Variant):
             tr = [float(x) for x in (o.st_gdd_thin_range or "1,1").split(",")]
             gcfg = GoldDocDropConfig(keep_lo=kr[0], keep_hi=kr[-1], max_gold_frac=o.st_gdd_max_gold_frac,
                                      whole_frac=o.st_gdd_whole_frac, thin_lo=tr[0], thin_hi=tr[-1],
-                                     thin_keep_first=o.st_gdd_thin_keep_first, seed=ctx.seed)
+                                     thin_keep_first=o.st_gdd_thin_keep_first, seed=ctx.seed,
+                                     only_fps_path=o.st_gdd_only_fps)
             model._gold_doc_drop = GoldDocDrop(gcfg, router=model._online_token_router, doc_start_id=ctx.ids.doc_start,
                                                doc_end_id=ctx.ids.doc_end, eos_id=ctx.ids.eos, rank=ctx.rank)
             print(f"[variants] gold doc drop before block 0: {gcfg}", flush=True)

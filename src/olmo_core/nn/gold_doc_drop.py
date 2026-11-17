@@ -44,6 +44,9 @@ class GoldDocDropConfig:
     thin_keep_first: int = 8
     seed: int = 0
     log_every: int = 20
+    #: optional JSON list of row content fingerprints; when set, ONLY those rows get the document drop / thinning
+    #: (e.g. a pool's ``gdd_only_contradiction.json``), every other row is passed through whole
+    only_fps_path: str = ""
 
 
 class GoldDocDrop:
@@ -59,6 +62,12 @@ class GoldDocDrop:
         self.rng = random.Random(cfg.seed * 1_000_003 + rank * 7919 + 17)
         self.calls = 0
         self.st: Dict[str, float] = {}
+        self.only_fps = None
+        if cfg.only_fps_path:
+            import json
+
+            with open(cfg.only_fps_path) as f:
+                self.only_fps = set(json.load(f))
 
     def _acc(self, k: str, v: float) -> None:
         self.st[k] = self.st.get(k, 0.0) + v
@@ -94,6 +103,11 @@ class GoldDocDrop:
             nd = len(spans)
             self._acc("rows", 1)
             self._acc("tok_in", float(sum(e - s + 1 for s, e in spans)))
+            if self.only_fps is not None and fp not in self.only_fps and nd > 0:
+                self._acc("not_selected", 1)
+                out_ids.append(row), out_lab.append(lab)
+                self._acc("tok_out", float(sum(e - s + 1 for s, e in spans)))
+                continue
             if gold is None or nd == 0:
                 self._acc("miss", 1)
                 out_ids.append(row), out_lab.append(lab)
@@ -149,7 +163,7 @@ class GoldDocDrop:
             print(f"[gold-doc-drop] call {self.calls}: rows {s.get('rows', 0):.0f} miss {s.get('miss', 0):.0f} "
                   f"whole {s.get('whole', 0):.0f} dropped {s.get('dropped_rows', 0):.0f} "
                   f"(docs {s.get('docs_out', 0):.0f}/{s.get('docs_in', 0):.0f}) thin {s.get('thin_rows', 0):.0f} "
-                  f"full {s.get('full_rows', 0):.0f}; doc-token keep {s.get('tok_out', 0) / max(1.0, s.get('tok_in', 1)):.3f}",
+                  f"full {s.get('full_rows', 0):.0f} not-selected {s.get('not_selected', 0):.0f}; doc-token keep {s.get('tok_out', 0) / max(1.0, s.get('tok_in', 1)):.3f}",
                   flush=True)
         if not changed:
             return input_ids, labels
