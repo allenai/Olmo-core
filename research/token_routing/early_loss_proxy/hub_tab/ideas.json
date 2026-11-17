@@ -132,7 +132,7 @@
   "family": "scales with length",
   "title": "Long-range positions on short rows",
   "what": "Short rows only show the attention blocks distances below 2k. Give them positions that span 16k (stretching), and thin long rows by dropping whole documents at the input while keeping the survivors' original positions, so cheap rows carry long-range structure and fewer full long rows are needed for the 16k loss.",
-  "status": "running",
-  "result": "agent started 12:50"
+  "status": "done",
+  "result": "Mixed (one seed, 16k reading from 320 rows). Position-preserving document subsampling of long rows works: keeping 25% of the non-gold documents (45% of the tokens) on the all-long pool needs 1.23-1.35x fewer FLOPs than the plain recipe for the same 16k loss (about 3.1x vs dense LoRA at LR 2e-5) and ties the 80/20 pool where their FLOPs overlap; keeping 50% gives 1.10-1.16x. Position stretching of short rows does not help: a tie or slightly worse on the 80/20 pool (0.92x), and short rows alone stay far behind at 16k even when stretched (16k loss 0.46-0.57). Not yet tried: subsampling the long rows inside the 80/20 pool. Branch loop/longpos."
  }
 ]

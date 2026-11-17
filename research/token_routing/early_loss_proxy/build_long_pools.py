@@ -39,7 +39,7 @@ RUNGS = ["32k", "64k"]
 TARGET = {"32k": 29000.0, "64k": 58000.0}
 CAP = 65536
 ROWS = 320
-GEN_ROWS = {"contradiction": 450, "outlier": 450, "qdmatch_nq": 1300}
+GEN_ROWS = {"contradiction": 450, "outlier": 450, "qdmatch_nq": 2400}  # qdmatch_nq: ~17% eligible
 HO_ROWS, HO_GEN = 24, 120
 EVAL_SEED = 99
 SH = "/data/prasann/early_loss_proxy/shards"
@@ -366,6 +366,105 @@ def build(a):
     print(f"[long] wrote {final} ({len(lens_all)} rows, {tot_tok} tokens) and {out} ({len(sets)} rows)", flush=True)
 
 
+QD_SEED, QD_ROWS = 7777, 6000
+
+
+def hofix(a):
+    """Rebuild heldout_v4's qdmatch_nq gen32k / gen64k: ctc's qdmatch EVAL split re-uses gold pairs of the training
+    pools (only 3 / 6 of 120 rows were clean), so draw them like heldout_v3's gen16k instead: ``--split train`` seed
+    7777, gold pairs absent from every training pool's gold (incl. mtb64k). Other rows of heldout_v4 are kept as is."""
+    import tempfile
+
+    import build_heldout_v3 as H
+
+    t = "qdmatch_nq"
+    n_docs = json.load(open(f"{LW}/n_docs_long.json"))
+    tr_gold, tr_docs, tr_prompt = set(), set(), set()
+    by_src = {}
+    for p in ALL_POOLS + ["mtb64k"]:
+        for line in open(f"{SH}/{p}/row_info.jsonl"):
+            x = json.loads(line)
+            if x["task"] == t:
+                by_src.setdefault(x["src"], {})[x["src_idx"]] = x["gold"]
+        d = f"{SH}/{p}"
+        mt = json.load(open(f"{d}/metadata.json"))
+        for f in sorted(glob.glob(f"{d}/token_ids_part_t*_000.npy")):
+            ids = np.fromfile(f, dtype=mt["dtype"])
+            mk = np.fromfile(f.replace("token_ids_part_", "labels_mask_"), dtype=mt["mask_dtype"])
+            s0 = 0
+            for e in np.flatnonzero(ids == P.EOS):
+                tr_prompt.add(H.keys(ids[s0:e + 1], mk[s0:e + 1]))
+                s0 = e + 1
+    for s_, idx in by_src.items():
+        with open(s_) as f:
+            for i, line in enumerate(f):
+                if i in idx:
+                    ex = json.loads(line)
+                    tr_gold.update(gold_h(t, ex, idx[i]))
+                    tr_docs.update(P.thash(dd.get("text")) for dd in ex["documents"])
+    out = "/data/prasann/early_loss_proxy/heldout_v4.npz"
+    h = np.load(out)
+    o = h["offsets"]
+    keep = [j for j in range(len(h["sets"])) if not (h["tasks"][j] == t and h["sets"][j] in ("gen32k", "gen64k"))]
+    rows = [(str(h["sets"][j]), str(h["tasks"][j]), int(h["src_idx"][j]), h["ids"][o[j]:o[j + 1]], h["mask"][o[j]:o[j + 1]])
+            for j in keep]
+    hs = json.load(open(out.replace(".npz", "_stats.json")))
+    for r in RUNGS:
+        n = n_docs[f"{t}:{r}"]["n_docs"]
+        outd = f"{LW}/heldout_gen_tr/{t}_{r}"
+        src = f"{outd}/{t}/train.jsonl"
+        if not os.path.exists(src):
+            cmd = [sys.executable, f"{P.REPO}/recipes/data/ctc_sft/ctc_calibrated.py", "build", "--task", t, "--split",
+                   "train", "--rungs", r, "--train", str(QD_ROWS), "--seed", str(QD_SEED), "--out", outd, "--pool", P.POOL[t]]
+            e = P.env()
+            e["CTC_DOCS_OVERRIDE"] = json.dumps({f"{t}:{r}": n})
+            subprocess.run(cmd, env=e, check=True, capture_output=True, text=True)
+        exs = P.read_jsonl(src)
+        cand = [i for i, ex in enumerate(exs) if not (gold_h(t, ex) & tr_gold)]
+        d = {"generated": len(exs), "gold_in_train_gold": len(exs) - len(cand), "over_cap": 0}
+        with tempfile.TemporaryDirectory(dir="/data/prasann/tmp") as tmp:
+            with open(f"{tmp}/c.jsonl", "w") as g:
+                for i in cand[:HO_ROWS + 8]:
+                    g.write(json.dumps(exs[i]) + "\n")
+            os.makedirs(f"{tmp}/o")
+            convert(f"{tmp}/c.jsonl", t, f"{tmp}/o")
+            _, trows = P.load_shard_rows(f"{tmp}/o")
+        sel = []
+        for i, (ids, m) in zip(cand[:HO_ROWS + 8], trows):
+            if len(ids) > CAP:
+                d["over_cap"] += 1
+                continue
+            sel.append((i, ids, m, exs[i]))
+        sel = sel[:HO_ROWS]
+        L = np.array([len(x[1]) for x in sel])
+        st = {"rows": len(sel), "source_file": src, "split": "train", "seed": QD_SEED, "drops": d,
+              "content_eligible": len(cand), "len_mean": float(L.mean()), "len_min": int(L.min()), "len_max": int(L.max()),
+              "answer_tokens_mean": float(np.mean([int(x[2].sum()) for x in sel])),
+              "prompt_in_train": sum(H.keys(x[1], x[2]) in tr_prompt for x in sel),
+              "rows_with_gold_in_train_gold": sum(bool(gold_h(t, x[3]) & tr_gold) for x in sel),
+              "rows_with_gold_in_train_docs": sum(bool(gold_h(t, x[3]) & tr_docs) for x in sel),
+              "doc_share_in_train_mean": float(np.mean([np.mean([P.thash(dd.get("text")) in tr_docs
+                                                                  for dd in x[3]["documents"]]) for x in sel])),
+              "note": "eval split re-used training gold pairs (3 / 6 of 120 clean); drawn from --split train seed 7777"}
+        hs[f"gen{r}/{t}"] = st
+        print(f"[hofix] gen{r}/{t}: {json.dumps(st)}", flush=True)
+        rows += [(f"gen{r}", t, i, ids, m) for i, ids, m, _ in sel]
+    order_ = {"gen32k": 0, "gen64k": 1, "gen16k": 2}
+    tord = {x: i for i, x in enumerate(P.TASKS)}
+    rows.sort(key=lambda x: (order_[x[0]], tord[x[1]]))
+    offs = np.concatenate([[0], np.cumsum([len(x[3]) for x in rows])])
+    np.savez(out + ".tmp.npz", ids=np.concatenate([np.asarray(x[3], dtype=np.uint32) for x in rows]),
+             mask=np.concatenate([np.asarray(x[4], dtype=bool) for x in rows]), offsets=offs,
+             sets=np.asarray([x[0] for x in rows]), tasks=np.asarray([x[1] for x in rows]),
+             src_idx=np.asarray([x[2] for x in rows]))
+    json.dump(hs, open(out.replace(".npz", "_stats.json"), "w"), indent=1)
+    st_pool = json.load(open(f"{SH}/mtb64k_stats.json"))
+    st_pool["heldout"] = hs
+    json.dump(st_pool, open(f"{SH}/mtb64k_stats.json", "w"), indent=1)
+    os.replace(out + ".tmp.npz", out)
+    print(f"[hofix] wrote {out}: {len(rows)} rows", flush=True)
+
+
 def order(a):
     P.MAX_LEN = CAP
     a.out = f"{SH}/mtb64k"
@@ -374,12 +473,12 @@ def order(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["fetch", "gen", "tokenize", "build", "order"])
+    ap.add_argument("stage", choices=["fetch", "gen", "tokenize", "build", "order", "hofix"])
     ap.add_argument("--shuffle-seed", type=int, default=20261119)
     ap.add_argument("--verify-rows", type=int, default=10)
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
-    {"fetch": fetch, "gen": gen, "tokenize": tokenize, "build": build, "order": order}[a.stage](a)
+    {"fetch": fetch, "gen": gen, "tokenize": tokenize, "build": build, "order": order, "hofix": hofix}[a.stage](a)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ deep2 full-epoch: rc-mix80 3.1-3.7x all lengths, 3.2-3.5x on suite16k (56 rows);
 lenscale CLOSED negative (doc-local attention hurts; block 3 only is mild but worse per FLOP at 16k). New agent longpos (a717aab682ac9c264): position stretching on short rows + position-preserving doc subsampling of long rows. v3 tag also has rc-mix80x3 sd0/sd1 (1,464 steps).
 HUB REORG DONE (v108, 13:00): hub has an Overview + six groups; auto-research tab is in group 3. New builder copied to hub_tab/build_autoresearch_tab.py (markers AR:PART / AR:SCRIPT; source of truth hub_live/build_autoresearch_tab.py in the main checkout). Refresh: python3 hub_tab/build_autoresearch_tab.py HUB.html --state hub_tab/loop_state.json; node --check; publish. Republishes resumed via the hub-tab agent.
 memscale DONE and merged (flags --prefix-chunk N, --prefix-chunk-offload, --st-otr-keep-cap N; dense_probe memory fix): slope 0.040 GiB/1k with chunk 4k + cap 4096 + offload; 1M row fits (77.5 GiB), 2M at 126.5 GiB; 16k learning = recipe. NEXT for memory: learning test at 64k+ rows with chunking + keep cap (needs a long-row pool with real tasks), keep-cap effect on learning at 16k.
+longpos DONE (13:40, while paused): doc subsampling with preserved positions keep 25% = 1.23-1.35x over recipe at 16k (ties rc-mix80); stretching no help. NEXT on resume: subsample the long rows of mtbmix80 (keep 0.25 / 0.1), flags --longpos-docsub-keep in branch loop/longpos (not merged).
 Tools: rescore.sh, iso.py, iso_set.py set/suite16k, depth.py, depth_set.py suite16k.
 
 (older state below)
