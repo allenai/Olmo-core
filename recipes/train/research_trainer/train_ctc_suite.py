@@ -1190,6 +1190,8 @@ def build_and_fit(opts: argparse.Namespace) -> None:
         )
     else:
         steps_total = -(-plan["n_examples"] * opts.epochs // gbs_examples)
+        if opts.row_len_keep:  # the subset trains on the full pool's step horizon (max_tokens set in main)
+            steps_total = max(1, opts.max_tokens // (gbs_examples * opts.seq_len))
     accum = max(1, opts.global_batch // (world_size * opts.micro_batch_instances))
     total_calls = max(1, steps_total * accum)
     if opts.ffn_drop_max_rate > 0 or opts.ffn_drop_layer_prob > 0:
@@ -1679,6 +1681,11 @@ def parse_args() -> argparse.Namespace:
                     help="debug (memory probes): train on rows of up to this many tokens built at startup from --data "
                     "(research/token_routing/online_router/make_long_rows.py, node-local /tmp). 0 = off")
     ap.add_argument("--long-rows-count", type=int, default=8, help="--long-rows-target: rows to build")
+    ap.add_argument("--row-len-keep", default="", metavar="SPEC",
+                    help="FLOP-aware length sampling (early_loss_proxy/row_sample.py): train on a subset of --data "
+                    "keeping each row with a length-dependent probability, 'pow:L0:a' = min(1,(len/L0)^-a) or "
+                    "'cut:L:p' = 1 if len<=L else p; the LR schedule stays the full pool's unless --max-tokens")
+    ap.add_argument("--row-len-keep-seed", type=int, default=0, help="--row-len-keep: subset seed")
     ap.add_argument(
         "--mem-probe-steps",
         type=int,
@@ -2624,6 +2631,24 @@ def main() -> None:
         lens = mlr.build(opts.data, out, int(opts.long_rows_target), rows=int(opts.long_rows_count))
         print(f"[long-rows] {len(lens)} rows of <= {opts.long_rows_target} tokens from {opts.data} -> {out}: {lens}",
               flush=True)
+        opts.data = out
+    if opts.row_len_keep:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "row_sample", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
+                                       "research", "token_routing", "early_loss_proxy", "row_sample.py"))
+        rs = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rs)  # type: ignore[union-attr]
+        src_meta = json.load(open(os.path.join(opts.data, "metadata.json")))
+        out = rs.build(opts.data, os.environ.get("TMPDIR", "/tmp"), opts.row_len_keep, opts.row_len_keep_seed)
+        if not opts.max_tokens:  # keep the full pool's schedule (same steps / warmup / decay as the reference)
+            opts.max_tokens = int(src_meta["num_instances"]) * opts.epochs * opts.seq_len
+        sub = json.load(open(os.path.join(out, "metadata.json")))
+        print(f"[row-len-keep] {opts.row_len_keep}: {sub['num_instances']}/{src_meta['num_instances']} rows, "
+              f"mean len {sub['num_tokens'] / sub['num_instances']:.0f} vs "
+              f"{src_meta['num_tokens'] / src_meta['num_instances']:.0f}; max_tokens={opts.max_tokens} -> {out}; "
+              f"{json.dumps(sub['row_len_keep']['parts'])}", flush=True)
         opts.data = out
     if opts.dry_run:
         dry_run(opts)
