@@ -187,7 +187,7 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=JetBrains+Mono:wght@400;500&family=Public+Sans:wght@400;600&display=swap">
-<script type="application/json" id="hubgroups">[{"id": "g-best", "title": "Best method and how it is measured", "short": "Best method", "blurb": "The recipe and the metric: verdicts first, then the 4-task study that defines FLOPs-to-match."}, {"id": "g-scale", "title": "Scale and length", "short": "Scale, length", "blurb": "Does it hold with more tasks, longer rows, other models and continued pretraining?"}, {"id": "g-tried", "title": "What was tried and what is next", "short": "Tried, next", "blurb": "Token-selection rules, ruled-out ideas, prior work and the live auto-research search."}, {"id": "g-mech", "title": "Mechanism and analysis", "short": "Mechanism", "blurb": "Why it works: where the gradient lives and how well the router ranks tokens."}, {"id": "g-cost", "title": "Cost and infrastructure", "short": "Cost", "blurb": "Memory, wall-clock time and the GPU-hours spent."}, {"id": "g-log", "title": "Log and provenance", "short": "Log, provenance", "blurb": "Every experiment in time order, and where the data, code and caveats live."}]</script>
+<script type="application/json" id="hubgroups">[{"id": "g-best", "title": "Best method and how it is measured", "short": "Best method", "blurb": "The recipe and the metric: verdicts first, then the 4-task study that defines FLOPs-to-match."}, {"id": "g-scale", "title": "Scale and length", "short": "Scale, length", "blurb": "How aggressive the keep can be at 32k-64k rows (running), whether the gain grows with length and holds past 64k, other models and sizes, and continued pretraining."}, {"id": "g-tried", "title": "What was tried and what is next", "short": "Tried, next", "blurb": "Token-selection rules, ruled-out ideas, prior work and the live auto-research search."}, {"id": "g-mech", "title": "Mechanism and analysis", "short": "Mechanism", "blurb": "Why it works: where the gradient lives and how well the router ranks tokens."}, {"id": "g-cost", "title": "Cost and infrastructure", "short": "Cost", "blurb": "Memory, wall-clock time and the GPU-hours spent."}, {"id": "g-log", "title": "Log and provenance", "short": "Log, provenance", "blurb": "Every experiment in time order, and where the data, code and caveats live."}]</script>
 <div class="layout">
 <div class="sitehead" id="sitehead">Token Drop Results<span class="cur"></span></div>
 <nav class="toc" id="toc" aria-label="Sections"><div class="tabs1"></div><div class="tabs2"></div></nav>
@@ -461,11 +461,60 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
 </div>
 </details>
 </div>
+<div class="part" id="keeplen" data-group="g-scale" data-order="0" data-short="Keep vs length" data-badge="running">
+<div class="parthead"><span class="eyebrow">Scale and length · new 2026-11-17 · in progress</span><h2 class="ptitle">Does the best keep fraction fall as context grows?</h2><p class="verdict">Running, no 32k or 64k result yet. The recipe keeps 20% of document tokens after block 7 and 7% after block 16, tuned at 4k to 16k; the open question is whether a lower keep is the better trade at 32k and 64k, and whether gold-aware stochastic keep (<code>goldrand</code> / <code>grJ</code>) helps there.</p></div>
+<p class="note sv"><b>How this group fits together.</b> <em>Keep vs length</em> (new, running) asks how aggressive the cut can be at 32k to 64k rows. <em>11 tasks, 64k, length</em> trains on rows up to 64k, shows whether the gain grows with eval length, and tests generalization past 64k (128k, 256k) and training on rows of 16k or less versus 64k. <em>Other models and sizes</em> repeats the recipe on Qwen3 and on Qwen3.5 from 0.8B to 9B. <em>Continued pretraining</em> is the same question for OLMo 3 7B long-document CPT.</p>
+<!-- KEEPLEN:START -->
+<details class="sec" open>
+<summary><h2>The question and the design</h2><span class="n">1 table</span></summary>
+<div class="secbody">
+  <p class="note sv"><b>Status: in progress.</b> No 32k or 64k result exists yet. Everything under "What is known" comes from the 4k to 16k mixed pool of the auto-research loop and is marked as such.</p>
+  <p><b>Question.</b> At matched held-out loss, does the best keep fraction fall as rows get longer? At 4k to 16k a lower keep than the recipe's already costs efficiency (see below). Longer rows hold more distractor text per gold document, and the recipe's per-step cost against dense falls with length (see below), so the best keep may move to a smaller value, or stay put.</p>
+  <p><b>Design.</b> Single-length pools at 32k and at 64k (every row about that length), the recipe's router with two cuts at blocks 7 and 16, and a dense-LoRA reference trained on the same pool. Metric: the dense forward's held-out answer CE (cheap; no generation), scored as dense-LoRA FLOPs to reach a loss divided by the arm's FLOPs, as on the <a href="#autoresearch">auto-research tab</a>. Arms:</p>
+  <div class="tbl"><table>
+    <tr><th>arm</th><th class="n">keep after block 7</th><th class="n">keep after block 16</th><th>role</th></tr>
+    <tr><td>keep-40</td><td class="n">40%</td><td class="n">14%</td><td>wider than the recipe</td></tr>
+    <tr><td>recipe</td><td class="n">20%</td><td class="n">7%</td><td>the recipe, tuned at 4k to 16k</td></tr>
+    <tr><td>keep-10</td><td class="n">10%</td><td class="n">3.5%</td><td>half the recipe</td></tr>
+    <tr><td>keep-5</td><td class="n">5%</td><td class="n">1.75%</td><td>a quarter</td></tr>
+    <tr><td>keep-2.5</td><td class="n">2.5%</td><td class="n">0.9%</td><td>an eighth</td></tr>
+    <tr><td><code>grJ</code></td><td class="n" colspan="2">gold-aware stochastic keep (idea <code>goldrand</code>)</td><td>at both lengths</td></tr>
+    <tr><td>outlier-safe <code>grJ</code> variant</td><td class="n" colspan="2">same, with a guard for the outlier task (see below)</td><td>one variant</td></tr>
+    <tr><td>dense LoRA</td><td class="n" colspan="2">no dropping, LoRA rank 64 on all blocks</td><td>the reference</td></tr>
+  </table></div>
+  <p class="note">Why the guard: on the 4k to 16k pool <code>grJ</code> stalled on outlier (see "What is known"); an arm that keeps gold documents but starves the outlier task would look good on the mean and fail on the task it hurts. The task buttons on the auto-research tab show the per-task effect.</p>
+</div>
+</details>
+<details class="sec" open>
+<summary><h2>What is known so far (4k to 16k mixed pool, not 32k or 64k)</h2><span class="n">1 table</span><span class="vl">Lower keeps lose efficiency at 4k to 16k (10% / 3.5% = 0.71×, 5% / 2% = 0.55×, 2% / 1% = 0.27× of the recipe); the recipe's per-step cost falls from 0.227× to 0.168× dense by 128k; grJ is 1.26× the recipe on the four-task mean but stalls on outlier.</span></summary>
+<div class="secbody">
+  <p class="note sv"><b>Verdict: at 4k to 16k the recipe's keep is already near the best, and going lower costs efficiency; nothing here says what happens at 32k or 64k.</b> Source for every row: the auto-research loop on the 4k to 16k mixed pool (eval_size 184, below 500, one seed per arm; details on the <a href="#autoresearch">auto-research tab</a>).</p>
+  <div class="tbl"><table>
+    <tr><th>finding (4k to 16k mixed pool)</th><th class="n">number</th><th>source</th></tr>
+    <tr><td>Keep 10% / 3.5% (recipe: 20% / 7%), efficiency vs the recipe at matched loss</td><td class="n">0.71×</td><td>arm <code>agg1</code>, idea "keep ladder" / recipe</td></tr>
+    <tr><td>Keep 5% / 2%</td><td class="n">0.55×</td><td>arm <code>agg2</code></td></tr>
+    <tr><td>Keep 2% / 1%</td><td class="n">0.27×</td><td>arm <code>agg3</code></td></tr>
+    <tr><td>Recipe FLOPs per step vs dense, at 4k / 16k / 64k / 128k rows</td><td class="n">0.227 / 0.217 / 0.189 / 0.168</td><td>flop meter's formulas, idea <code>lenscale</code>; a calculation, not a training run. The floor is the linear per-token cost of blocks 0 to 6.</td></tr>
+    <tr><td><code>grJ</code> (gold-aware stochastic keep) vs the recipe at matched loss, four-task mean</td><td class="n">1.26×</td><td>idea <code>goldrand</code>, main pool, step 108, 0.133× dense per step</td></tr>
+    <tr><td><code>grJ</code> on outlier, held-out CE</td><td class="n">0.169 vs 0.10 to 0.13</td><td>stalled; relayed by the orchestrating session from the loop's per-task columns, check on the auto-research tab (outlier button)</td></tr>
+  </table></div>
+  <p class="note">Caveats: the recipe's cost fall with length is a FLOP formula and says nothing about learning; the keep ladder was measured on mixed 4k to 16k rows (mean over lengths), so it cannot say whether the 16k rows alone want a lower keep; on the 50/50 short/long pool gold-aware arms are level with or behind the plain recipe, so the <code>grJ</code> gain and the short-row gain do not stack.</p>
+</div>
+</details>
+<details class="sec" open>
+<summary><h2>Results at 32k and 64k</h2><span class="n">pending</span><span class="vl">None yet. This bar is filled in by the session "Keep fraction vs context length (32k/64k proxy)" (<code>keepfrac-len</code>).</span></summary>
+<div class="secbody">
+  <p class="note sv"><b>No 32k or 64k result exists yet.</b> This section will hold, per length: held-out CE vs FLOPs for each keep arm and dense LoRA, the FLOP speedup of each arm at matched loss, the best keep per length, and the <code>grJ</code> arms with their outlier column.</p>
+</div>
+</details>
+<!-- KEEPLEN:END -->
+</div>
 <div class="part" id="sft11" data-group="g-scale" data-order="1" data-short="11 tasks, 64k, length">
 <div class="parthead"><span class="eyebrow">Scale and length · was tab 3</span><h2 class="ptitle">SFT 11-task, 64k and length generalization</h2><p class="verdict">≈1.7–2.4× on 11 tasks; at 64k the recipe is ahead on all 10 graded tasks at 0.365× FLOPs; the gain grows to 16–32k and holds at 64k.</p></div>
 <details class="sec" open>
-<summary><h2>SFT: 11-task mix</h2><span class="n">1 chart</span></summary>
+<summary><h2>SFT: 11-task mix</h2><span class="n">1 chart</span><span class="vl">Verdict: on the 11-task mix the recipe needs about 1.7× fewer FLOPs than dense, and whole-model LoRA with the two-stage keep about 2.4× (0.762 vs dense 0.697 at the same 232 PF, 2 seeds).</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict: on the 11-task mix the recipe needs about 1.7× fewer FLOPs than dense, and whole-model LoRA with the two-stage keep about 2.4× (0.762 vs dense 0.697 at the same 232 PF, 2 seeds).</b></p>
   
   <div class="figs">
     <figure><h3>Mean over 9 tasks @8k vs training FLOPs</h3><div class="chart"><canvas id="f11" aria-label="11-task Pareto"></canvas></div>
@@ -474,16 +523,18 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
 </div>
 </details>
 <details class="sec">
-<summary><h2>Per task: 11-task mix @8k</h2></summary>
+<summary><h2>Per task: 11-task mix @8k</h2><span class="vl">Verdict: the gains concentrate on xabsence, contradiction and outlier; four retrieval tasks sit near dense's ceiling, and grouping is the one task the router loses.</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict: the gains concentrate on xabsence, contradiction and outlier; four retrieval tasks sit near dense's ceiling, and grouping is the one task the router loses.</b></p>
   
   <p class="note">Each panel = one task at 8k, same runs and colours as the 11-task plot. Reorder and rerank are not shown (no working grader yet; fixes in progress).</p>
   <div class="figs small" id="pt11"></div>
 </div>
 </details>
 <details class="sec">
-<summary><h2>SFT: 11-task mix at 64k (10× data)</h2><span class="n">2 charts</span></summary>
+<summary><h2>SFT: 11-task mix at 64k (10× data)</h2><span class="n">2 charts</span><span class="vl">Verdict: at 64k the recipe is +0.037 task-average over dense at matched FLOPs (0.365× dense FLOPs), ahead on all 10 graded tasks, with 24% less peak active memory (1/4 epoch, one seed).</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict: at 64k the recipe is +0.037 task-average over dense at matched FLOPs (0.365× dense FLOPs), ahead on all 10 graded tasks, with 24% less peak active memory (1/4 epoch, one seed).</b></p>
   
   <div class="figs">
     <figure><h3>Task average (2k–64k) vs training FLOPs</h3><div class="chart"><canvas id="m64avg" aria-label="64k task average"></canvas></div>
@@ -496,8 +547,9 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
 </div>
 </details>
 <details class="sec">
-<summary><h2>Does the advantage grow with context length?</h2><span class="n">3 charts</span></summary>
+<summary><h2>Does the advantage grow with context length?</h2><span class="n">3 charts</span><span class="vl">Verdict: the router's gain over dense grows with eval length up to about 16k to 32k (+0.015 to +0.033 at 8k, +0.03 to +0.05 at 16k to 32k) and holds at 64k (+0.02 to +0.04); in CPT the LoRA lead is about 1.4 to 1.5× …</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict: the router's gain over dense grows with eval length up to about 16k to 32k (+0.015 to +0.033 at 8k, +0.03 to +0.05 at 16k to 32k) and holds at 64k (+0.02 to +0.04); in CPT the LoRA lead is about 1.4 to 1.5× larger at 64k than at 32k and the same at 128k.</b></p>
   
   <div class="figs">
     <figure><h3>Router gain over dense at matched FLOPs, by eval length</h3><div class="chart"><canvas id="lenD" aria-label="gain by eval length"></canvas></div>
@@ -507,12 +559,13 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
     <figure><h3>CPT: whole-model LoRA vs dense, training at 32k, 64k and 128k</h3><div class="chart"><canvas id="lenC" aria-label="CPT gap by training length"></canvas></div>
       <figcaption>Dev CE of whole-model LoRA minus dense at the same step count, full-row scoring (more negative = better). The gap is ≈1.4–1.5× larger at 64k than at 32k and about the same at 128k as at 64k. On the far half of each row alone (32k–64k, 64k–128k positions) it is essentially the same.</figcaption></figure>
   </div>
-  <p class="note" id="lenNote"><b>Reading:</b> at 2k the router barely beats dense (Δ ≈ 0.001–0.004; these tasks are near their ceiling at 2k). The gain rises to +0.015–0.033 at 8k and +0.03–0.05 at 16k–32k, then stays at +0.02–0.04 at 64k; dense FLOPs to match go from ≈1.1–1.3× at 2k to ≈1.4–1.9× at 8k–32k and ≈1.3–1.6× at 64k. So the advantage grows with eval length up to ~16–32k and holds at 64k, rather than growing without bound (1/2- and 1-epoch points are one seed). In CPT (full-row scoring), LoRA's lead over dense is ≈1.4–1.5× larger when training at 64k than at 32k, and about the same at 128k as at 64k: it grows to 64k and then stops.</p>
+  <details class="more"><summary>Reading: how the gain moves with eval length <span class="mh">full note</span></summary><p class="note" id="lenNote"><b>Reading:</b> at 2k the router barely beats dense (Δ ≈ 0.001–0.004; these tasks are near their ceiling at 2k). The gain rises to +0.015–0.033 at 8k and +0.03–0.05 at 16k–32k, then stays at +0.02–0.04 at 64k; dense FLOPs to match go from ≈1.1–1.3× at 2k to ≈1.4–1.9× at 8k–32k and ≈1.3–1.6× at 64k. So the advantage grows with eval length up to ~16–32k and holds at 64k, rather than growing without bound (1/2- and 1-epoch points are one seed). In CPT (full-row scoring), LoRA's lead over dense is ≈1.4–1.5× larger when training at 64k than at 32k, and about the same at 128k as at 64k: it grows to 64k and then stops.</p></details>
 </div>
 </details>
 <details class="sec">
-<summary><h2>Length generalization past the 64k training length (128k, 256k)</h2><span class="n">1 chart</span></summary>
+<summary><h2>Length generalization past the 64k training length (128k, 256k)</h2><span class="n">1 chart</span><span class="vl">Verdict: the recipe's gain persists past the 64k training length: matched-FLOP delta vs dense, 6-task mean, at 64k / 128k / 256k is +0.046 / +0.033 / +0.054 (recipe, 1,696 PF); training on rows of 16k or less loses 0.05 …</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict: the recipe's gain persists past the 64k training length: matched-FLOP delta vs dense, 6-task mean, at 64k / 128k / 256k is +0.046 / +0.033 / +0.054 (recipe, 1,696 PF); training on rows of 16k or less loses 0.05 to 0.10 from 64k to 256k at matched FLOPs. Single seed, eval_size 125 at 256k.</b></p>
   
   <div class="figs"><figure><h3>Router gain over dense at matched FLOPs, 6-task mean</h3><div class="chart"><canvas id="lenGen" aria-label="gain at 64k-256k"></canvas></div>
     <figcaption>Evaluated at 64k / 128k / 256k with YaRN ×2. eval_size 500 at 64k and 128k, ⚠ 125 at 256k (±0.03–0.045). Single seed.</figcaption></figure></div>
@@ -521,18 +574,19 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
 </details>
 </div>
 <div class="part" id="models" data-group="g-scale" data-order="2" data-short="Other models and sizes">
-<div class="parthead"><span class="eyebrow">Scale and length · was tab 3b</span><h2 class="ptitle">Other models and model sizes</h2><p class="verdict">On all-full-attention Qwen3-4B the recipe still wins, but by less: ≈2.1× dense FLOPs-to-match at 1,952 rows vs ≈4.6× on Qwen3.5 (interim, 1 seed). Across Qwen3.5 sizes the gain grows with scale at fixed data (≈1.7× at 0.8B → ≈2.4–3.2× at 2B → ≈3.7–4.1× at 4B → &gt;4.4× at 9B).</p></div>
+<div class="parthead"><span class="eyebrow">Scale and length · was tab 3b</span><h2 class="ptitle">Other models and model sizes</h2><p class="verdict">On all-full-attention Qwen3-4B the recipe still wins, but by less: ≈2.1× dense FLOPs-to-match at 1,952 rows vs ≈4.6× on Qwen3.5 (1 seed; 3.26× at 3,904 rows, see the size table). Across Qwen3.5 sizes the gain grows with scale at fixed data (≈1.7× at 0.8B → ≈2.4–3.2× at 2B → ≈3.7–4.1× at 4B → &gt;4.4× at 9B).</p></div>
 <details class="sec" open>
-<summary><h2>Qwen3-4B (36 full-attention layers)</h2><span class="n">2 charts · 1 table</span></summary>
+<summary><h2>Qwen3-4B (36 full-attention layers)</h2><span class="n">2 charts · 1 table</span><span class="vl">Verdict (1 seed): on all-full-attention Qwen3-4B the recipe still wins but by less than on Qwen3.5: 2.09× dense FLOPs-to-match at 1,952 rows (split 12/24) against about 4.6×. Routing alone is only 1.19×, so LoRA matters …</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict (1 seed): on all-full-attention Qwen3-4B the recipe still wins but by less than on Qwen3.5: 2.09× dense FLOPs-to-match at 1,952 rows (split 12/24) against about 4.6×. Routing alone is only 1.19×, so LoRA matters here.</b></p>
   
   <div class="figs">
     <figure><h3>Qwen3-4B: mean score vs training FLOPs</h3><div class="chart"><canvas id="q3par" aria-label="Qwen3 Pareto"></canvas></div>
       <figcaption>4-task fresh pools, 8-cell mean, eval_size 500, no-cot, 1 seed. Dense at its better LR per size. Recipe arms are named by drop depths: keep 20% after block a, 7% after block b (of 36). Routing-only = the 12/24 split without LoRA (full fine-tuning).</figcaption></figure>
     <figure><h3>Dense FLOPs to match: Qwen3 vs Qwen3.5</h3><div class="chart"><canvas id="q3ftm" aria-label="FLOPs to match Qwen3 vs Qwen3.5"></canvas></div>
-      <figcaption>Qwen3: best split per size (12/24 at 1,952 rows; 8/18 at 3,904 and 7,808, where the values are lower bounds until dense at 3,904 / 7,808 is scored). Qwen3.5: the recipe (7/16).</figcaption></figure>
+      <figcaption>Qwen3: best split per size (12/24 at 1,952 rows; 8/18 at 3,904 and 7,808, where the values are lower bounds because dense at 3,904 / 7,808 had not been scored when this figure was made; it has since been, see the size table below). Qwen3.5: the recipe (7/16).</figcaption></figure>
   </div>
-  <div class="tbl" style="margin-top:14px"><table>
+  <details class="more tblmore"><summary>Show table: Qwen3-4B runs <span class="mh">6 rows</span></summary><div class="tbl"><table>
     <tr><th>Qwen3 run</th><th class="n">rows/task</th><th class="n">PF</th><th class="n">8-cell mean</th><th class="n">outlier@8k</th><th class="n">contra@8k</th><th class="n">dense FLOPs to match</th><th class="n">peak GiB</th></tr>
     <tr><td>dense</td><td class="n">488 / 976 / 1,464 / 1,952</td><td class="n">437 / 878 / 1,317 / 1,761</td><td class="n">0.591 / 0.724 / 0.761 / 0.807</td><td class="n">0.12 / 0.28 / 0.35 / 0.62</td><td class="n">0.48 / 0.81 / 0.90 / 0.94</td><td class="n">1.0×</td><td class="n">55.8</td></tr>
     <tr><td>recipe, split 4/18</td><td class="n">1,952</td><td class="n">292</td><td class="n">0.574</td><td class="n">0.257</td><td class="n">0.281</td><td class="n">≤1.5×</td><td class="n">19.5</td></tr>
@@ -541,11 +595,11 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
     <tr><td><b>recipe, split 12/24</b></td><td class="n">1,952</td><td class="n">518</td><td class="n">0.743</td><td class="n">0.403</td><td class="n">0.849</td><td class="n"><b>2.09×</b></td><td class="n">19.5</td></tr>
     <tr><td>recipe, split 16/24 · 16/27</td><td class="n">1,952</td><td class="n">621 · 631</td><td class="n">0.721 · 0.717</td><td class="n">0.30 · 0.31</td><td class="n">0.89 · 0.91</td><td class="n">1.39 · 1.34×</td><td class="n">19.7</td></tr>
     <tr><td>routing only (12/24, no LoRA, LR 5e-6)</td><td class="n">1,952</td><td class="n">718</td><td class="n">0.719</td><td class="n">0.279</td><td class="n">0.836</td><td class="n">1.19×</td><td class="n">57.0</td></tr>
-  </table></div>
-  <details class="more"><summary>Reading: the per-row FLOP cut is the same as on Qwen3.5 (0.22× at split 8/18, 0.29× at 12/24); attention is … <span class="mh">full note</span></summary><p class="note"><b>Reading:</b> the per-row FLOP cut is the same as on Qwen3.5 (0.22× at split 8/18, 0.29× at 12/24); attention is only ≈20–25% of Qwen3's FLOPs at 8k, so its quadratic saving barely moves the ratio. The difference is accuracy at matched data: −0.16 vs dense at 1,952 rows (split 8/18) against −0.006 on Qwen3.5, mostly outlier and contradiction, shrinking with data (outlier@8k 0.22 → 0.64 → 0.95). Early drops hurt more on Qwen3, so the best split sits deeper (12/24, one and two thirds of depth). Unlike the Qwen3.5 2×2, LoRA matters here: routing alone is 1.19× vs 2.09× with LoRA, and LoRA's frozen base is the memory win (19.5 vs 57 GiB). Still running: dense at 3,904 / 7,808, split 12/24 at 3,904, dense + LoRA-all at 1,952. Single-seed noise ≈ ±0.01–0.02 on the mean. JSON: <code>research/token_routing/ds64_fast8k/q3_flops_to_match.json</code> (branch <code>claude/qwen3-recipe-c876d1</code>).</p></details>
+  </table></div></details>
+  <details class="more"><summary>Reading: the per-row FLOP cut is the same as on Qwen3.5 (0.22× at split 8/18, 0.29× at 12/24); attention is … <span class="mh">full note</span></summary><p class="note"><b>Reading:</b> the per-row FLOP cut is the same as on Qwen3.5 (0.22× at split 8/18, 0.29× at 12/24); attention is only ≈20–25% of Qwen3's FLOPs at 8k, so its quadratic saving barely moves the ratio. The difference is accuracy at matched data: −0.16 vs dense at 1,952 rows (split 8/18) against −0.006 on Qwen3.5, mostly outlier and contradiction, shrinking with data (outlier@8k 0.22 → 0.64 → 0.95). Early drops hurt more on Qwen3, so the best split sits deeper (12/24, one and two thirds of depth). Unlike the Qwen3.5 2×2, LoRA matters here: routing alone is 1.19× vs 2.09× with LoRA, and LoRA's frozen base is the memory win (19.5 vs 57 GiB). Dense at 3,904 / 7,808 and split 12/24 at 3,904 have since been scored (see the size table below: 3.26× at 3,904 rows); dense + LoRA-all at 1,952 is still pending. Single-seed noise ≈ ±0.01–0.02 on the mean. JSON: <code>research/token_routing/ds64_fast8k/q3_flops_to_match.json</code> (branch <code>claude/qwen3-recipe-c876d1</code>).</p></details>
 </div>
 </details>
-<details class="sec" open>
+<details class="sec">
 <summary><h2>Qwen3 sizes 0.6B / 1.7B / 4B / 8B: the gain does not grow with size</h2><span class="n">1 chart · 1 table</span><span class="vl">Verdict (1 seed per point): on all-full-attention Qwen3 the gain does not grow with size; it sits at ≈2–3× everywhere (0.6B 2.9× / 2.9×, 1.7B 2.9× / 2.9×, 4B 2.1× / 3.3×, 8B 2.3× / 2.6× at 1,952 / 3,904 rows), against …</span></summary>
 <div class="secbody">
   
@@ -562,9 +616,10 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
   
 </div>
 </details>
-<details class="sec" open>
-<summary><h2>Model scale: Qwen3.5 0.8B, 2B and 4B</h2><span class="n">5 charts · 1 table</span></summary>
+<details class="sec">
+<summary><h2 id="models--model-scale-qwen3-5-0-8b-2b-and-4b">Model scale: Qwen3.5 0.8B, 2B, 4B and 9B</h2><span class="n">5 charts · 1 table</span><span class="vl">Verdict: at matched small data the recipe's gain grows with scale, about 1.7 to 1.9× at 0.8B, 2.4 to 3.2× at 2B, 3.7 to 4.1× at 4B and over 4.4× at 9B, at the same 0.23 to 0.25× cost per step; compare scales at fixed …</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict: at matched small data the recipe's gain grows with scale, about 1.7 to 1.9× at 0.8B, 2.4 to 3.2× at 2B, 3.7 to 4.1× at 4B and over 4.4× at 9B, at the same 0.23 to 0.25× cost per step; compare scales at fixed small data.</b></p>
   
   <div class="figs">
     <figure><h3>Dense FLOPs to match vs model size</h3><div class="chart"><canvas id="scftm" aria-label="FLOPs to match vs model size"></canvas></div>
@@ -592,8 +647,9 @@ a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
 <div class="part" id="cpt" data-group="g-scale" data-order="3" data-short="Continued pretraining">
 <div class="parthead"><span class="eyebrow">Scale and length · was tab 4</span><h2 class="ptitle">Continued pretraining on OLMo 3 7B</h2><p class="verdict">Frozen-output-layer whole-model LoRA: never behind dense up to 960 steps, 4.8× → 1.4× FLOPs-to-match; every token-drop variant loses.</p></div>
 <details class="sec" open>
-<summary><h2>Long-document CPT (OLMo 3 7B)</h2><span class="n">3 charts</span></summary>
+<summary><h2>Long-document CPT (OLMo 3 7B)</h2><span class="n">3 charts</span><span class="vl">Verdict: whole-model LoRA with a frozen output layer is never behind dense up to 960 steps: dense FLOPs to match 4.8× / 4.3× / 3.2× / 2.1× / 1.4× at 48 / 120 / 240 / 480 / 960 steps at 32k, with the lead about 1.5× …</span></summary>
 <div class="secbody">
+  <p class="note sv"><b>Verdict: whole-model LoRA with a frozen output layer is never behind dense up to 960 steps: dense FLOPs to match 4.8× / 4.3× / 3.2× / 2.1× / 1.4× at 48 / 120 / 240 / 480 / 960 steps at 32k, with the lead about 1.5× larger at 64k; every token-drop variant loses.</b></p>
   
   <div class="figs">
     <figure><h3>32k: dev CE vs training FLOPs (lower is better)</h3><div class="chart"><canvas id="cpt32" aria-label="CPT 32k"></canvas></div>
