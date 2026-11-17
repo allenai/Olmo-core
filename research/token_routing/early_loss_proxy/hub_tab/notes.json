@@ -1,5 +1,5 @@
 {
- "status": "About 55 arms scored at 16k (one seed, eval_size 184). Best so far: the recipe trained on a pool that mixes 1k-2k-token rows with the 4k-16k rows, 2.35x fewer FLOPs than dense LoRA at matched loss and 1.25x the plain recipe; a gold-aware keep arm is 1.26x the recipe; rows <= 5k 1.35x at a shallow level. Deeper two-seed confirmations are running. The reference is now the cheaper of dense LoRA at LR 1e-5 and 2e-5, which lowers the recipe to 1.7x at the 100-step level (1.4x on the worst task). Closed as negative: frozen no-grad prefix, earlier cuts, FFN skip, early-exit-loss selection, detached context, input-level token exit (with or without the drop-CPT base), higher LR, 8 rows/step, keep below 20%/7%, random keep. Nothing is near 10x: every idea that touches blocks 0-6 or the context's gradient loses more per step than it saves.",
+ "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k), about 3.1-3.4x fewer training FLOPs than dense LoRA to reach held-out CE 0.125 (two seeds), against 1.9-2.2x for the plain recipe; in absolute terms one of its steps costs about 0.08x of a dense step on the main pool. Loss-per-cost sampling of task and length cells on the 50/50 pool gives 3.3x (one seed). Full-epoch curves show the plain recipe's advantage stays near 2x through the epoch and it ends above dense LoRA (0.086-0.093 vs 0.071 held-out CE) because it has used 3.4x fewer FLOPs on the same rows. Multi-question rows did not help. Nothing is near 10x; about 90 arms scored, eval_size 184. Next: 90% and 95% short pools, sampling stacked on the 80/20 pool, full-epoch runs on the mixed pools, generation-graded validation.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -7,9 +7,18 @@
   "One iteration is under 15 minutes. Every 2-3 hours the most promising methods get a larger FLOP-matched training run with generation-graded evals.",
   "Data caveats: the 16k training cells use fewer documents per row than the eval (contradiction 324 vs 379, outlier 96 vs 111, reorder 90 vs 116) so rows fit in 16,384 tokens; the 16k held-out rows are the short tail of the eval rung (70, 303, 8 and 497 of 500 rows fit for contradiction, outlier, reorder, qdmatch_nq). About 46% of the documents in a qdmatch_nq held-out row also occur in training rows (no gold overlap, no prompt overlap).",
   "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part.",
-  "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps."
+  "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps.",
+  "Deep comparisons (from 11-17 11:30) use the full-epoch dense-LoRA curve (488 steps, probes every 50) as the reference and give the FLOP ratio at fixed held-out CE levels 0.160 / 0.140 / 0.125 / 0.115 / 0.105 / 0.095."
  ],
  "log": [
+  {
+   "t": "11-17 02:00",
+   "text": "Loop paused by a usage limit until 11:20; cluster jobs finished on their own. A recurring heartbeat now restarts the loop after a limit resets."
+  },
+  {
+   "t": "11-17 11:30",
+   "text": "Overnight results scored. Recipe through the full epoch: 1.9-2.2x at every loss level (two seeds). Recipe on mtbmix50: 2.4-3.0x; on mtbmix80: 3.1-3.4x at CE 0.125 (2.7-4.4x across levels and seeds). Loss-per-cost cell sampling: 2.3-2.6x on the main pool, 3.2-3.7x on the 50/50 pool (one seed). Rows <= 5k: 3.2-3.4x until it plateaus at 0.119. Dense LoRA on the 50/50 pool with token-budget batches: 1.4-1.5x. Multi-question rows: 1.8-2.1x on the main pool, below the plain recipe. Gold-aware keep on the 50/50 pool: no gain over the recipe on that pool. Detached context from block 16 only: far behind (0.207 vs 0.145 at 131 PF)."
+  },
   {
    "t": "11-17 01:30",
    "text": "First larger validation started: full-epoch dense LoRA (three FLOP budgets), recipe (two seeds) and dense full FT on mtb16k with generation-graded evals at 4k / 8k / 16k; plus full-epoch dense-loss curves for dense LoRA and the recipe."

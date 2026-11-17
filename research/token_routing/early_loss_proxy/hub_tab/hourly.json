@@ -18,5 +18,15 @@
   "xw": null,
   "mem": 1.2023616853701615,
   "note": "Matched-loss ratio vs dense LoRA; 1.25x the recipe at that loss. Stopped by the 12-minute cap at step 143; a deeper two-seed confirmation is running. One seed, eval_size 184."
+ },
+ {
+  "t": "11-17 11:30",
+  "arm": "recipe on the 80/20 short/long pool (rc-mix80)",
+  "idea": "short rows",
+  "x": 3.25,
+  "level": "held-out CE 0.125 (dense LoRA's level at about step 130); seeds 3.43x and 3.08x",
+  "xw": null,
+  "mem": 1.19,
+  "note": "Against the full-epoch dense-LoRA curve. Plain recipe 1.9-2.2x at every level through the epoch (two seeds); recipe on the 50/50 pool 2.9-3.0x; recipe with loss-per-cost sampling on the 50/50 pool 3.3x (one seed); recipe on rows <= 5k 3.4x but it plateaus at 0.119. eval_size 184. The loop was paused 02:00-11:20 by a usage limit; cluster jobs kept running."
  }
 ]
