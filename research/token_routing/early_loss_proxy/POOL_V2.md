@@ -88,3 +88,36 @@ Eval rung files (HF `PrasannSinghal/ctc-suite-eval` at olmo-eval's pinned revisi
 - mtbmix50: 1k 202, 2k 174, 4k 154, 8k 143, 16k 127
 
 **Caveat:** the long rows (from mtb16k) were filtered against the 4k-16k eval rungs only, not the r2k rung.
+
+## Multi-question pools (built 2026-11-17 by `build_mq_pools.py`)
+- **Paths:** `/data/prasann/early_loss_proxy/shards/{mtb16k_mq,mtbmix50_mq}`, with `_stats.json` and `_order_seed0.json`. On mooney + sneetches; staged to weka `.../prasanns/early_loss_proxy/shards/` (Beaker 01M7MEGXE1X2KEC7920N33H1MK).
+- **Rows:** the same rows and order as mtb16k / mtbmix50. The prompt plus original answer is byte-identical. Then K chat turns follow before the EOS: `<|im_start|>user\n{q}<|im_end|>\n` + the row's own assistant prefix + `{a}<|im_end|>\n`.
+- **Mask:** the original answer plus every sub-answer (each with `<|im_end|>\n`).
+- **`mq_info.jsonl`:** one line per row with n_sub, `orig_answer` [s, e), `sub_answers` [[s, e)], and the question and answer texts.
+- **Other sidecars:** gold sidecars re-keyed to the new fingerprints.
+- **Verification:** 20 rows per task per pool, 20/20 on all three checks: prefix identical, sub-answers re-derived from the source gold, mask exact.
+
+**K per rung:** 1k 2, 2k 4, 4k 8, 8k 16, 16k 32. Positives take at most half of K and negatives at most 2× the positives. Each row has 6 gold claims (contradiction), 3 outliers (outlier) and 6 pair members (qdmatch_nq), so the realised 16k K is lower:
+- contradiction ~18
+- outlier 9 (also 9 at 8k)
+- reorder ~29
+- qdmatch_nq ~14
+
+Turns that would push a row past 16,384 tokens are dropped from the end. Cap drops: reorder 2,015 sub-questions, qdmatch_nq 2,840, contradiction 37 (mtb16k).
+
+**Loss tokens per row, before -> after:**
+
+| task | mtb16k_mq | mtbmix50_mq |
+|---|---|---|
+| contradiction | 28.0 -> 77.3 | 26.1 -> 55.8 |
+| outlier | 16.4 -> 42.4 | 15.5 -> 33.0 |
+| reorder | 224.9 -> 411.6 | 127.8 -> 234.5 |
+| qdmatch_nq | 26.1 -> 68.7 | 23.8 -> 49.9 |
+
+**Row length:** grows 3–10% (mtb16k mean 9,147 -> 9,724 tokens; 75.93M tokens and 1.17M loss tokens in total). mtbmix50_mq has 44.79M tokens.
+
+**Example sub-questions:**
+- contradiction: "Which claim contradicts Claim 5? Output the claim ID, or none if no claim contradicts it." -> `15`
+- outlier: "Is Document [73] about a different topic than the rest of these passages? Answer yes or no." -> `yes`
+- reorder: "Which passage comes immediately after Passage [23] in the original order? Output its passage ID, or none if it is the last passage." -> `4`. These alternate with "Put passages [a, b, c, d] in their original order. Write your answer as [id1, id2, ...]".
+- qdmatch_nq: "Which query does document [49] answer? Output the query's number, or none if it answers no query." -> `none`. The pool also asks "Which document answers query [q]?".
