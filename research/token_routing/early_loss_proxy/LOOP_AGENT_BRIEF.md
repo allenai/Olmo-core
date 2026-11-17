@@ -141,3 +141,11 @@ to `launch_proxy.py`. Real runs use the defaults (new pool, 16,384).
   in its flags, and say which. Open choice, not yet decided: the LR schedule still spans the pool's epoch, so a
   cheap arm is further down the decay at the budget than dense is at step 50.
 - Code added 2026-11-17 while the loop was paused and NOT yet run: smoke-test `--max-pf` once before relying on it.
+
+## Reference (Prasann, 2026-11-17 15:40): dense FULL fine-tuning, not dense LoRA
+- Every speedup is against dense full fine-tuning: its held-out loss levels and its FLOPs (1.0x per step). Dense LoRA
+  (0.74x per step) is an arm, not the reference. `python3 deep.py --ref v2/dense` scores against the dense full-FT
+  curve that exists (steps 10-100 only: 0.176 at 205 PF, 0.135 at 409 PF).
+- Missing: a full-epoch dense full-FT run with held-out probes (heldout_v2 and heldout_v3). Until it exists the
+  deepest dense full-FT level is only known from generation evals (0.928 at 1,982 PF; recipe 0.897 at 442 PF and
+  dense LoRA 0.882 at 1,496 PF do not reach it).
