@@ -2804,6 +2804,11 @@ class Transformer(nn.Module):
                 from ..pooled_soft_token import example_lengths
 
                 dense_lens = example_lengths(input_ids, None, pst0["eos_id"])
+            gdd = getattr(self, "_gold_doc_drop", None)
+            if gdd is not None and self.training and not packed:
+                # whole-document drop before block 0 (olmo_core.nn.gold_doc_drop): dense_lens above stay the
+                # original rows, the actual lengths below are the shortened ones
+                input_ids, labels = gdd.apply(input_ids, labels, ignore_index)
             compacted = self._compact_pooled_soft_tokens(input_ids, labels, ignore_index)
             if compacted is None and packed:
                 input_ids, labels = packed_orig[0], packed_orig[1]

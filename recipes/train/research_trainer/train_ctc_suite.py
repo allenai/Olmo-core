@@ -2097,6 +2097,19 @@ def parse_args() -> argparse.Namespace:
                     help="online router: drop the h*q query-interaction features")
     ap.add_argument("--st-otr-use-gold", action="store_true",
                     help="online router: per-document 0/1 gold flag (gold sidecar) as a feature")
+    ap.add_argument("--st-otr-gold-prior", default="",
+                    help="online router root stage: 'G,N' per-document share multipliers for gold / non-gold documents, "
+                    "per-row strength s~U(smin,1) (olmo_core.nn.online_token_router.OnlineRouterConfig.gold_prior)")
+    ap.add_argument("--st-otr-gold-prior-smin", type=float, default=0.0)
+    ap.add_argument("--st-gdd-keep-range", default="",
+                    help="gold doc drop before block 0 (olmo_core.nn.gold_doc_drop): 'lo,hi' per-row fraction of the "
+                    "distractor documents kept (every gold document kept) on rows with gold share <= max-gold-frac")
+    ap.add_argument("--st-gdd-max-gold-frac", type=float, default=0.5)
+    ap.add_argument("--st-gdd-whole-frac", type=float, default=0.0,
+                    help="gold doc drop: fraction of rows left untouched (no drop, no gold prior)")
+    ap.add_argument("--st-gdd-thin-range", default="",
+                    help="gold doc drop: 'lo,hi' per-row body-token keep fraction on the other rows (uniform tokens)")
+    ap.add_argument("--st-gdd-thin-keep-first", type=int, default=8)
     ap.add_argument("--st-otr-target", choices=["gnorm", "gxh", "dh", "mix"], default="gnorm",
                     help="online router target: gnorm log ||dL/dh_t||; gxh log |<dL/dh_t, h_t>|; dh log ||h_t^L - h_t^0|| "
                     "(residual change through the first L blocks, mid-stack only); mix = average of the gnorm and dh ranks")

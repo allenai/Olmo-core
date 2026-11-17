@@ -204,6 +204,11 @@ class OnlineRouterConfig:
     use_hidden: bool = True
     use_query: bool = True
     use_gold: bool = False
+    gold_prior: str = ""
+    """``"G,N"`` (root stage, per-document share only): gold documents keep ``G x`` and the others ``N x`` the
+    per-document share, scaled per row by a strength ``s ~ U(gold_prior_smin, 1)`` (mult ``1 + s (G - 1)``);
+    rows in ``noprior_fps`` (gold doc drop ``whole_frac``) get ``s = 0``; no score refill of the freed budget."""
+    gold_prior_smin: float = 0.0
     target: str = "gnorm"
     ridge: float = 0.1
     """Ridge strength, relative to the mean diagonal of the (decayed) Gram matrix."""
@@ -876,6 +881,34 @@ class OnlineTokenRouter:
                 self._flop(model, per_tok * input_ids.numel())
         return h
 
+    def _gold_prior_frac(self, input_ids: torch.Tensor, chunk_ids: torch.Tensor, kd: float) -> torch.Tensor:
+        """(B, n_docs) per-document keep fraction under ``gold_prior`` (see the config field)."""
+        from .attention.gold_grad_mask import content_fingerprint_from_row
+
+        G, N = (float(x) for x in self.cfg.gold_prior.split(","))
+        B = input_ids.shape[0]
+        cid = chunk_ids.to(torch.long)
+        n_docs = max(1, int(cid.max().item()) + 1)
+        g = torch.zeros(B, n_docs, dtype=torch.float32)
+        s = torch.zeros(B, 1, dtype=torch.float32)
+        gen = torch.Generator().manual_seed((self.cfg.seed * 31 + self.step * 7919 + self.rank * 104_729
+                                             + self._calls) % (2**62))
+        noprior = getattr(self, "noprior_fps", set())
+        rows = input_ids.detach().to("cpu").tolist()
+        for b in range(B):
+            fp = content_fingerprint_from_row(rows[b], self.eos_id)
+            gold = self.gold.get(fp) if self.gold is not None else None
+            u = float(torch.rand(1, generator=gen))
+            if gold is None or fp in noprior:
+                continue
+            s[b, 0] = self.cfg.gold_prior_smin + (1.0 - self.cfg.gold_prior_smin) * u
+            for d in gold:
+                if 0 <= d < n_docs:
+                    g[b, d] = 1.0
+        mult = torch.where(g > 0, 1.0 + s * (G - 1.0), 1.0 + s * (N - 1.0))
+        self._stat("gold_prior_s", float(s.mean()))
+        return (kd * mult).clamp(min=0.0, max=1.0).to(input_ids.device)
+
     def _row_gold(self, input_ids: torch.Tensor, chunk_ids: torch.Tensor) -> torch.Tensor:
         """(B, T) float gold-document flag per token (0 where unknown)."""
         from .attention.gold_grad_mask import content_fingerprint_from_row
@@ -1159,13 +1192,19 @@ class OnlineTokenRouter:
                 # (exploration tokens rank first, so they count against their document's share)
                 from .attention.chunked_mask import FREE_CHUNK_ID, mark_doc_topk_tokens_free
 
-                if kd >= 1.0:
+                kdf = self._gold_prior_frac(ids, cid, kd) if (c.gold_prior and self.stage_idx == 0
+                                                               and self.gold is not None) else None
+                if kd >= 1.0 and kdf is None:
                     keep = body.clone()
                 else:
                     sc_d = torch.where(explore | forced, torch.full_like(score, 1e30), score)
                     ds, de = self._doc_ids()
-                    out = mark_doc_topk_tokens_free(cid, ids, sc_d, doc_start_id=ds, doc_end_id=de, k=kd)
+                    out = mark_doc_topk_tokens_free(cid, ids, sc_d, doc_start_id=ds, doc_end_id=de, k=kd,
+                                                    n_docs=(kdf.shape[1] if kdf is not None else None),
+                                                    k_doc_frac=kdf)
                     keep = keep | (body & (out == FREE_CHUNK_ID))
+                    if kdf is not None:
+                        k = keep.sum(dim=1)  # no refill: the prior moves budget off the non-gold documents
             if c.min_per_doc > 0:
                 # per-document FLOOR: every document keeps at least its top min_per_doc body tokens by score (all of
                 # a shorter one), counted against the budget -- tiny documents (strmatch: ~25 tokens) are otherwise
