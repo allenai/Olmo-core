@@ -1,5 +1,2098 @@
 [
  {
+  "date": "2026-11-14",
+  "status": "done",
+  "track": "64k",
+  "who": "side session (mt11-lengen-32k)",
+  "title": "11-task 64k length generalization: dense/recipe trained on rows <= 32k with more rows at matched FLOPs, vs <= 16k and <= 64k, evaluated 2k-256k",
+  "result": "Doubling the row-length cap from 16k to 32k at the same FLOPs closes about half to three-quarters of the long-context loss, not all of it. 6-task mean vs the 64k-data model at the same PF, 64k*/128k*/256k* (olmo-eval; 256k YaRN x2): dense ~f4 (4,889 PF) -0.028/-0.030/-0.036, dense ~f2 (9,724 PF) -0.022/-0.046/-0.031, recipe (1,800 PF) -0.017/-0.015/-0.038; vs the <= 16k twin +0.035 to +0.054 at every long rung (3 of 3 budgets). That closes 51-77% of the 16k-vs-64k gap (dense f4 69/67/51%, recipe 68/77/54%, dense f2 71/55/61%), although only 5.2% of the <= 32k rows exceed 16k (\"<= 32k\" is mostly \"<= 24k\"). The remaining gap is mostly contradiction (-0.12 to -0.17 for dense; 21 contradiction rows above 24k in the pool). At 2k-32k the three caps are within +-0.02. Per-step cost: the <= 32k recipe runs at actual/dense 0.367 (best-case per-step speedup ~2.7x); no FTM is given for this comparison (it is a length test at fixed FLOPs, not a dense-curve fit). Single seed; eval_size 500 at 2k-128k, 256k only 125/cell (+-0.03-0.045 per task). Data mt11L32: 203,156 rows, 925M tokens; no repetition. Page: mt11 artifact https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n (section \"Length generalization\"). Record records/mt11-64k-length-generalization.md (section \"Results: training on rows <= 32k at matched FLOPs\"), branch claude/mt11-lengen-32k-56ed58 (809f27c63).",
+  "match": "matched FLOPs (dense interpolated in log PF between true neighbours; recipe vs the 64k-data recipe f4 at 1,696 PF)",
+  "record": "records/mt11-64k-length-generalization.md",
+  "branch": "claude/mt11-lengen-32k-56ed58 (809f27c63)",
+  "tables": [
+   {
+    "title": "Mean delta per rung for the rows <= 32k runs: vs the 64k-data model at the same PF, and vs the rows <= 16k run at the same budget",
+    "cols": [
+     "rung",
+     "dense f4: vs 64k",
+     "dense f4: vs 16k",
+     "dense f2: vs 64k",
+     "dense f2: vs 16k",
+     "recipe: vs 64k recipe",
+     "recipe: vs 16k"
+    ],
+    "rows": [
+     [
+      "2k",
+      "-0.005",
+      "-0.006",
+      "+0.001",
+      "-0.005",
+      "+0.003",
+      "+0.000"
+     ],
+     [
+      "8k",
+      "+0.004",
+      "-0.019",
+      "+0.005",
+      "-0.009",
+      "+0.007",
+      "-0.010"
+     ],
+     [
+      "16k",
+      "+0.007",
+      "-0.012",
+      "+0.021",
+      "-0.012",
+      "+0.016",
+      "+0.000"
+     ],
+     [
+      "32k",
+      "+0.007",
+      "+0.003",
+      "+0.012",
+      "-0.001",
+      "-0.001",
+      "+0.011"
+     ],
+     [
+      "64k native / 64k*",
+      "-0.031 / -0.028",
+      "+0.050 / +0.052",
+      "-0.020 / -0.022",
+      "+0.043 / +0.041",
+      "-0.017 / -0.017",
+      "+0.038 / +0.036"
+     ],
+     [
+      "128k*",
+      "-0.030",
+      "+0.051",
+      "-0.046",
+      "+0.054",
+      "-0.015",
+      "+0.049"
+     ],
+     [
+      "256k* ⚠ eval_size 125",
+      "-0.036",
+      "+0.035",
+      "-0.031",
+      "+0.045",
+      "-0.038",
+      "+0.044"
+     ]
+    ],
+    "note": "2k-64k: native docchunk ladder (no-signal cells excluded; task count 10/9/9/8/6), eval_size 500/cell. 64k*-256k*: olmo-eval launch_ctc_suite, 6 tasks (nq, hotpotqa, qdmatch_nq, outlier, oolong, contradiction); eval_size 500 at 64k*/128k*, ⚠ only 125/cell at 256k* (binomial SE +-0.03-0.045 per task). vs 64k: dense interpolated in log PF between true neighbours; recipe = the 64k-data recipe f4 at 1,696 PF (not interpolated). Single seed, no-cot."
+   },
+   {
+    "title": "6-task mean by rung for rows <= 16k / <= 32k / <= 64k at matched FLOPs",
+    "cols": [
+     "budget",
+     "row cap",
+     "PF",
+     "2k",
+     "8k",
+     "16k",
+     "32k",
+     "64k*",
+     "128k*",
+     "256k* ⚠ eval_size 125"
+    ],
+    "rows": [
+     [
+      "dense ~f4",
+      "<= 16k",
+      "4,839",
+      0.969,
+      0.902,
+      0.807,
+      0.675,
+      0.506,
+      0.401,
+      0.324
+     ],
+     [
+      "dense ~f4",
+      "<= 32k",
+      "4,889",
+      0.965,
+      0.89,
+      0.799,
+      0.69,
+      0.558,
+      0.452,
+      0.359
+     ],
+     [
+      "dense ~f4",
+      "<= 64k",
+      "4,625",
+      0.964,
+      0.887,
+      0.797,
+      0.687,
+      0.581,
+      0.477,
+      0.393
+     ],
+     [
+      "recipe",
+      "<= 16k",
+      "1,836",
+      0.956,
+      0.878,
+      0.772,
+      0.626,
+      0.485,
+      0.382,
+      0.293
+     ],
+     [
+      "recipe",
+      "<= 32k",
+      "1,800",
+      0.957,
+      0.872,
+      0.776,
+      0.639,
+      0.521,
+      0.431,
+      0.337
+     ],
+     [
+      "recipe",
+      "<= 64k",
+      "1,696",
+      0.952,
+      0.868,
+      0.759,
+      0.638,
+      0.538,
+      0.446,
+      0.375
+     ],
+     [
+      "dense ~f2",
+      "<= 16k",
+      "9,792",
+      0.97,
+      0.931,
+      0.871,
+      0.749,
+      0.581,
+      0.437,
+      0.355
+     ],
+     [
+      "dense ~f2",
+      "<= 32k",
+      "9,724",
+      0.971,
+      0.92,
+      0.854,
+      0.741,
+      0.622,
+      0.49,
+      0.4
+     ],
+     [
+      "dense ~f2",
+      "<= 64k",
+      "9,294",
+      0.969,
+      0.92,
+      0.843,
+      0.739,
+      0.639,
+      0.534,
+      0.429
+     ]
+    ],
+    "note": "Same 6 tasks at every rung. 2k-32k native ladder, 64k*-256k* olmo-eval (r256k YaRN x2, 131,072-token chunked prefill). eval_size 500/cell except ⚠ 256k* = 125/cell (+-0.03-0.045 per task). Rows <= 64k = the mt11L64 dense f4 / recipe f4 / dense f2 runs themselves (not interpolated). Single seed, no-cot, LR 5e-6."
+   }
+  ],
+  "chart": {
+   "title": "6-task mean at 64k* / 128k* / 256k* by row-length cap (dense ~f4 and recipe; 256k eval_size 125)",
+   "unit": "6-task mean, olmo-eval path; 256k* ⚠ eval_size 125",
+   "labels": [
+    "dense ~f4 @64k",
+    "dense ~f4 @128k",
+    "dense ~f4 @256k (125)",
+    "recipe @64k",
+    "recipe @128k",
+    "recipe @256k (125)",
+    "dense ~f2 @64k",
+    "dense ~f2 @128k",
+    "dense ~f2 @256k (125)"
+   ],
+   "series": [
+    {
+     "name": "rows <= 16k",
+     "values": [
+      0.506,
+      0.401,
+      0.324,
+      0.485,
+      0.382,
+      0.293,
+      0.581,
+      0.437,
+      0.355
+     ]
+    },
+    {
+     "name": "rows <= 32k",
+     "values": [
+      0.558,
+      0.452,
+      0.359,
+      0.521,
+      0.431,
+      0.337,
+      0.622,
+      0.49,
+      0.4
+     ]
+    },
+    {
+     "name": "rows <= 64k",
+     "values": [
+      0.581,
+      0.477,
+      0.393,
+      0.538,
+      0.446,
+      0.375,
+      0.639,
+      0.534,
+      0.429
+     ]
+    }
+   ],
+   "ymin": 0.25,
+   "ymax": 0.7
+  }
+ },
+ {
+  "date": "2026-11-13",
+  "status": "done",
+  "track": "sft4",
+  "who": "side session (docdrop-nongold)",
+  "title": "Random non-gold document drop at the recipe's FLOPs: gold kept, document IDs preserved, dense full-context eval (arms ddp, ddc, ddpg, ddcg)",
+  "result": "No: far below the recipe at equal FLOPs. Keep every gold document (the IDs the answer cites) and a random 15.7% of non-gold documents, cut the rest before block 0 (printed IDs unchanged; oolong whole), whole-model LoRA r64 at LR 1e-5 as the recipe, 1,952 rows/task, 350-352 PF (recipe 343-345; 0.229x dense). 8k 4-task mean 0.555 (original positions) / 0.588 (compact): outlier collapses to 0.00 because random dropping leaves the outlier article as the only multi-passage topic, the opposite of the generator's definition (uniquely smallest group); the model learns to name passages that share an article (99% of its 8k answers). With a group-aware outlier drop (whole articles kept) 0.665 / 0.661 (original / compact positions), still 0.18 under the recipe's 0.846 and below dense f488 (FTM < 1.08x vs 4.6x). The same models score 0.930 / 0.934 at 2k, above the recipe's 0.921: trained on ~1.5k-token rows it does not transfer to 8k contexts (contradiction 0.70-0.80 vs 0.96, no over-prediction). Best-case per-step speedup 4.3-4.4x (step cost 0.229-0.230x) vs recipe 4.5x, the same by construction. Single seed per arm; no seeds or 3,904 point (clearly below). Record records/docdrop-nongold-baseline.md, branch claude/docdrop-nongold-42bb6b (cac6c3dd3).",
+  "match": "1,952 rows/task, recipe optimiser and FLOPs (350 PF vs 344)",
+  "record": "records/docdrop-nongold-baseline.md",
+  "branch": "claude/docdrop-nongold-42bb6b (cac6c3dd3)",
+  "tables": [
+   {
+    "title": "8k rung (primary), 1,952 rows/task, single seed, eval_size 500/cell, no-cot",
+    "cols": [
+     "arm",
+     "8k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong",
+     "2k mean",
+     "PF",
+     "step cost (x dense)",
+     "best-case per-step speedup",
+     "peak GiB",
+     "FTM 8k"
+    ],
+    "rows": [
+     [
+      "dense (full FT)",
+      0.843,
+      0.973,
+      0.924,
+      0.817,
+      0.656,
+      "-",
+      1531,
+      "1.0",
+      "1.0x",
+      "-",
+      "1.0"
+     ],
+     [
+      "recipe (s0 / sd1)",
+      ".846 / .847",
+      ".960 / .956",
+      ".912 / .922",
+      ".860 / .861",
+      ".650 / .649",
+      ".921 / .919",
+      "343-345",
+      "0.221",
+      "4.5x",
+      "26.9",
+      "4.6x"
+     ],
+     [
+      "ddp: random docs, original positions",
+      0.555,
+      0.696,
+      0.886,
+      0.001,
+      0.635,
+      0.672,
+      350.6,
+      "0.229",
+      "4.4x",
+      "25.6",
+      "<1.08x"
+     ],
+     [
+      "ddc: random docs, compact positions",
+      0.588,
+      0.799,
+      0.89,
+      0.002,
+      0.662,
+      0.684,
+      350.6,
+      "0.229",
+      "4.4x",
+      "26.7 (padded)",
+      "<1.08x"
+     ],
+     [
+      "ddpg: group-aware outlier, original positions",
+      0.665,
+      0.715,
+      0.896,
+      0.421,
+      0.627,
+      0.93,
+      352.5,
+      "0.230",
+      "4.3x",
+      "25.6",
+      "<1.08x"
+     ],
+     [
+      "ddcg: group-aware outlier, compact positions",
+      0.661,
+      0.76,
+      0.885,
+      0.353,
+      0.646,
+      0.934,
+      352.5,
+      "0.230",
+      "4.3x",
+      "26.7 (padded)",
+      "<1.08x"
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot, f1 (oolong: score), single seed per docdrop arm (seed noise on the 8k mean ~0.02-0.03); SE per cell 0.01-0.02, 4-task mean ~0.008-0.01. Step cost = PF / dense f1952's 1,531 PF; speedup = 1 / step cost. Every docdrop arm is below dense f488 (0.667 at 379 PF), so FTM = 379 / PF is an upper bound. 2k per task: ddp 0.868/0.962/0.000/0.856; ddc 0.898/0.978/0.002/0.858; ddpg 0.902/0.976/0.988/0.854; ddcg 0.923/0.972/0.987/0.855. ddc/ddcg peak is the padded full-length row (dense path pads to 12,288)."
+   },
+   {
+    "title": "Realised keep (q = 0.157 of non-gold docs)",
+    "cols": [
+     "task",
+     "docs/row",
+     "gold/row",
+     "docs kept",
+     "tokens kept",
+     "gold share of visible docs"
+    ],
+    "rows": [
+     [
+      "contradiction",
+      187,
+      6,
+      "18.2%",
+      "19.7%",
+      "3.2% -> 17.6%"
+     ],
+     [
+      "nq",
+      48,
+      1,
+      "16.7%",
+      "17.3%",
+      "2.1% -> 12.5%"
+     ],
+     [
+      "outlier (random / group-aware)",
+      57,
+      3,
+      "19.3% / 19.9%",
+      "20.5% / 21.1%",
+      "5.3% -> 27.3% / 26.6%"
+     ],
+     [
+      "oolong (whole)",
+      "30-200",
+      "-",
+      "100%",
+      "100%",
+      "-"
+     ],
+     [
+      "all",
+      "",
+      "",
+      "34.2%",
+      "31.2%",
+      ""
+     ]
+    ],
+    "note": "oolong is kept whole (its label aggregates every item) and charged in full, so the other tasks keep ~17-21%. Gold = IDs the answer cites, matched to printed IDs (0 issues over 5,856 rows)."
+   }
+  ],
+  "chart": {
+   "title": "8k mean at the recipe's FLOPs, 1,952 rows/task (single seed per docdrop arm)",
+   "unit": "4-task 8k mean, eval_size 500/cell, no-cot",
+   "labels": [
+    "recipe (2-seed mean)",
+    "ddp: random docs, original positions",
+    "ddc: random docs, compact positions",
+    "ddpg: group-aware outlier, original positions",
+    "ddcg: group-aware outlier, compact positions"
+   ],
+   "series": [
+    {
+     "name": "8k mean",
+     "values": [
+      0.8465,
+      0.555,
+      0.588,
+      0.665,
+      0.661
+     ]
+    },
+    {
+     "name": "2k mean",
+     "values": [
+      0.92,
+      0.672,
+      0.684,
+      0.93,
+      0.934
+     ]
+    }
+   ],
+   "refs": [
+    {
+     "name": "dense f1952",
+     "value": 0.843
+    },
+    {
+     "name": "dense f488",
+     "value": 0.667
+    }
+   ],
+   "ymin": 0.5,
+   "ymax": 1.0
+  }
+ },
+ {
+  "date": "2026-11-11",
+  "status": "done",
+  "track": "sft4",
+  "who": "side session (oracle-thresh-sweep)",
+  "title": "Oracle threshold sweep: per-document oracle at attribution-cos 0.90→0.60 vs matched per-document random, plus dense f488/f976",
+  "result": "No: the attribution oracle is not a better per-document selector than uniform random at matched keep, and it loses below 0.85. 1,952 rows/task, single cut @7, eval_size 500/cell, no-cot, 1 seed each (seed noise ~±0.03 on the 8k mean: random 17.7% vs 19.7% differ by .028). 8k mean: ~18% keep oracle 0.90 .824 vs random .813 (17.7%) / .841 (19.7%), a tie; ~12% keep oracle 0.80 .721 vs random .796 (11.7%), outlier .409 vs .740; 0.85 .837 (13.1%); 0.70 .648 / 0.60 .643 sit at dense f488 (.667) cost-for-cost (FTM <=1.34x/<=1.47x). Best-case per-step speedup (routed pass only) / FTM: oracle 0.90 3.79x / 3.44x, 0.85 4.28x / 4.16x (the best oracle FTM), 0.80 4.40x / 2.30x; random 17.7% 3.84x / 3.29x, 11.7% 4.43x / 3.47x; recipe 4.43x / 4.60x, so nothing here beats the recipe. Per-doc allocation = no empty docs and gold share = body share for both; the oracle differs only by piling picks on each document's first tokens (outlier first-8-token share 27% at 0.90 → 71% at 0.60, uniform 5%), and its routed train CE drops far below dense (0.80: .152 vs .211). Per-row 0.90 + random x1.15: total keep 34.8% (oracle 16.2%), gold keep .774 vs distractor .334, routed CE .106 vs dense .184, 8k .733 (outlier .408): random tokens do not fix the per-row leak. 0.90/0.80 re-scored on the local path (same as random): within 0.004/cell of Lambda. Dense f488 / f976 (LR 5e-6, local slurm, eval_size 500/cell) added to the dense curve: 8k 0.667 / 0.712. Record records/oracle-threshold-sweep.md, branch claude/oracle-thresh-sweep-69bc7d (178a6b346); figure research/token_routing/oracle_train/sweep_pareto.png on the branch.",
+  "match": "orc1doc9,orc1doc8,orc1doc7,orc1doc6,orc1row90r115,rnd1doc,dense-f488-tde,dense-f976-tde",
+  "record": "records/oracle-threshold-sweep.md",
+  "branch": "claude/oracle-thresh-sweep-69bc7d (178a6b346)",
+  "tables": [
+   {
+    "title": "8k rung (primary) by arm: realised keep, step cost, best-case per-step speedup, 8k per task, FTM (1,952 rows/task)",
+    "cols": [
+     "arm",
+     "realised keep",
+     "step cost (x dense)",
+     "best-case per-step speedup",
+     "contra 8k",
+     "nq 8k",
+     "outlier 8k",
+     "oolong 8k",
+     "8k mean",
+     "2k mean",
+     "PF",
+     "FTM 8k"
+    ],
+    "rows": [
+     [
+      "dense f488 (LR 5e-6)",
+      "100%",
+      0.25,
+      "1.0x",
+      0.888,
+      0.896,
+      0.344,
+      0.541,
+      0.667,
+      0.805,
+      379.0,
+      "1.0x"
+     ],
+     [
+      "dense f976 (LR 5e-6)",
+      "100%",
+      0.5,
+      "1.0x",
+      0.951,
+      0.916,
+      0.38,
+      0.599,
+      0.712,
+      0.816,
+      762.0,
+      "1.0x"
+     ],
+     [
+      "dense f1952 (LR 5e-6)",
+      "100%",
+      1.0,
+      "1.0x",
+      0.973,
+      0.924,
+      0.817,
+      0.656,
+      0.843,
+      0.933,
+      1531.0,
+      "1.0x"
+     ],
+     [
+      "dense f3904 (LR 5e-6)",
+      "100%",
+      2.0,
+      "1.0x",
+      null,
+      null,
+      null,
+      null,
+      0.899,
+      0.953,
+      3063.0,
+      "1.0x"
+     ],
+     [
+      "dense f5856 (LR 5e-6)",
+      "100%",
+      3.0,
+      "1.0x",
+      null,
+      null,
+      null,
+      null,
+      0.901,
+      0.955,
+      4595.0,
+      "1.0x"
+     ],
+     [
+      "dense f7808 (LR 5e-6)",
+      "100%",
+      4.0,
+      "1.0x",
+      null,
+      null,
+      null,
+      null,
+      0.904,
+      0.958,
+      6128.0,
+      "1.0x"
+     ],
+     [
+      "oracle doc 0.95 (orc1doc, 11-04)",
+      "35.5%",
+      0.365,
+      "2.74x",
+      0.973,
+      0.93,
+      0.828,
+      0.669,
+      0.85,
+      0.902,
+      559.0,
+      "3.00x"
+     ],
+     [
+      "oracle doc 0.90",
+      "18.3%",
+      0.264,
+      "3.79x",
+      0.957,
+      0.924,
+      0.76,
+      0.656,
+      0.824,
+      0.882,
+      404.0,
+      "3.44x"
+     ],
+     [
+      "oracle doc 0.85",
+      "13.1%",
+      0.234,
+      "4.28x",
+      0.959,
+      0.936,
+      0.82,
+      0.633,
+      0.837,
+      0.871,
+      358.0,
+      "4.16x"
+     ],
+     [
+      "oracle doc 0.80",
+      "12.0%",
+      0.227,
+      "4.40x",
+      0.898,
+      0.932,
+      0.409,
+      0.644,
+      0.721,
+      0.808,
+      348.0,
+      "2.30x"
+     ],
+     [
+      "oracle doc 0.70",
+      "4.5%",
+      0.184,
+      "5.43x",
+      0.82,
+      0.916,
+      0.254,
+      0.601,
+      0.648,
+      0.77,
+      282.0,
+      "<=1.34x"
+     ],
+     [
+      "oracle doc 0.60",
+      "1.7%",
+      0.168,
+      "5.94x",
+      0.861,
+      0.922,
+      0.21,
+      0.581,
+      0.643,
+      0.75,
+      258.0,
+      "<=1.47x"
+     ],
+     [
+      "oracle ROW 0.90 + random x1.15 (other scope)",
+      "34.8%",
+      0.362,
+      "2.76x",
+      0.958,
+      0.916,
+      0.408,
+      0.651,
+      0.733,
+      0.826,
+      554.0,
+      "1.54x"
+     ],
+     [
+      "random doc, nominal 19%",
+      "19.7%",
+      0.272,
+      "3.68x",
+      0.945,
+      0.926,
+      0.857,
+      0.634,
+      0.841,
+      0.885,
+      416.0,
+      "3.64x"
+     ],
+     [
+      "random doc, nominal 17%",
+      "17.7%",
+      0.26,
+      "3.84x",
+      0.928,
+      0.904,
+      0.783,
+      0.637,
+      0.813,
+      0.911,
+      398.0,
+      "3.29x"
+     ],
+     [
+      "random doc, nominal 11%",
+      "11.7%",
+      0.225,
+      "4.43x",
+      0.931,
+      0.878,
+      0.74,
+      0.637,
+      0.796,
+      0.895,
+      345.0,
+      "3.47x"
+     ],
+     [
+      "random doc, nominal 9%",
+      "9.7%",
+      0.214,
+      "4.67x",
+      0.915,
+      0.862,
+      0.689,
+      0.609,
+      0.769,
+      0.868,
+      328.0,
+      "3.16x"
+     ],
+     [
+      "recipe lora64all32r20to7 (router, 2 cuts)",
+      "20.5%",
+      0.226,
+      "4.43x",
+      0.96,
+      0.912,
+      0.86,
+      0.65,
+      0.846,
+      0.921,
+      345.0,
+      "4.60x"
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot, f1 (oolong: score). EVERY ARM IS 1 SEED (seed-to-seed ~±0.03 on the 8k mean; eval SE ~±0.008 for the 4-task mean, ±0.007-0.022 per cell). Step cost = run flop_meter/actual_pflops / dense f1952 (1,531 PF); oracle arms are charged for the routed pass only, so step cost and speedup (= 1 / step cost) are the best case of a selector that knew the oracle set for free. FTM = dense PF for the arm's 8k mean (log-linear along dense 488 -> 7,808 rows/task) / arm PF; <= = below dense f488. Dense f488/f976 per task from the record; dense f1952 per task from records/oracle-selection-training.md; f3904+ per task not in the record. Eval paths: dense f488/f976, oracle 0.90/0.80 (local re-score of the Lambda copy), 0.70/0.60 and random on local slurm; 0.85 and the per-row arm on Lambda; dense f1952+, recipe and 0.95 on Beaker."
+   },
+   {
+    "title": "Random controls: which oracle arm each one matches (1 seed each)",
+    "cols": [
+     "random control",
+     "realised keep",
+     "matched oracle arm (realised keep)",
+     "8k mean: random vs oracle (gap)",
+     "outlier@8k random vs oracle"
+    ],
+    "rows": [
+     [
+      "nominal 17% (rnd1doc17)",
+      "17.7%",
+      "0.90 (18.3%), closest match",
+      "0.813 vs 0.824 (−0.011)",
+      "0.783 vs 0.760"
+     ],
+     [
+      "nominal 19% (rnd1doc19)",
+      "19.7%",
+      "0.90 (18.3%), first control, sized from the step-225 mean",
+      "0.841 vs 0.824 (+0.017)",
+      "0.857 vs 0.760"
+     ],
+     [
+      "nominal 11% (rnd1doc11)",
+      "11.7%",
+      "0.80 (12.0%), closest match",
+      "0.796 vs 0.721 (+0.075)",
+      "0.740 vs 0.409"
+     ],
+     [
+      "nominal 9% (rnd1doc9)",
+      "9.7%",
+      "0.80 (12.0%), first control, sized from the step-225 projection",
+      "0.769 vs 0.721 (+0.048)",
+      "0.689 vs 0.409"
+     ]
+    ],
+    "note": "The 0.80 arm's keep rose after step 225 (6% -> 16% by quarter), so the first 9% control undershot; the 0.90 arm's fell late (19 -> 16%), so the first 19% control overshot. The 17% and 11% controls were launched against the final full-run means."
+   },
+   {
+    "title": "Fit and gradient (cost columns as in the main table)",
+    "cols": [
+     "arm",
+     "realised keep",
+     "step cost (routed pass / dense f1952)",
+     "FTM 8k",
+     "grad cos (LoRA)",
+     "train CE dense → routed",
+     "eval path"
+    ],
+    "rows": [
+     [
+      "oracle doc 0.95 (11-04)",
+      "35.5%",
+      0.365,
+      "3.00x",
+      0.575,
+      "0.148 → 0.151",
+      "Beaker"
+     ],
+     [
+      "oracle doc 0.90",
+      "18.3%",
+      0.264,
+      "3.44x",
+      0.441,
+      "0.160 → 0.157",
+      "local slurm (re-score of the Lambda copy)"
+     ],
+     [
+      "oracle doc 0.85",
+      "13.1%",
+      0.234,
+      "4.16x",
+      0.361,
+      "0.164 → 0.155",
+      "Lambda"
+     ],
+     [
+      "oracle doc 0.80",
+      "12.0%",
+      0.227,
+      "2.30x",
+      0.286,
+      "0.211 → 0.152",
+      "local slurm (re-score of the Lambda copy)"
+     ],
+     [
+      "oracle doc 0.70",
+      "4.5%",
+      0.184,
+      "<=1.34x",
+      0.227,
+      "0.240 → 0.150",
+      "local slurm"
+     ],
+     [
+      "oracle doc 0.60",
+      "1.7%",
+      0.168,
+      "<=1.47x",
+      0.227,
+      "0.241 → 0.160",
+      "local slurm"
+     ],
+     [
+      "oracle ROW 0.90 + random x1.15 (other scope)",
+      "34.8%",
+      0.362,
+      "1.54x",
+      0.453,
+      "0.184 → 0.106",
+      "Lambda"
+     ],
+     [
+      "random doc 19.7%",
+      "19.7%",
+      0.272,
+      "3.64x",
+      null,
+      "- → 0.202",
+      "local slurm"
+     ],
+     [
+      "random doc 17.7%",
+      "17.7%",
+      0.26,
+      "3.29x",
+      null,
+      "- → 0.226",
+      "local slurm"
+     ],
+     [
+      "random doc 11.7%",
+      "11.7%",
+      0.225,
+      "3.47x",
+      null,
+      "- → 0.228",
+      "local slurm"
+     ],
+     [
+      "random doc 9.7%",
+      "9.7%",
+      0.214,
+      "3.16x",
+      null,
+      "- → 0.232",
+      "local slurm"
+     ],
+     [
+      "recipe (router, 2 cuts)",
+      "20.5%",
+      0.226,
+      "4.60x",
+      null,
+      "- → 0.176",
+      "Beaker"
+     ]
+    ],
+    "note": "Step cost from flop_meter/actual_pflops; oracle arms charged for the routed pass only (best case). FTM log-linear along dense 488→7,808 rows/task; <= = below dense f488. Random controls matched on REALISED keep: 17.7% and 19.7% ↔ oracle 0.90 (18.3%), 11.7% and 9.7% ↔ oracle 0.80 (12.0%)."
+   },
+   {
+    "title": "Where the selected tokens sit (outlier task)",
+    "cols": [
+     "arm (keep)",
+     "zero-kept docs",
+     "kept in gold docs (gold body share)",
+     "first 8 tokens of each doc (uniform)"
+    ],
+    "rows": [
+     [
+      "oracle 0.95 (35%)",
+      "0.000",
+      "n/a",
+      "0.147 (0.054)"
+     ],
+     [
+      "oracle 0.90 (18%)",
+      "0.000",
+      "0.052 (0.052)",
+      "0.269 (0.054)"
+     ],
+     [
+      "oracle 0.85 (13%)",
+      "0.000",
+      "0.052 (0.052)",
+      "0.350 (0.054)"
+     ],
+     [
+      "oracle 0.80 (12%)",
+      "0.000",
+      "0.052 (0.052)",
+      "0.306 (0.054)"
+     ],
+     [
+      "oracle 0.70 (4.5%)",
+      "0.000",
+      "0.052 (0.052)",
+      "0.549 (0.054)"
+     ],
+     [
+      "oracle 0.60 (1.7%)",
+      "0.000",
+      "0.053 (0.052)",
+      "0.707 (0.054)"
+     ],
+     [
+      "row 0.90, oracle part (16%)",
+      "0.033",
+      "0.166 (0.052)",
+      "0.185 (0.055)"
+     ],
+     [
+      "random per doc (any keep)",
+      "0 (by construction)",
+      "= gold body share",
+      "uniform"
+     ]
+    ],
+    "note": "From oracle_meta/sel (every 2nd saved step), sel_stats.py. Random per-document controls are uniform within each document by construction."
+   }
+  ],
+  "chart": {
+   "title": "8k mean vs step cost (x dense, sorted): oracle per-doc curve, 4 random controls, recipe, dense curve (1 seed per arm)",
+   "unit": "8k 4-task mean; label = arm @ step cost (oracle: routed pass only)",
+   "labels": [
+    "oracle doc 0.60 @ 0.168x",
+    "oracle doc 0.70 @ 0.184x",
+    "random doc, nominal 9% @ 0.214x",
+    "random doc, nominal 11% @ 0.225x",
+    "recipe @ 0.226x",
+    "oracle doc 0.80 @ 0.227x",
+    "oracle doc 0.85 @ 0.234x",
+    "dense f488 @ 0.250x",
+    "random doc, nominal 17% @ 0.260x",
+    "oracle doc 0.90 @ 0.264x",
+    "random doc, nominal 19% @ 0.272x",
+    "oracle ROW 0.90 + random x1.15 @ 0.362x",
+    "oracle doc 0.95 @ 0.365x",
+    "dense f976 @ 0.500x",
+    "dense f1952 @ 1.000x",
+    "dense f3904 @ 2.000x",
+    "dense f5856 @ 3.000x",
+    "dense f7808 @ 4.000x"
+   ],
+   "series": [
+    {
+     "name": "oracle per document (target)",
+     "values": [
+      0.643,
+      0.648,
+      null,
+      null,
+      null,
+      0.721,
+      0.837,
+      null,
+      null,
+      0.824,
+      null,
+      null,
+      0.85,
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "name": "random per document (realised keep)",
+     "values": [
+      null,
+      null,
+      0.769,
+      0.796,
+      null,
+      null,
+      null,
+      null,
+      0.813,
+      null,
+      0.841,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "name": "oracle per row 0.90 + random x1.15",
+     "values": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      0.733,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "name": "recipe (router, 2 cuts)",
+     "values": [
+      null,
+      null,
+      null,
+      null,
+      0.846,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    {
+     "name": "dense curve (488 -> 7,808 rows/task)",
+     "values": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      0.667,
+      null,
+      null,
+      null,
+      null,
+      null,
+      0.712,
+      0.843,
+      0.899,
+      0.901,
+      0.904
+     ]
+    }
+   ],
+   "refs": [
+    {
+     "name": "dense f1952",
+     "value": 0.843
+    },
+    {
+     "name": "recipe",
+     "value": 0.846
+    }
+   ],
+   "ymin": 0.6,
+   "ymax": 0.92
+  }
+ },
+ {
+  "date": "2026-11-11",
+  "status": "done",
+  "track": "sft4",
+  "who": "side session (weighted-token-sampling)",
+  "title": "Weighted token sampling: sampled survival with weights w = 1/p in attention / DeltaNet, and a FLOP price rule, instead of the recipe's two-stage top-k",
+  "result": "No: sampled survival with w = 1/p weights never matched the recipe's top-k, at any budget tried. 1,952 rows/task, eval_size 500/cell, no-cot, local slurm eval path. Pooled, the 9 single-seed runs that sample at block 7 with top-k at block 16 (weighted) average 0.828 8k mean (sd 0.019) vs 0.847 for the 4 top-k runs (recipe x2, S0wr x2); best 2-seed arm wtsS2aH 0.8365 vs recipe 0.846/0.847. At 3,904 rows/task S2aH 0.877 vs recipe 0.882/0.889 (-0.007). At half the keeps (0.19x) top-k 0.821 vs sampled 0.805 (2 seeds each). Weights are required (without them outlier 0.63-0.67); sharper scores help only from temp 1 to 0.5; clipping weights or cutting the uniform share does not close the gap; the price rule trails (best S3aT2 0.832 at 0.203x, 1 seed). Best-case per-step speedup 4.6x (0.215-0.218x) vs recipe 4.5x (0.221x); 8k FTM at 1,952 rows <= 4.9-5.0x for every wts arm (upper bound, below the lowest dense point) vs recipe 4.6-4.7x; at 3,904 rows S2aH 3.55x, S2aT5 3.54x vs recipe 3.61x/3.94x. Side result: the recipe with a routed uniform warmup instead of its dense step 1 (wtsS0wr) matches it (2-seed 0.848; 0.884 at 3,904 rows, FTM 3.82x) at 24.2 GiB peak instead of 26.9, so the recipe needs no dense step. Seed noise on the 8k mean ~0.02 for routed runs. S5 (row-level sampling) not run. Record records/weighted-token-sampling.md, branch claude/weighted-token-sampling-041da9 (7196f46d7).",
+  "match": "1,952 rows/task, recipe base, no dense step",
+  "record": "records/weighted-token-sampling.md",
+  "branch": "claude/weighted-token-sampling-041da9 (7196f46d7)",
+  "tables": [
+   {
+    "title": "8k rung (primary), 1,952 rows/task, every arm (seed 0 unless the row says seed 1 / sd1)",
+    "cols": [
+     "arm",
+     "8k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong",
+     "step cost (x dense)",
+     "peak GiB"
+    ],
+    "rows": [
+     [
+      "dense",
+      0.843,
+      0.973,
+      0.924,
+      0.817,
+      0.656,
+      "1.0",
+      "-"
+     ],
+     [
+      "recipe (s0 / sd1)",
+      ".846 / .847",
+      ".960 / .956",
+      ".912 / .922",
+      ".860 / .861",
+      ".650 / .649",
+      "0.221",
+      "26.9"
+     ],
+     [
+      "wtsS0wr (top-k, warmup routed)",
+      0.837,
+      0.956,
+      0.92,
+      0.838,
+      0.633,
+      "0.219",
+      "24.2"
+     ],
+     [
+      "wtsS1 (sampled, no weights)",
+      0.79,
+      0.942,
+      0.93,
+      0.67,
+      0.62,
+      "0.215",
+      "24.1"
+     ],
+     [
+      "wtsS2a (weights: attention)",
+      0.827,
+      0.945,
+      0.914,
+      0.811,
+      0.638,
+      "0.215",
+      "24.2"
+     ],
+     [
+      "wtsS2g (weights: DeltaNet)",
+      0.815,
+      0.941,
+      0.902,
+      0.775,
+      0.641,
+      "0.215",
+      "24.2"
+     ],
+     [
+      "wtsS2b (weights: both)",
+      0.822,
+      0.937,
+      0.92,
+      0.794,
+      0.637,
+      "0.215",
+      "24.1"
+     ],
+     [
+      "wtsS3 (price rule, cuts 7/16)",
+      0.795,
+      0.934,
+      0.914,
+      0.725,
+      0.609,
+      "0.214",
+      "24.6"
+     ],
+     [
+      "wtsS3d (price, alloc=doc)",
+      0.795,
+      0.919,
+      0.914,
+      0.71,
+      0.638,
+      "0.216",
+      "24.2"
+     ],
+     [
+      "wtsS3m (price, 6 cuts)",
+      0.789,
+      0.953,
+      0.91,
+      0.665,
+      0.629,
+      "0.213",
+      "25.8"
+     ],
+     [
+      "wtsS2aT5 (attention weights, temp 0.5)",
+      0.84,
+      0.954,
+      0.92,
+      0.841,
+      0.644,
+      "0.215",
+      "24.2"
+     ],
+     [
+      "wtsS2aT2 (attention weights, temp 0.2)",
+      0.829,
+      0.945,
+      0.908,
+      0.835,
+      0.626,
+      "0.215",
+      "24.2"
+     ],
+     [
+      "wtsS1T2 (no weights, temp 0.2)",
+      0.833,
+      0.946,
+      0.914,
+      0.843,
+      0.628,
+      "0.215",
+      "24.2"
+     ],
+     [
+      "wtsS3aT5 (price, attention weights, temp 0.5)",
+      0.82,
+      0.962,
+      0.91,
+      0.778,
+      0.63,
+      "0.211",
+      "24.4"
+     ],
+     [
+      "wtsS2aT5 seed 1",
+      0.837,
+      0.944,
+      0.888,
+      0.852,
+      0.662,
+      "0.215",
+      "24.2"
+     ],
+     [
+      "wtsS2aH (sampled at block 7, top-k at 16) s0 / sd1",
+      ".847 / .826",
+      ".956 / .941",
+      ".934 / .914",
+      ".851 / .815",
+      ".648 / .634",
+      "0.218",
+      "24.2"
+     ],
+     [
+      "wtsS2aT5H (as S2aH, temp 0.5) s0 / sd1",
+      ".810 / .864",
+      ".948 / .949",
+      ".910 / .918",
+      ".757 / .908",
+      ".626 / .680",
+      "0.218",
+      "24.2"
+     ],
+     [
+      "wtsS3aT2 (price, attention weights, temp 0.2)",
+      0.832,
+      0.963,
+      0.91,
+      0.815,
+      0.639,
+      "0.203",
+      "24.2"
+     ],
+     [
+      "wtsS0wr seed 1",
+      0.859,
+      0.943,
+      0.94,
+      0.897,
+      0.656,
+      "0.219",
+      "24.2"
+     ],
+     [
+      "wtsS1H (sampled at 7, no weights, top-k at 16)",
+      0.773,
+      0.932,
+      0.936,
+      0.625,
+      0.599,
+      "0.218",
+      "24.2"
+     ],
+     [
+      "wtsS2aT2H (S2aH, temp 0.2)",
+      0.823,
+      0.945,
+      0.902,
+      0.782,
+      0.664,
+      "0.218",
+      "24.2"
+     ],
+     [
+      "wtsS2aHc16 (clip log w 1.6)",
+      0.817,
+      0.943,
+      0.926,
+      0.8,
+      0.597,
+      "0.218",
+      "24.2"
+     ],
+     [
+      "wtsS2aHc07 (clip log w 0.7)",
+      0.819,
+      0.949,
+      0.906,
+      0.774,
+      0.646,
+      "0.218",
+      "24.2"
+     ],
+     [
+      "wtsS2aHm02 (uniform share 0.02)",
+      0.806,
+      0.95,
+      0.924,
+      0.734,
+      0.617,
+      "0.218",
+      "24.2"
+     ],
+     [
+      "wtsS2aHm02c16 (both)",
+      0.841,
+      0.948,
+      0.934,
+      0.825,
+      0.657,
+      "0.218",
+      "24.2"
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot, f1 (oolong: score), local slurm eval path. SE of the 4-task mean ~0.008; outlier ~0.016-0.019; seed-to-seed spread on the 8k mean ~0.02, so single-seed gaps under ~0.03 mean little. wts arms 1 seed unless marked; recipe 2 seeds. Dense per task = dense f1952 LR 5e-6 (records/oracle-selection-training.md). Recipe peak 26.9 GiB includes its dense step 1 (routed from step 1, S0wr: 24.2). Best-case per-step speedup = 1 / step cost (4.6-4.9x for the wts arms, recipe 4.5x). FTM at this budget <= 4.9-5.0x for every wts arm (upper bound: below dense f1952, 0.843 at 1,531 PF, the lowest dense point the record used); recipe 4.6-4.7x."
+   },
+   {
+    "title": "2-seed 8k means vs the recipe",
+    "cols": [
+     "arm",
+     "rows/task",
+     "step cost (x dense)",
+     "8k seed 0",
+     "8k seed 1",
+     "8k 2-seed mean",
+     "gap vs recipe"
+    ],
+    "rows": [
+     [
+      "recipe lora64all32r20to7",
+      "1,952",
+      "0.221",
+      0.846,
+      0.847,
+      0.8465,
+      "-"
+     ],
+     [
+      "wtsS0wr (recipe top-k, routed warmup, no dense step)",
+      "1,952",
+      "0.219",
+      0.837,
+      0.859,
+      0.848,
+      "+0.0015"
+     ],
+     [
+      "wtsS2aT5 (sampled at both cuts, temp 0.5)",
+      "1,952",
+      "0.215",
+      0.84,
+      0.837,
+      0.8385,
+      "-0.0080"
+     ],
+     [
+      "wtsS2aH (sampled @7, top-k @16)",
+      "1,952",
+      "0.218",
+      0.847,
+      0.826,
+      0.8365,
+      "-0.0100"
+     ],
+     [
+      "wtsS2aT5H (as S2aH, temp 0.5)",
+      "1,952",
+      "0.218",
+      0.81,
+      0.864,
+      0.837,
+      "-0.0095"
+     ],
+     [
+      "wtsS4k (half keeps, top-k)",
+      "1,952",
+      "0.189",
+      0.819,
+      0.823,
+      0.821,
+      "-"
+     ],
+     [
+      "wtsS4aH (half keeps, sampled @7)",
+      "1,952",
+      "0.188",
+      0.814,
+      0.796,
+      0.805,
+      "-0.016 vs S4k"
+     ]
+    ],
+    "note": "eval_size 500/cell per seed, no-cot. SE of a 2-seed 4-task mean ~0.006. Means computed from the record's per-seed values; S4 arms are below the lowest dense point, FTM <= 5.6x (upper bound)."
+   },
+   {
+    "title": "8k rung, 3,904 rows/task (976 steps, local mt4f3904 shard), seed 0",
+    "cols": [
+     "arm",
+     "8k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong",
+     "step cost (x dense)",
+     "peak GiB",
+     "FTM 8k"
+    ],
+    "rows": [
+     [
+      "recipe (s0 / sd1)",
+      ".882 / .889",
+      ".977 / .973",
+      ".918 / .926",
+      ".970 / .967",
+      ".663 / .689",
+      "0.220",
+      "26.9 / 20.2",
+      "3.61x / 3.94x"
+     ],
+     [
+      "wtsS2aH",
+      0.877,
+      0.967,
+      0.918,
+      0.945,
+      0.679,
+      "0.218",
+      "24.2",
+      "3.55x"
+     ],
+     [
+      "wtsS2aT5",
+      0.876,
+      0.971,
+      0.908,
+      0.966,
+      0.659,
+      "0.215",
+      "24.2",
+      "3.54x"
+     ],
+     [
+      "wtsS0wr (recipe, no dense step)",
+      0.884,
+      0.972,
+      0.936,
+      0.973,
+      0.655,
+      "0.219",
+      "24.2",
+      "3.82x"
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot. wts arms 1 seed (seed 0); recipe 2 seeds. FTM from the record (dense curve 1,952 -> 7,808 rows/task)."
+   },
+   {
+    "title": "S4: half the recipe's keeps (7:0.1,16:0.035), 1,952 rows/task",
+    "cols": [
+     "arm",
+     "8k mean",
+     "contra",
+     "nq",
+     "outlier",
+     "oolong",
+     "step cost (x dense)",
+     "peak GiB"
+    ],
+    "rows": [
+     [
+      "wtsS4k (top-k) s0 / sd1",
+      ".819 / .823",
+      ".942 / .936",
+      ".930 / .902",
+      ".777 / .784",
+      ".626 / .668",
+      "0.189",
+      "23.9"
+     ],
+     [
+      "wtsS4aH (sampled at 7) s0 / sd1",
+      ".814 / .796",
+      ".922 / .924",
+      ".876 / .886",
+      ".818 / .743",
+      ".638 / .633",
+      "0.188",
+      "23.9"
+     ]
+    ],
+    "note": "eval_size 500/cell, no-cot, 2 seeds each. Both arms are below the lowest dense point: FTM <= 5.6x (upper bound)."
+   }
+  ],
+  "chart": {
+   "title": "8k mean, 1,952 rows/task (2-seed means where a seed 1 exists, else seed 0)",
+   "unit": "4-task 8k mean, eval_size 500/cell, no-cot",
+   "labels": [
+    "dense",
+    "wtsS0wr (top-k, warmup routed)",
+    "wtsS1 (sampled, no weights)",
+    "wtsS2a (weights: attention)",
+    "wtsS2g (weights: DeltaNet)",
+    "wtsS2b (weights: both)",
+    "wtsS3 (price rule, cuts 7/16)",
+    "wtsS3d (price, alloc=doc)",
+    "wtsS3m (price, 6 cuts)",
+    "wtsS2aT5 (2-seed mean)",
+    "wtsS2aT2 (attention weights, temp 0.2)",
+    "wtsS1T2 (no weights, temp 0.2)",
+    "wtsS3aT5 (price, attention weights, temp 0.5)",
+    "wtsS2aH (2-seed mean)",
+    "wtsS2aT5H (2-seed mean)",
+    "wtsS3aT2",
+    "wtsS0wr (2-seed mean)",
+    "wtsS2aHm02c16",
+    "wtsS4k (2-seed, 0.19x)",
+    "wtsS4aH (2-seed, 0.19x)"
+   ],
+   "series": [
+    {
+     "name": "8k mean",
+     "values": [
+      0.843,
+      0.837,
+      0.79,
+      0.827,
+      0.815,
+      0.822,
+      0.795,
+      0.795,
+      0.789,
+      0.8385,
+      0.829,
+      0.833,
+      0.82,
+      0.8365,
+      0.837,
+      0.832,
+      0.848,
+      0.841,
+      0.821,
+      0.805
+     ]
+    }
+   ],
+   "refs": [
+    {
+     "name": "recipe",
+     "value": 0.8465
+    }
+   ],
+   "ymin": 0.75,
+   "ymax": 0.9
+  }
+ },
+ {
+  "date": "2026-11-10",
+  "status": "done",
+  "track": "Infra",
+  "who": "side session (gpu-workflow-audit)",
+  "title": "GPU usage + workflow audit, 10-20 to 11-10: where 6,705 GPU-h went, what was lost, and what changed (GPU audit tab)",
+  "result": "6,705 GPU-h over 10-20 -> 11-10 (Beaker 4,954 / jsteinhardt 1,190 / Lambda 560 / berkeleynlp 1). The largest loss is preempted Beaker training restarting from step 0: 1,083 GPU-h (16%; 309 attempts, 304 at minRuntime 1 h). Beaker jobs spent 60% of their lifetime pending (2-GPU p90 wait 2.97 h jupiter-only vs 0.81 h jupiter+ceres), while jsteinhardt ran at 23% of its 8-GPU preemptive_high cap. Decided 11-10: minRuntime = min(4h, 1.3x expected) with a resume point past 4 h (adopted); small short jobs (<= ~2 GPUs, <= 2 h) spill to jsteinhardt or wherever they start (adopted); allocated Beaker usage is fine (the 'always unallocated' rule is retired); jupiter+ceres as a Beaker default deferred ('ask me about this again later'); jsteinhardt: at most 8 GPUs at preemptive_high across sessions, more at preemptive if available. Built: ops capacity, the minRuntime auto default + --resume-interval, and the local slurm fast8k eval (submit_eval_local.py; 8/8 cells within 0.002 of Beaker on the recipe checkpoint). Branch not merged into prasann/flopdrop_clean. No eval metrics (infra audit). Full page: the GPU audit tab here and https://claude.ai/artifact/AxWXjBS1jDQy51MtGszd3d. Record records/gpu-usage-workflow-audit-2026-11.md, branch claude/gpu-workflow-audit-8833c4 (e790ae6b2).",
+  "match": "-",
+  "record": "records/gpu-usage-workflow-audit-2026-11.md",
+  "branch": "claude/gpu-workflow-audit-8833c4 (e790ae6b2)",
+  "tables": [
+   {
+    "title": "GPU-hours lost or unused by cause, 10-20 -> 11-10",
+    "cols": [
+     "cause",
+     "GPU-h"
+    ],
+    "rows": [
+     [
+      "Beaker training preempted, restarted from step 0",
+      1083
+     ],
+     [
+      "preempted eval / smoke / probe attempts",
+      100
+     ],
+     [
+      "slurm / Lambda training preempted",
+      47
+     ],
+     [
+      "failed attempts (457, 171 training)",
+      233
+     ],
+     [
+      "cancelled while running (incl. deliberate kills)",
+      234
+     ],
+     [
+      "completed evals with no result row after 24 h (597 jobs)",
+      173
+     ],
+     [
+      "same training run on two pools (33 runs, smaller copy)",
+      53
+     ],
+     [
+      "unregistered jobs (94 attempts)",
+      36
+     ],
+     [
+      "smokes, all (154; 71 failed or cancelled)",
+      77
+     ],
+     [
+      "unused jsteinhardt cap during Beaker backlog (capacity, not held)",
+      691
+     ]
+    ],
+    "note": "From the record's waste table (research/common/gpu_audit/data/summary.json). Per week: divide by 3.1. Categories overlap (smokes include failed smokes)."
+   }
+  ]
+ },
+ {
+  "date": "2026-11-10",
+  "status": "done",
+  "track": "mechanism",
+  "who": "side session (context-fidelity probe)",
+  "title": "Context-fidelity probe: can cheap stand-ins for dropped tokens keep the kept tokens' gradients dense-like? (no training)",
+  "result": "Mostly no. One cut at block 7, keep 20% per document; eval_size 512 rows (128/task), no-cot, frozen ckpts. Dense f1952: plain drop keeps expected gradient cos (Adam) 0.06 / 0.08 / 0.02 (router / random / attribution); the exact forward with no gradient through the dropped tokens restores 0.99 / 0.96 / 1.00 and CE exactly, at 0.553 of a dense step (1.81x vs drop 2.70x): what the dropped tokens give is forward context only. Best cheap stand-in = their stale block-7 state fed to EVERY layer incl. DeltaNet: 0.42 / 0.19 / 0.39 and 63% / 45% / 74% of the CE gap at 0.426 (2.35x). The same state in attention layers only closes 23-39% of CE and little gradient (DeltaNet context is what matters); refresh at block 15, per-doc / per-64-span means with log-count bias (span1 check reproduces frozen) and ridge linear corrections close ~nothing (corrections cut hidden error 15-29% but make the gradient worse). Partial stale (Prasann): 20% / 50% of the dropped tokens give 30% / 49% of the router's CE gap but expected cos only 0.10 / 0.20. Recipe ckpt: plain drop already 0.88 / 0.16 / 0.91; stale context slightly hurts the router (0.81, CE +0.007); bound 0.98. None raises the per-step ceiling; worth a screen only as a way to make aggressive keeps (5-10%) or the early phase trainable — next cheap step is this probe at keep 5-10% on the early-phase checkpoints. Record records/context-fidelity-probe.md, branch claude/gallant-robinson-adc54a (814ba80de); figure research/token_routing/context_fidelity/figs/context_fidelity.png on the branch.",
+  "match": "same 512 unseen fresh-pool rows as the gradient-gap probe; dense f1952 and recipe lora64all32r20to7 f1952 checkpoints",
+  "record": "records/context-fidelity-probe.md",
+  "branch": "claude/gallant-robinson-adc54a (814ba80de)",
+  "tables": [
+   {
+    "title": "Dense f1952 checkpoint (eval_size 512): expected gradient cos with dense and answer CE (dense 0.109)",
+    "cols": [
+     "variant",
+     "step cost (speedup)",
+     "router: exp cos Adam / raw",
+     "random: exp cos Adam / raw",
+     "attribution: exp cos Adam / raw",
+     "router: CE",
+     "random: CE",
+     "attribution: CE"
+    ],
+    "rows": [
+     [
+      "drop",
+      "0.371 (2.70x)",
+      "0.06 / 0.03",
+      "0.08 / 0.03",
+      "0.02 / 0.12",
+      "0.313",
+      "0.373",
+      "0.176"
+     ],
+     [
+      "stale, attention only",
+      "0.382 (2.62x)",
+      "0.14 / 0.25",
+      "0.20 / 0.17",
+      "0.45 / 0.66",
+      "0.266",
+      "0.298",
+      "0.150"
+     ],
+     [
+      "refresh at 15",
+      "0.389 (2.57x)",
+      "0.11 / 0.24",
+      "0.14 / 0.16",
+      "0.25 / 0.47",
+      "0.275",
+      "0.314",
+      "0.153"
+     ],
+     [
+      "mean per doc",
+      "0.371 (2.70x)",
+      "0.07 / 0.01",
+      "0.09 / 0.05",
+      "0.06 / 0.12",
+      "0.317",
+      "0.411",
+      "0.185"
+     ],
+     [
+      "mean per 64-span",
+      "0.371 (2.70x)",
+      "0.07 / 0.04",
+      "0.09 / 0.04",
+      "0.06 / 0.14",
+      "0.315",
+      "0.409",
+      "0.186"
+     ],
+     [
+      "linear corr. [h7]",
+      "0.371 (2.70x)",
+      "-0.07 / 0.03",
+      "-0.02 / 0.01",
+      "-0.11 / 0.09",
+      "0.320",
+      "0.416",
+      "0.203"
+     ],
+     [
+      "linear corr. [h7;h16]",
+      "0.371 (2.69x)",
+      "-0.06 / 0.03",
+      "-0.01 / 0.04",
+      "-0.12 / 0.10",
+      "0.317",
+      "0.435",
+      "0.204"
+     ],
+     [
+      "stale 20%, all layers",
+      "0.382 (2.62x)",
+      "0.10 / 0.14",
+      "0.08 / 0.08",
+      "-0.02 / 0.13",
+      "0.251",
+      "0.319",
+      "0.165"
+     ],
+     [
+      "stale 50%, all layers",
+      "0.399 (2.51x)",
+      "0.20 / 0.26",
+      "0.09 / 0.05",
+      "0.03 / 0.20",
+      "0.212",
+      "0.274",
+      "0.147"
+     ],
+     [
+      "stale, all layers",
+      "0.426 (2.35x)",
+      "0.42 / 0.46",
+      "0.19 / 0.09",
+      "0.39 / 0.49",
+      "0.184",
+      "0.253",
+      "0.126"
+     ],
+     [
+      "fresh K/V (diag.)",
+      "0.553 (1.81x)",
+      "0.31 / 0.13",
+      "0.85 / 0.44",
+      "0.59 / 0.55",
+      "0.160",
+      "0.116",
+      "0.135"
+     ],
+     [
+      "exact fwd, no grad (bound)",
+      "0.553 (1.81x)",
+      "0.99 / 0.95",
+      "0.96 / 0.62",
+      "1.00 / 0.96",
+      "0.109",
+      "0.109",
+      "0.109"
+     ]
+    ],
+    "note": "Probe, no training: one cut at block 7, keep 20% per document, 512 unseen fresh-pool rows pooled (eval_size 512; ⚠ 128 per task, so no per-task numbers here), 32 batches of 16 rows. Expected cos = cos(E[R], E[D]) from cross-batch terms (jackknife SE ±0.00-0.09, in the record). Step cost analytic (6 x params per token with gradient, 2 x params forward-only, attention pairs charged); best-case per-step speedup = 1 / step cost. Selections: router = ridge emulation of the online router, random = uniform, attribution = gradient-attribution top-k. Stale 20% / 50% rows come from a separate run (f1952st, same rows; its random selections differ, so their random column is compared within that run, where drop = 0.09 / 0.01 and stale-all = 0.22 / 0.13)."
+   },
+   {
+    "title": "Recipe checkpoint (eval_size 512): expected gradient cos with dense and answer CE (dense 0.121)",
+    "cols": [
+     "variant",
+     "step cost (speedup)",
+     "router: exp cos Adam / raw",
+     "random: exp cos Adam / raw",
+     "attribution: exp cos Adam / raw",
+     "router: CE",
+     "random: CE",
+     "attribution: CE"
+    ],
+    "rows": [
+     [
+      "drop",
+      "0.371 (2.70x)",
+      "0.88 / 0.81",
+      "0.16 / 0.15",
+      "0.91 / 0.86",
+      "0.135",
+      "0.256",
+      "0.120"
+     ],
+     [
+      "stale, attention only",
+      "0.382 (2.62x)",
+      "0.81 / 0.75",
+      "0.19 / 0.22",
+      "0.82 / 0.76",
+      "0.136",
+      "0.225",
+      "0.121"
+     ],
+     [
+      "refresh at 15",
+      "0.389 (2.57x)",
+      "0.79 / 0.77",
+      "0.15 / 0.18",
+      "0.83 / 0.77",
+      "0.136",
+      "0.245",
+      "0.120"
+     ],
+     [
+      "mean per doc",
+      "0.371 (2.70x)",
+      "0.67 / 0.66",
+      "0.15 / 0.20",
+      "0.79 / 0.77",
+      "0.144",
+      "0.291",
+      "0.133"
+     ],
+     [
+      "mean per 64-span",
+      "0.371 (2.70x)",
+      "0.66 / 0.66",
+      "0.15 / 0.21",
+      "0.79 / 0.77",
+      "0.144",
+      "0.290",
+      "0.128"
+     ],
+     [
+      "linear corr. [h7]",
+      "0.371 (2.70x)",
+      "0.89 / 0.82",
+      "0.16 / 0.17",
+      "0.92 / 0.85",
+      "0.136",
+      "0.270",
+      "0.121"
+     ],
+     [
+      "linear corr. [h7;h16]",
+      "0.371 (2.69x)",
+      "0.86 / 0.80",
+      "0.14 / 0.18",
+      "0.91 / 0.84",
+      "0.137",
+      "0.272",
+      "0.122"
+     ],
+     [
+      "stale 20%, all layers",
+      "0.382 (2.62x)",
+      "0.90 / 0.81",
+      "0.24 / 0.24",
+      "0.92 / 0.88",
+      "0.136",
+      "0.236",
+      "0.124"
+     ],
+     [
+      "stale 50%, all layers",
+      "0.399 (2.51x)",
+      "0.86 / 0.77",
+      "0.24 / 0.25",
+      "0.90 / 0.91",
+      "0.138",
+      "0.238",
+      "0.125"
+     ],
+     [
+      "stale, all layers",
+      "0.426 (2.35x)",
+      "0.81 / 0.76",
+      "0.23 / 0.26",
+      "0.83 / 0.84",
+      "0.142",
+      "0.240",
+      "0.129"
+     ],
+     [
+      "fresh K/V (diag.)",
+      "0.553 (1.81x)",
+      "0.91 / 0.87",
+      "0.80 / 0.64",
+      "0.95 / 0.90",
+      "0.123",
+      "0.128",
+      "0.120"
+     ],
+     [
+      "exact fwd, no grad (bound)",
+      "0.553 (1.81x)",
+      "0.98 / 0.85",
+      "0.91 / 0.70",
+      "0.98 / 0.91",
+      "0.121",
+      "0.121",
+      "0.121"
+     ]
+    ],
+    "note": "Probe, no training: one cut at block 7, keep 20% per document, 512 unseen fresh-pool rows pooled (eval_size 512; ⚠ 128 per task, so no per-task numbers here), 32 batches of 16 rows. Expected cos = cos(E[R], E[D]) from cross-batch terms (jackknife SE ±0.00-0.09, in the record). Step cost analytic (6 x params per token with gradient, 2 x params forward-only, attention pairs charged); best-case per-step speedup = 1 / step cost. Selections: router = ridge emulation of the online router, random = uniform, attribution = gradient-attribution top-k. On the recipe checkpoint the attribution selection's drop CE gap is ~0 (0.120 vs dense 0.121), so read its CE directly. The dense step's own cross-batch cos is 0.027 (Adam), so per-step cosines are noise-bound."
+   }
+  ],
+  "chart": {
+   "title": "Expected gradient cos with dense (Adam), dense f1952 checkpoint, keep 20% after block 7",
+   "unit": "cos(E[R], E[D])",
+   "labels": [
+    "drop",
+    "stale, attention only",
+    "refresh at 15",
+    "mean per doc",
+    "mean per 64-span",
+    "linear corr. [h7]",
+    "linear corr. [h7;h16]",
+    "stale 20%, all layers",
+    "stale 50%, all layers",
+    "stale, all layers",
+    "fresh K/V (diag.)",
+    "exact fwd, no grad (bound)"
+   ],
+   "series": [
+    {
+     "name": "router",
+     "values": [
+      0.06,
+      0.14,
+      0.11,
+      0.07,
+      0.07,
+      -0.07,
+      -0.06,
+      0.1,
+      0.2,
+      0.42,
+      0.31,
+      0.99
+     ]
+    },
+    {
+     "name": "random",
+     "values": [
+      0.08,
+      0.2,
+      0.14,
+      0.09,
+      0.09,
+      -0.02,
+      -0.01,
+      0.08,
+      0.09,
+      0.19,
+      0.85,
+      0.96
+     ]
+    },
+    {
+     "name": "attribution",
+     "values": [
+      0.02,
+      0.45,
+      0.25,
+      0.06,
+      0.06,
+      -0.11,
+      -0.12,
+      -0.02,
+      0.03,
+      0.39,
+      0.59,
+      1.0
+     ]
+    }
+   ],
+   "refs": [],
+   "ymin": -0.2,
+   "ymax": 1.0
+  }
+ },
+ {
   "date": "2026-11-04",
   "status": "done",
   "track": "sft4",

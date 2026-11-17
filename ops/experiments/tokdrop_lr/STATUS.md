@@ -13,13 +13,15 @@ records:
   - records/multiview-cached-h7.md (branch claude/multiview-h7cache, unmerged: k late-stack views per row from cached h7)
   - records/tokdrop-large-data-decay.md (branch claude/tokdrop-decay-fix, unmerged)
   - records/grad-routing-gap.md (branch claude/grad-routing-gap, unmerged; training flags on claude/grad-routing-gap-train)
+  - records/oracle-threshold-sweep.md (branch claude/oracle-thresh-sweep-69bc7d, unmerged: oracle per-doc 0.95→0.60 + matched random + dense f488/f976)
   - records/sparse-backward.md (branch claude/sparse-backward, unmerged)
   - records/oracle-selection-training.md (branch claude/oracle-train-bd7414, unmerged)
   - records/tokdrop-model-scale-ablation.md (branch claude/recipe-scale-ablation-71d007, unmerged)
   - records/oracle-tokens-under-routing.md (branch claude/grad-support-tokens, unmerged: 0.95 oracle token sets under true routing, frozen dense)
   - records/posid-reset-recipe-ablation.md (branch claude/posid-reset-0abac3, unmerged: position-id reset after each cut; -0.026/-0.015 8k, outlier only)
   - records/tail-rule-recipe-ablation.md (branch claude/posid-reset-0abac3, unmerged: fixed per-document tail instead of the router; -0.10 / -0.065 8k)
-  - records/tokdrop-handoff-2026-11-09.md (START HERE for a new main agent: goal, state locations, results, traps)
+  - records/tokdrop-handoff-2026-11-17.md (START HERE for a new main agent: every open thread, sessions, jobs, pending decisions at 11-17)
+  - records/tokdrop-handoff-2026-11-09.md (background: goal, recipe, mechanism picture, what was ruled out before 11-09)
   - records/perrow-floor-recipe-ablation.md (branch claude/otr-perrow-minfloor @ 315f37b03, unmerged: per-row budget; ties / trails at 1,952 and 3,904)
   - records/cross-row-allocation.md (branch claude/cross-row-alloc, unmerged: step threshold ties, selective backprop loses)
   - records/mt11-64k-length-generalization.md (branch claude/mt11-lengen-bed337, unmerged: gain persists to 128k/256k)
@@ -32,7 +34,7 @@ artifacts:
   - https://claude.ai/artifact/Y15xcuaVDVhz737nw9g5VZ (multi-view block-7 cache, 10-30 overnight)
   - https://claude.ai/artifact/9vAYqzh69sXf1RjVFfsnNV (oracle token-selection training, 9 arms, 11-04; record oracle-selection-training.md)
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/f8k-lra-q35-4b
-next_step: (11-09) Handoff: records/tokdrop-handoff-2026-11-09.md. RECIPE unchanged (whole-model LoRA, router 7:0.2,16:0.07, per-document): 8k-only FTM 4.6x / 3.6x / >=4.5x at 1,952 / 3,904 / 7,808 rows/task. Every >=5x idea so far failed (sparse backward, multi-view, KV-only, layer skip, aggressive keep, late widening; per-row / cross-row allocation, position-id reset, fixed tail rule, oracle-selection training all tie or lose). NOTHING RUNNING; all side sessions archived. PENDING PRASANN: larger-data push (15,616 rows, 11-task, 32k-64k); new approach to blocks 0-6; merge side branches; offered: per-layer router-vs-true-gradient check, two-cut orcbatchr2. METRIC (Prasann 11-02): rank by the 8k rung; 2k secondary.
+next_step: (11-17) CURRENT HANDOFF: records/tokdrop-handoff-2026-11-17.md (open: keep fraction vs context length 2k-64k session running; early-loss proxy / auto-research loop paused by Prasann; body below not yet closed out for 11-10..11-17). (11-09) Earlier handoff: records/tokdrop-handoff-2026-11-09.md. RECIPE unchanged (whole-model LoRA, router 7:0.2,16:0.07, per-document): 8k-only FTM 4.6x / 3.6x / >=4.5x at 1,952 / 3,904 / 7,808 rows/task. Every >=5x idea so far failed (sparse backward, multi-view, KV-only, layer skip, aggressive keep, late widening; per-row / cross-row allocation, position-id reset, fixed tail rule, oracle-selection training all tie or lose). NOTHING RUNNING; all side sessions archived. PENDING PRASANN: larger-data push (15,616 rows, 11-task, 32k-64k); new approach to blocks 0-6; merge side branches; offered: per-layer router-vs-true-gradient check, two-cut orcbatchr2. METRIC (Prasann 11-02): rank by the 8k rung; 2k secondary.
 ---
 
 # tokdrop_lr
@@ -376,3 +378,109 @@ routed pass applied), `--oracle-*` flags, router `--st-otr-score oracle`; launch
 - All 7 side sessions archived; branches pushed; their ignored results copied to
   OLMo-core-archive/worktree_files/<worktree>/.
 
+
+## Weighted token sampling (2026-11-10, side session; branch claude/weighted-token-sampling-041da9)
+- Replaces the recipe's fixed two-stage top-k with sampled survival (exact inclusion probs), token weights w = 1/p in
+  attention (log w key bias) and Gated DeltaNet (exact w-fold write: g*w, 1-(1-b)^w and a value rescale), IPW router fit,
+  then a price rule p = clip(s/(tau sqrt(c)), pmin, 1) with a FLOP controller. No dense steps (warmup routed).
+  Flag `--st-otr-wts`; launcher research/token_routing/wts/launch_wts.py; record records/weighted-token-sampling.md.
+  Run tags `wts*` (names f8k-mt4-wts<stage>[sdN]-f1952-wts-lr1e-05[-loc]); state research/token_routing/wts/state.json.
+- Baseline measured from the recipe's Beaker log: 0.221x dense cumulative FLOPs, peak 26.9 GiB allocated / GPU.
+- 11-10: 19 unit tests pass (H200). S1 (sampled, no weights) and S2b (both weights) trained on mooney (0.215x each);
+  checkpoints -> S3 -> weka for Beaker evals. S2a / S2g / S0wr queued on Beaker. Open: peak memory creeps 27 -> 30.4 GiB
+  over training in the wts runs (recipe flat); memory probe running.
+
+## Oracle threshold sweep + matched random controls (2026-11-10/11, side session; branch claude/oracle-thresh-sweep-69bc7d)
+
+Record `records/oracle-threshold-sweep.md`; code/data `research/token_routing/oracle_train/` (collect_sweep.py →
+sweep_table.json, make_sweep_fig.py → sweep_pareto.png, sel_stats.py → sel_stats/). Per-document oracle (single cut
+@7, f1952, 1 seed each) at attribution-cos 0.90/0.85/0.80/0.70/0.60, per-row 0.90 + random x1.15, four per-doc random
+controls, dense f488/f976. eval_size 500/cell, no-cot.
+- 8k mean (keep, step cost): oracle 0.95 .850 (35.5%, .365) · 0.90 .824 (18.3%, .264) · 0.85 .837 (13.1%, .234) ·
+  0.80 .721 (12.0%, .227) · 0.70 .648 (4.5%, .184) · 0.60 .643 (1.7%, .168) · row .733 (34.8%, .362);
+  random .841 (19.7%) · .813 (17.7%) · .796 (11.7%) · .769 (9.7%); dense f488 .667 · f976 .712 · f1952 .843;
+  recipe .846 (FTM 4.60x). Best oracle FTM 4.16x (0.85).
+- Verdict: oracle ≈ random at ~18% keep (.824 vs .813/.841, within seed noise ~±0.03), random wins at ~12%
+  (.796 vs .721; outlier .740 vs .409); ≤5% keep sits on the dense matched-FLOP line. Oracle picks pile onto each
+  document's first tokens (outlier first-8-token share 27–71% vs 5% uniform); routed train CE far below dense at
+  ≤0.80 (leak). Per-row + random: gold keep .774 vs distractor .334, routed CE .106 vs dense .184; random does not fix it.
+- Same eval path: 0.90/0.80 re-scored on local slurm, within 0.004/cell of Lambda (one cell 0.009).
+- Trap fixed: `run_eval_lambda.sbatch` picked `stepN` resume dirs (no config.json) → every eval died in 22 s (836ae96a8).
+- Checkpoints: S3 `_transfer/oracle/runs/<run>` (cubbins runs + dense), cubbins `/data/prasann/oracle/runs/` (all incl.
+  0.90/0.80 -lam), Lambda hp02 `/tmp/prasann/oracle/runs/`. No open jobs.
+
+### wts update 2026-11-11 (side session, branch claude/weighted-token-sampling-041da9, record records/weighted-token-sampling.md)
+- S1-S3 scored at 1,952 rows/task, seed 0 (eval_size 500/cell, local slurm eval): every wts arm trails the recipe
+  (8k mean .846/.847) — S0wr (top-k, routed warmup) .837, S2a (attn weights) .827, S2b .822, S2g .815, S3 .795,
+  S3d .795, S1 .790, S3m .789. Step cost 0.213-0.219, peak 24.1-25.8 GiB (recipe 0.221, 26.9). The gap is outlier
+  (recipe .86; wts .67-.81); weights recover most of the sampling loss; empty documents are not the cause (S3d).
+- Diag memory creep explained and fixed (router-link copies in the diag); no-diag peak 24.1 GiB.
+- Round 2 training on mooney at preemptive (sharper score temp, attention-only weights): S2aT5, S2aT2, S1T2, S3aT5,
+  each chained to a local eval. Beaker S1/S2b eval twins cancelled.
+
+### wts round 2 (2026-11-11)
+
+- Sharper sampling scores close the outlier gap (1,952 rows/task, seed 0, eval_size 500 per cell, no-cot): wtsS2aT5
+  (attention weights, temp 0.5) 8k mean **0.840** (outlier 0.841) vs recipe 0.846 / 0.847 (inside the ~0.008 SE), at
+  0.215x step cost and 24.2 GiB peak (recipe 0.221x, 26.9 GiB). wtsS1T2 (no weights, temp 0.2) 0.833; wtsS2aT2 0.829;
+  price rule wtsS3aT5 0.820 (from 0.795).
+- Round 3 on mooney (`preemptive`, chained to local evals): wtsS2aT5 seed 1, wtsS2aT5H and wtsS2aH (new `hard=1`:
+  recipe top-k at block 16, sampling at block 7), wtsS3aT2.
+- Record: `records/weighted-token-sampling.md` (branch claude/weighted-token-sampling-041da9, 5dd252e3d).
+
+### wts round 3 (2026-11-11)
+
+- **wtsS2aH** (sampled + attention weights at block 7, recipe top-k at block 16 via `hard=1`) 8k mean **0.847** =
+  recipe 0.846 / 0.847, at 0.218x and 24.2 GiB (seed 0, 1,952 rows/task, eval_size 500 per cell, no-cot).
+  wtsS2aT5 seed 1 0.837 (2-seed mean 0.8385). wtsS2aT5H 0.810 (outlier 0.757; seed 1 running). Price rule wtsS3aT2
+  0.832 at 0.203x.
+- Running on mooney (`preemptive`, chained to local evals): wtsS2aH seed 1, wtsS2aT5H seed 1, wtsS2aH and wtsS2aT5 at
+  3,904 rows/task (new node-local shard /data/prasann/oracle/shards/mt4f3904; recipe 0.882 / 0.889).
+- Launcher fixes: full-length local runs always save the final model; local runs read their budget's shard.
+
+### wts round 4 (2026-11-11)
+
+- 2 seeds, 1,952 rows/task (eval_size 500 per cell, no-cot): wtsS2aH 0.847 / 0.826 (mean 0.8365), wtsS2aT5H
+  0.810 / 0.864 (0.837), wtsS2aT5 0.840 / 0.837 (0.8385); recipe 0.846 / 0.847. Sampled arms swing ±0.05 on outlier
+  across seeds; the recipe's two seeds agree to 0.001.
+- 3,904 rows/task: wtsS2aH 0.877, wtsS2aT5 0.876 vs recipe 0.882 / 0.889 (0.215-0.218x, 24.2 GiB vs 26.9).
+- Verdict so far: about 0.009 under the bar at both budgets. The routed-warmup recipe wtsS0wr (no dense step, top-k
+  at both cuts) is also 0.837, so the gap may be the missing dense step 1.
+- Round 5 running on mooney (`preemptive`, chained to local evals): wtsS0wr seed 1, wtsS0wr at 3,904, wtsS1H,
+  wtsS2aT2H (code 48b18efe9).
+
+### wts round 5 (2026-11-11)
+
+- wtsS0wr (recipe top-k, no dense step) seed 1 0.859 (2-seed 0.848) and 0.884 at 3,904 rows: it matches the recipe,
+  so the ~0.01 gap of the best wts arms is the sampling. wtsS1H (no weights) 0.773, wtsS2aT2H 0.823.
+- Round 6 running on mooney (`preemptive`, chained to local evals, code c9dcf2809): wtsS2aHc16, wtsS2aHc07,
+  wtsS2aHm02, wtsS2aHm02c16 (clip log w / uniform share 0.02, top-k at block 16).
+
+### wts round 6 (2026-11-11)
+
+- Weight-tail / uniform-share fixes (all top-k at block 16, one seed): clip log w 1.6 0.817, 0.7 0.819, mix 0.02
+  0.806, both 0.841. None closes the gap. Pooled: 9 sampled-at-block-7 runs 0.828 (sd 0.019) vs 4 top-k runs 0.847
+  (sd 0.009). Seed noise ~0.02 on the 8k mean, so single-seed screens are no longer informative.
+- S4 running (code 1e65c64a1): half the recipe's keeps (7:0.1,16:0.035, ~0.18x), top-k wtsS4k vs wtsS4aH, seeds 0/1.
+
+### wts S4 and verdict (2026-11-11)
+
+- S4, half the recipe's keeps (7:0.1,16:0.035; 0.189x, 23.9 GiB), 2 seeds: top-k wtsS4k 0.819 / 0.823, sampled
+  wtsS4aH 0.814 / 0.796. Sampling loses here too.
+- **Verdict: weighted token sampling is negative.** It never matches top-k: ~-0.02 at 1,952 rows, -0.007 at 3,904,
+  -0.016 at half the keeps. S5 not run. Record: records/weighted-token-sampling.md.
+- **Side result worth keeping:** the recipe without its dense step 1 (wtsS0wr, `--st-otr-warmup-random`) matches the
+  recipe (2-seed 0.848; 0.884 at 3,904 rows) at 24.2 GiB peak instead of 26.9.
+- No jobs running. Leftover step0/step400 dirs under mooney /data/prasann/wts/runs/ can be deleted.
+
+## 2026-11-17: early-loss-proxy full-run validation (pool mtb16k, branch loop/validate @ 787581912)
+- Runs (Beaker, 16 rows/step, micro 2, seq 16,384, 2 GPUs; dense full FT 4 GPUs): dense LoRA f4/f2/f1 = 375/754/1496 PF,
+  recipe f2 223 PF, recipe f1 x2 seeds 442 PF, dense full FT f1 1982 PF. Ckpts weka ctc_suite/ckpts/elpv-*.
+- Eval: suite rows contradiction_iid/outlier/reorder/qdmatch_nq x 4k/8k/16k, eval_size 500, qafter, ctc-grade, no-cot
+  (84 cells in ops). reorder ~0 with parse_rate 0-0.72 for EVERY arm incl. dense full FT (strict grader): no signal, excluded.
+- 3-task 9-cell mean: dense LoRA .743/.825/.882 (f4/f2/f1); recipe f2 .822, f1 .899/.895; dense full FT f1 .928.
+  8k-only 3-task: LoRA .760/.847/.906; recipe f2 .850, f1 .931/.925; dense FT .946.
+- FTM vs dense-LoRA curve: recipe f2 3.3x (8k 3.5x); recipe f1 >=3.4x (beats LoRA f1). Proxy said 1.9-2.2x: ranking holds,
+  ratio underestimated. But dense FULL FT f1 beats dense LoRA f1 by +0.046 and the recipe f1 by +0.031 (8k +0.018): vs full FT
+  the recipe does not reach the reference (<4.5x). Proxy CE showed full FT ~= LoRA; it missed this.
+- Files: research/token_routing/early_loss_proxy/validation/{launch_val,collect_val,table_val}.py, results.json, table.json.

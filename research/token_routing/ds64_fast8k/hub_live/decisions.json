@@ -1,0 +1,44 @@
+{
+ "base": ["v2", "recipe"],
+ "ladder_base": ["v2", "dense"],
+ "ladder": [
+  {"label": "Dense full fine-tune", "what": "every token, every block, all weights trained", "alts": [["v2", "dense"]]},
+  {"label": "+ LoRA on all blocks", "what": "rank-64 adapters, base frozen (best of LR 1e-5 and 2e-5)", "alts": [["v2", "denselora"], ["v2", "denselora2e5"]]},
+  {"label": "+ drop tokens at random", "what": "one cut after block 7 keeping 19% at random, the recipe's FLOPs", "alts": [["v2", "rnd19"]]},
+  {"label": "+ learned router, two cuts (the recipe)", "what": "ridge router keeps 20% after block 7 and 7% after block 16", "alts": [["v2", "recipe"]]},
+  {"label": "+ half the rows short (1k-2k)", "what": "the recipe on the 50/50 short/long pool", "alts": [["deep", "rc-mix50"]]},
+  {"label": "+ length curriculum", "what": "the same pool with a growing row-length cap", "alts": [["rowsbk", "r_mix50curr"]]}
+ ],
+ "groups": [
+  {"name": "Which tokens are kept", "items": [
+   {"label": "Random tokens instead of the router (same FLOPs)", "arm": ["v2", "rnd19"]},
+   {"label": "Random tokens, keep 9% after block 7", "arm": ["keep", "rnd9"]},
+   {"label": "Sample the kept set instead of top-k", "arm": ["keep", "wtsS1"]},
+   {"label": "Score by early-exit loss gradient (block 7)", "arm": ["earlyloss", "ee7"]},
+   {"label": "Gold-aware stochastic keep", "arm": ["goldrand", "grJ"]}]},
+  {"name": "How many tokens are kept", "items": [
+   {"label": "Keep 10% / 3.5% (recipe: 20% / 7%)", "arm": ["keep", "agg1"]},
+   {"label": "Keep 5% / 2%", "arm": ["keep", "agg2"]},
+   {"label": "Keep 2% / 1%", "arm": ["keep", "agg3"]}]},
+  {"name": "What runs where in the stack", "items": [
+   {"label": "Freeze blocks 0-6 (forward-only)", "arm": ["prefixl", "png7wr"]},
+   {"label": "First cut at block 4, gradient everywhere", "arm": ["prefixl", "ps4"]},
+   {"label": "Skip the FFN for half the body tokens, blocks 0-6", "arm": ["ffnskip-lam", "a50"]},
+   {"label": "Context forward-only from block 7", "arm": ["detach", "cd7"]},
+   {"label": "Context forward-only from block 16", "arm": ["detach", "cd16"]}]},
+  {"name": "Optimiser", "items": [
+   {"label": "LR 2e-5 (recipe: 1e-5)", "arm": ["hp", "recipe-lr2e5"]},
+   {"label": "LR 4e-5", "arm": ["hp", "recipe-lr4e5"]},
+   {"label": "8 rows per step (recipe: 16)", "arm": ["hp", "recipe-gb8"]},
+   {"label": "8 rows per step, LR 2e-5", "arm": ["hp", "recipe-gb8-lr2e5"]}]},
+  {"name": "Starting checkpoint", "items": [
+   {"label": "Base pretrained with token drop (token-exit CPT)", "arm": ["cptbase", "dcpt-recipe"]}]},
+  {"name": "Which rows are trained on", "items": [
+   {"label": "Half the rows short (1k-2k), 400 steps", "arm": ["deep", "rc-mix50"]},
+   {"label": "80% short rows", "arm": ["short", "rc-mix80"]},
+   {"label": "Only rows up to 5k tokens", "arm": ["rowsbk", "r_cut5k"]},
+   {"label": "Half short rows + loss-proportional sampling", "arm": ["alloc", "m50ema11"]},
+   {"label": "Half short rows + length curriculum", "arm": ["rowsbk", "r_mix50curr"]},
+   {"label": "Multi-question rows", "arm": ["mq", "rc-mq"]}]}
+ ]
+}

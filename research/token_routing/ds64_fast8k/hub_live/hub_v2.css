@@ -1,0 +1,66 @@
+/* ---- v2 (2026-11-17): overview, two-level navigation, folded detail ---- */
+.layout { grid-template-columns: 250px minmax(0, 1fr); }
+nav.toc { gap: 0; max-height: 100vh; overflow-y: auto; align-content: start; }
+.tocin { display: grid; gap: 12px; }
+.grp { display: grid; gap: 1px; }
+nav.toc a.gh { display: block; padding: 6px 10px 3px; font: 600 .7rem/1.25 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+nav.toc a.gh span { display: inline; margin-right: 6px; }
+nav.toc a.gh i { font-style: normal; }
+nav.toc a.gh i.gs { display: none; }
+nav.toc a.gh:hover { background: transparent; color: var(--fg); }
+.grp.on a.gh { color: var(--fg); }
+.grp.home a.gh { font-size: .8rem; padding: 8px 10px; border-radius: 4px; }
+.grp.home.on a.gh { background: var(--surface); box-shadow: inset 2px 0 0 var(--c2); }
+.secs { display: grid; gap: 1px; }
+.secs a { padding: 5px 10px 5px 14px; }
+nav.toc a i.badge { font: 600 .62rem/1 var(--mono); font-style: normal; letter-spacing: .05em; text-transform: uppercase; color: var(--c1); border: 1px solid var(--c1); border-radius: 999px; padding: 2px 5px; margin-left: auto; }
+.secbar { display: none; }
+.part > .parthead h1 { font: 600 2rem/1.15 var(--display); margin: 0; text-wrap: balance; }
+/* in-page jump row */
+.jump { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; font-size: .8rem; margin-top: -10px; }
+.jump > span { font: 500 .68rem/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+.jump a { text-decoration: none; padding: 3px 8px; border: 1px solid var(--rule); border-radius: 999px; color: var(--fg); background: var(--surface); }
+.jump a:hover { border-color: var(--c2); color: var(--c2); }
+.part section h2, .part h2[id] { scroll-margin-top: 70px; }
+/* folded detail */
+details.more { border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); padding: 0; min-width: 0; }
+details.more > summary { cursor: pointer; padding: 8px 12px; font-size: .86rem; color: var(--fg); list-style-position: inside; }
+details.more > summary .mh { font: 500 .68rem/1 var(--mono); color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 7px; margin-left: 6px; white-space: nowrap; }
+details.more > summary:focus-visible { outline: 2px solid var(--c2); outline-offset: 2px; }
+details.more[open] > summary { border-bottom: 1px solid var(--rule); }
+details.more > .note, details.more > .tbl { margin: 10px 12px 12px; }
+details.more > .tbl { margin: 0; border-radius: 0 0 6px 6px; }
+details.more > p.note.sv { background: transparent; border: 0; }
+p.note.sv { color: var(--fg); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px; max-width: 90ch; font-size: .9rem; }
+/* overview */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(185px, 100%), 1fr)); gap: 12px; }
+a.tile { display: grid; gap: 6px; align-content: start; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; color: var(--fg); text-decoration: none; min-width: 0; }
+a.tile:hover { border-color: var(--c2); }
+a.tile b { font: 600 1.7rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+a.tile span { font-size: .8rem; line-height: 1.4; color: var(--muted); }
+.map { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); gap: 14px; }
+.mapgrp { border-top: 2px solid var(--fg); padding-top: 8px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.mapgrp h3 { font: 600 1rem/1.25 var(--display); margin: 0; }
+.mapgrp h3 a { color: var(--fg); text-decoration: none; }
+.mapgrp ul { list-style: none; padding: 0; display: grid; gap: 6px; }
+.mapgrp li { margin: 0; max-width: none; font-size: .86rem; line-height: 1.4; }
+.mapgrp li a { font-weight: 600; display: block; }
+#ovLive .lr { margin: 0 0 6px; }
+#ovLive ul { margin-top: 4px; }
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { display: block; max-height: none; overflow: visible; padding-block: 0; background: var(--bg); border-bottom: 1px solid var(--rule); top: env(safe-area-inset-top, 0px); }
+  .tocin { display: flex; overflow-x: auto; gap: 2px; padding-block: 6px 2px; scrollbar-width: thin; }
+  .grp { display: block; flex: 0 0 auto; }
+  .secs { display: none; }
+  nav.toc a.gh i.gl { display: none; } nav.toc a.gh i.gs { display: inline; }
+  nav.toc a.gh { white-space: nowrap; padding: 6px 10px; border-radius: 999px; font-size: .68rem; }
+  .grp.on a.gh { background: var(--fg); color: var(--bg); }
+  .grp.home.on a.gh { background: var(--fg); color: var(--bg); box-shadow: none; }
+  .secbar { display: flex; overflow-x: auto; gap: 2px; padding-block: 2px 6px; scrollbar-width: thin; }
+  .secbar:empty { display: none; }
+  .secbar a { white-space: nowrap; padding: 5px 9px; font-size: .82rem; }
+  .part section h2, .part h2[id] { scroll-margin-top: 110px; }
+  .part { scroll-margin-top: 110px; }
+}
+@media (max-width: 760px) { .part > .parthead h1 { font-size: 1.6rem; } a.tile b { font-size: 1.4rem; } }

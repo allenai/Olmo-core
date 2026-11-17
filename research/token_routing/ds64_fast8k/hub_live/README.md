@@ -1,13 +1,80 @@
-# Live tokdrop_lr hub snapshot
+# Live tokdrop_lr hub
 
-`hub.html` is the page published at https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (private). It has drifted from
-`../make_overview_page.py`: the Gradient maps (6b), Selection ablations (6c) and Prior work (8b) tabs, the
-concentration / router-accuracy sections and the per-entry log tables exist only here. Edit this file (or rerun the
-builders) rather than regenerating from `make_overview_page.py`, which would drop them.
+`hub.html` is the page published at https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt (private). Reorganized 2026-11-17
+(old flat 16-tab page: version 1794947058-c158, kept in `REORG_PLAN.md` terms). **This file is the source: edit it
+(or run the small builders below) rather than regenerating from `../make_overview_page.py`**, which has none of the later tabs.
+`hub.html` is the authored page (no `<!doctype>` skeleton); `action: "read"` returns the same page wrapped in the skeleton,
+and every builder below works on either form.
 
-- `../experiment_log.json` is spliced into `const D_LOG` on every update. Entries may carry `tables`, `chart` and `figs`;
-  the log renders them under "Show ...", and `<div data-logfig="<title prefix>">` blocks in the tabs render them as figures.
-- `build_nov_tabs.py` adds the 6c / 8b tabs and the 128k-256k and router-accuracy sections (data: `sel_ops.json`,
-  numbers from `ops result show`); `log_extras.json` holds the per-entry tables extracted from the records (2026-11-09).
-- Gradient-map PNGs are published under `gradmaps/` from `research/token_routing/grad_concentration/gradmaps/`
-  (branch `claude/grad-support-tokens`).
+## Structure
+
+An **Overview** landing part, then six groups; each old tab is a section (`.part`) and **keeps its old id**, so old links work.
+
+| group (id) | sections (ids) |
+|---|---|
+| Overview (`overview`) | bottom line, five numbers, running now (filled by the auto-research script), map of the page |
+| 1 Best method and how it is measured (`g-best`) | `summary`, `sft4` |
+| 2 Scale and length (`g-scale`) | `sft11`, `models`, `cpt` |
+| 3 What was tried and what is next (`g-tried`) | `autoresearch` (live), `selection`, `ruledout`, `next`, `priorwork` |
+| 4 Mechanism and analysis (`g-mech`) | `mechanism`, `gradmaps` |
+| 5 Cost and infrastructure (`g-cost`) | `memory`, `gpuaudit` |
+| 6 Log and provenance (`g-log`) | `log`, `provenance` |
+
+Layout follows the PAIL Workbench: a site title, row 1 of tabs = Overview + the six groups, row 2 = the sections of the active group
+(on a phone both rows scroll sideways). Each section opens on its verdict, then a hero (chart or key table), then **section bars**
+(`<details class="sec">`: heading, counts of charts / tables, verdict snippet; the first bar of a part, or all bars of a part with 3 or fewer, start open;
+"Expand all / Collapse all" per part). Long tables (12+ rows) and long notes sit in `<details class="more">`. Tabs are built at run time from
+`data-group`, `data-order`, `data-short` (and optional `data-badge`) on each `<div class="part" id="...">` and the group list in
+`<script type="application/json" id="hubgroups">`. Deep links: `#<part id>`, `#<group id>` (first section), `#<part>--<heading-slug>` (opens the bar).
+
+**Add a section:** append `<div class="part" id="myid" data-group="g-tried" data-order="6" data-short="Nav label">` with a
+`.parthead` (eyebrow, `h2.ptitle`, `p.verdict`: the verdict first) and `<section><h2>` blocks. Nothing else needs editing.
+**Add a group:** add an entry to `#hubgroups` (`id`, `title`, `short`, `blurb`). A part with no known group lands under "More".
+Charts are `<canvas>` + data in the page's `const D` script (Chart.js 4.4.1 from cdnjs); the router already fires a resize
+when a part is shown, so charts in hidden sections size correctly.
+
+## Refresh the auto-research tab (hourly; done by the loop's hub-tab agent)
+
+Source of truth: `research/token_routing/early_loss_proxy/hub_tab/` (branch `claude/early-loss-proxy-d6e886`):
+`build_autoresearch_tab.py` (copy also here) and `loop_state.json` (keys: status, updated, setup, log, ideas, best_by_hour,
+depth, board, curves, validation, pilot). Copy of the state: `autoresearch_state.json`.
+
+```bash
+python3 research/token_routing/early_loss_proxy/hub_tab/build_autoresearch_tab.py HUB.html --state research/token_routing/early_loss_proxy/hub_tab/loop_state.json
+```
+
+then `node --check` the inline scripts and publish HUB.html to the same artifact URL (read the live page first; if a newer
+version exists, run the builder on that version, never force). The builder replaces the blocks between
+`<!-- AR:PART:START -->`/`END` and `<!-- AR:SCRIPT:START -->`/`END` in place (first run: part before `provenance`, script at the
+end; legacy `AUTORESEARCH` blocks are stripped). It is idempotent, does not touch the navigation, and also fills the
+overview's "Running now" box. Context-length tabs (Weighted 16k-heavy by default, 16k, 8k, 4k, all-lengths mean) drive the stat strip, hero chart, glance bars, idea list and arm tables; the per-length speedups are recomputed by the builder from `curves[i].by` (reference pool = the `v2` tag, weights 4k 20% / 8k 30% / 16k 50% in `LENSETS`), the same method as `score.py`, and the builder checks them against `board[i].x` (1100 of 1100 levels match). Layout (PAIL style): verdict line and stat strip; "Best so far, over time" (step chart, table folded);
+
+**`keeplen` part (Scale and length, first section, in progress).** Everything between `<!-- KEEPLEN:START -->` and `<!-- KEEPLEN:END -->` in `hub.html` is the part's replaceable body (three section bars: question and design, what is known, results at 32k and 64k); the group-overview line above the START marker and the part header stay. The session "Keep fraction vs context length (32k/64k proxy)" (`keepfrac-len`) replaces the body in place and updates the part's verdict line and badge; follow the usual publish procedure (read the live page first, never force).
+
+**Per-task views.** A second button row ("Or one task") switches every number on the tab (strip, hero chart, glance bars, decisions, arm tables) to the held-out CE of one task (contradiction, outlier, reorder, qdmatch_nq; all lengths pooled, about 40-48 rows each, so very noisy). The speedups are recomputed from `curves[i].by["task/<name>"]` like the length metrics (`TASKSETS` in the builder). Hovering a bar, an arm-table speedup cell or a hero-chart point shows the same number split by task.
+
+**Where the gain comes from (`decisions.json`).** The section after the glance bars splits a speedup into decisions with the same per-length curves, against another ARM instead of the dense-LoRA reference: (1) a build-up ladder, dense full fine-tune -> + LoRA -> + random drop -> + router/two cuts (the recipe) -> + short-row pool -> + curriculum, each row compared at the deepest loss level every row reaches; (2) one change at a time against the plain recipe (`v2/recipe`), each at the deepest level that arm reached, whiskers = range over levels. `decisions.json` names the arms (tag, arm) and labels; edit it to add a row. The ratio at a level is (PF the base needs to reach its own loss at probe step k) / (PF the arm needs). The idea panels also say which arm and level a glance bar comes from (the bar is a max over arms and levels, so it favours a lucky shallow level). Copy `decisions.json` and `idea_impl.json` with the builder.
+
+**Idea notes (what each idea does and how it is implemented).** Every bar in "Every idea at a glance" folds open to a plain-language note: what it does, numbered implementation steps, the branch and trainer flags, a diagram (share of tokens that run each of the 32 blocks, or a row layout) and the result. The text lives in `idea_impl.json` (generated by `make_idea_impl.py`, which documents the diagram format; sources are the loop branches' flags and help text and the module docstrings). The builder reads `idea_impl.json` beside itself and attaches an entry to the idea with the same id, unless the loop wrote its own `how` field on the idea. A new idea with no entry falls back to the first sentence of its `what`; add an entry to `make_idea_impl.py`, re-run it and rebuild. Copy `idea_impl.json` along with the builder when the builder is copied elsewhere.
+"Every idea at a glance" (one bar per idea: best FLOP speedup, dashed line = plain recipe); "Ideas, with their verdicts" (one line per
+idea, grouped by outcome or by family, details and arms folded); FLOPs to reach a held-out loss; loss vs FLOPs (references, top arms and
+a selector for one idea's arms); validation runs; how it is scored; log newest first; 8k pilot. Every section is a bar with counts.
+Board rows map to ideas by `board[i].idea` (the family, from `hub_tab/arms.json`), then by `tag` (== idea id, or an alias in
+the script), then by the family's single idea; set `idea_id` on a row to pin it.
+
+## Other refreshes
+
+- Experiment log: `python3 update_log.py hub.html` splices `../experiment_log.json` into `const D_LOG`.
+- Verify a rebuild lost nothing: `python3 verify_reorg.py OLD.html NEW.html [DOM_DUMP.html STATE.json]`
+  (counts, ids, text blocks, data-script hashes; with `chrome --headless --dump-dom NEW#autoresearch` it checks every board row).
+- Gradient-map PNGs are published under `gradmaps/` from `research/token_routing/grad_concentration/gradmaps/`.
+
+## Files
+
+- `restyle_v3.py`, `hub_v3.css`, `hub_v3_nav.js`: second pass (PAIL layout): swaps the v2 CSS and nav for the tab rows and turns every `<section><h2>` into a bar. Run once on the v2 page; `hub.html` already has it applied.
+- `reorg_hub.py`, `hub_v2.css`, `hub_v2_nav.js`, `hub_v2_map.js`: the one-off transform that produced the grouped page from the
+  old one (kept for provenance; the CSS and the nav / overview scripts now live inside `hub.html`). `REORG_PLAN.md`: inventory and plan.
+- `legacy/`: `rebuild_hub.sh`, `build_nov_tabs.py`, `build_gpu_tab.py`, `patch_log_render.py`. They assembled the old flat page from
+  a v95 backup and edit the old navigation, so do not run them on the grouped page. Their data (`log_extras.json`, `sel_ops.json`,
+  `gpu_audit_data.json`) stay here; the tabs they built are already in `hub.html`.
+- Known stale item: the "Compute now" box on the log tab is a snapshot from 2026-10-30 (`const D_COMPUTE`); nothing refreshes it.

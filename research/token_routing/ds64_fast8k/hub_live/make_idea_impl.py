@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""Writes idea_impl.json: plain-language implementation notes for every idea on the auto-research tab.
+Sources: the loop branches' flags and help text (recipes/train/research_trainer/train_ctc_suite.py on each loop/<idea>
+branch), module docstrings (online_token_router.py, gold_doc_drop.py, longpos.py), build_*_pools.py, and the idea
+queue in loop_state.json.  Edit here, re-run, then rebuild the tab (build_autoresearch_tab.py reads idea_impl.json
+next to itself and attaches each entry to the idea with the same id unless the loop wrote its own `how`).
+
+Entry fields: one (bar label), does, steps[], flags, branch, diagrams[].
+Depth diagram  {"kind":"depth","name","segs":[[b0,b1,keep,mode]],"overlay":[...],"marks":[[block,text]],"note"}
+  blocks are 0..31 (Qwen3.5-4B: 24 Gated DeltaNet + 8 full-attention blocks at 3,7,...,31); keep = share of the row's
+  tokens that run the block; mode g = trained, n = forward-only (no gradient), f = attention/GDN only (FFN skipped),
+  c = run in chunks.
+Row diagram    {"kind":"row","name","segs":[[weight,kind,label]],"note"}  kind p prompt, d document, G gold document,
+  x removed, q query, a answer, s sub-question, gap = position gap, t / u / v pool shares.
+"""
+import json, os
+R = [[0, 7, 1, "g"], [7, 16, .2, "g"], [16, 32, .07, "g"]]
+H = {}
+H["ref"] = dict(
+  one="No dropping: every token runs all 32 blocks and gets a gradient (full fine-tune or LoRA).",
+  does="The yardstick. Plain training on the same rows. A method's speedup is how many fewer training FLOPs it needs than this to reach the same held-out loss.",
+  steps=["Dense forward and backward over the whole context, every block, every token.",
+         "Three versions: full fine-tune (LR 5e-6), LoRA rank 64 on all blocks at LR 1e-5, and the same at LR 2e-5 (LoRA costs 0.74x of full per step).",
+         "The loss is probed every 10 steps on held-out rows with the dense forward; the cheapest of the three at each loss level is the reference."],
+  flags="variant full / LoRA: --lora-rank 64 --lora-blocks 0 --lora-scale 32",
+  diagrams=[dict(kind="depth", name="Dense: every token in every block", segs=[[0, 32, 1, "g"]])])
+H["recipe"] = dict(
+  one="A learned scorer keeps 20% of document tokens after block 7 and 7% after block 16; the rest are removed from the sequence.",
+  does="All tokens run the first 7 blocks. A cheap linear router then ranks each document's body tokens and only the top ones continue. Dropped tokens leave the sequence, so every later block, forward and backward, gets cheaper. The final evaluation is always the dense forward.",
+  steps=["Blocks 0-6 run on every token (a fixed floor: about half of the recipe's step at 16k).",
+         "At block 7 the router keeps the top 20% of each document's body tokens (a tenth of that budget is drawn at random so the router still sees what it would never keep); at block 16 it keeps 7%.",
+         "Prompt, query, answer and document markers are never dropped.",
+         "The router is a ridge regression refit every optimiser step on that step's own gradient norms of the kept tokens (features: position in the document, query match, hidden state). No heuristic warm start: the first steps train dense.",
+         "LoRA rank 64 on all blocks, LR 1e-5; about 0.22x of dense cost per step."],
+  flags="--st-keep-token-rule online --st-otr-stages 7:0.2,16:0.07 --st-otr-explore-frac 0.1",
+  diagrams=[dict(kind="depth", name="Recipe: share of tokens that run each block", segs=R,
+                 note="Training only: inference stays dense over the full context.")])
+H["prefix"] = dict(
+  one="Run the first blocks forward-only (no backward, no stored activations) and start cutting tokens earlier.",
+  does="Blocks 0-6 are the cost floor of the recipe, so this idea freezes them and runs them under no_grad (charged a third of a normal block), then cuts tokens in more, earlier stages.",
+  steps=["Blocks 0 to k (k = 7, 16 or 20) and the embeddings are frozen and run forward-only on every pass.",
+         "Token cuts move earlier (first cut at block 2-4) with more stages; router targets for cuts below k are read at block k.",
+         "Measured: 0.149x dense per step (vs 0.22x) but the early blocks never learn, so held-out CE stalls (0.282 at step 60 vs about 0.19 for the recipe)."],
+  flags="--st-otr-nograd-until K", branch="loop/prefix",
+  diagrams=[dict(kind="depth", name="Frozen prefix (k = 7) with the recipe's cuts", segs=[[0, 7, 1, "n"], [7, 16, .2, "g"], [16, 32, .07, "g"]],
+                 note="Variants froze to block 16 or 20 and moved the first cut to block 2-4.")])
+H["goldrand"] = dict(
+  one="Drop whole distractor documents before block 0 and favour gold ones, without ever keeping only gold.",
+  does="Tokens in the gold documents (the ones the answer depends on) matter more, but keeping only gold is a shortcut that collapses training (contradiction 0.07 vs 0.89). So the keep decision is biased toward gold and stays random.",
+  steps=["Before block 0, a whole-document drop removes tokens from the row: every gold document is kept, plus a random fraction (per row, drawn from a range) of the distractors. The dropped text never enters any block, so it costs nothing.",
+         "On reorder and qdmatch rows almost every document is gold, so instead a random fraction of each document's body tokens is dropped.",
+         "A share of rows is left untouched (inference-like distribution), and the router gets a per-document gold prior with a per-row random strength.",
+         "Answers stay valid because documents carry their own display ids."],
+  flags="--st-gdd-keep-range lo,hi · --st-gdd-whole-frac · --st-otr-gold-prior G,N", branch="loop/goldrand",
+  diagrams=[dict(kind="row", name="One contradiction row: before and after the drop",
+                 segs=[[1, "p", "prompt"], [1, "d", "doc"], [1, "G", "gold"], [1, "d", "doc"], [1, "d", "doc"], [1, "G", "gold"], [1, "d", "doc"], [1, "q", "query"], [1, "a", "answer"]]),
+                dict(kind="row", name="After: gold kept, distractors thinned at random",
+                 segs=[[1, "p", "prompt"], [1, "x", ""], [1, "G", "gold"], [1, "d", "doc"], [1, "x", ""], [1, "G", "gold"], [1, "x", ""], [1, "q", "query"], [1, "a", "answer"]])])
+H["earlyloss"] = dict(
+  one="Pick tokens by the gradient of an early-exit loss at block 7 instead of by a learned scorer.",
+  does="A loss computed after block 7 (those states go through the final norm and LM head) gives true per-token gradients at full length for the cost of 7 blocks. That signal replaces the ridge router, and can also train the early blocks.",
+  steps=["After block 7, the answer CE is computed from the block-7 hidden states with the real LM head.",
+         "Tokens are scored by log of the norm of that loss's gradient with respect to their hidden state, and the top ones are kept.",
+         "Variants: add the early loss as an auxiliary loss, or train the early blocks by the early loss alone.",
+         "Measured: worse than the ridge router at the recipe's keep (0.213 vs 0.175 CE at step 75). The head is not trained for block-7 states, so its gradient is weak."],
+  flags="--st-otr-score eegrad --st-otr-ee-src · --st-otr-ee-weight", branch="loop/earlyloss",
+  diagrams=[dict(kind="depth", name="Same cuts as the recipe; the score comes from an early exit", segs=R, marks=[[7, "early-exit loss: scores the tokens"]])])
+H["detach"] = dict(
+  one="Context runs forward-only as constant keys, values and state; only the question and answer get gradients.",
+  does="The context tokens are processed under no_grad, then the query and answer tokens attend to that frozen context. The gradient path is only as long as the suffix, and the no-grad context pass can also drop tokens aggressively.",
+  steps=["Context tokens (up to the last document-close marker) run blocks k and deeper under no_grad as constant attention K/V and Gated DeltaNet state.",
+         "Only the suffix (query + answer) carries a gradient path there; optionally the last N context tokens join it, or every 4th step is an ordinary dense step.",
+         "The no-grad pass may use the recipe's token drops.",
+         "Measured: 0.15x of the recipe's efficiency with no drops, and still behind the recipe with them. The context's own representations get no training signal. The arms with activation checkpointing off, meant to show the memory side, produced no result."],
+  flags="--ctx-detach-layer K · --ctx-detach-stages · --ctx-detach-tail N · --ctx-detach-full-every k", branch="loop/detach",
+  diagrams=[dict(kind="depth", name="Context forward-only from block 0, recipe drops (cd0d)", segs=[[0, 7, 1, "n"], [7, 16, .2, "n"], [16, 32, .07, "n"]],
+                 overlay=[[0, 32, .07, "g"]], note="Thin solid band = query and answer tokens, the only ones with a gradient path.")])
+H["rows"] = dict(
+  one="Sample rows by expected loss gain per FLOP: short rows often, long 16k rows rarely.",
+  does="Rows differ a lot in cost. This idea trains on a length-dependent subset of the pool so cheap rows give most of the steps, and (planned) skips rows a cheap early-exit loss marks as already solved.",
+  steps=["Each row is kept with a probability that depends on its length: a power rule min(1, (len/L0)^-a) or a cut (1 up to L tokens, then probability p).",
+         "Measured arms: only rows up to 5k tokens (recipe 3.2-3.4x over dense LoRA down to CE 0.125, then it plateaus at 0.119 because no 8k or 16k rows are seen), long rows truncated to a label-valid document subset, a length curriculum, and token-budget batches.",
+         "The LR schedule stays that of the full pool unless a token budget is set."],
+  flags="--row-len-keep pow:L0:a | cut:L:p", branch="loop/rows",
+  diagrams=[dict(kind="row", name="Share of training rows by length (cut rule, up to 5k)", segs=[[3, "t", "1k-2k: every row"], [2, "u", "4k-5k: every row"], [1, "x", "8k-16k: a tail"]])])
+H["subproblem"] = dict(
+  one="Train mostly on short rows built from fewer documents, mixed with 4k-16k rows.",
+  does="A row with many documents contains many smaller problems of the same kind. Short rows are cheap, and mixed with a few full-length rows they teach most of the task. The answer is always valid for the documents that are in the row.",
+  steps=["For each task, short rows (about 1k and 2k tokens) are generated with the suite's generators and the same converter, with fewer documents. Rows whose gold documents occur in any eval rung file are excluded.",
+         "Pools of 1,952 rows per task: 80/20 (781 x 1k, 781 x 2k, 130 each of 4k / 8k / 16k) and 50/50 (488 + 488 short, 325 each of 4k / 8k / 16k), taken in the long pool's shuffled order.",
+         "The recipe trains on these pools; dense LoRA on the same pools is the control (it gains only 1.4-1.5x with token-budget batches).",
+         "Measured: 3.1-3.4x on the 80/20 pool over dense LoRA at CE 0.125 (plain recipe 1.9-2.2x). On the 16k rows alone only 1.1-1.2x ahead of the plain recipe (56 rows, noisy)."],
+  flags="research/token_routing/early_loss_proxy/build_short_pools.py (pools mtbmix80, mtbmix50)",
+  diagrams=[dict(kind="row", name="80/20 pool: share of rows", segs=[[4, "t", "1k rows 40%"], [4, "u", "2k rows 40%"], [2, "v", "4k, 8k, 16k 20%"]]),
+            dict(kind="row", name="50/50 pool: share of rows", segs=[[2.5, "t", "1k 25%"], [2.5, "u", "2k 25%"], [5, "v", "4k, 8k, 16k 50%"]])])
+H["ffnskip"] = dict(
+  one="Context tokens stay in attention but skip most FFNs, instead of leaving the sequence.",
+  does="The FFN is 41-62% of a block's per-token FLOPs. Rather than dropping a token, keep it for attention and the Gated DeltaNet mixing and skip its feed-forward layer.",
+  steps=["Document-body tokens skip the FFN of chosen blocks with probability p, but stay in the sequence for attention / GDN.",
+         "Evaluation runs every FFN, so training adapts to FFN-free tokens that the dense eval forward then runs through the FFN.",
+         "Measured: skipping with p = 0.5 in blocks 0-6 costs 0.193x (recipe 0.220x) but reaches only 0.274 CE at step 50 vs 0.201; skipping every body-token FFN in blocks 0-3 stops learning (0.779)."],
+  flags="--ffn-skip-layers 0-6:0.5 (a-b:p)", branch="loop/ffnskip",
+  diagrams=[dict(kind="depth", name="FFN skipped for body tokens in blocks 0-6 (p = 0.5), recipe cuts after", segs=[[0, 7, 1, "f"], [7, 16, .2, "g"], [16, 32, .07, "g"]])])
+H["cptbase"] = dict(
+  one="Start the recipe from a checkpoint pretrained with token dropping.",
+  does="If a base was continued-pretrained with token drops, it may lose less when dropping aggressively. No pretraining is run inside the loop; existing drop-CPT checkpoints are used.",
+  steps=["Look for existing drop-CPT checkpoints (token-exit CPT base, and a dense-CPT control).",
+         "Run the router recipe from each and from the standard base at the same keep.",
+         "Measured: 0.65-0.77x of the recipe's efficiency at matched loss, no better than the standard base (0.71x at keep 10% / 3.5%)."],
+  branch="loop/cptbase")
+H["hparams"] = dict(
+  one="Retune learning rate and rows per step for a cheap step: more, smaller steps per FLOP.",
+  does="A cheap step can afford a higher learning rate or a smaller batch. Everything else is the recipe.",
+  steps=["Recipe arms: LR 2e-5, LR 4e-5, 8 rows per step, 8 rows at LR 2e-5 (baseline: 16 rows, LR 1e-5).",
+         "Dense LoRA at LR 2e-5 and 4e-5 as references; the better of them is used as the reference everywhere.",
+         "Measured: 0.85x / 0.61x / 0.74x / 0.62x of the recipe's efficiency, so none helps."],
+  flags="--global-batch 8 · LR per arm")
+H["cptnative"] = dict(
+  one="Fine-tune drop-pretrained checkpoints in their own exit format: token exit at block 8 or at the input.",
+  does="A drop-CPT base was pretrained with tokens leaving the stack at a fixed compression (0.2 / 0.1 / 0.05). Fine-tune it the same way, from it and from the standard base.",
+  steps=["Token exit at block 8 and at the input (first + last rule), compression 0.2 / 0.1 / 0.05.",
+         "Same arms from the matching CPT base and from the standard base.",
+         "Measured: input-level exit improves for 25-50 steps and then degrades on the dense probe from both bases (never below 0.69); exit at block 8 ties the two bases (0.233 vs 0.238) and trails the recipe."],
+  branch="loop/cptnative",
+  diagrams=[dict(kind="depth", name="Exit at block 8, keep 10%", segs=[[0, 8, 1, "g"], [8, 32, .1, "g"]]),
+            dict(kind="depth", name="Exit at the input, keep 10%", segs=[[0, 32, .1, "g"]])])
+H["multiq"] = dict(
+  one="Append 8-32 extra sub-questions, derived from the row's gold, after the answer: more supervision per context.",
+  does="The context is paid for once; extra answers cost only their own tokens. Each row keeps its prompt and original answer byte for byte, then gets extra chat turns before the end-of-text.",
+  steps=["Sub-questions per task: which claim contradicts claim i, is document i an outlier, which passage follows passage x (and put these passages in order), which document answers query q.",
+         "Number of extra turns by row length: 2 (1k), 4 (2k), 8 (4k), 16 (8k), 32 (16k); positives take up to half, negatives fill the rest.",
+         "The loss covers the original answer and every sub-answer.",
+         "Measured: the sub-answers add 2-3x the supervised tokens but dilute the main answer's loss: 0.124 CE at 220 PF vs 180-210 PF for the plain recipe. A weighted variant was not tried."],
+  flags="research/token_routing/early_loss_proxy/build_mq_pools.py (pool suffix _mq)",
+  diagrams=[dict(kind="row", name="Row with extra turns",
+                 segs=[[1, "p", "prompt"], [5, "d", "documents (same as before)"], [1, "q", "query"], [1, "a", "answer"], [.8, "s", "Q1 A1"], [.8, "s", "Q2 A2"], [.8, "s", "… up to 32"]])])
+H["alloc"] = dict(
+  one="Sample the next rows by each task × length cell's running training loss per FLOP.",
+  does="Instead of drawing rows uniformly, estimate each (task, length) cell's training loss and cost, and sample cells with a high loss per cost more often (reorder holds 5x the loss of the other tasks).",
+  steps=["Cells are (task, length rung); each keeps an exponential moving average of its training CE.",
+         "Sampling weight grows with the cell's EMA loss (exponent a) and is divided by its row cost (exponent b); a floor mixes the pool's own composition back in.",
+         "Also tried: a 16k-targeted rule, a fixed short-row minority, a stronger cost term, per-row vs per-token loss averaging, row-level backward skipping.",
+         "Measured: level with the plain recipe on the 16k held-out rows (1.0x with two seeds); all-lengths gain 1.0-1.3x that does not stack."],
+  flags="--alloc-mode ema --alloc-a --alloc-b --alloc-floor · --loss-row-pow", branch="loop/alloc")
+H["lenscale"] = dict(
+  one="Make the early blocks' attention document-local in training so their cost grows linearly with length.",
+  does="At 16k and beyond, the early blocks' full attention is quadratic in length. First the recipe's FLOPs are broken down at 4k-128k, then attention in the early blocks is restricted to each document in training.",
+  steps=["FLOP breakdown (flop meter's formulas): recipe cost vs dense 0.227 / 0.217 / 0.189 / 0.168 at 4k / 16k / 64k / 128k.",
+         "Training-only document-local attention in chosen blocks (block 3 only; blocks 3-15; all attention blocks); evaluation stays global.",
+         "Measured: even block 3 alone is 0.01-0.02 CE behind at every step for a 2.8% FLOP saving, and larger sets stall. A causal-mask control trains normally, so documents need cross-document attention."],
+  flags="--st-doclocal-blocks ... --st-doclocal-pattern", branch="loop/lenscale",
+  diagrams=[dict(kind="depth", name="Recipe, with block 3's attention document-local", segs=R, marks=[[3, "attention sees only its own document"]])])
+H["memscale"] = dict(
+  one="Run the early blocks chunk by chunk and cap the kept tokens, so peak memory stays flat to 1M tokens.",
+  does="The goal is memory, not FLOPs: long rows do not fit because the early blocks run on the whole row. Here they run in chunks and the later blocks see a fixed token budget, so the peak is one chunk plus the kept tokens.",
+  steps=["Blocks 0-6 run in 4k-token chunks: a first no-grad pass fills the keys, values and Gated DeltaNet state per chunk, then a second pass with gradient.",
+         "Kept tokens after the cut are capped at a fixed count (4,096), not a fraction.",
+         "Optional: checkpoint inputs of the early blocks are offloaded to pinned host memory.",
+         "Measured transient memory per 1k tokens: dense LoRA 0.37 GiB, recipe 0.24, chunked 0.10, plus cap 0.074, plus offload 0.040. Longest row on 141 GB: 128k dense, 256k recipe, 512k chunked, 1M capped, 2M offloaded. Learning at 16k unchanged."],
+  flags="--prefix-chunk · --st-otr-keep-cap 4096 · --prefix-chunk-offload", branch="loop/memscale",
+  diagrams=[dict(kind="depth", name="Early blocks in chunks (no-grad pass, then a gradient pass), recipe cuts", segs=[[0, 7, 1, "c"], [7, 16, .2, "g"], [16, 32, .07, "g"]],
+                 note="Later blocks see at most 4,096 kept tokens however long the row is.")])
+H["longpos"] = dict(
+  one="Give short rows long-range positions, and thin long rows by dropping documents but keeping their positions.",
+  does="Short rows only show the attention blocks distances below 2k. Position tricks make cheap rows carry long-range structure, so fewer full long rows are needed for the 16k loss. FLOPs per token are unchanged.",
+  steps=["Stretching: a short row keeps its tokens but its position ids span up to 16k; the extra positions are split at random into gaps before each document, and query and answer stay contiguous.",
+         "Document subsampling: a long row (12k+ tokens) drops a random share of its non-gold documents at the input; survivors keep their original position ids, so the row still spans its full length. Gold documents are always kept; reorder rows stay whole.",
+         "Training forwards only; the eval rows are untouched."],
+  flags="--longpos-stretch-prob · --longpos-stretch-short-max · --longpos-stretch-max · --longpos-docsub-keep", branch="loop/longpos",
+  diagrams=[dict(kind="row", name="Stretched short row: documents sit at random offsets",
+                 segs=[[1, "p", "prompt"], [1, "gap", "gap"], [1, "d", "doc"], [1.5, "gap", "gap"], [1, "d", "doc"], [.8, "gap", "gap"], [1, "d", "doc"], [1, "q", "query"], [1, "a", "answer"]],
+                 note="Gaps are position ids that no token uses."),
+            dict(kind="row", name="Thinned long row: removed documents leave their positions empty",
+                 segs=[[1, "p", "prompt"], [1, "d", "doc"], [1, "x", ""], [1, "G", "gold"], [1, "x", ""], [1, "x", ""], [1, "d", "doc"], [1, "q", "query"], [1, "a", "answer"]])])
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "idea_impl.json")
+json.dump(H, open(out, "w"), indent=1, ensure_ascii=False)
+print("wrote", out, len(H), "ideas")

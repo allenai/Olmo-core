@@ -5,8 +5,8 @@ updated: 2026-11-09
 experiment: tokdrop_lr
 area: token_routing
 kind: handoff
-status: current
-superseded_by: 
+status: superseded for current state (background still valid)
+superseded_by: tokdrop-handoff-2026-11-17.md
 artifact: https://claude.ai/artifact/SPSBxHFs2PUn5CPjJX3Wgt
 summary: Start here to take over tokdrop_lr as the main agent. The recipe (whole-model LoRA + online per-document router, 20% of document tokens after block 7, 7% after 16) trains Qwen3.5-4B to dense quality at ~4-4.6x fewer FLOPs (8k rung), and every attempt to reach 5-10x has failed. Covers the goal, where state lives (STATUS.md, experiment_log.json, hub source), results so far, what is ruled out, the mechanism picture, open options, working rules and traps. Nothing is running.
 ---

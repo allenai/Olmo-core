@@ -1,0 +1,623 @@
+{
+ "_source": "research/common/gpu_audit/data/{summary.json,daily_gpuh_pool.csv,waits.csv} on branch claude/gpu-workflow-audit-8833c4 (e790ae6b2), copied verbatim; daily_gpuh_pool's duplicated 2026-11-01 row (DST fall-back in analyze.py's day axis) kept once",
+ "window": [
+  "2026-10-20T07:00:00+00:00",
+  "2026-11-10T22:45:00+00:00"
+ ],
+ "gpuh_total": 6705,
+ "gpuh_by_pool": {
+  "beaker:jupiter": 2971,
+  "beaker:multi:jupiter+ceres": 1864,
+  "jsteinhardt:preemptive_high": 945,
+  "lambda:preemptive": 391,
+  "jsteinhardt:preemptive": 245,
+  "lambda:preemptive_high": 166,
+  "beaker:titan": 119,
+  "lambda:normal": 3,
+  "berkeleynlp": 1,
+  "beaker:ceres": 0,
+  "beaker:multi:saturn+neptune+jupiter+ceres": 0
+ },
+ "gpuh_by_experiment": {
+  "tokdrop_lr": 2035,
+  "olmo3_cptdrop": 1585,
+  "mt11_64k": 1079,
+  "learned_router": 616,
+  "pail_ar": 318,
+  "pail_benchmax": 302,
+  "pail_benchmax_wd": 163,
+  "pail_cpt": 134,
+  "ds64_fast8k": 125,
+  "pail_modelscale": 116,
+  "pail_benchmax_nr": 49,
+  "pail_ensemble": 47,
+  "UNREGISTERED": 36,
+  "pail_benchmax_scale": 32,
+  "grad_composition": 16,
+  "unassigned": 15,
+  "pail_benchmax_lm": 13,
+  "pail_ccdev": 7,
+  "setA_pareto": 5,
+  "pail_scale50k": 4,
+  "pail_webgen": 3,
+  "pail_benchmax_snap": 2,
+  "pail_weird": 2,
+  "sparsity_scale": 1,
+  "pail_autoresearch": 1
+ },
+ "gpuh_by_kind": {
+  "train": 4847,
+  "eval": 1657,
+  "smoke": 77,
+  "probe/bench": 52,
+  "data": 37,
+  "unregistered": 35
+ },
+ "beaker_report_gpuh": {
+  "allocated": 4871,
+  "unallocated": 119
+ },
+ "cap_use": {
+  "jst_ph_mean_gpus": 1.82,
+  "jst_ph_share_of_cap_hours": 0.227,
+  "jst_hours_at_cap": 92,
+  "jst_hours_zero": 375,
+  "lam_mean_gpus": 1.08,
+  "lam_share_of_16cap_hours": 0.067,
+  "lam_hours_zero": 419,
+  "lam_others_mean_gpus": 20.5,
+  "lam_free_mean_gpus": 2.42,
+  "hours": 520,
+  "bk_pending_mean_gpus": 16.0,
+  "bk_running_mean_gpus": 9.5,
+  "bk_running_peak": 99
+ },
+ "idle_while_beaker_waited": {
+  "hours_bk_pending_ge4": 168,
+  "jst_headroom_gpuh": 691,
+  "lam_free_gpuh": 467,
+  "lam_headroom_nopreempt_gpuh": 467
+ },
+ "wait_hist": {
+  "labels": [
+   "<1m",
+   "1-5m",
+   "5-15m",
+   "15-30m",
+   "30-60m",
+   "1-2h",
+   "2-4h",
+   "4-8h",
+   "8-24h",
+   ">24h"
+  ],
+  "beaker": [
+   1293,
+   730,
+   745,
+   839,
+   844,
+   629,
+   336,
+   147,
+   0,
+   0
+  ],
+  "jsteinhardt": [
+   266,
+   25,
+   22,
+   4,
+   5,
+   0,
+   13,
+   2,
+   0,
+   0
+  ],
+  "lambda": [
+   432,
+   159,
+   266,
+   184,
+   141,
+   52,
+   34,
+   0,
+   0,
+   0
+  ]
+ },
+ "wait_share_of_turnaround": {
+  "jsteinhardt": 0.169,
+  "berkeleynlp": 0.986,
+  "lambda": 0.573,
+  "beaker": 0.6
+ },
+ "beaker_preemptions": {
+  "n": 405,
+  "gpuh": 1159,
+  "train_n": 309,
+  "train_gpuh": 1083,
+  "after_min_runtime": 339,
+  "minrt0": 66
+ },
+ "beaker_preempt_gpuh_by_day": {
+  "2026-10-20": 0,
+  "2026-10-21": 0,
+  "2026-10-22": 154,
+  "2026-10-23": 67,
+  "2026-10-24": 87,
+  "2026-10-25": 77,
+  "2026-10-26": 103,
+  "2026-10-27": 20,
+  "2026-10-28": 21,
+  "2026-10-29": 50,
+  "2026-10-30": 311,
+  "2026-10-31": 45,
+  "2026-11-01": 60,
+  "2026-11-02": 26,
+  "2026-11-03": 5,
+  "2026-11-04": 99,
+  "2026-11-05": 0,
+  "2026-11-06": 35,
+  "2026-11-07": 0,
+  "2026-11-08": 0,
+  "2026-11-09": 0
+ },
+ "expected_vs_actual": {
+  "n": 4179,
+  "p10": 0.06,
+  "p50": 0.21,
+  "p90": 0.95,
+  "n_over_2x": 30,
+  "n_under_quarter": 2247,
+  "over_2x_gpuh": 528
+ },
+ "daily_pool_cols": [
+  "day",
+  "beaker",
+  "jsteinhardt",
+  "lambda",
+  "berkeleynlp"
+ ],
+ "daily_pool": [
+  [
+   "2026-10-20",
+   5.2,
+   4.1,
+   37.4,
+   0.0
+  ],
+  [
+   "2026-10-21",
+   1.2,
+   19.6,
+   54.1,
+   0.0
+  ],
+  [
+   "2026-10-22",
+   466.9,
+   126.5,
+   168.4,
+   0.1
+  ],
+  [
+   "2026-10-23",
+   511.2,
+   155.0,
+   78.4,
+   0.0
+  ],
+  [
+   "2026-10-24",
+   452.9,
+   303.4,
+   110.1,
+   0.0
+  ],
+  [
+   "2026-10-25",
+   398.1,
+   266.8,
+   51.2,
+   0.0
+  ],
+  [
+   "2026-10-26",
+   365.3,
+   77.4,
+   10.6,
+   0.0
+  ],
+  [
+   "2026-10-27",
+   142.6,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-10-28",
+   220.7,
+   24.4,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-10-29",
+   270.4,
+   58.4,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-10-30",
+   592.4,
+   102.6,
+   0.0,
+   0.4
+  ],
+  [
+   "2026-10-31",
+   98.9,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-01",
+   81.4,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-02",
+   154.8,
+   1.1,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-03",
+   67.5,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-04",
+   824.0,
+   41.1,
+   47.2,
+   0.0
+  ],
+  [
+   "2026-11-05",
+   55.8,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-06",
+   217.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-07",
+   19.6,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-08",
+   0.0,
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   "2026-11-09",
+   1.6,
+   0.0,
+   0.0,
+   0.0
+  ]
+ ],
+ "waits_cols": [
+  "pool",
+  "gpus",
+  "count",
+  "p50_h",
+  "p90_h",
+  "max_h"
+ ],
+ "waits": [
+  [
+   "beaker:attempt=first",
+   "all",
+   5157,
+   0.28,
+   1.89,
+   7.2
+  ],
+  [
+   "beaker:attempt=retry",
+   "all",
+   406,
+   0.06,
+   0.8,
+   6.1
+  ],
+  [
+   "beaker:ceres",
+   "1",
+   4,
+   0.11,
+   0.15,
+   0.1
+  ],
+  [
+   "beaker:ceres",
+   "all",
+   4,
+   0.11,
+   0.15,
+   0.1
+  ],
+  [
+   "beaker:jupiter",
+   "1",
+   901,
+   0.33,
+   1.04,
+   4.2
+  ],
+  [
+   "beaker:jupiter",
+   "2",
+   2681,
+   0.4,
+   2.97,
+   7.2
+  ],
+  [
+   "beaker:jupiter",
+   "3-4",
+   59,
+   0.84,
+   1.37,
+   2.8
+  ],
+  [
+   "beaker:jupiter",
+   "5-8",
+   118,
+   0.72,
+   3.03,
+   6.1
+  ],
+  [
+   "beaker:jupiter",
+   "all",
+   3759,
+   0.39,
+   2.35,
+   7.2
+  ],
+  [
+   "beaker:minRuntime=0",
+   "all",
+   145,
+   0.28,
+   2.05,
+   2.9
+  ],
+  [
+   "beaker:minRuntime=1h",
+   "all",
+   4575,
+   0.28,
+   1.92,
+   7.2
+  ],
+  [
+   "beaker:minRuntime=2h",
+   "all",
+   668,
+   0.15,
+   1.41,
+   3.0
+  ],
+  [
+   "beaker:minRuntime=3h",
+   "all",
+   110,
+   0.28,
+   1.19,
+   1.5
+  ],
+  [
+   "beaker:minRuntime=4h",
+   "all",
+   27,
+   0.08,
+   1.52,
+   2.2
+  ],
+  [
+   "beaker:minRuntime=5h",
+   "all",
+   5,
+   0.3,
+   1.22,
+   1.2
+  ],
+  [
+   "beaker:minRuntime=6h",
+   "all",
+   12,
+   0.05,
+   0.15,
+   0.8
+  ],
+  [
+   "beaker:minRuntime=7h",
+   "all",
+   8,
+   0.43,
+   1.31,
+   1.3
+  ],
+  [
+   "beaker:minRuntime=8h",
+   "all",
+   13,
+   0.24,
+   2.24,
+   2.9
+  ],
+  [
+   "beaker:multi:jupiter+ceres",
+   "1",
+   1396,
+   0.05,
+   0.56,
+   2.4
+  ],
+  [
+   "beaker:multi:jupiter+ceres",
+   "2",
+   222,
+   0.1,
+   0.81,
+   2.2
+  ],
+  [
+   "beaker:multi:jupiter+ceres",
+   "3-4",
+   22,
+   0.17,
+   1.23,
+   2.9
+  ],
+  [
+   "beaker:multi:jupiter+ceres",
+   "5-8",
+   14,
+   0.81,
+   1.56,
+   2.0
+  ],
+  [
+   "beaker:multi:jupiter+ceres",
+   "all",
+   1654,
+   0.06,
+   0.6,
+   2.9
+  ],
+  [
+   "beaker:titan",
+   "1",
+   145,
+   0.28,
+   2.05,
+   2.9
+  ],
+  [
+   "beaker:titan",
+   "all",
+   145,
+   0.28,
+   2.05,
+   2.9
+  ],
+  [
+   "berkeleynlp",
+   "1",
+   17,
+   0.01,
+   0.28,
+   35.3
+  ],
+  [
+   "berkeleynlp",
+   "all",
+   19,
+   0.01,
+   0.28,
+   35.3
+  ],
+  [
+   "jsteinhardt",
+   "1",
+   212,
+   0.0,
+   0.19,
+   3.1
+  ],
+  [
+   "jsteinhardt",
+   "2",
+   69,
+   0.0,
+   0.01,
+   0.1
+  ],
+  [
+   "jsteinhardt",
+   "3-4",
+   6,
+   0.01,
+   0.01,
+   0.0
+  ],
+  [
+   "jsteinhardt",
+   "5-8",
+   50,
+   0.0,
+   0.43,
+   5.1
+  ],
+  [
+   "jsteinhardt",
+   "all",
+   337,
+   0.0,
+   0.14,
+   5.1
+  ],
+  [
+   "lambda",
+   "1",
+   36,
+   0.0,
+   0.29,
+   0.4
+  ],
+  [
+   "lambda",
+   "2",
+   1232,
+   0.11,
+   0.8,
+   3.2
+  ],
+  [
+   "lambda",
+   "all",
+   1268,
+   0.1,
+   0.78,
+   3.2
+  ]
+ ]
+}

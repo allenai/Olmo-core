@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rebuild hub.html = v95 base + November tabs + pager fix + current experiment log.
+# Rebuild hub.html = v95 base + November tabs + GPU audit tab + pager fix + current experiment log.
 set -e
 S=/tmp/claude-3018/-accounts-projects-berkeleynlp-prasann-projects-OLMo-core/c664b673-5989-46a0-b9dc-b1019ba743c0/scratchpad
 R=/accounts/projects/berkeleynlp/prasann/projects/OLMo-core
@@ -7,6 +7,8 @@ cd $S
 cp hub_v95_backup.html hub.html
 python3 patch_log_render.py hub.html >/dev/null || true
 python3 build_nov_tabs.py hub.html
+python3 $R/research/token_routing/ds64_fast8k/hub_live/build_gpu_tab.py hub.html   # 8c GPU audit tab (data: hub_live/gpu_audit_data.json)
+python3 $R/research/token_routing/ds64_fast8k/hub_live/build_autoresearch_tab.py hub.html --state $R/research/token_routing/ds64_fast8k/hub_live/autoresearch_state.json || true   # 8d auto-research tab
 python3 - <<'PY'
 import json
 S=/tmp/claude-3018/-accounts-projects-berkeleynlp-prasann-projects-OLMo-core/c664b673-5989-46a0-b9dc-b1019ba743c0/scratchpad

@@ -202,7 +202,10 @@ job (`ops register --cluster beaker --job-id <id>`) and check it with `ops statu
 
 **Job priority — ALWAYS `urgent`, never lower.** Every Beaker/gantry job (training, eval, data build) must launch at `priority="urgent"` — exactly `urgent`: never `normal`/`high`/`low`, and not `immediate` either. Lower-priority jobs pend behind capacity; `urgent` preempts to get nodes. Set `BeakerLaunchConfig.priority = "urgent"`, pass `--priority urgent` to launchers, or bump a live job with `beaker job update-priority <job-id> urgent`. If you add or edit a launcher, make `urgent` its default.
 
-**minRuntime — ALWAYS set it (default `1h`).** Urgent jobs with `minRuntime=0` get a very long wait
+**minRuntime — size it to the run: `min(4h, 1.3 × expected runtime)`** (2026-11-10; `1h` only when no
+estimate exists), and give any run expected over 4 h a mid-run resume point. Beaker preempts our jobs
+soon after minRuntime, and restarts from step 0 cost 1,083 GPU-h (16%) over 10-20 → 11-10
+(`records/gpu-usage-workflow-audit-2026-11.md`). **Never `0`:** urgent jobs with `minRuntime=0` get a very long wait
 tail: over 14 days (to 2026-10-20) our 0s jobs had p90 waits of 10-12 h (amandab's 117 h), and every
 job stuck for days was a 0s job; with a minRuntime, p90 was ~1-1.5 h. Avoid 4-GPU requests on jupiter
 when 2 or 8 will do (4 was the slowest size we hit).
@@ -210,15 +213,19 @@ when 2 or 8 will do (4 was the slowest size we hit).
 1h; for gantry pass `--min-runtime 1h`, for `BeakerLaunchConfig` set `min_runtime="1h"`. A job stuck
 pending at `0s` must be cancelled and relaunched. Memory: [[beaker-min-runtime]].
 
-**Allocation — ALWAYS unallocated.** Beaker capacity is split into per-budget *allocations*
-(`beaker allocation list ai2/jupiter-cirrascale-2 --budget ai2/oe-other`: 14%/168 slots on
-jupiter, 15%/88 on ceres, all of it granted to the `ai2/oe-scaling` workspace group; nothing on
-saturn/neptune). A job is *allocated* only when its workspace is in that group, and allocated
-jobs consume the team's guaranteed quota. Our jobs must stay **unallocated + urgent**: launch
-from workspace `ai2/flex2` under budget `ai2/oe-other` and never from an oe-scaling workspace.
-There is no per-job flag; the workspace decides. Verify with
+**Allocation — allocated is fine (rule updated 2026-11-10).** Launch from workspace `ai2/flex2` under budget
+`ai2/oe-other` as before. That workspace now belongs to the `ai2/oe-scaling` group, so our jobs run
+*allocated* (98% of our Beaker GPU-hours over 10-20 → 11-10), and Prasann confirmed this is the intended
+state; the earlier "always unallocated" rule is retired. Check with
 `beaker report gpu-usage --organizations ai2 --users prasanns --since 7d -g allocated,cluster`
-(non-admins must pass the org filter). Status 2026-09-02: 100% of our GPU hours were unallocated.
+(non-admins must pass the org filter).
+
+**Small short jobs spill to jsteinhardt** (2026-11-10): evals, probes and short trainings of about 2 GPUs
+or fewer and 2 h or less go to jsteinhardt (or any pool where they start now) rather than waiting in a
+backed-up Beaker queue. On jsteinhardt that means at most 8 GPUs at `preemptive_high` across all sessions,
+plus more at `--qos=preemptive` when capacity is available (restartable work only: it can be bumped). `ops status` shows only our own
+jobs: check `squeue` on Lambda before starting there, since it is usually busy and a preemptive start
+ends another user's job.
 
 ## Testing
 

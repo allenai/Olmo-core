@@ -2,7 +2,7 @@
 experiment: mt11_64k
 title: Long-context, large-data 11-task CTC mix (rows to 64k, ~64M tokens/task) -- dense vs the mid-stack online token router at matched FLOPs
 status: active
-updated: 2026-11-04
+updated: 2026-11-14
 branch: prasann/mt11-64k (pushed; based on prasann/flopdrop_clean 177c76b05; worktree .claude/worktrees/mt11-64k)
 launcher: research/token_routing/mt11_64k/launch_mt11_64k.py (state.json beside it)
 records:
@@ -12,7 +12,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/5LcLKC8bT6MDfz6JcLLQ9n
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/m64-q35-4b
-next_step: LENGTH-GEN COMPLETE (2026-11-04, branch claude/mt11-lengen-bed337, record records/mt11-64k-length-generalization.md; all cells recorded in ops). Possible next (Prasann to choose): seeds; a small long-row tail in the <=16k mix.
+next_step: ROWS<=32K COMPLETE (2026-11-14, branch claude/mt11-lengen-32k-56ed58, record records/mt11-64k-length-generalization.md section 'rows <= 32k'; all 189 m32 cells in ops; artifact republished). Rows <=32k close 51-77% of the <=16k-vs-<=64k gap at 64k-256k but still trail 64k-data by 0.02-0.05 (mostly contradiction). Possible next (Prasann to choose): seeds; a small long-row tail (e.g. a few % of rows at 32-64k) in the <=16k/<=32k mix. Earlier: LENGTH-GEN COMPLETE (2026-11-04, branch claude/mt11-lengen-bed337).
 ---
 
 # mt11_64k
@@ -122,6 +122,33 @@ same FLOPs) at long eval lengths?
 - Titan preemptions: stalled cells rerun on jupiter as -jp/-jq launches (minRuntime 3h); lengen_pool.py picks one
   complete source per cell. Git push over SSH broke mid-session: push with
   `git -c credential.helper= -c credential.helper='!gh auth git-credential' push https://github.com/allenai/OLMo-core.git <branch>`.
+
+## Rows <= 32k at matched FLOPs (2026-11-14, COMPLETE; session mt11-lengen-32k, branch claude/mt11-lengen-32k-56ed58)
+Prasann (2026-11-12): "could you run 32k training with more data such that FLOPs match the 64k runs, and then compare
+that in evaluation?"
+- Data mt11L32 (weka mt11_64k/shards/mt11L32): every setA s42 gold row <= 32,768 tokens, 11 tasks
+  (`build_beaker.sh NAME=mt11L32 MAXLEN=32768 MIX=3072:1,6144:1,12288:1,16384:1,24576:1,32768:1 TOKENS_PER_SRC=1e12`,
+  01M7BQTY0CYNGNKZ9K4KZ62FGE): 203,156 rows, 925.3M tokens, max 32,766; VERIFY PASSED (01M7BR7HCFCHHP8GE3H3RXQW3B,
+  sidecars 100%). Only 10,602 rows (5.2%; 209M tokens = 22.6%) are 16,384-32,768 tokens, 1,765 of them above 24k
+  (six eval tasks: nq 94, hotpotqa 260, qdmatch 607, outlier 134, oolong 0, contradiction 21). The 32k-rung rows are
+  mostly > 32,768, so the added rows are mostly the 16k-rung rows that overflow 16,384. oolong/rerank/strmatch max
+  17.8k/18.8k/20.4k. No repetition needed (f2-matched run uses ~43% of the pool).
+- Smokes (10 steps, seq 32,768, 4 GPUs): dense 01M7BR9Y63Q3TGARW9Q8CBQ9B4, recipe 01M7BRB2DHSHQJ5X81YSBYKXNA, both OK
+  (CE 0.54-0.55 at step 10, model-only ckpt saved). Dense 27.5 GFLOP/token -> ~16.0 PF/step at the pool's 4,555
+  tokens/row; ~40 s/step dense, ~34 s/step recipe on 4 H100.
+- Runs (seq 32,768, 128 rows/step, 4 GPUs, LR 5e-6, seed 0, resume every 50 steps, minRuntime 4h):
+  m32-dense-s304 (~4,850 PF, 01M7BS9QYBBFZD1ZGR95V4T3X8), m32-lora64r20to7f16-s304 (~1,800 PF,
+  01M7BSAWGMGD4EVA355Q15HM0T), m32-dense-s610 (~9,740 PF, 01M7BSVVMJGA9B62TMYV6PPAVN). Launch env:
+  M64_SEQ_LEN=32768 M64_SHARD=$W/mt11_64k/shards/mt11L32 M64_PREFIX=m32 M64_STATE=.../state_lengen.json M64_NGPU=4.
+- Analysis: lengen_short16.py now also takes m32-* runs from extra_pf.json (delta vs 64k-data at PF and vs the m16
+  twin); lengen_chart.py draws the 16k/32k/64k chart (lengen_rows16_32_64.png).
+- Actual PF: dense s304 4,889; recipe s304 1,800 (actual/dense 0.367); dense s610 9,724. All 93 eval jobs exit 0; 0 empty
+  generations; recipe evals show `[early-lora] adapters re-installed`. Recorded: 189 rows (63 per run; m11lg-m32-* long
+  rungs via lengen_pool.py collect 01M7CQ0NTM24GC087PB8N99CY8, native via lengen_short16.py --record).
+- RESULT (mean delta, 64k*/128k*/256k* olmo-eval, 6 tasks; 256k eval_size 125):
+  vs 64k-data at same PF: dense f4 -0.028/-0.030/-0.036, dense f2 -0.022/-0.046/-0.031, recipe vs 64k recipe f4
+  -0.017/-0.015/-0.038. vs <=16k twin: dense f4 +0.052/+0.051/+0.035, f2 +0.041/+0.054/+0.045, recipe +0.036/+0.049/+0.044.
+  2k-32k native: within +-0.02 of both. Remaining gap mostly contradiction (-0.06..-0.17; 21 contradiction rows >24k).
 
 ## Universal recipe f4 FINAL (2026-10-26): all 10 tasks in. vs better-LR dense (seeds averaged within LR; collector fixed,
 it used to take the max over seeds): nq +0.004, hotpotqa +0.022, qdmatch +0.017, outlier +0.063, oolong +0.023,
