@@ -1,4 +1,15 @@
-# keepfrac_len handoff (2026-11-17 ~15:10 PT, usage limit)
+# keepfrac_len handoff
+
+## 2026-11-17 15:45 PT (takeover session)
+- q32k scored: `INTERIM_q32k.md`, `q32k_scored.json` (k40 ~ k20 best; k10 and below plateau higher).
+- launch_kl.py: `--local CODE_DIR` (jsteinhardt via launch_proxy.py, node /data paths, MICRO env, `--group` arms/job),
+  `--heldout` (default heldout_kls.npz at 2k/4k/8k), lengths 2k/4k/8k added.
+- q64k quick read RUNNING (Prasann asked 15:30): pool kl64k, held-out heldout_kl.npz set kl64k:48 (eval_size 144),
+  steps 10-40, seed 0, micro 1, code_7c6b5d877, mooney preemptive_high, 4 x 2 GPUs: slurm 5201918 (dft,k5),
+  5201919 (ref,k10), 5201920 (k40,k2p5), 5201921 (k20,k1p25). Results mooney results/q64k/.
+  Score: copy to <dir>/q64k, `analyze_kl.py --root <dir> --lens 64k --tag-prefix q --ref dft`.
+
+## previous session (2026-11-17 ~15:10 PT, usage limit)
 
 Done:
 - Pools built on mooney `/data/prasann/early_loss_proxy/shards/kl{2k,4k,8k,16k,32k,64k}` (3 tasks x 1,200 rows,
