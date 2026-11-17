@@ -1,0 +1,461 @@
+{
+ "runs": {
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-smoke-loc": {
+   "ex": "4431692",
+   "arm": "wtsS2b",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "0b3e6e7df40db8114e042551169d87ea58b737a4",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both --st-otr-diag-every 4",
+   "steps": 12
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc": {
+   "ex": "4431710",
+   "arm": "wtsS1",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "05200ed44ba349070b499d60d7c38a98034885a0",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=none --st-otr-diag-every 50",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc": {
+   "ex": "4431711",
+   "arm": "wtsS2b",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "05200ed44ba349070b499d60d7c38a98034885a0",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both --st-otr-diag-every 50",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2a-f1952-wts-lr1e-05": {
+   "ex": "01M73XJEXT6Z4VTVV1G3RK0END",
+   "arm": "wtsS2a",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "beaker",
+   "git": "7eea6d4fea9bfee1901f0cdecb61f9c372c7d694",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn --ephemeral-save-interval 100"
+  },
+  "f8k-mt4-wtsS2g-f1952-wts-lr1e-05": {
+   "ex": "01M73XKDJXYDMKC6TXRGS4EQ8X",
+   "arm": "wtsS2g",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "beaker",
+   "git": "7eea6d4fea9bfee1901f0cdecb61f9c372c7d694",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=gdn --ephemeral-save-interval 100"
+  },
+  "f8k-mt4-wtsS0wr-f1952-wts-lr1e-05": {
+   "ex": "01M73XMA7A1SMZFHSFM47HBZMP",
+   "arm": "wtsS0wr",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "beaker",
+   "git": "7eea6d4fea9bfee1901f0cdecb61f9c372c7d694",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100"
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-memprobe-loc": {
+   "ex": "4431935",
+   "arm": "wtsS1",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "9ab3933ae57d3e741f04bad753b13cc2d0e94511",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=none",
+   "steps": 160
+  },
+  "f8k-mt4-wtsS3-f1952-wts-lr1e-05-smoke-loc": {
+   "ex": "4431942",
+   "arm": "wtsS3",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "0b77620b93c6c536c69ccfe915c4ee18afa85e5b",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,16:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both,price=0.216,center=none --st-otr-diag-every 20",
+   "steps": 60
+  },
+  "f8k-mt4-wtsS3-f1952-wts-lr1e-05-loc": {
+   "ex": "4432637",
+   "arm": "wtsS3",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "9a94b49db364649a8596f6e3fb68ec407bfd900c",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,16:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both,price=0.216,center=none --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS3d-f1952-wts-lr1e-05-loc": {
+   "ex": "4432638",
+   "arm": "wtsS3d",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "9a94b49db364649a8596f6e3fb68ec407bfd900c",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,16:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both,price=0.216,center=none,alloc=doc --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS3m-f1952-wts-lr1e-05-loc": {
+   "ex": "4432639",
+   "arm": "wtsS3m",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "9a94b49db364649a8596f6e3fb68ec407bfd900c",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,11:0.3,15:0.2,19:0.2,23:0.2,27:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=both,price=0.216,center=none --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2a-f1952-wts-lr1e-05-loc": {
+   "ex": "4432903",
+   "arm": "wtsS2a",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "30856af1d2be350354b23b283ddf9cbe106c44e6",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2g-f1952-wts-lr1e-05-loc": {
+   "ex": "4432904",
+   "arm": "wtsS2g",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "30856af1d2be350354b23b283ddf9cbe106c44e6",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=gdn --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS0wr-f1952-wts-lr1e-05-loc": {
+   "ex": "4432905",
+   "arm": "wtsS0wr",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "30856af1d2be350354b23b283ddf9cbe106c44e6",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aT5-f1952-wts-lr1e-05-loc": {
+   "ex": "4434190",
+   "arm": "wtsS2aT5",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "bf3fb673772dd5b64bb1abf974acdd08417841d9",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,temp=0.5 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aT2-f1952-wts-lr1e-05-loc": {
+   "ex": "4434191",
+   "arm": "wtsS2aT2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "bf3fb673772dd5b64bb1abf974acdd08417841d9",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,temp=0.2 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS1T2-f1952-wts-lr1e-05-loc": {
+   "ex": "4434192",
+   "arm": "wtsS1T2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "bf3fb673772dd5b64bb1abf974acdd08417841d9",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=none,temp=0.2 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS3aT5-f1952-wts-lr1e-05-loc": {
+   "ex": "4434193",
+   "arm": "wtsS3aT5",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "bf3fb673772dd5b64bb1abf974acdd08417841d9",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,16:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,price=0.216,center=none,temp=0.5 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aH-f1952-wts-lr1e-05-loc": {
+   "ex": "4499333",
+   "arm": "wtsS2aH",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "ea9c30d125689c05b328dd31523b708f6b948194",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1 --resume --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aT5sd1-f1952-wts-lr1e-05-loc": {
+   "ex": "4501138",
+   "arm": "wtsS2aT5",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 1,
+   "cluster": "slurm:mooney",
+   "git": "ea9c30d125689c05b328dd31523b708f6b948194",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,temp=0.5 --resume --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aT5H-f1952-wts-lr1e-05-loc": {
+   "ex": "4501141",
+   "arm": "wtsS2aT5H",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "ea9c30d125689c05b328dd31523b708f6b948194",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,temp=0.5,hard=1 --resume --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS3aT2-f1952-wts-lr1e-05-loc": {
+   "ex": "4501142",
+   "arm": "wtsS3aT2",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "ea9c30d125689c05b328dd31523b708f6b948194",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.4,16:0.2 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,price=0.216,center=none,temp=0.2 --resume --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aHsd1-f1952-wts-lr1e-05-loc": {
+   "ex": "4521173",
+   "arm": "wtsS2aH",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 1,
+   "cluster": "slurm:mooney",
+   "git": "81a0494c46f7d87d6be42553e9f43e0cd5af3574",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aT5Hsd1-f1952-wts-lr1e-05-loc": {
+   "ex": "4521182",
+   "arm": "wtsS2aT5H",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 1,
+   "cluster": "slurm:mooney",
+   "git": "81a0494c46f7d87d6be42553e9f43e0cd5af3574",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,temp=0.5,hard=1 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aH-f3904-wts-lr1e-05-loc": {
+   "ex": "4521184",
+   "arm": "wtsS2aH",
+   "budget": "f3904",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "81a0494c46f7d87d6be42553e9f43e0cd5af3574",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aT5-f3904-wts-lr1e-05-loc": {
+   "ex": "4521185",
+   "arm": "wtsS2aT5",
+   "budget": "f3904",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "81a0494c46f7d87d6be42553e9f43e0cd5af3574",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,temp=0.5 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS0wrsd1-f1952-wts-lr1e-05-loc": {
+   "ex": "4589043",
+   "arm": "wtsS0wr",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 1,
+   "cluster": "slurm:mooney",
+   "git": "48b18efe9b8b424f27be2c245ab352b289c596ee",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS1H-f1952-wts-lr1e-05-loc": {
+   "ex": "4589046",
+   "arm": "wtsS1H",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "48b18efe9b8b424f27be2c245ab352b289c596ee",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=none,hard=1 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aT2H-f1952-wts-lr1e-05-loc": {
+   "ex": "4589048",
+   "arm": "wtsS2aT2H",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "48b18efe9b8b424f27be2c245ab352b289c596ee",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,temp=0.2,hard=1 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS0wr-f3904-wts-lr1e-05-loc": {
+   "ex": "4589049",
+   "arm": "wtsS0wr",
+   "budget": "f3904",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "48b18efe9b8b424f27be2c245ab352b289c596ee",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aHc16-f1952-wts-lr1e-05-loc": {
+   "ex": "4635461",
+   "arm": "wtsS2aHc16",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "c9dcf28099e496ca90033d077ab033f27fd47784",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1,clip=1.6 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aHc07-f1952-wts-lr1e-05-loc": {
+   "ex": "4635462",
+   "arm": "wtsS2aHc07",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "c9dcf28099e496ca90033d077ab033f27fd47784",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1,clip=0.7 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aHm02-f1952-wts-lr1e-05-loc": {
+   "ex": "4635464",
+   "arm": "wtsS2aHm02",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "c9dcf28099e496ca90033d077ab033f27fd47784",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1,mix=0.02 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS2aHm02c16-f1952-wts-lr1e-05-loc": {
+   "ex": "4635465",
+   "arm": "wtsS2aHm02c16",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "c9dcf28099e496ca90033d077ab033f27fd47784",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.2,16:0.07 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1,mix=0.02,clip=1.6 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS4k-f1952-wts-lr1e-05-loc": {
+   "ex": "4666337",
+   "arm": "wtsS4k",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "1e65c64a1b2dedd38e9484fbb9d0688e15b9711f",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.1,16:0.035 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS4aH-f1952-wts-lr1e-05-loc": {
+   "ex": "4666338",
+   "arm": "wtsS4aH",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 0,
+   "cluster": "slurm:mooney",
+   "git": "1e65c64a1b2dedd38e9484fbb9d0688e15b9711f",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.1,16:0.035 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1 --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS4ksd1-f1952-wts-lr1e-05-loc": {
+   "ex": "4666339",
+   "arm": "wtsS4k",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 1,
+   "cluster": "slurm:mooney",
+   "git": "1e65c64a1b2dedd38e9484fbb9d0688e15b9711f",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.1,16:0.035 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --ephemeral-save-interval 100",
+   "steps": 0
+  },
+  "f8k-mt4-wtsS4aHsd1-f1952-wts-lr1e-05-loc": {
+   "ex": "4666340",
+   "arm": "wtsS4aH",
+   "budget": "f1952",
+   "lr": 1e-05,
+   "seed": 1,
+   "cluster": "slurm:mooney",
+   "git": "1e65c64a1b2dedd38e9484fbb9d0688e15b9711f",
+   "extra": "--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-keep-frac 0.2 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-drop-layer 7 --st-otr-stages 7:0.1,16:0.035 --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-warmup-random --st-otr-wts sample=1,weights=attn,hard=1 --ephemeral-save-interval 100",
+   "steps": 0
+  }
+ },
+ "evals": {
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evcontradiction": {
+   "ex": "01M7407A58VFD7KB0133ZZWB49",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "contradiction"
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evnq": {
+   "ex": "01M7408H9J5N2HZ5FFAS0KMTXY",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "nq"
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evoutlier": {
+   "ex": "01M7409PCV3EG2NPHV708TBZYX",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "outlier"
+  },
+  "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc-evoolong": {
+   "ex": "01M740AMG4PP8VQWEJT9TXAHB2",
+   "train_run": "f8k-mt4-wtsS1-f1952-wts-lr1e-05-loc",
+   "task": "oolong"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evcontradiction": {
+   "ex": "01M740WNWA0TS4BRNGCE1JPXFK",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "contradiction"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evnq": {
+   "ex": "01M740XTJ29WQRSQ1SXM2R0JZH",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "nq"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evoutlier": {
+   "ex": "01M740Z4NKA98F54T4T8TQE3JG",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "outlier"
+  },
+  "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc-evoolong": {
+   "ex": "01M7410DCQG0Q39MTHTA4RYDSD",
+   "train_run": "f8k-mt4-wtsS2b-f1952-wts-lr1e-05-loc",
+   "task": "oolong"
+  }
+ }
+}

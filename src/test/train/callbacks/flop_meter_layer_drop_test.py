@@ -130,3 +130,18 @@ def test_lora_frozen_head_is_charged_at_two_thirds():
     head = m.lm_head.num_flops_per_token(256)
     want = 2 * 256 * (m.num_flops_per_token(256) + lora_flop_adjust_per_token(m, 256) - head / 3)
     assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)
+
+
+def test_lora_without_router_per_example_charges_each_example_at_its_length():
+    """--lora-rank in per-example mode: the frozen-base / adapter adjustment is priced at each example's own
+    length, not at seq_len (a short row must not be credited the seq_len attention it never ran)."""
+    from olmo_core.nn.early_lora import install_early_lora, lora_flop_adjust_per_token
+
+    m, cb, metrics = _setup(per_example=True)
+    install_early_lora(m, 4, 4, scale=8.0)
+    lens = [40, 256, 97]
+    m._flop_example_lens = {"dense": list(lens), "actual": list(lens)}
+    cb.post_step()
+    want = sum(L * (m.num_flops_per_token(L) + lora_flop_adjust_per_token(m, L)) for L in lens)
+    assert metrics["flop_meter/actual_pflops"] == pytest.approx(want / 1e15)
+    assert lora_flop_adjust_per_token(m, 40) != lora_flop_adjust_per_token(m, 256)

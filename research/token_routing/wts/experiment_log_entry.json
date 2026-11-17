@@ -1,0 +1,432 @@
+{
+ "date": "2026-11-11",
+ "status": "done (negative)",
+ "track": "sft4",
+ "who": "side session (weighted-token-sampling)",
+ "title": "Weighted token sampling: sampled survival with weights w = 1/p in attention / DeltaNet, and a FLOP price rule, instead of the recipe's two-stage top-k",
+ "result": "Negative. 1,952 rows/task, eval_size 500/cell, no-cot. Sampled survival with w = 1/p weights never matched the recipe's top-k: 9 single-seed variants that sample at block 7 (top-k at block 16) average 0.828 (sd 0.019) vs 0.847 for 4 top-k runs; best 2-seed arm wtsS2aH 0.8365 (recipe 0.846/0.847). At 3,904 rows S2aH 0.877 vs recipe 0.882/0.889. At half the keeps (0.19x) top-k 0.821 vs sampled 0.805 (2 seeds each). Weights are required (no weights: outlier 0.63); clipping weights or cutting the uniform share does not help; the price rule trails (best 0.832 at 0.203x). Side result: the recipe with a routed warmup instead of its dense step 1 (wtsS0wr) matches it (2-seed 0.848; 0.884 at 3,904 rows) at 24.2 GiB instead of 26.9. Seed noise on the 8k mean is ~0.02 for routed runs.",
+ "match": "1,952 rows/task, recipe base, no dense step",
+ "record": "records/weighted-token-sampling.md",
+ "branch": "claude/weighted-token-sampling-041da9",
+ "tables": [
+  {
+   "title": "8k rung (primary), 1,952 rows/task (seed 0 unless noted)",
+   "cols": [
+    "arm",
+    "8k mean",
+    "contra",
+    "nq",
+    "outlier",
+    "oolong",
+    "step cost (x dense)",
+    "peak GiB"
+   ],
+   "rows": [
+    [
+     "dense",
+     0.843,
+     0.973,
+     0.924,
+     0.817,
+     0.656,
+     "1.0",
+     "-"
+    ],
+    [
+     "recipe (s0 / sd1)",
+     ".846 / .847",
+     ".960 / .956",
+     ".912 / .922",
+     ".860 / .861",
+     ".650 / .649",
+     "0.221",
+     "26.9"
+    ],
+    [
+     "wtsS0wr (top-k, warmup routed)",
+     0.837,
+     0.956,
+     0.92,
+     0.838,
+     0.633,
+     "0.219",
+     "24.2"
+    ],
+    [
+     "wtsS1 (sampled, no weights)",
+     0.79,
+     0.942,
+     0.93,
+     0.67,
+     0.62,
+     "0.215",
+     "24.1"
+    ],
+    [
+     "wtsS2a (weights: attention)",
+     0.827,
+     0.945,
+     0.914,
+     0.811,
+     0.638,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS2g (weights: DeltaNet)",
+     0.815,
+     0.941,
+     0.902,
+     0.775,
+     0.641,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS2b (weights: both)",
+     0.822,
+     0.937,
+     0.92,
+     0.794,
+     0.637,
+     "0.215",
+     "24.1"
+    ],
+    [
+     "wtsS3 (price rule, cuts 7/16)",
+     0.795,
+     0.934,
+     0.914,
+     0.725,
+     0.609,
+     "0.214",
+     "24.6"
+    ],
+    [
+     "wtsS3d (price, alloc=doc)",
+     0.795,
+     0.919,
+     0.914,
+     0.71,
+     0.638,
+     "0.216",
+     "24.2"
+    ],
+    [
+     "wtsS3m (price, 6 cuts)",
+     0.789,
+     0.953,
+     0.91,
+     0.665,
+     0.629,
+     "0.213",
+     "25.8"
+    ],
+    [
+     "wtsS2aT5 (attention weights, temp 0.5)",
+     0.84,
+     0.954,
+     0.92,
+     0.841,
+     0.644,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS2aT2 (attention weights, temp 0.2)",
+     0.829,
+     0.945,
+     0.908,
+     0.835,
+     0.626,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS1T2 (no weights, temp 0.2)",
+     0.833,
+     0.946,
+     0.914,
+     0.843,
+     0.628,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS3aT5 (price, attention weights, temp 0.5)",
+     0.82,
+     0.962,
+     0.91,
+     0.778,
+     0.63,
+     "0.211",
+     "24.4"
+    ],
+    [
+     "wtsS2aT5 seed 1",
+     0.837,
+     0.944,
+     0.888,
+     0.852,
+     0.662,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS2aH (sampled at block 7, top-k at 16) s0 / sd1",
+     ".847 / .826",
+     ".956 / .941",
+     ".934 / .914",
+     ".851 / .815",
+     ".648 / .634",
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aT5H (as S2aH, temp 0.5) s0 / sd1",
+     ".810 / .864",
+     ".948 / .949",
+     ".910 / .918",
+     ".757 / .908",
+     ".626 / .680",
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS3aT2 (price, attention weights, temp 0.2)",
+     0.832,
+     0.963,
+     0.91,
+     0.815,
+     0.639,
+     "0.203",
+     "24.2"
+    ],
+    [
+     "wtsS0wr seed 1",
+     0.859,
+     0.943,
+     0.94,
+     0.897,
+     0.656,
+     "0.219",
+     "24.2"
+    ],
+    [
+     "wtsS1H (sampled at 7, no weights, top-k at 16)",
+     0.773,
+     0.932,
+     0.936,
+     0.625,
+     0.599,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aT2H (S2aH, temp 0.2)",
+     0.823,
+     0.945,
+     0.902,
+     0.782,
+     0.664,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHc16 (clip log w 1.6)",
+     0.817,
+     0.943,
+     0.926,
+     0.8,
+     0.597,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHc07 (clip log w 0.7)",
+     0.819,
+     0.949,
+     0.906,
+     0.774,
+     0.646,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHm02 (uniform share 0.02)",
+     0.806,
+     0.95,
+     0.924,
+     0.734,
+     0.617,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aHm02c16 (both)",
+     0.841,
+     0.948,
+     0.934,
+     0.825,
+     0.657,
+     "0.218",
+     "24.2"
+    ]
+   ],
+   "note": "eval_size 500/cell, no-cot, f1 (oolong: score). SE of the 4-task mean ~0.008; outlier ~0.016-0.019. wts arms 1 seed; recipe 2 seeds. Recipe peak includes its dense step 1 (routed from step 1: 24.2)."
+  },
+  {
+   "title": "8k rung, 3,904 rows/task, seed 0",
+   "cols": [
+    "arm",
+    "8k mean",
+    "contra",
+    "nq",
+    "outlier",
+    "oolong",
+    "step cost (x dense)",
+    "peak GiB"
+   ],
+   "rows": [
+    [
+     "recipe (s0 / sd1)",
+     ".882 / .889",
+     ".977 / .973",
+     ".918 / .926",
+     ".970 / .967",
+     ".663 / .689",
+     "0.220",
+     "26.9 / 20.2"
+    ],
+    [
+     "wtsS2aH",
+     0.877,
+     0.967,
+     0.918,
+     0.945,
+     0.679,
+     "0.218",
+     "24.2"
+    ],
+    [
+     "wtsS2aT5",
+     0.876,
+     0.971,
+     0.908,
+     0.966,
+     0.659,
+     "0.215",
+     "24.2"
+    ],
+    [
+     "wtsS0wr (recipe, no dense step)",
+     0.884,
+     0.972,
+     0.936,
+     0.973,
+     0.655,
+     "0.219",
+     "24.2"
+    ]
+   ],
+   "note": "eval_size 500/cell, no-cot. Local mt4f3904 shard (976 steps)."
+  },
+  {
+   "title": "S4: half the recipe's keeps (7:0.1,16:0.035), 1,952 rows/task",
+   "cols": [
+    "arm",
+    "8k mean",
+    "contra",
+    "nq",
+    "outlier",
+    "oolong",
+    "step cost (x dense)",
+    "peak GiB"
+   ],
+   "rows": [
+    [
+     "wtsS4k (top-k) s0 / sd1",
+     ".819 / .823",
+     ".942 / .936",
+     ".930 / .902",
+     ".777 / .784",
+     ".626 / .668",
+     "0.189",
+     "23.9"
+    ],
+    [
+     "wtsS4aH (sampled at 7) s0 / sd1",
+     ".814 / .796",
+     ".922 / .924",
+     ".876 / .886",
+     ".818 / .743",
+     ".638 / .633",
+     "0.188",
+     "23.9"
+    ]
+   ],
+   "note": "eval_size 500/cell, no-cot."
+  }
+ ],
+ "chart": {
+  "title": "8k mean, 1,952 rows/task",
+  "unit": "4-task mean",
+  "labels": [
+   "dense",
+   "wtsS0wr (top-k, warmup routed)",
+   "wtsS1 (sampled, no weights)",
+   "wtsS2a (weights: attention)",
+   "wtsS2g (weights: DeltaNet)",
+   "wtsS2b (weights: both)",
+   "wtsS3 (price rule, cuts 7/16)",
+   "wtsS3d (price, alloc=doc)",
+   "wtsS3m (price, 6 cuts)",
+   "wtsS2aT5 (attention weights, temp 0.5)",
+   "wtsS2aT2 (attention weights, temp 0.2)",
+   "wtsS1T2 (no weights, temp 0.2)",
+   "wtsS3aT5 (price, attention weights, temp 0.5)",
+   "wtsS2aH (2-seed mean)",
+   "wtsS2aT5H (2-seed mean)",
+   "wtsS3aT2",
+   "wtsS0wr (2-seed mean)",
+   "wtsS2aHm02c16",
+   "wtsS4k (2-seed, 0.19x)",
+   "wtsS4aH (2-seed, 0.19x)"
+  ],
+  "series": [
+   {
+    "name": "8k mean",
+    "values": [
+     0.843,
+     0.837,
+     0.79,
+     0.827,
+     0.815,
+     0.822,
+     0.795,
+     0.795,
+     0.789,
+     0.84,
+     0.829,
+     0.833,
+     0.82,
+     0.8365,
+     0.837,
+     0.832,
+     0.848,
+     0.841,
+     0.821,
+     0.805
+    ]
+   }
+  ],
+  "refs": [
+   {
+    "name": "recipe",
+    "value": 0.8465
+   }
+  ],
+  "ymin": 0.75,
+  "ymax": 0.9
+ }
+}

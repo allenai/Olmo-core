@@ -1949,6 +1949,7 @@ class Attention(SequenceMixer):
         soft_keep: Optional[torch.Tensor] = None,
         summary_roles: Optional[torch.Tensor] = None,
         causal_example: Optional[torch.Tensor] = None,
+        token_weight: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Apply attention to the input.
@@ -2002,6 +2003,10 @@ class Attention(SequenceMixer):
             :class:`~olmo_core.nn.attention.summary_token.SummaryTokenAttention`, which consumes them.
         :param causal_example: **Accepted and ignored**; the per-example mask-mixture arm, threaded
             alongside ``summary_roles``.
+        :param token_weight: Optional ``(B, T)`` float ``w >= 1`` (weighted token sampling): key ``j`` stands for
+            ``w_j`` identical copies of itself, i.e. the additive logit bias ``log w_j`` for every query, on top of
+            the causal mask (exact: ``w`` copies of a key multiply its softmax mass by ``w``). Runs the masked-SDPA
+            path (flash-attn has no additive bias). All-ones weights leave the layer on its normal path.
 
         :returns: The output of attention with shape ``(batch_size, seq_len, d_model)``.
         """
@@ -2089,6 +2094,16 @@ class Attention(SequenceMixer):
                     v[aux_capture["rows_sh"], aux_capture["cols_sh"]],
                 )
             )
+
+        if token_weight is not None and getattr(self, "_token_weight_on", True):
+            tw = token_weight.to(device=q.device, dtype=torch.float64 if q.dtype == torch.float64 else torch.float32)
+            if bool((tw != 1.0).any()):
+                lw = torch.log(tw)[:, None, None, :]  # (B, 1, 1, T)
+                if attn_bias is None:
+                    causal = torch.full((T, T), float("-inf"), device=q.device, dtype=tw.dtype).triu(1)
+                    attn_bias = causal[None, None] + lw
+                else:
+                    attn_bias = attn_bias + lw.to(attn_bias.dtype)
 
         if soft_keep is not None:
             sk_dtype = torch.float64 if q.dtype == torch.float64 else torch.float32

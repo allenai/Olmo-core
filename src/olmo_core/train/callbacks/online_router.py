@@ -26,6 +26,55 @@ class OnlineRouterCallback(Callback):
     def _router(self):
         return getattr(self.trainer.train_module.model, "_online_token_router", None)  # type: ignore[union-attr]
 
+    #: the fit carried across a preemption resume (2026-10-30): without it a resumed run restarts the router with no
+    #: weights, i.e. one full-context warmup step mid-run and a fresh ridge accumulation
+    _STATE_KEYS = ("w", "XtX", "Xty", "n_seen", "step", "task_w", "task_XtX", "task_Xty", "task_seen", "frozen_blocks",
+                   "_logtau", "_tau_src")
+
+    def state_dict(self) -> Dict[str, Any]:
+        import torch
+
+        router = self._router()
+        if router is None:
+            return {}
+
+        def cpu(v):
+            if torch.is_tensor(v):
+                return v.detach().cpu()
+            if isinstance(v, dict):
+                return {k: cpu(x) for k, x in v.items()}
+            return v
+
+        chain = [{k: cpu(getattr(r, k)) for k in self._STATE_KEYS if hasattr(r, k)} for r in router.chain()]
+        return {"chain": chain, "freeze_early": bool(router.cfg.freeze_early)}
+
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        import torch
+
+        router = self._router()
+        if router is None or not state_dict.get("chain"):
+            return
+        model = self.trainer.train_module.model  # type: ignore[union-attr]
+        dev = next(model.parameters()).device
+
+        def to(v):
+            if torch.is_tensor(v):
+                return v.to(dev)
+            if isinstance(v, dict):
+                return {k: to(x) for k, x in v.items()}
+            return v
+
+        chain = router.chain()
+        if len(chain) != len(state_dict["chain"]):
+            raise RuntimeError(f"online router resume: {len(state_dict['chain'])} saved stages vs {len(chain)} built")
+        for r, d in zip(chain, state_dict["chain"]):
+            for k, v in d.items():
+                setattr(r, k, to(v))
+            r._pending = []
+        if get_rank() == 0:
+            log.info("[online-router] resumed the fit of %d stage(s) at router step %s", len(chain),
+                     state_dict["chain"][0].get("step"))
+
     def pre_train(self):
         router = self._router()
         if router is None:
@@ -72,6 +121,8 @@ class OnlineRouterCallback(Callback):
                              "(%.0fM params), optimizer state released", self.trainer.global_step, want, n / 1e6)
 
         if torch.cuda.is_available():
+            # allocated memory carried into the step (params, optimizer state, anything persistent): a leak shows here
+            self._mem_start = torch.cuda.memory_allocated() / 2**30
             torch.cuda.reset_peak_memory_stats()
         router = self._router()
         for r in router.chain():  # every pyramid stage refits from its own targets
@@ -91,7 +142,9 @@ class OnlineRouterCallback(Callback):
         sub = {k: (v[:n] if torch.is_tensor(v) and v.dim() > 0 and v.shape[0] == B else v) for k, v in batch.items()}
         saved_r = []
         for r in router.chain():
-            d = {k: copy.copy(v) for k, v in r.__dict__.items()}
+            # router-object links (_root / _next) stay as they are: copying them left stale router copies (and their
+            # ridge statistics) alive after every diag and pointed later stages at a stale root (price-rule tau)
+            d = {k: (v if isinstance(v, type(r)) else copy.copy(v)) for k, v in r.__dict__.items()}
             d["_stats"] = {k: list(v) for k, v in r._stats.items()}
             saved_r.append(d)
         saved_m = {k: copy.deepcopy(getattr(model, k)) for k in ("_flop_extra_actual", "_flop_example_lens",
@@ -129,6 +182,11 @@ class OnlineRouterCallback(Callback):
         if torch.cuda.is_available():
             # this step's peak allocated memory on this rank (reset in pre_step)
             m["online_router/peak_mem_gib"] = torch.cuda.max_memory_allocated() / 2**30
+            # the run's peak so far (the per-step value resets every step; warmup / first steps can set the peak)
+            self._peak_run = max(float(getattr(self, "_peak_run", 0.0)), m["online_router/peak_mem_gib"])
+            m["online_router/peak_mem_run_gib"] = self._peak_run
+            m["online_router/mem_start_gib"] = float(getattr(self, "_mem_start", 0.0))
+            m["online_router/mem_end_gib"] = torch.cuda.memory_allocated() / 2**30
         if getattr(self, "_diag_batch", None) is not None:
             dg = self._diag(router, self._diag_batch)
             self._diag_batch = None
