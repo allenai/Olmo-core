@@ -119,6 +119,88 @@
    "custom": [],
    "min_runtime": "30m",
    "expected_minutes": 10
+  },
+  "01M7MBQT89ZWV36AAP4W1M270Y": {
+   "tag": "cptnative",
+   "runs": [
+    "elp-cptnative-sL0r10-sd0",
+    "elp-cptnative-sL0r05-sd0",
+    "elp-cptnative-sL0mix10-sd0",
+    "elp-cptnative-sL8r10-sd0"
+   ],
+   "steps": "25,50,100,200,300,400",
+   "sets": "suite4k:16,suite8k:16,suite16k:16",
+   "commit": "37d4816bda6e794faf52b04e24029995b101a420",
+   "branch": "loop/cptnative",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16k",
+   "heldout": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/heldout_v2.npz",
+   "seq_len": 16384,
+   "gpus": 2,
+   "micro": 2,
+   "custom": [
+    "sL0r10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.1",
+    "sL0r05=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.05",
+    "sL0mix10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.1 --st-otr-dense-every 8",
+    "sL8r10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-drop-layer 8 --st-otr-keep-frac 0.1"
+   ],
+   "min_runtime": "71m",
+   "expected_minutes": 54
+  },
+  "01M7MBW9CE252T1REJSKTYQ4PR": {
+   "tag": "cptnative",
+   "runs": [
+    "elp-cptnative-sL0r10-sd0",
+    "elp-cptnative-sL0r05-sd0",
+    "elp-cptnative-sL0mix10-sd0",
+    "elp-cptnative-sL8r10-sd0"
+   ],
+   "steps": "25,50,100,200,300,400",
+   "sets": "suite4k:16,suite8k:16,suite16k:16",
+   "commit": "37d4816bda6e794faf52b04e24029995b101a420",
+   "branch": "loop/cptnative",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16k",
+   "heldout": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/heldout_v2.npz",
+   "seq_len": 16384,
+   "gpus": 2,
+   "micro": 2,
+   "custom": [
+    "sL0r10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.1",
+    "sL0r05=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.05",
+    "sL0mix10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.1 --st-otr-dense-every 8",
+    "sL8r10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-drop-layer 8 --st-otr-keep-frac 0.1"
+   ],
+   "min_runtime": "71m",
+   "expected_minutes": 54
+  },
+  "01M7MCSRVH6FQRTH1SA7TZ80CZ": {
+   "tag": "cptnative",
+   "runs": [
+    "elp-cptnative-cL0r10-sd0",
+    "elp-cptnative-cL0r05-sd0",
+    "elp-cptnative-cL8r10-sd0"
+   ],
+   "steps": "25,50,100,200,300,400",
+   "sets": "suite4k:16,suite8k:16,suite16k:16",
+   "commit": "37d4816bda6e794faf52b04e24029995b101a420",
+   "branch": "loop/cptnative",
+   "extra": "",
+   "lr_mult": 1.0,
+   "data": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16k",
+   "heldout": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/heldout_v2.npz",
+   "seq_len": 16384,
+   "gpus": 2,
+   "micro": 2,
+   "custom": [
+    "cL0r10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.1 --base-checkpoint /weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/bases/dscpt-L0fl-u64M/model_and_optim",
+    "cL0r05=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --lora-rank 64 --lora-blocks 0 --lora-scale 32 --attn-backend flash_2 --st-otr-drop-layer 0 --st-otr-keep-frac 0.05 --base-checkpoint /weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/bases/dscpt-L0fl-u64M/model_and_optim",
+    "cL8r10=softtoken,1e-5,--st-keep-token-rule online --st-drop-slots --st-keep-prob 0.0 --st-otr-explore-frac 0.1 --st-otr-doc-share 1.0 --st-otr-dense-every 0 --st-otr-score first_last --st-otr-warmup-random --st-otr-early-lora 64 --st-otr-early-lora-scale 32 --st-otr-early-lora-blocks 32 --attn-backend flash_2 --st-otr-drop-layer 8 --st-otr-keep-frac 0.1 --base-checkpoint /weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/bases/dscpt-L8fl-u64M/model_and_optim"
+   ],
+   "min_runtime": "54m",
+   "expected_minutes": 41
   }
  }
 }
