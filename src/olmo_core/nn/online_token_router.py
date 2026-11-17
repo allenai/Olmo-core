@@ -220,6 +220,15 @@ class OnlineRouterConfig:
     """Mid-stack only: FREEZE the embeddings and blocks [0, L) (L = the first drop layer): ``requires_grad=False`` before
     the train module is built (:func:`freeze_early_blocks`), so they never get gradients or optimizer state, and every
     forward (dense steps included) runs them forward-only -- no stored activations. Charged forward-only."""
+    nograd_until: int = 0
+    """Frozen NO-GRAD PREFIX (2026-11-16, loop idea ``prefix``): blocks [0, K) + embeddings are frozen and run
+    forward-only under ``no_grad`` on EVERY training forward (nothing stored for backward); the gradient path starts
+    at block K (a fresh leaf there). K may lie past the first cut(s): cuts at layers < K then happen inside the
+    no-grad region and their routers read their gnorm targets at block K (the gradient at K of each sampled token
+    that survives to K, columns carried through the later gathers) instead of at their own layer. Adapters (with
+    ``early_lora``) must start at K (``early_lora_start == K``). Charged 1/3 per block below K, at each block's own
+    (compacted) length. Needs the mid-stack drop with the first cut <= K; exclusive with freeze_early / early_nograd
+    / freeze_after / freeze_schedule / target_layer / mod_layers / merge_dropped / exit_loss_weight. 0 = off."""
     freeze_after: int = 0
     """Warmup-then-freeze: train every block normally for the first ``freeze_after`` optimizer steps, then (from step
     ``freeze_after + 1``) freeze the embeddings and blocks [0, L) and free their gradients and optimizer state
@@ -446,6 +455,18 @@ class OnlineRouterConfig:
                 not self.early_lora or self.early_lora_start >= (self.early_lora_blocks or self.drop_layer))):
             raise ValueError("online router early_lora_start needs early_lora > 0 and 0 <= start < the LoRA end "
                              "(early_lora_blocks, else drop_layer)")
+        if self.nograd_until:
+            first = parse_stages(self.stages)[0][0] if self.stages else self.drop_layer
+            if first <= 0 or self.nograd_until < first:
+                raise ValueError("online router nograd_until needs the mid-stack drop with the first cut <= nograd_until")
+            if (self.freeze_early or self.early_nograd or self.freeze_after or self.freeze_schedule or self.target_layer
+                    or self.mod_layers or self.merge_dropped or self.exit_loss_weight > 0):
+                raise ValueError("online router nograd_until is exclusive with freeze_early / early_nograd / "
+                                 "freeze_after / freeze_schedule / target_layer / mod_layers / merge_dropped / exit loss")
+            if self.early_lora and self.early_lora_start != self.nograd_until:
+                raise ValueError("online router nograd_until with early_lora needs early_lora_start == nograd_until")
+            if self.target not in ("gnorm", "gxh"):
+                raise ValueError("online router nograd_until supports targets gnorm / gxh only")
         if self.target_layer:
             if self.drop_layer <= 0 or self.target_layer <= self.drop_layer:
                 raise ValueError("online router target_layer must be > drop_layer (> 0)")
@@ -733,7 +754,7 @@ class OnlineTokenRouter:
             prev_k, prev = k0, self
             for i, (l, k) in enumerate(rest, start=1):
                 # later stages: keep ``k`` of the ORIGINAL body = k / prev_k of the tokens entering; their own fit
-                c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False,
+                c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False, nograd_until=0,
                                         seed=cfg.seed + 1009 * i, keep_first=0)
                 if lmt > 0:
                     c = dataclasses.replace(c, mass_target=lmt, max_keep_frac=lmk)
@@ -776,6 +797,7 @@ class OnlineTokenRouter:
         self.total_steps: Optional[int] = None  # set by the callback (dense_tail_frac)
         self._nograd_fwd = False  # this forward runs blocks [0, _nograd_until) forward-only (early_nograd / freeze)
         self._nograd_until = 0
+        self._deferred: List[Tuple["OnlineTokenRouter", Dict[str, Any]]] = []  # nograd_until: targets read at block K
         self.frozen_blocks = 0  # leading blocks frozen so far by freeze_schedule (set by the callback)
         self._exit: Optional[Dict[str, Any]] = None  # this forward's dropped-token hidden states for the exit loss
         self._calls = 0
@@ -1062,9 +1084,12 @@ class OnlineTokenRouter:
                 self._nograd_until = min(self.frozen_blocks, L0)
             elif model.training and (self.cfg.freeze_early or (self.cfg.early_nograd and not self.dense_now())):
                 self._nograd_until = L0
+            elif model.training and self.cfg.nograd_until:
+                self._nograd_until = self.cfg.nograd_until
             else:
                 self._nograd_until = 0
             self._nograd_fwd = self._nograd_until > 0
+            self._deferred = []
             full[:, :Tr] = fp["body"]
             return full
         keep, entry = self._choose(model, fp, ids, cid)
@@ -1513,7 +1538,16 @@ class OnlineTokenRouter:
                 entry["ok"] = entry["ok"] & entry["explore"]
             self._tap = entry
         else:
-            self._register_target(model, entry, h_new)
+            root = self._root
+            if root.cfg.nograd_until and model.training:
+                # carry earlier cuts' deferred targets through this gather (dropped here = no gradient at block K)
+                for _, e in root._deferred:
+                    e["ok"] = e["ok"] & keep_all[e["rows"], e["cols"]]
+                    e["cols"] = newcol[e["rows"], e["cols"]]
+            if root.cfg.nograd_until and model.training and not h_new.requires_grad:
+                root._deferred.append((self, entry))  # inside the no-grad prefix: read the target at block K
+            else:
+                self._register_target(model, entry, h_new)
         self._exit = None
         if self.cfg.exit_loss_weight > 0 and not entry["dense"]:
             dropped = real & body & ~keep_body
@@ -1559,8 +1593,10 @@ class OnlineTokenRouter:
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         if self._next is not None:
             self._next._mid = self._stash_for_next(fp, ids, cid, Tr, Tw, order, valid)
-            self._next._nograd_fwd = False
-            self._next._nograd_until = 0
+            # nograd_until: the root's no-grad prefix [0, K) also covers the later stages' blocks below K (charged 1/3)
+            nu = self._nograd_until if self._root.cfg.nograd_until else 0
+            self._next._nograd_fwd = nu > 0
+            self._next._nograd_until = nu
             self._next._ignore_index = getattr(self, "_ignore_index", -100)
         return h_new, kw
 
@@ -1766,6 +1802,14 @@ class OnlineTokenRouter:
         if self.cfg.early_lora <= 0:
             return 0
         return int(self.cfg.early_lora_blocks or (self._root_drop_layer if self.stage_idx else self.cfg.drop_layer))
+
+    def flush_deferred(self, model, h: torch.Tensor) -> torch.Tensor:
+        """nograd_until: at block K (h = the gradient path's first hidden state, columns in the current frame) register
+        the targets of the cuts made inside the no-grad prefix."""
+        d, self._deferred = self._deferred, []
+        for r, e in d:
+            r._register_target(model, e, h)
+        return h
 
     def tap_target(self, model, h: torch.Tensor, block_idx: int) -> torch.Tensor:
         """At the input of block ``target_layer``: register this forward's pending target hook there."""

@@ -314,6 +314,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_stages: str = ""
     st_otr_merge_dropped: bool = False
     st_otr_freeze_early: bool = False
+    st_otr_nograd_until: int = 0
     st_otr_min_per_doc: int = 0
     st_otr_freeze_after: int = 0
     st_otr_exit_loss_weight: float = 0.0
@@ -1203,6 +1204,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         stages=o.st_otr_stages,
         merge_dropped=o.st_otr_merge_dropped,
         freeze_early=o.st_otr_freeze_early,
+        nograd_until=o.st_otr_nograd_until,
         min_per_doc=o.st_otr_min_per_doc,
         freeze_after=o.st_otr_freeze_after,
         exit_loss_weight=o.st_otr_exit_loss_weight,
@@ -1414,6 +1416,12 @@ class SoftToken(Variant):
             print(f"[variants] online router early LoRA: blocks [0, {K}) + embeddings frozen, adapters on [{B0}, {K}), "
                   f"{len(mods)} linears get rank-{o.st_otr_early_lora} adapters (scale {o.st_otr_early_lora_scale})",
                   flush=True)
+        if online and o.st_otr_nograd_until:
+            from olmo_core.nn.online_token_router import freeze_early_blocks
+
+            n = freeze_early_blocks(model, o.st_otr_nograd_until)
+            print(f"[variants] online router nograd_until: embeddings + blocks [0, {o.st_otr_nograd_until}) frozen, "
+                  f"forward-only under no_grad ({n / 1e6:.0f}M params)", flush=True)
         if online and o.st_otr_freeze_early:
             from olmo_core.nn.online_token_router import freeze_early_blocks
 

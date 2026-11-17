@@ -1773,6 +1773,9 @@ class Transformer(nn.Module):
             if block_idx in otr_stages:
                 # online router, mid-stack drop: dropped tokens skip blocks [otr_layer, n_layers)
                 h, all_block_kwargs = otr_stages[block_idx].mid_compact(self, h, all_block_kwargs)
+            if otr_nograd and block_idx == otr_nograd_end and otr.cfg.nograd_until:  # type: ignore[union-attr]
+                # nograd_until: cuts inside the no-grad prefix read their router targets here
+                h = otr.flush_deferred(self, h)  # type: ignore[union-attr]
             if otr_tap and block_idx == otr_tap:
                 h = otr.tap_target(self, h, block_idx)  # type: ignore[union-attr]
             if block_idx in ld_skip:
