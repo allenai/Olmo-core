@@ -22,7 +22,7 @@ def rows(path):
     for b in d["board"]:
         meta = arms.get(b["arm"], {})
         out.append({**{k: b.get(k) for k in ("tag", "arm", "seeds", "steps", "eval_size", "is_ref", "ce_last", "frac",
-                                             "pf", "pf_per_step_vs_dense", "x", "xw", "peak_gib", "peak_vs_ref",
+                                             "pf", "pf_per_step_vs_dense", "x", "xw", "peak_gib", "peak_vs_ref", "transient_gib", "transient_vs_ref",
                                              "train_s", "d_vs_ref", "d_vs_ref_se")},
                     "idea": meta.get("idea", ""), "desc": meta.get("desc", "")})
     for r in d["runs"]:
