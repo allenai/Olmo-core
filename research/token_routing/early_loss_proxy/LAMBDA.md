@@ -29,3 +29,9 @@ result JSON (`"done": true`), not the slurm state.
 ## Rules
 Lambda is shared: at most 8 GPUs `preemptive_high` plus 8 `preemptive` in total, anything more at `normal`. One job =
 2 GPUs; keep at most 4 submitted at `preemptive_high`. No internet, no `/data` on Lambda.
+
+## Measured on A100-80GB (2 GPUs, 2026-11-17, jobs 115205 / 115208)
+- Startup (env, model load, step-0 probe when uncached) 220-270 s; later jobs reuse `step0_cache.json`.
+- `recipe`: ~10-12 s/step steady (first steps 17-24 s: Triton/JIT), peak 13.2 GiB. `denselora`: ~31 s/step, peak 12.4 GiB
+  (fits easily; trainer defaults apply full activation checkpointing + FSDP). Probe of 192 held-out rows: ~55 s.
+- recipe, 10 steps: process wall 554 s. Step-0 mean CE 0.8668 (cached for later jobs). No v2 Berkeley result existed to compare.
