@@ -121,13 +121,20 @@ def run_prefix_chunked(
     run: Dict[str, Any] = {"B": B, "T": T, "device": h.device, "dtype": h.dtype, "gdn": {}, "kv": {},
                            "n_chunks": len(bounds)}
     blocks = [model.blocks[str(i)] for i in range(n_prefix)]
+    offload = bool(os.environ.get("OLMO_OTR_PREFIX_OFFLOAD"))
     outs = []
     for c, (s, e) in enumerate(bounds):
         x = h[:, s:e]
         ps = PrefixState(run, c, s)
         kwc = _slice_kwargs(kw, B, T, s, e)
         for i, blk in enumerate(blocks):
-            x = blk(x, prefix_state=ps, **kwc, **_slice_kwargs(per_block_kwargs.get(i, {}), B, T, s, e))
+            if offload and torch.is_grad_enabled():
+                # the block's activation-checkpoint input (the only tensor its checkpointed forward saves) goes
+                # to pinned host memory and comes back for the recompute: prefix blocks x row x d_model off the GPU
+                with torch.autograd.graph.save_on_cpu(pin_memory=True):
+                    x = blk(x, prefix_state=ps, **kwc, **_slice_kwargs(per_block_kwargs.get(i, {}), B, T, s, e))
+            else:
+                x = blk(x, prefix_state=ps, **kwc, **_slice_kwargs(per_block_kwargs.get(i, {}), B, T, s, e))
         outs.append(x)
     out = torch.cat(outs, dim=1)
     if os.environ.get("OLMO_OTR_PREFIX_VERIFY") and not getattr(model, "_prefix_verified", False):
