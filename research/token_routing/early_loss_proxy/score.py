@@ -63,6 +63,7 @@ def load(folders):
                 "tag": tag, "arm": arm, "seed": seed, "curve": curve, "eval_size": len(rows),
                 "ce_rows_last": d["probes"][-1]["ce"], "ce_rows_0": d["probes"][0]["ce"],
                 "peak_gib": max([s.get("peak_gib", 0.0) for s in st] or [0.0]),
+                "transient_gib": max([s.get("transient_gib", 0.0) for s in st] or [0.0]),
                 "train_s": float(sum(s["train_s"] for s in st)), "probe_s": float(sum(p["probe_s"] for p in d["probes"])),
                 "wall_s": d.get("process_wall_s"), "steps": len(st), "node": (d.get("slurm") or {}).get("SLURMD_NODENAME"),
                 "lr": d["probes"][-1]["lr"][0] if d["probes"][-1].get("lr") else None,
@@ -118,6 +119,7 @@ def main():
         ref_last = min(x["curve"][-1]["all"] for x in rs)
         ref_last_pf = min((x["curve"][-1]["pf"] for x in rs if x["curve"][-1]["all"] <= ref_last + 1e-12))
         ref_peak = max(x["peak_gib"] for x in rs)
+        ref_tr = max(x["transient_gib"] for x in rs)
         need = [pf_to_reach(x["curve"], la) for x in rs]
         need = [n for n in need if n is not None]
         lb = not need
@@ -138,7 +140,7 @@ def main():
             xs[str(c["step"])] = sp("all")
             per = [sp(k) for k in tkeys]
             xw[str(c["step"])] = (min(per) if per and all(p is not None for p in per) else None)
-        rec = {k: r[k] for k in ("tag", "arm", "seed", "steps", "eval_size", "peak_gib", "train_s", "probe_s",
+        rec = {k: r[k] for k in ("tag", "arm", "seed", "steps", "eval_size", "peak_gib", "transient_gib", "train_s", "probe_s",
                                  "wall_s", "node", "lr", "step0_src")}
         rec.update({
             "ce0": l0, "ce_last": la, "drop": l0 - la, "pf": fa, "dense_pf": last["dense_pf"],
@@ -147,6 +149,7 @@ def main():
             "iso": (ref_pf / fa) if fa > 0 else None, "iso_lb": lb,
             "to_target": (ref_last_pf / cross) if cross else None, "x": xs, "xw": xw,
             "peak_vs_ref": (r["peak_gib"] / ref_peak) if ref_peak else None,
+            "transient_vs_ref": (r["transient_gib"] / ref_tr) if ref_tr else None,
             "by": {k: [c[k] for c in r["curve"]] for k in last if k.startswith(("task/", "set/"))},
             "curve": [[c["step"], c["pf"], c["all"]] for c in r["curve"]],
             "is_ref": r["arm"] in a.ref.split(",")})
@@ -169,7 +172,8 @@ def main():
         board.append({"tag": tag, "arm": arm, "seeds": sorted(x["seed"] for x in rs), "steps": rs[0]["steps"],
                       "eval_size": rs[0]["eval_size"], "is_ref": rs[0]["is_ref"],
                       **{k: mean(k) for k in ("ce_last", "drop", "frac", "pf", "pf_per_step_vs_dense", "iso",
-                                              "to_target", "peak_gib", "peak_vs_ref", "train_s", "wall_s",
+                                              "to_target", "peak_gib", "peak_vs_ref", "transient_gib", "transient_vs_ref",
+                                              "train_s", "wall_s",
                                               "d_vs_ref", "d_vs_ref_se")},
                       "iso_lb": any(x["iso_lb"] for x in rs)})
         for kk in ("x", "xw"):  # per level: mean over seeds, None unless every seed reached it
@@ -185,14 +189,14 @@ def main():
     print(f"reference seeds {ref_seeds}; ranked by deepest reference level reached, then FLOP speedup there "
           f"(x@k = cheapest reference PF to reach the reference's step-k loss / run PF to reach it; xw = worst task)")
     print(f"{'tag/arm':34s} {'sd':>4s} {'steps':>5s} {'CE':>6s} {'frac':>5s} {'PF':>7s} {'step/dense':>10s} "
-          f"{'x@lvl':>10s} {'xw@lvl':>10s} {'peakGiB':>7s} {'mem/ref':>7s} {'train_s':>7s}")
+          f"{'x@lvl':>10s} {'xw@lvl':>10s} {'peakGiB':>7s} {'transGiB':>8s} {'tr/ref':>6s} {'train_s':>7s}")
     f = lambda v, w, p: (f"{v:{w}.{p}f}" if v is not None else " " * (w - 1) + "-")  # noqa: E731
     for b in board:
         print(f"{(b['tag'] + '/' + b['arm'])[:34]:34s} {len(b['seeds']):>4d} {b['steps']:>5d} {f(b['ce_last'], 6, 3)} "
               f"{f(b['frac'], 5, 2)} {f(b['pf'], 7, 2)} {f(b['pf_per_step_vs_dense'], 10, 3)} "
               f"{deepest(b)[1]:5.2f}@{deepest(b)[0]:<4d} {deepest(b, 'xw')[1]:5.2f}@{deepest(b, 'xw')[0]:<4d} "
-              f"{f(b['peak_gib'], 7, 1)} "
-              f"{f(b['peak_vs_ref'], 7, 2)} {f(b['train_s'], 7, 0)}")
+              f"{f(b['peak_gib'], 7, 1)} {f(b['transient_gib'], 8, 1)} "
+              f"{f(b['transient_vs_ref'], 6, 2)} {f(b['train_s'], 7, 0)}")
     if a.out:
         json.dump({"board": board, "runs": out, "ref": a.ref, "min_frac": a.min_frac}, open(a.out, "w"), indent=1)
         print("wrote", a.out)
