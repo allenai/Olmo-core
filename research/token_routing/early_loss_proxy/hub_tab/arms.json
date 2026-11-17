@@ -146,5 +146,169 @@
  "a50": {
   "idea": "early layers",
   "desc": "body tokens skip the FFN in blocks 0-6 with probability 0.5"
+ },
+ "rc-mix50": {
+  "idea": "short rows",
+  "desc": "recipe on the 50/50 short/long pool"
+ },
+ "rc-mix80": {
+  "idea": "short rows",
+  "desc": "recipe on the 80/20 short/long pool"
+ },
+ "rc-short": {
+  "idea": "short rows",
+  "desc": "recipe on 1k-2k rows only"
+ },
+ "dl-mix50": {
+  "idea": "short rows",
+  "desc": "dense LoRA on the 50/50 pool"
+ },
+ "dl-mix80": {
+  "idea": "short rows",
+  "desc": "dense LoRA on the 80/20 pool"
+ },
+ "dl-short": {
+  "idea": "short rows",
+  "desc": "dense LoRA on 1k-2k rows only"
+ },
+ "denselora2e5": {
+  "idea": "reference",
+  "desc": "dense LoRA, LR 2e-5"
+ },
+ "r_cut5k": {
+  "idea": "cross-row",
+  "desc": "recipe on rows <= 5k only"
+ },
+ "dl_cut5k": {
+  "idea": "cross-row",
+  "desc": "dense LoRA on rows <= 5k only"
+ },
+ "grJ": {
+  "idea": "gold + randomness",
+  "desc": "gold-aware stochastic keep, variant J"
+ },
+ "grE": {
+  "idea": "gold + randomness",
+  "desc": "variant E"
+ },
+ "cd0": {
+  "idea": "KV reuse",
+  "desc": "context forward-only from block 0, no drops"
+ },
+ "cd0d": {
+  "idea": "KV reuse",
+  "desc": "context forward-only with the recipe's drops"
+ },
+ "cd0dB": {
+  "idea": "KV reuse",
+  "desc": "context forward-only, drops from block 2"
+ },
+ "cd0dfe4": {
+  "idea": "KV reuse",
+  "desc": "cd0d with every 4th step dense LoRA"
+ },
+ "rt10": {
+  "idea": "early-layer signal",
+  "desc": "ridge router at keep 10%/3% (control)"
+ },
+ "ee10": {
+  "idea": "early-layer signal",
+  "desc": "early-exit selection at keep 10%/3%"
+ },
+ "ee7aux": {
+  "idea": "early-layer signal",
+  "desc": "ee7 plus the early loss as an auxiliary loss"
+ },
+ "ee7det": {
+  "idea": "early-layer signal",
+  "desc": "early blocks trained by the early loss only"
+ },
+ "sL0r10": {
+  "idea": "base model",
+  "desc": "standard base, token exit at the input, ratio 0.10"
+ },
+ "sL0r05": {
+  "idea": "base model",
+  "desc": "standard base, token exit at the input, ratio 0.05"
+ },
+ "cL0r10": {
+  "idea": "base model",
+  "desc": "drop-CPT base, token exit at the input, ratio 0.10"
+ },
+ "a16ema11": {
+  "idea": "cross-row",
+  "desc": "recipe, cells sampled by training loss / cell tokens (main pool)"
+ },
+ "a16ema10": {
+  "idea": "cross-row",
+  "desc": "recipe, cells sampled by training loss (main pool)"
+ },
+ "a16st": {
+  "idea": "cross-row",
+  "desc": "recipe, static reorder-heavy task mix"
+ },
+ "a16rp1": {
+  "idea": "cross-row",
+  "desc": "recipe, loss averaged per row"
+ },
+ "m50ema11": {
+  "idea": "cross-row",
+  "desc": "recipe on the 50/50 pool, cells sampled by loss / tokens"
+ },
+ "m50ema10": {
+  "idea": "cross-row",
+  "desc": "recipe on the 50/50 pool, cells sampled by loss"
+ },
+ "m50e11rp": {
+  "idea": "cross-row",
+  "desc": "m50ema11 with per-row loss averaging"
+ },
+ "m50rp1": {
+  "idea": "cross-row",
+  "desc": "recipe on the 50/50 pool, per-row loss averaging"
+ },
+ "rc-mq": {
+  "idea": "more supervision per context",
+  "desc": "recipe on multi-question rows"
+ },
+ "rc-mix50mq": {
+  "idea": "more supervision per context",
+  "desc": "recipe on multi-question 50/50 pool"
+ },
+ "dl-mq": {
+  "idea": "more supervision per context",
+  "desc": "dense LoRA (LR 2e-5) on multi-question rows"
+ },
+ "r_mix50curr": {
+  "idea": "cross-row",
+  "desc": "recipe on the 50/50 pool with a length curriculum"
+ },
+ "dl_mix50pack": {
+  "idea": "cross-row",
+  "desc": "dense LoRA on the 50/50 pool with token-budget batches"
+ },
+ "dl_mix50": {
+  "idea": "cross-row",
+  "desc": "dense LoRA on the 50/50 pool"
+ },
+ "cd16": {
+  "idea": "KV reuse",
+  "desc": "context forward-only from block 16"
+ },
+ "cd7": {
+  "idea": "KV reuse",
+  "desc": "context forward-only from block 7"
+ },
+ "cd7d": {
+  "idea": "KV reuse",
+  "desc": "context forward-only from block 7 with drops"
+ },
+ "cd0dt1k": {
+  "idea": "KV reuse",
+  "desc": "cd0d with a 1,024-token gradient tail"
+ },
+ "cd0dA": {
+  "idea": "KV reuse",
+  "desc": "context forward-only, drops from block 4"
  }
 }

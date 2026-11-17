@@ -34,7 +34,10 @@ import build_pool_v2 as P  # noqa: E402
 SHORT = ["1k", "2k"]
 LONG = ["4k", "8k", "16k"]
 TARGET = {"1k": 1000.0, "2k": 2000.0}
-GEN_ROWS = {"qdmatch_nq": 4500}  # ~32% survive the eval-gold exclusion at 1k/2k
+#: rows generated per (task, rung). qdmatch_nq: ~32% survive the eval-gold exclusion. The 1k cells were regenerated
+#: larger (2026-11-17, same seed: a prefix-stable stream) for mtbmix80h, which needs 1,562 rows at 1k per task.
+GEN_ROWS = {("qdmatch_nq", "2k"): 4500, ("qdmatch_nq", "1k"): 5500, ("contradiction", "1k"): 1800,
+            ("outlier", "1k"): 1800, ("reorder", "1k"): 1800}
 GEN_DEFAULT = 1000
 SHORT_N_DOCS_FILE = f"{P.WORK}/n_docs_short.json"
 R2K = f"{P.WORK}/suite_rows_r2k/suite"
@@ -44,6 +47,10 @@ POOLS = {
     "mtbshort": {"1k": 976, "2k": 976},
     "mtbmix80": {"1k": 781, "2k": 781, "4k": 130, "8k": 130, "16k": 130},
     "mtbmix50": {"1k": 488, "2k": 488, "4k": 325, "8k": 325, "16k": 326},
+    "mtbmix90": {"1k": 878, "2k": 878, "4k": 65, "8k": 65, "16k": 66},
+    "mtbmix95": {"1k": 927, "2k": 927, "4k": 33, "8k": 33, "16k": 32},
+    "mtbmix80L": {"1k": 781, "2k": 781, "16k": 390},
+    "mtbmix80h": {"1k": 1562, "4k": 130, "8k": 130, "16k": 130},
 }
 SH = "/data/prasann/early_loss_proxy/shards"
 
@@ -72,7 +79,7 @@ def gen(a):
         for r in SHORT:
             n, why = n_docs_for(t, r, cal)
             used[f"{t}:{r}"] = {"n_docs": n, **why}
-            jobs.append((t, r, n, GEN_ROWS.get(t, GEN_DEFAULT)))
+            jobs.append((t, r, n, GEN_ROWS.get((t, r), GEN_DEFAULT)))
             print(f"[short gen] {t}@{r}: {n} documents ({why['why']}), rows {jobs[-1][3]}", flush=True)
     json.dump(used, open(SHORT_N_DOCS_FILE, "w"), indent=1)
     with cf.ProcessPoolExecutor(max_workers=a.jobs) as ex:

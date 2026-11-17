@@ -107,3 +107,11 @@ to `launch_proxy.py`. Real runs use the defaults (new pool, 16,384).
   `BEAKER.md`. Needs your branch PUSHED (`git push -u origin <your-branch>`; never main / prasann/flopdrop_clean) and
   merged with `origin/claude/early-loss-proxy-d6e886`. Arms that read files only on Berkeley `/data` are refused.
 - Data and held-out rows: `POOL_V2.md`. Memory to report: `transient_gib` (peak minus pre-step baseline).
+
+## Priority (Prasann, 2026-11-17 12:00): the 16k held-out loss, and ideas that gain more as rows get longer
+- Judge every arm first on the 16k held-out rows (`python3 iso_set.py set/suite16k`; with `heldout_v3.npz` the sets
+  `gen16k` = fresh in-range 16k rows and `rung16k` = uncapped 16k-rung eval rows), then on all lengths.
+- The plain recipe is 2.1-2.7x vs dense LoRA at 16k; short-heavy pools add only ~1.2x there. Prefer levers whose
+  saving grows with length (attention is quadratic in length; the kept-token share can fall as rows grow).
+- Memory: with activation checkpointing the step's transient memory at 16k is ~3 GiB against ~12 GiB of weights and
+  optimizer state, so memory does not limit context length at 16k; report `transient_gib` per 1k tokens instead.

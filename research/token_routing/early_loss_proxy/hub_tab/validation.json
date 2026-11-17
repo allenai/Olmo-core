@@ -3,18 +3,27 @@
   "run": "calibration: full epoch on mtb16k with generation-graded evals",
   "arm": "dense LoRA at f1 / f2 / f4, recipe at f1 (2 seeds) and f2, dense full FT at f1",
   "rows": "1,952 per task; evals 4 tasks x 4k / 8k / 16k, eval_size 500 per cell",
-  "status": "launching",
+  "status": "evals running",
   "predicted": "proxy: recipe 1.9x fewer FLOPs than dense LoRA to the 100-step loss level",
-  "actual": "",
-  "note": "Establishes the real FLOPs-to-match on the new task set and checks the proxy's ratio. Agent started 01:30."
+  "actual": "Training done (flop-meter PF): dense LoRA f1 / f2 / f4 = 1,496 / 754 / 375; recipe f1 = 442 (two seeds), f2 = 223; dense full FT f1 = 1,982. Generation evals submitted from 11:45 (28 jobs, at most 8 at a time); table expected in 3-5 hours.",
+  "note": "The seven training jobs ended overnight; the validation agent was cut off by the usage limit before launching evals and was resumed at 11:30. The 16k-rung eval prompts are mostly longer than the 16,384-token training cap (418 of 500 for contradiction, up to 18.7k; 479 of 500 for reorder, up to 35.4k), so the 16k cells also test length extrapolation."
  },
  {
   "run": "full-epoch loss curves (488 steps, dense-forward held-out CE every 50 steps)",
   "arm": "dense LoRA, recipe (2 seeds)",
   "rows": "1,952 per task; eval_size 184",
-  "status": "running",
+  "status": "done",
   "predicted": "",
+  "actual": "Dense LoRA: 0.178 / 0.140 / 0.100 / 0.084 / 0.071 held-out CE at steps 50 / 100 / 200 / 300 / 488 (1,496 PF). Recipe (two seeds): 0.172 / 0.124-0.135 / 0.103-0.107 / 0.086-0.093 at steps 100 / 200 / 300 / 488 (442 PF). FLOP ratio 1.9-2.2x at every level from 0.160 to 0.095.",
+  "note": "The recipe's advantage does not grow later in the epoch on this task set, and at equal rows it ends above dense LoRA; a 100-step proxy reading (1.7-1.9x) matches the full-epoch reading."
+ },
+ {
+  "run": "full-epoch recipe on the mixed pools (488 steps)",
+  "arm": "recipe on 80/20 (two seeds) and 50/50",
+  "rows": "1,952 per task; eval_size 184",
+  "status": "running",
+  "predicted": "3.1-3.4x at held-out CE 0.125 from the 400-step runs",
   "actual": "",
-  "note": "Shows whether the recipe's FLOP advantage grows later in training, which a 100-step run cannot see."
+  "note": "Checks whether the mixed pools keep their lead or plateau the way rows <= 5k do."
  }
 ]

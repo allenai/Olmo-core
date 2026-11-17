@@ -37,5 +37,7 @@ for b in a.boards:
     state["curves"] += c
 if a.pilot:
     state["pilot"] = rows(a.pilot)[0]
+if os.path.exists(os.path.join(T, "depth.json")):
+    state["depth"] = ld("depth.json")
 json.dump(state, open(os.path.join(T, "loop_state.json"), "w"), indent=1)
 print("wrote loop_state.json:", len(state["board"]), "board rows,", len(state["curves"]), "curves,", len(state["ideas"]), "ideas")

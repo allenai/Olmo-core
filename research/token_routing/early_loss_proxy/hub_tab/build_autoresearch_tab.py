@@ -22,6 +22,7 @@ TAB = S + '''
 <div class="parthead"><span class="eyebrow">8d · Auto-research loop</span><h2 class="ptitle">FLOPs to reach the dense loss at 4k-16k: search log</h2><p class="verdict" id="arVerdict"></p><p class="note" id="arUpdated"></p></div>
 <section><h2>Best so far, by hour</h2><div id="arBest"></div>
   <div class="figs"><figure style="grid-column: 1 / -1"><div class="chart" style="height:220px"><canvas id="arBestChart" aria-label="best FLOP speedup over time"></canvas></div><figcaption>Best FLOP speedup over the dense reference found so far, by time of the loop.</figcaption></figure></div></section>
+<section id="arDepthSec"><h2>FLOPs to reach a held-out loss, against the full-epoch dense-LoRA curve</h2><div id="arDepth"></div><p class="note">Ratio above 1 means fewer training FLOPs than dense LoRA needs for the same held-out loss; eval_size 184, one seed per row unless the name says otherwise.</p></section>
 <section><h2>Leaderboard</h2><div id="arBoard"></div><p class="note" id="arBoardNote"></p></section>
 <section><h2>Loss vs training FLOPs</h2>
   <div class="figs"><figure style="grid-column: 1 / -1"><div class="chart" style="height:380px"><canvas id="arCurves" aria-label="held-out loss vs training PFLOPs"></canvas></div><figcaption id="arCurvesCap">Held-out dense CE against cumulative training PFLOPs (log axis); step 0 is omitted. Reference runs are thick and dashed.</figcaption></figure></div></section>
@@ -53,12 +54,24 @@ JS = S + r'''
   const BH = ST.best_by_hour || [];
   if (!BH.length) empty($("arBest"), "No 16k result yet"); else
     $("arBest").appendChild(table(["time", "method", "idea", "FLOP speedup", "worst task", "transient memory vs dense LoRA", "note"],
-      BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level != null ? " @ step " + r.level : ""), xs(r.xw), r.mem == null ? "" : f(r.mem, 2) + "×", r.note]), [3, 4, 5]));
+      BH.map(r => [r.t, r.arm, r.idea, xs(r.x) + (r.level == null || r.level === "" ? "" : (isNaN(r.level) ? " @ " : " @ step ") + r.level), r.xw == null ? "n/a" : xs(r.xw), r.mem == null ? "" : f(r.mem, 2) + "×", r.note]), [3, 4, 5]));
   if (!BH.length) { const fg = $("arBestChart"); if (fg) fg.closest("figure").style.display = "none"; }
+  // depth table
+  const DP = ST.depth;
+  if (!DP || !(DP.runs || []).length) { const s = $("arDepthSec"); if (s) s.style.display = "none"; } else {
+    const lvls = DP.levels || [], key = l => Number(l).toFixed(3);
+    const cell = (x, pf) => { const s = el("span"); s.appendChild(document.createTextNode(x == null ? "not reached" : f(x, 1) + "×")); if (pf != null) { s.appendChild(el("br")); s.appendChild(el("small", f(pf, 0) + " PF", "note")); } return s; };
+    let mn = Infinity; const rm = (DP.ref || []).map(q => [q[0], mn = Math.min(mn, q[1])]);
+    const refPF = l => { for (let i = 0; i < rm.length; i++) if (rm[i][1] <= l) { if (i === 0) return rm[0][0]; const [p0, c0] = rm[i - 1], [p1, c1] = rm[i]; return c0 === c1 ? p1 : p0 + (p1 - p0) * (c0 - l) / (c0 - c1); } return null; };
+    const rows = [[two("dense LoRA, full epoch (reference)"), "", "1.00×", ""].concat(lvls.map(l => { const p = refPF(l); return p == null ? cell(null) : cell(1, p); }))];
+    DP.runs.forEach(r => rows.push([r.run, r.steps, r.x_dense == null ? "" : f(r.x_dense, 2) + "×", f(r.last_ce, 3)].concat(lvls.map(l => { const q = (r.levels || {})[key(l)]; return q ? cell(q.x_vs_dense_lora, q.pf) : cell(null); }))));
+    $("arDepth").appendChild(table(["run", "steps", "cost per step vs dense", "last CE"].concat(lvls.map(l => "CE " + key(l))), rows, [1, 2, 3].concat(lvls.map((_, i) => 4 + i))));
+  }
   // leaderboard
   const tg = r => { const s = el("span"); s.appendChild(document.createTextNode(f(r.transient_gib, 1))); if (r.peak_gib != null && r.peak_gib !== "") s.appendChild(el("span", " (" + f(r.peak_gib, 1) + ")", "note")); return s; };
+  function HIDE(r) { return r.tag + "/" + r.arm === "hp/denselora-lr2e5" || r.tag === "hp/denselora-lr2e5" || r.arm === "hp/denselora-lr2e5"; }
   const rk = r => r.arm === "recipe" ? 0 : r.is_ref ? 1 : 2, ir = r => r.iso_rec == null ? -Infinity : r.iso_rec;
-  const B = (ST.board || []).map((r, i) => [r, i]).sort((a, b) => rk(a[0]) - rk(b[0]) || ir(b[0]) - ir(a[0]) || a[1] - b[1]).map(x => x[0]), lv = new Set();
+  const B = (ST.board || []).filter(r => !HIDE(r)).map((r, i) => [r, i]).sort((a, b) => rk(a[0]) - rk(b[0]) || ir(b[0]) - ir(a[0]) || a[1] - b[1]).map(x => x[0]), lv = new Set();
   const iso = r => r.iso == null ? "n/a" : (r.iso_lb ? ">= " : "") + f(r.iso, 1) + "×", isr = r => r.iso_rec == null ? "n/a" : f(r.iso_rec, 2) + "×";
   B.forEach(r => Object.keys(r.x || {}).forEach(k => lv.add(k)));
   const levels = [...lv].sort((a, b) => a - b), deep = levels[levels.length - 1];
@@ -108,7 +121,7 @@ JS = S + r'''
     new Chart($("arBestChart"), { type: "line", data: { labels: BH.map(r => r.t), datasets: [{ label: "best FLOP speedup", data: BH.map(r => r.x), borderColor: css("--c1"), backgroundColor: css("--c1"), tension: 0, pointRadius: 3 }] },
       options: { ...base, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => BH[c.dataIndex].arm + ": " + f(c.raw, 1) + "×" } } }, scales: { x: { ticks: { color: mu, maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: axis("FLOP speedup (×)", { beginAtZero: true }) } } });
   }
-  const C = ST.curves || [];
+  const C = (ST.curves || []).filter(c => !HIDE(c));
   if ($("arCurves")) {
     if (!C.length) { $("arCurves").closest("figure").style.display = "none"; empty($("arCurves").closest("section"), "No curves yet."); }
     else {
