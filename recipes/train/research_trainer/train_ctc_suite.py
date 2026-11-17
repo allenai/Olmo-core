@@ -1211,7 +1211,9 @@ def build_and_fit(opts: argparse.Namespace) -> None:
         # context forward-only training (olmo_core.nn.ctx_detach, early-loss-proxy idea "detach", 2026-11-16)
         stg = {int(a): float(b) for a, b in (x.split(":") for x in opts.ctx_detach_stages.split(",") if x)}
         model._ctx_detach = {"layer": opts.ctx_detach_layer, "stages": stg, "doc_start_id": ids.doc_start,
-                             "doc_end_id": ids.doc_end, "pad_id": ids.eos, "seed": opts.seed, "_calls": 0}
+                             "doc_end_id": ids.doc_end, "pad_id": ids.eos, "seed": opts.seed, "_calls": 0,
+                             "tail": opts.ctx_detach_tail, "full_every": opts.ctx_detach_full_every,
+                             "calls_per_step": accum}
         model._flop_extra_actual = 0.0
         print(f"[ctc-suite] ctx detach: context forward-only from block {opts.ctx_detach_layer}, "
               f"prefix drops {stg or 'none'}", flush=True)
@@ -1581,6 +1583,10 @@ def parse_args() -> argparse.Namespace:
                     help="context forward-only training (olmo_core.nn.ctx_detach): context tokens (up to the last "
                     "doc-close marker) run blocks >= K under no_grad as constant K/V + GDN state; only the suffix "
                     "(query + answer) keeps a gradient path there. -1 = off")
+    ap.add_argument("--ctx-detach-tail", type=int, default=0,
+                    help="--ctx-detach-layer: the last N context tokens join the gradient (suffix) pass")
+    ap.add_argument("--ctx-detach-full-every", type=int, default=0,
+                    help="--ctx-detach-layer: every k-th optimizer step runs the ordinary full-gradient forward (0 = never)")
     ap.add_argument("--ctx-detach-stages", default="",
                     help="--ctx-detach-layer: random prefix-pass drops, 'block:keep_frac,...' of each row's document "
                     "body tokens (nested; markers / non-document tokens always kept), e.g. 7:0.2,16:0.07")

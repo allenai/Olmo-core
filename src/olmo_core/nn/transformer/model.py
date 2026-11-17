@@ -2693,7 +2693,14 @@ class Transformer(nn.Module):
             from ..ctx_detach import clear as _cd_clear, ctx_detach_forward
 
             _cd_clear(self)
-            if self.training and not input_ids.is_floating_point() and input_embeddings is None:
+            _cdc = self._ctx_detach
+            _every = int(_cdc.get("full_every", 0))
+            if self.training:
+                _cdc["_fwd"] = int(_cdc.get("_fwd", 0)) + 1
+            # --ctx-detach-full-every k: every k-th optimizer step runs the ordinary (full-gradient) forward
+            _full = (self.training and _every > 0
+                     and ((_cdc["_fwd"] - 1) // max(1, int(_cdc.get("calls_per_step", 1)))) % _every == _every - 1)
+            if self.training and not _full and not input_ids.is_floating_point() and input_embeddings is None:
                 # context forward-only training (olmo_core.nn.ctx_detach): context tokens run blocks >= K without grad
                 return ctx_detach_forward(
                     self, input_ids, labels, ignore_index=ignore_index, loss_reduction=loss_reduction,

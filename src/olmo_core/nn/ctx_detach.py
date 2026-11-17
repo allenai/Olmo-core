@@ -86,7 +86,8 @@ def ctx_detach_forward(model, input_ids, labels, *, ignore_index, loss_reduction
     is_end = ids == cfg["doc_end_id"]
     ar = torch.arange(T, device=dev)
     last_end = torch.where(is_end, ar[None, :], torch.full_like(ids, -1)).max(dim=1).values
-    s = (last_end + 1).clamp(min=0)  # suffix start = first token after the last doc-close marker
+    # suffix start = first token after the last doc-close marker, minus an optional grad TAIL of the context
+    s = (last_end + 1 - int(cfg.get("tail", 0))).clamp(min=0)
     S_b = L - s
     if labels is not None:
         lab_ctx = ((labels != ignore_index) & (ar[None, :] < s[:, None])).sum()
