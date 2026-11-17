@@ -324,6 +324,13 @@ class SoftTokenOptions(VariantOptions):
     st_otr_no_hidden: bool = False
     st_otr_no_query: bool = False
     st_otr_use_gold: bool = False
+    st_otr_gold_prior: str = ""
+    st_otr_gold_prior_smin: float = 0.0
+    st_gdd_keep_range: str = ""
+    st_gdd_max_gold_frac: float = 0.5
+    st_gdd_whole_frac: float = 0.0
+    st_gdd_thin_range: str = ""
+    st_gdd_thin_keep_first: int = 8
     st_otr_target: str = "gnorm"
     st_otr_ridge: float = 0.1
     st_otr_decay: float = 0.9
@@ -1213,6 +1220,8 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         use_hidden=not o.st_otr_no_hidden,
         use_query=not o.st_otr_no_query,
         use_gold=o.st_otr_use_gold,
+        gold_prior=o.st_otr_gold_prior,
+        gold_prior_smin=o.st_otr_gold_prior_smin,
         target=o.st_otr_target,
         ridge=o.st_otr_ridge,
         decay=o.st_otr_decay,
@@ -1403,6 +1412,17 @@ class SoftToken(Variant):
             slot_stop_ids=(None if o.st_slot_mode == "mean" else build_slot_stop_set(o, ctx)),
             cat_keep=resolve_cat_keep(o),
         )
+        if online and (o.st_gdd_keep_range or o.st_gdd_thin_range or o.st_gdd_whole_frac > 0):
+            from olmo_core.nn.gold_doc_drop import GoldDocDrop, GoldDocDropConfig
+
+            kr = [float(x) for x in (o.st_gdd_keep_range or "1,1").split(",")]
+            tr = [float(x) for x in (o.st_gdd_thin_range or "1,1").split(",")]
+            gcfg = GoldDocDropConfig(keep_lo=kr[0], keep_hi=kr[-1], max_gold_frac=o.st_gdd_max_gold_frac,
+                                     whole_frac=o.st_gdd_whole_frac, thin_lo=tr[0], thin_hi=tr[-1],
+                                     thin_keep_first=o.st_gdd_thin_keep_first, seed=ctx.seed)
+            model._gold_doc_drop = GoldDocDrop(gcfg, router=model._online_token_router, doc_start_id=ctx.ids.doc_start,
+                                               doc_end_id=ctx.ids.doc_end, eos_id=ctx.ids.eos, rank=ctx.rank)
+            print(f"[variants] gold doc drop before block 0: {gcfg}", flush=True)
         if online and o.st_otr_early_lora > 0:
             from olmo_core.nn.early_lora import install_early_lora
 
