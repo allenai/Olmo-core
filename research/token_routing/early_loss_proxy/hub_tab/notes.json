@@ -13,6 +13,14 @@
  ],
  "log": [
   {
+   "t": "11-17 11:55",
+   "text": "Variants of the recipe on the 80/20 pool (partial, one seed): keep 30%/10% is level with the standard keep per FLOP (0.127 at 108 PF); keep 10%/3.5%, 32 rows/step and LR 2e-5 are behind. Note: log entries stamped 12:00-12:15 above this one were written between 11:35 and 11:50."
+  },
+  {
+   "t": "11-17 12:00",
+   "text": "Larger 16k held-out set built (heldout_v3): 48 fresh in-range 16k rows per task (12.9k-16.1k tokens) and 32 uncapped 16k-rung eval rows per task (15.4k-20.2k tokens), 320 rows at 16k; no shared prompts or gold documents with training. Eleven runs launched on it: dense LoRA full epoch (LR 1e-5) and to step 250 (LR 2e-5), recipe (two seeds), recipe on the 80/20 pool (two seeds), on the 50/50 pool, and on four new pools: 90% short, 95% short, 80% short with the long part all 16k, 80% short with the short part all 1k."
+  },
+  {
    "t": "11-17 12:15",
    "text": "Memory goal restated by Prasann: not savings at 16k but algorithms that keep memory nearly flat at 256k, 1M tokens or longer. New agent: memory scaling law with length, then chunked early blocks with a fixed kept-token budget."
   },

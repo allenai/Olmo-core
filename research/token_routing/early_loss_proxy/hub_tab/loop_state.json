@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-17 11:44 PT",
+ "updated": "2026-11-17 11:59 PT",
  "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k), about 3.1-3.4x fewer training FLOPs than dense LoRA to reach held-out CE 0.125 (two seeds), against 1.9-2.2x for the plain recipe; in absolute terms one of its steps costs about 0.08x of a dense step on the main pool. Loss-per-cost sampling of task and length cells on the 50/50 pool gives 3.3x (one seed). Full-epoch curves show the plain recipe's advantage stays near 2x through the epoch and it ends above dense LoRA (0.086-0.093 vs 0.071 held-out CE) because it has used 3.4x fewer FLOPs on the same rows. Multi-question rows did not help. Nothing is near 10x; about 90 arms scored, eval_size 184. Next: 90% and 95% short pools, sampling stacked on the 80/20 pool, full-epoch runs on the mixed pools, generation-graded validation.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,14 @@
   "From 11-17 12:00 the primary measure is the 16k held-out loss. Until the larger 16k set is in place, 16k readings come from 56 rows (8 for reorder) and are noisy."
  ],
  "log": [
+  {
+   "t": "11-17 11:55",
+   "text": "Variants of the recipe on the 80/20 pool (partial, one seed): keep 30%/10% is level with the standard keep per FLOP (0.127 at 108 PF); keep 10%/3.5%, 32 rows/step and LR 2e-5 are behind. Note: log entries stamped 12:00-12:15 above this one were written between 11:35 and 11:50."
+  },
+  {
+   "t": "11-17 12:00",
+   "text": "Larger 16k held-out set built (heldout_v3): 48 fresh in-range 16k rows per task (12.9k-16.1k tokens) and 32 uncapped 16k-rung eval rows per task (15.4k-20.2k tokens), 320 rows at 16k; no shared prompts or gold documents with training. Eleven runs launched on it: dense LoRA full epoch (LR 1e-5) and to step 250 (LR 2e-5), recipe (two seeds), recipe on the 80/20 pool (two seeds), on the 50/50 pool, and on four new pools: 90% short, 95% short, 80% short with the long part all 16k, 80% short with the short part all 1k."
+  },
   {
    "t": "11-17 12:15",
    "text": "Memory goal restated by Prasann: not savings at 16k but algorithms that keep memory nearly flat at 256k, 1M tokens or longer. New agent: memory scaling law with length, then chunked early blocks with a fixed kept-token budget."
@@ -5463,6 +5471,306 @@
    "d_vs_ref_se": 0.008822579306933568,
    "idea": "gold + randomness",
    "desc": "variant G (Lambda, 50 steps)"
+  },
+  {
+   "tag": "memscale",
+   "arm": "dl16kac",
+   "seeds": [
+    0
+   ],
+   "steps": 3,
+   "eval_size": 4,
+   "is_ref": false,
+   "ce_last": 0.6395207792520523,
+   "frac": 0.2601924980351046,
+   "pf": 1.056842135790592,
+   "pf_per_step_vs_dense": 0.7386335339018749,
+   "x": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 11.75217391606202,
+   "iso_lb": false,
+   "iso_rec": 9.224653135337773,
+   "peak_gib": 24.463263511657715,
+   "peak_vs_ref": 0.8959101340168745,
+   "transient_gib": 5.774725914001465,
+   "transient_vs_ref": 1.9979559292405065,
+   "train_s": 6.9873716831207275,
+   "d_vs_ref": null,
+   "d_vs_ref_se": null,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "memscale",
+   "arm": "dl16knoac",
+   "seeds": [
+    0
+   ],
+   "steps": 3,
+   "eval_size": 4,
+   "is_ref": false,
+   "ce_last": 0.6352056562900543,
+   "frac": 0.26640644589171536,
+   "pf": 1.056842135790592,
+   "pf_per_step_vs_dense": 0.7386335339018749,
+   "x": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 11.974976483203998,
+   "iso_lb": false,
+   "iso_rec": 9.400097676124346,
+   "peak_gib": 24.463019371032715,
+   "peak_vs_ref": 0.8959011929342605,
+   "transient_gib": 5.774481773376465,
+   "transient_vs_ref": 1.997871460779743,
+   "train_s": 5.757625579833984,
+   "d_vs_ref": null,
+   "d_vs_ref_se": null,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "memscale",
+   "arm": "dl32kac",
+   "seeds": [
+    0
+   ],
+   "steps": 3,
+   "eval_size": 4,
+   "is_ref": false,
+   "ce_last": 0.5878031849861145,
+   "frac": 0.33466788074565645,
+   "pf": 2.329580772486144,
+   "pf_per_step_vs_dense": 0.7314962797326755,
+   "x": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 6.542942226484612,
+   "iso_lb": false,
+   "iso_rec": 5.138805890211182,
+   "peak_gib": 24.526740074157715,
+   "peak_vs_ref": 0.8982348154964818,
+   "transient_gib": 5.775702476501465,
+   "transient_vs_ref": 1.9982938030835609,
+   "train_s": 13.051910638809204,
+   "d_vs_ref": null,
+   "d_vs_ref_se": null,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "memscale",
+   "arm": "rc16kac",
+   "seeds": [
+    0
+   ],
+   "steps": 3,
+   "eval_size": 4,
+   "is_ref": false,
+   "ce_last": 0.6360888704657555,
+   "frac": 0.26513458252134103,
+   "pf": 0.5640929531685,
+   "pf_per_step_vs_dense": 0.3942480691653202,
+   "x": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 22.349977110434843,
+   "iso_lb": false,
+   "iso_rec": 17.544038235423784,
+   "peak_gib": 25.09172773361206,
+   "peak_vs_ref": 0.9189261745810295,
+   "transient_gib": 5.952324867248535,
+   "transient_vs_ref": 2.0594021150770594,
+   "train_s": 5.57125449180603,
+   "d_vs_ref": null,
+   "d_vs_ref_se": null,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "memscale",
+   "arm": "rc16knoac",
+   "seeds": [
+    0
+   ],
+   "steps": 3,
+   "eval_size": 4,
+   "is_ref": false,
+   "ce_last": 0.6288778856396675,
+   "frac": 0.27551868607962643,
+   "pf": 0.5640929531685,
+   "pf_per_step_vs_dense": 0.3942480691653202,
+   "x": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 23.04753626416493,
+   "iso_lb": false,
+   "iso_rec": 18.09332699348221,
+   "peak_gib": 25.092261791229248,
+   "peak_vs_ref": 0.9189457331992473,
+   "transient_gib": 5.952858924865723,
+   "transient_vs_ref": 2.05958688983498,
+   "train_s": 4.860522031784058,
+   "d_vs_ref": null,
+   "d_vs_ref_se": null,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "memscale",
+   "arm": "rc32kac",
+   "seeds": [
+    0
+   ],
+   "steps": 3,
+   "eval_size": 4,
+   "is_ref": false,
+   "ce_last": 0.6237716376781464,
+   "frac": 0.28287188524805196,
+   "pf": 1.218807314151332,
+   "pf_per_step_vs_dense": 0.3827096388081888,
+   "x": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": null,
+    "20": null,
+    "30": null,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 10.895561423522288,
+   "iso_lb": false,
+   "iso_rec": 8.554042374460744,
+   "peak_gib": 25.154428482055664,
+   "peak_vs_ref": 0.9212224436750651,
+   "transient_gib": 5.952324867248535,
+   "transient_vs_ref": 2.0594021150770594,
+   "train_s": 8.4047691822052,
+   "d_vs_ref": null,
+   "d_vs_ref_se": null,
+   "idea": "",
+   "desc": ""
   },
   {
    "tag": "prefix",
@@ -12253,6 +12561,246 @@
      0.31190478721899645,
      0.23074011451431684,
      0.2220338092385126
+    ]
+   }
+  },
+  {
+   "tag": "memscale",
+   "arm": "dl16kac",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8202050477266312
+    ],
+    [
+     3,
+     1.056842135790592,
+     0.6395207792520523
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.9901206493377686,
+     0.5357882976531982
+    ],
+    "set/suite4k": [
+     0.8202050477266312,
+     0.6395207792520523
+    ],
+    "task/outlier": [
+     0.8619528412818909,
+     0.8115299344062805
+    ],
+    "task/reorder": [
+     0.7327790260314941,
+     0.7756831049919128
+    ],
+    "task/qdmatch_nq": [
+     0.6959676742553711,
+     0.4350817799568176
+    ]
+   }
+  },
+  {
+   "tag": "memscale",
+   "arm": "dl16knoac",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8202050477266312
+    ],
+    [
+     3,
+     1.056842135790592,
+     0.6352056562900543
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.9901206493377686,
+     0.5379745960235596
+    ],
+    "set/suite4k": [
+     0.8202050477266312,
+     0.6352056562900543
+    ],
+    "task/outlier": [
+     0.8619528412818909,
+     0.8165433406829834
+    ],
+    "task/reorder": [
+     0.7327790260314941,
+     0.7684628367424011
+    ],
+    "task/qdmatch_nq": [
+     0.6959676742553711,
+     0.4178418517112732
+    ]
+   }
+  },
+  {
+   "tag": "memscale",
+   "arm": "dl32kac",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8202050477266312
+    ],
+    [
+     3,
+     2.329580772486144,
+     0.5878031849861145
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.9901206493377686,
+     0.5282962918281555
+    ],
+    "set/suite4k": [
+     0.8202050477266312,
+     0.5878031849861145
+    ],
+    "task/outlier": [
+     0.8619528412818909,
+     0.6974107027053833
+    ],
+    "task/reorder": [
+     0.7327790260314941,
+     0.7308213710784912
+    ],
+    "task/qdmatch_nq": [
+     0.6959676742553711,
+     0.394684374332428
+    ]
+   }
+  },
+  {
+   "tag": "memscale",
+   "arm": "rc16kac",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8202050477266312
+    ],
+    [
+     3,
+     0.5640929531685,
+     0.6360888704657555
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.9901206493377686,
+     0.5194308757781982
+    ],
+    "set/suite4k": [
+     0.8202050477266312,
+     0.6360888704657555
+    ],
+    "task/outlier": [
+     0.8619528412818909,
+     0.7910141348838806
+    ],
+    "task/reorder": [
+     0.7327790260314941,
+     0.7499726414680481
+    ],
+    "task/qdmatch_nq": [
+     0.6959676742553711,
+     0.4839378297328949
+    ]
+   }
+  },
+  {
+   "tag": "memscale",
+   "arm": "rc16knoac",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8202050477266312
+    ],
+    [
+     3,
+     0.5640929531685,
+     0.6288778856396675
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.9901206493377686,
+     0.520915150642395
+    ],
+    "set/suite4k": [
+     0.8202050477266312,
+     0.6288778856396675
+    ],
+    "task/outlier": [
+     0.8619528412818909,
+     0.7900302410125732
+    ],
+    "task/reorder": [
+     0.7327790260314941,
+     0.7480923533439636
+    ],
+    "task/qdmatch_nq": [
+     0.6959676742553711,
+     0.45647379755973816
+    ]
+   }
+  },
+  {
+   "tag": "memscale",
+   "arm": "rc32kac",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8202050477266312
+    ],
+    [
+     3,
+     1.218807314151332,
+     0.6237716376781464
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.9901206493377686,
+     0.531078577041626
+    ],
+    "set/suite4k": [
+     0.8202050477266312,
+     0.6237716376781464
+    ],
+    "task/outlier": [
+     0.8619528412818909,
+     0.701854944229126
+    ],
+    "task/reorder": [
+     0.7327790260314941,
+     0.734249472618103
+    ],
+    "task/qdmatch_nq": [
+     0.6959676742553711,
+     0.5279035568237305
     ]
    }
   },
