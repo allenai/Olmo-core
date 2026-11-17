@@ -108,7 +108,7 @@ def apply_longpos(
             lr = lab_cpu[b].tolist()
             out_lab.append([lr[j] for j in keep_cols])
         out_pos.append(pos)
-    if cfg.get("log_every", 0) and cnt % cfg["log_every"] == 0 and cfg["rank"] == 0:
+    if cfg.get("log_every", 0) and (cnt in (1, 2, 5, 10) or cnt % cfg["log_every"] == 0) and cfg["rank"] == 0:
         msg = f"[longpos] call {cnt}: rows={st['rows']} stretched={st['stretched']}"
         if st["stretched"]:
             msg += f" mean_span={st['span_sum'] / st['stretched']:.0f}"
