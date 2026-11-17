@@ -3,10 +3,10 @@
   "run": "calibration: full epoch on mtb16k with generation-graded evals",
   "arm": "dense LoRA at f1 / f2 / f4, recipe at f1 (2 seeds) and f2, dense full FT at f1",
   "rows": "1,952 per task; evals 4 tasks x 4k / 8k / 16k, eval_size 500 per cell",
-  "status": "evals running",
+  "status": "done",
   "predicted": "proxy: recipe 1.9x fewer FLOPs than dense LoRA to the 100-step loss level",
-  "actual": "Training done (flop-meter PF): dense LoRA f1 / f2 / f4 = 1,496 / 754 / 375; recipe f1 = 442 (two seeds), f2 = 223; dense full FT f1 = 1,982. Generation evals submitted from 11:45 (28 jobs, at most 8 at a time); table expected in 3-5 hours.",
-  "note": "The seven training jobs ended overnight; the validation agent was cut off by the usage limit before launching evals and was resumed at 11:30. The 16k-rung eval prompts are mostly longer than the 16,384-token training cap (418 of 500 for contradiction, up to 18.7k; 479 of 500 for reorder, up to 35.4k), so the 16k cells also test length extrapolation."
+  "actual": "Generation evals done (reorder excluded: grader broken in every arm, parse rate 0.00-0.72). Mean over the other 3 tasks x 4k/8k/16k (eval_size 500 per cell, SE 0.004-0.006): dense LoRA f4 / f2 / f1 = 0.743 / 0.825 / 0.882 at 375 / 754 / 1,496 PF; recipe f2 = 0.822 at 223 PF; recipe f1 = 0.899 / 0.895 (two seeds) at 442 PF; dense full FT f1 = 0.928 at 1,982 PF. 16k cells: dense LoRA 0.615 / 0.702 / 0.772, recipe f2 0.696, recipe f1 0.792 / 0.794, dense full FT 0.850. FLOPs to match the dense-LoRA curve: recipe f2 3.3x overall (8k 3.5x, 16k 3.2x; contradiction 2.0x, outlier 4.4x, qdmatch_nq at most 1.7x); recipe f1 at least 3.4x (it beats the most expensive dense-LoRA point). Dense full FT beats the recipe's full epoch by 0.031, so against that reference the recipe never reaches the target.",
+  "note": "The proxy ranked recipe ahead of dense LoRA per FLOP correctly but was about 1.5x conservative (1.9-2.2x predicted, 3.3x real); it also had dense full FT tied with dense LoRA at step 100, which the real evals do not show. One seed per dense point. Most 16k eval prompts exceed the 16,384-token training cap (418 of 500 contradiction, 182 outlier, 479 reorder). Code and table: branch loop/validate @ 787581912, validation/table.json; checkpoints weka ctc_suite/ckpts/elpv-*."
  },
  {
   "run": "full-epoch loss curves (488 steps, dense-forward held-out CE every 50 steps)",
