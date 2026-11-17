@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-17 01:17 PT",
+ "updated": "2026-11-17 01:25 PT",
  "status": "27 arms scored at 16k (one seed, eval_size 184). The recipe is still the best: 1.9x fewer FLOPs than dense LoRA to the 100-step loss level (1.3x on the worst task). Every cheaper arm so far is behind the recipe at matched loss: random keep 0.54x of the recipe's efficiency, keep 10%/3.5% 0.71x, LR 2e-5 0.85x, 8 rows/step 0.74x, no-grad prefix 0.34-0.41x, early-loss selection 0.25-0.60x, FFN skip 0.12-0.58x, gold-aware keep 0.75-0.89x. Two gold-aware arms on Lambda are ahead (1.5-1.6x the recipe) but only at a shallow 50-step level where the comparison is unreliable. Short-row pools, detached context and the drop-CPT bases are running.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -11,6 +11,10 @@
   "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps."
  ],
  "log": [
+  {
+   "t": "11-17 01:25",
+   "text": "Two ideas closed as negative: frozen no-grad prefix with earlier cuts, and FFN skip for context tokens. Both show that blocks 0-6 need every token, every FFN and their own gradient."
+  },
   {
    "t": "11-17 01:20",
    "text": "Short-row pools built (mean row 1.6k / 3.1k / 5.4k tokens vs 9.1k) and running on Beaker with dense LoRA and the recipe. Detached-context screen moved to Beaker. Reorder is the task every cheap arm loses on (0.45-0.60 vs 0.33)."
@@ -62,8 +66,8 @@
    "family": "early layers",
    "title": "Frozen no-grad prefix + earlier cuts",
    "what": "Blocks 0-k run forward-only (no backward, no stored activations), tokens dropped from block 2-4 onward in more stages. Attacks the 0.2x/step floor of blocks 0-6 and the memory peak.",
-   "status": "running",
-   "result": "First arms (cut at block 3-4, no-grad below block 7-20): 0.08-0.14x dense per step but 0.34-0.70x of the recipe's efficiency at matched loss. Still iterating."
+   "status": "dropped",
+   "result": "Negative. Freezing blocks 0-6 (forward-only) with the recipe's cuts: 0.149x dense per step, 0.282 held-out CE at step 60 vs about 0.19 for the recipe; deeper freezing is worse (0.399 / 0.491 / 0.647 with the boundary at block 7 / 16 / 20 plus earlier cuts). Earlier cuts alone (first cut at block 2) also trail the recipe per FLOP. Transient memory is unchanged under activation checkpointing. The gradient into the early blocks carries most of the learning. Branch loop/prefix."
   },
   {
    "id": "goldrand",
@@ -110,8 +114,8 @@
    "family": "early layers",
    "title": "Skip the FFN for context tokens",
    "what": "Context tokens stay in attention / GDN mixing but skip most FFNs, instead of leaving the sequence.",
-   "status": "running",
-   "result": "First arms: FFN skipped in early blocks, 0.12-0.58x of the recipe's efficiency at matched loss. Still iterating."
+   "status": "dropped",
+   "result": "Negative. Body tokens skipping the FFN in blocks 0-6 with probability 0.5: 0.193x dense per step (the recipe is 0.220x) but 0.274 held-out CE at step 50 vs the recipe's 0.201. Skipping every body-token FFN in blocks 0-3 stops learning (0.779 at step 50): training adapts to FFN-free tokens and the dense eval forward runs every FFN. Ceiling of the idea: the FFN is 41-62% of a block's per-token FLOPs. Branch loop/ffnskip."
   },
   {
    "id": "cptbase",
@@ -150,7 +154,26 @@
    "note": "First 16k results. Worst-task speedup is at the 70-step level (the deepest level every task reached). One seed, eval_size 184."
   }
  ],
- "validation": [],
+ "validation": [
+  {
+   "run": "calibration: full epoch on mtb16k with generation-graded evals",
+   "arm": "dense LoRA at f1 / f2 / f4, recipe at f1 (2 seeds) and f2, dense full FT at f1",
+   "rows": "1,952 per task; evals 4 tasks x 4k / 8k / 16k, eval_size 500 per cell",
+   "status": "launching",
+   "predicted": "proxy: recipe 1.9x fewer FLOPs than dense LoRA to the 100-step loss level",
+   "actual": "",
+   "note": "Establishes the real FLOPs-to-match on the new task set and checks the proxy's ratio. Agent started 01:30."
+  },
+  {
+   "run": "full-epoch loss curves (488 steps, dense-forward held-out CE every 50 steps)",
+   "arm": "dense LoRA, recipe (2 seeds)",
+   "rows": "1,952 per task; eval_size 184",
+   "status": "running",
+   "predicted": "",
+   "actual": "",
+   "note": "Shows whether the recipe's FLOP advantage grows later in training, which a 100-step run cannot see."
+  }
+ ],
  "board": [
   {
    "tag": "v2",

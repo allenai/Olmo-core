@@ -1,1 +1,20 @@
-[]
+[
+ {
+  "run": "calibration: full epoch on mtb16k with generation-graded evals",
+  "arm": "dense LoRA at f1 / f2 / f4, recipe at f1 (2 seeds) and f2, dense full FT at f1",
+  "rows": "1,952 per task; evals 4 tasks x 4k / 8k / 16k, eval_size 500 per cell",
+  "status": "launching",
+  "predicted": "proxy: recipe 1.9x fewer FLOPs than dense LoRA to the 100-step loss level",
+  "actual": "",
+  "note": "Establishes the real FLOPs-to-match on the new task set and checks the proxy's ratio. Agent started 01:30."
+ },
+ {
+  "run": "full-epoch loss curves (488 steps, dense-forward held-out CE every 50 steps)",
+  "arm": "dense LoRA, recipe (2 seeds)",
+  "rows": "1,952 per task; eval_size 184",
+  "status": "running",
+  "predicted": "",
+  "actual": "",
+  "note": "Shows whether the recipe's FLOP advantage grows later in training, which a 100-step run cannot see."
+ }
+]

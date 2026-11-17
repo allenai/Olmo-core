@@ -7,7 +7,7 @@ from score import pf_to_reach
 b = json.load(open(sys.argv[1] if len(sys.argv) > 1 else "hub_tab/board_v2.json"))
 runs = b["runs"]
 cur = lambda r: [{"step": s, "pf": p, "all": c} for s, p, c in r["curve"]]
-ref = [cur(r) for r in runs if r["tag"] == "v2" and r["arm"] == "denselora"]
+ref = [cur(r) for r in runs if r["tag"] == "v2" and r["arm"] in ("denselora", "denselora2e5")]
 rec = [cur(r) for r in runs if r["tag"] == "v2" and r["arm"] == "recipe"]
 out = []
 for r in runs:
