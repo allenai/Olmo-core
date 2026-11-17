@@ -36,8 +36,10 @@ LONG = ["4k", "8k", "16k"]
 TARGET = {"1k": 1000.0, "2k": 2000.0}
 #: rows generated per (task, rung). qdmatch_nq: ~32% survive the eval-gold exclusion. The 1k cells were regenerated
 #: larger (2026-11-17, same seed: a prefix-stable stream) for mtbmix80h, which needs 1,562 rows at 1k per task.
-GEN_ROWS = {("qdmatch_nq", "2k"): 4500, ("qdmatch_nq", "1k"): 5500, ("contradiction", "1k"): 1800,
-            ("outlier", "1k"): 1800, ("reorder", "1k"): 1800}
+#: Regenerated again (same seed, prefix-stable) for mtbmix80x3, which needs 2,342 / 2,343 rows at 1k / 2k per task.
+GEN_ROWS = {("qdmatch_nq", "2k"): 8500, ("qdmatch_nq", "1k"): 8500}
+for _t in ("contradiction", "outlier", "reorder"):
+    GEN_ROWS[(_t, "1k")] = GEN_ROWS[(_t, "2k")] = 2700
 GEN_DEFAULT = 1000
 SHORT_N_DOCS_FILE = f"{P.WORK}/n_docs_short.json"
 R2K = f"{P.WORK}/suite_rows_r2k/suite"
@@ -51,6 +53,7 @@ POOLS = {
     "mtbmix95": {"1k": 927, "2k": 927, "4k": 33, "8k": 33, "16k": 32},
     "mtbmix80L": {"1k": 781, "2k": 781, "16k": 390},
     "mtbmix80h": {"1k": 1562, "4k": 130, "8k": 130, "16k": 130},
+    "mtbmix80x3": {"1k": 2342, "2k": 2343, "4k": 390, "8k": 390, "16k": 391},
 }
 SH = "/data/prasann/early_loss_proxy/shards"
 
@@ -137,6 +140,25 @@ def long_rows(task):
     return out
 
 
+def gen16k_keys(task):
+    """Gold hashes / reorder books of heldout_v3's gen16k rows (source JSONL rows named by src_idx)."""
+    import build_heldout_v3 as H
+
+    h = np.load("/data/prasann/early_loss_proxy/heldout_v3.npz")
+    idx = {int(i) for i, s_, t_ in zip(h["src_idx"], h["sets"], h["tasks"]) if s_ == "gen16k" and t_ == task}
+    src = H.CONTRA_EVAL if task == "contradiction" else f"{H.gcell(task)}/{task}/train.jsonl"
+    g, b = set(), set()
+    with open(src) as f:
+        for i, line in enumerate(f):
+            if i in idx:
+                ex = json.loads(line)
+                g |= H.gold_hashes(task, ex)
+                if task == "reorder" and P.book_of(ex):
+                    b.add(P.book_of(ex))
+    assert len(idx) == 48, (task, len(idx))
+    return g, b
+
+
 def pools(a):
     from tokenizers import Tokenizer
 
@@ -154,6 +176,11 @@ def pools(a):
             g2, _, b2 = P.eval_content_keys(task, P.read_jsonl(f))
             eg |= g2
             eb |= b2
+        # heldout_v3's gen16k rows are held-out too (added 2026-11-17 for mtbmix80x3; earlier pools predate gen16k,
+        # which was itself built disjoint from them)
+        g3, b3 = gen16k_keys(task)
+        eg |= g3
+        eb |= b3
         for r in SHORT:
             cells[(task, r)], drops[f"{task}/{r}"] = short_rows(task, r, eg, eb)
             print(f"[pools] {task}@{r}: {json.dumps(drops[f'{task}/{r}'])}", flush=True)

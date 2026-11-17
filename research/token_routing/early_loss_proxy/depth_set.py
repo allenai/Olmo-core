@@ -22,8 +22,8 @@ lv = {s: min(l for st, _, l in ref if st <= s) for s in steps}
 pfr = {s: reach(ref, lv[s]) for s in steps}
 print(f"{key}: eval_size {n} rows. dense LoRA CE on this subset at steps {steps}: " + ", ".join(f"{lv[s]:.3f} ({pfr[s]:.0f} PF)" for s in steps) + f"; final {ref[-1][2]:.3f}")
 runs = [("recipe sd0", "full/elp-full-recipe-sd0"), ("recipe sd1", "full/elp-full-recipe-sd1"),
-        ("rc-mix50 sd0", "deep/elp-deep-rc-mix50-sd0"), ("rc-mix50 sd1", "deep/elp-deep-rc-mix50-sd1"),
-        ("rc-mix80 sd0", "deep/elp-deep-rc-mix80-sd0"), ("rc-mix80 sd1", "deep/elp-deep-rc-mix80-sd1"),
+        ("rc-mix50 sd0 full", "deep2/elp-deep2-rc-mix50-sd0"), ("rc-mix50 sd1", "deep/elp-deep-rc-mix50-sd1"),
+        ("rc-mix80 sd0 full", "deep2/elp-deep2-rc-mix80-sd0"), ("rc-mix80 sd1 full", "deep2/elp-deep2-rc-mix80-sd1"),
         ("r_cut5k (rows<=5k)", "rowsbk/elp-rowsbk-r_cut5k-sd0"), ("a16ema11", "alloc/elp-alloc-a16ema11-sd0"),
         ("m50ema11", "alloc/elp-alloc-m50ema11-sd0"), ("dl_mix50pack", "rowsbk/elp-rowsbk-dl_mix50pack-sd0")]
 print(f"{'run':20s} {'last CE':>7s} {'at PF':>6s} " + " ".join(f"{'x@lvl' + str(s):>9s}" for s in steps))

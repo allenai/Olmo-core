@@ -6,6 +6,7 @@ In flight at 12:05: Beaker deep2 (full-epoch rc-mix80 x2, rc-mix50), sneetches m
 heldout_v3 EXISTS (mooney, sneetches, weka, Lambda). Beaker tag `v3` (launched 11:57): denselora, denselora2e5, recipe sd0/sd1, rc-mix80 sd0/sd1, rc-mix50, rc-mix80L, rc-mix90, rc-mix95, rc-mix80h, all with --sets gen16k:48,rung16k:32,suite8k:8,suite4k:8, probes 50..488. TODO when they finish (~13:00-14:00; denselora ~14:00): fetch tag v3, extend depth_set.py to take gen16k+rung16k as the primary key and v3/denselora as the reference, write the 16k table to the tracker. New pools: mtbmix90, mtbmix95, mtbmix80L (long part all 16k), mtbmix80h (short part all 1k). m80 variants on sneetches (k10, k30, gb32, lr2e5): standard keep and k30 best; others behind.
 MEMORY GOAL (Prasann 11-17 12:15): flat memory at 256k-1M+, not savings at 16k; agent memscale (ac86d3a313c91405e).
 lenscale: dlA (block 3 local) ~recipe -0.01..0.02 CE/step; dlB/dlC stall; control smoke Beaker 01M7NJQFFRJ967Q32TNDRK0DZM (tag smoke-lenscale2: dlBstd vs dlB, read [doclocal-check] lines in its log). alloc: closed, no gain at 16k. memscale: scaling law measured; transient_gib in dense_probe was wrong (fix in loop/memscale, merge it).
+deep2 full-epoch: rc-mix80 3.1-3.7x all lengths, 3.2-3.5x on suite16k (56 rows); rc-mix50 2.4-2.6x. Data agent building mtbmix80x3 (5,856 rows/task) -> run recipe on it full epoch (1,464 steps, Beaker, heldout_v3) when on weka.
 Tools: rescore.sh, iso.py, iso_set.py set/suite16k, depth.py, depth_set.py suite16k.
 
 (older state below)

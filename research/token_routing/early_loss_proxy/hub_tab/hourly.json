@@ -28,5 +28,15 @@
   "xw": null,
   "mem": 1.19,
   "note": "Against the full-epoch dense-LoRA curve. Plain recipe 1.9-2.2x at every level through the epoch (two seeds); recipe on the 50/50 pool 2.9-3.0x; recipe with loss-per-cost sampling on the 50/50 pool 3.3x (one seed); recipe on rows <= 5k 3.4x but it plateaus at 0.119. eval_size 184. The loop was paused 02:00-11:20 by a usage limit; cluster jobs kept running."
+ },
+ {
+  "t": "11-17 12:25",
+  "arm": "recipe on the 80/20 short/long pool, full epoch (rc-mix80)",
+  "idea": "short rows",
+  "x": 3.3,
+  "level": "held-out CE 0.115 on all lengths (seeds 3.1x and 3.2x; 3.1-3.7x at every level down to 0.115); on the 16k rows alone 3.2-3.5x at dense LoRA's 100- and 150-step levels",
+  "xw": null,
+  "mem": null,
+  "note": "Full-epoch runs, two seeds. Plain recipe on the 16k rows: 2.1-2.7x. The 16k reading is from 56 rows; reruns on the 320-row 16k set are in progress. The pool's epoch ends at 160 PF and held-out CE 0.112; a 3x larger 80/20 pool is being built to test the lead down to dense LoRA's final loss (0.071)."
  }
 ]
