@@ -1,4 +1,13 @@
-# Auto-research loop: state at 2026-11-17 02:00 PT (paused: usage limit reached)
+# Auto-research loop: state file (updated 2026-11-17 12:05 PT)
+
+PRIORITY (Prasann 11-17 12:00): 16k held-out loss first; ideas that gain more as rows get longer. Heartbeat cron 13,43 * * * * restarts the loop.
+Best at 12:00: recipe on mtbmix80 3.1-3.4x vs dense LoRA at CE 0.125 (all lengths), but only ~1.2x over the recipe at 16k; recipe 2.1-2.7x at 16k.
+In flight at 12:05: Beaker deep2 (full-epoch rc-mix80 x2, rc-mix50), sneetches m80 (k10, k30, gb32, lr2e5), agents alloc (a7afab9795fca3d76), lenscale (a3ad7c4e953f99c82), data (a4c7431e958c3b6ce: mix90/95/80L/80h pools then heldout_v3), validate (a36d6a3d399d712e1: evals running, table in 3-5 h), hub tab (a8a8bae49778d6cbb).
+TODO when heldout_v3 exists: rerun dense LoRA + recipe full-epoch references with --heldout heldout_v3 --sets gen16k:48,rung16k:32,suite8k:8,suite4k:8; make 16k the primary key in score.py / depth.py.
+Tools: rescore.sh, iso.py, iso_set.py set/suite16k, depth.py, depth_set.py suite16k.
+
+(older state below)
+
 
 Resume: `./rescore.sh` (BK_TAGS="deep v2s1 mq cptnative" for extra Beaker tags), `python3 iso.py | head -60`, update
 `hub_tab/{ideas,hourly,notes,arms,validation}.json`, `python3 make_loop_state.py --boards hub_tab/board_v2.json --pilot hub_tab/board_s50.json`,

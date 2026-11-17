@@ -8,9 +8,14 @@
   "Data caveats: the 16k training cells use fewer documents per row than the eval (contradiction 324 vs 379, outlier 96 vs 111, reorder 90 vs 116) so rows fit in 16,384 tokens; the 16k held-out rows are the short tail of the eval rung (70, 303, 8 and 497 of 500 rows fit for contradiction, outlier, reorder, qdmatch_nq). About 46% of the documents in a qdmatch_nq held-out row also occur in training rows (no gold overlap, no prompt overlap).",
   "Memory is reported as the step's transient (peak minus the weights and optimizer state held before the step), since under activation checkpointing the absolute peak is dominated by the fixed part.",
   "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps.",
-  "Deep comparisons (from 11-17 11:30) use the full-epoch dense-LoRA curve (488 steps, probes every 50) as the reference and give the FLOP ratio at fixed held-out CE levels 0.160 / 0.140 / 0.125 / 0.115 / 0.105 / 0.095."
+  "Deep comparisons (from 11-17 11:30) use the full-epoch dense-LoRA curve (488 steps, probes every 50) as the reference and give the FLOP ratio at fixed held-out CE levels 0.160 / 0.140 / 0.125 / 0.115 / 0.105 / 0.095.",
+  "From 11-17 12:00 the primary measure is the 16k held-out loss. Until the larger 16k set is in place, 16k readings come from 56 rows (8 for reorder) and are noisy."
  ],
  "log": [
+  {
+   "t": "11-17 12:00",
+   "text": "Priority changed to the 16k held-out loss and to ideas that gain more as rows get longer. On the 16k rows alone (56 rows, noisy) the plain recipe is 2.1-2.7x vs dense LoRA and the short-heavy pools are only about 1.1-1.2x ahead of it (1.8-2.1x ahead at 4k). A larger 16k held-out set is being built (48 fresh in-range rows and 32 uncapped 16k-rung eval rows per task); references will be rerun on it. New idea started: per-length FLOP breakdown and document-local attention in the early blocks."
+  },
   {
    "t": "11-17 02:00",
    "text": "Loop paused by a usage limit until 11:20; cluster jobs finished on their own. A recurring heartbeat now restarts the loop after a limit resets."

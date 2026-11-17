@@ -121,3 +121,20 @@ Turns that would push a row past 16,384 tokens are dropped from the end. Cap dro
 - outlier: "Is Document [73] about a different topic than the rest of these passages? Answer yes or no." -> `yes`
 - reorder: "Which passage comes immediately after Passage [23] in the original order? Output its passage ID, or none if it is the last passage." -> `4`. These alternate with "Put passages [a, b, c, d] in their original order. Write your answer as [id1, id2, ...]".
 - qdmatch_nq: "Which query does document [49] answer? Output the query's number, or none if it answers no query." -> `none`. The pool also asks "Which document answers query [q]?".
+
+## More short-share pools (2026-11-17, `build_short_pools.py --pools mtbmix90,mtbmix95,mtbmix80L,mtbmix80h`)
+- **Built like** mtbshort / mtbmix*: same layout, sidecars, exclusions and in-task shuffle. Each pool is 7,808 rows, on mooney + sneetches, and staged to weka by Beaker job 01M7NG7KZ71TVP4ANSNNNSGBP2.
+- **Regenerated cells:** the 1k cells were regenerated larger for mtbmix80h (contradiction / outlier / reorder 1,800 rows, qdmatch_nq 5,500). The seed is the same and the stream is prefix-stable: the earlier rows are byte-identical (checked).
+  - Eligible rows at 1k: 1,800 / 1,800 / 1,771 / 1,771.
+  - Exclusions: reorder dropped 29 rows that share a book with an eval file; qdmatch_nq dropped 3,729 rows with an eval gold pair.
+
+| pool | rows per task (1k / 2k / 4k / 8k / 16k) | total tokens | mean row length | first 800 rows by rung (seed 0) |
+|---|---|---|---|---|
+| mtbmix90 | 878 / 878 / 65 / 65 / 66 | 18.51M | 2,371 | 336 / 399 / 25 / 19 / 21 |
+| mtbmix95 | 927 / 927 / 33 / 33 / 32 | 15.52M | 1,987 | 353 / 415 / 12 / 11 / 9 |
+| mtbmix80L | 781 / 781 / - / - / 390 | 33.19M | 4,251 | 303 / 347 / - / - / 150 |
+| mtbmix80h | 1,562 / - / 130 / 130 / 130 | 20.90M | 2,676 | 650 / - / 57 / 53 / 40 |
+
+- **Mean row length by rung** (all pools): 1k ~1,061, 2k ~2,164, 4k ~4,170, 8k ~8,480, 16k ~14,780 tokens.
+- **First 800 rows by task:** 188 / 197 / 213 / 202 in every pool.
+- **Gold check:** 20/20 on every check, with one exception. One mtbmix95 reorder row fails the text match on 3 passages. These passages contain Unicode combining marks (e.g. "K͟hwāja"), which the tokenizer's normalization changes; the content is the same and the printed IDs and answer are correct.
