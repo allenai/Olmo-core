@@ -88,6 +88,11 @@ def build_callback(cfg: Dict[str, str]):
                                          cfg.get("base", "")]).encode()).hexdigest()[:16]
 
     cache_off: List[int] = []
+    # --probe-memtrace STEPS (memscale): at those training steps, log torch.cuda.memory_allocated / max_memory_allocated
+    # (GiB, minus the pre-step baseline) after every block forward (incl. activation-checkpoint recomputes), when the
+    # gradient reaches each block output, and after the LM head; stored as res["memtrace"][step] and printed.
+    trace_steps = {int(s) for s in cfg.get("memtrace", "").split(",") if s}
+    grad_ref = cfg.get("grad_ref", "")
 
     class DenseProbeCallback(Callback):
         """See the module docstring."""
@@ -207,8 +212,38 @@ def build_callback(cfg: Dict[str, str]):
                 json.dump(self.res, f)
             os.replace(tmp, out_path)
 
+        def _install_memtrace(self):
+            model = self.trainer.train_module.model
+            self._trace: List[Any] = []
+            self._tracing = False
+            G = 2.0**30
+
+            def rec(tag, idx, h):
+                if not self._tracing:
+                    return
+                torch.cuda.synchronize()
+                self._trace.append([tag, idx, int(h.shape[1]) if h is not None and h.dim() >= 2 else -1,
+                                    round((torch.cuda.memory_allocated() - self._base_mem) / G, 3),
+                                    round((torch.cuda.max_memory_allocated() - self._base_mem) / G, 3)])
+
+            for key, blk in model.blocks.items():
+                idx = int(key)
+                inner = getattr(blk, "_checkpoint_wrapped_module", blk)
+
+                def fwd_hook(mod, args, out, idx=idx):
+                    h = out if isinstance(out, torch.Tensor) else out[0]
+                    rec("f" if torch.is_grad_enabled() else "f0", idx, h)
+                    if self._tracing and h.requires_grad:
+                        h.register_hook(lambda g, idx=idx: rec("b", idx, g))
+
+                inner.register_forward_hook(fwd_hook)
+            if getattr(model, "lm_head", None) is not None:
+                model.lm_head.register_forward_hook(lambda m, a, o: rec("head", -1, a[0] if a else None))
+
         def pre_train(self):
             self.res["t_pre_train"] = time.time() - T_START  # process start -> model built + base loaded
+            if trace_steps:
+                self._install_memtrace()
             self._probe(0)
 
         def pre_step(self, batch: Dict[str, Any]):
@@ -219,12 +254,63 @@ def build_callback(cfg: Dict[str, str]):
             torch.cuda.reset_peak_memory_stats()
             self._base_mem = float(torch.cuda.memory_allocated())  # weights + optimizer state held before the step
             self._ntok = int(ii.numel())
+            if trace_steps:
+                self._tracing = int(self.step) in trace_steps
+                self._trace = []
+
+        def _grad_ref(self):
+            # --probe-grad-ref PATH (memscale): at step 1, if PATH does not exist save every trainable grad there (bf16);
+            # if it does, print the cosine of this run's grads against it (all, blocks < 7, blocks >= 7, per block)
+            import re
+            model = self.trainer.train_module.model
+            cur = {}
+            for n, p in model.named_parameters():
+                if p.grad is None:
+                    continue
+                g = p.grad
+                g = g.full_tensor() if hasattr(g, "full_tensor") else g
+                cur[n.replace("_checkpoint_wrapped_module.", "").replace("_fsdp_wrapped_module.", "")] = g.detach()
+            path = grad_ref
+            if self._rank() != 0:
+                return
+            if not os.path.exists(path):
+                torch.save({k: v.to(torch.bfloat16).cpu() for k, v in cur.items()}, path)
+                print(f"[grad-ref] saved {len(cur)} grads -> {path}", flush=True)
+                return
+            ref = torch.load(path)
+            acc: Dict[str, List[float]] = {}
+            for k, v in cur.items():
+                if k not in ref:
+                    continue
+                a, b = v.float().flatten(), ref[k].to(v.device).float().flatten()
+                m = re.search(r"blocks\.(\d+)\.", k)
+                grp = ["all"] + ([f"b{int(m.group(1))}", "pre" if int(m.group(1)) < 7 else "post"] if m else ["other"])
+                for gname in grp:
+                    t = acc.setdefault(gname, [0.0, 0.0, 0.0])
+                    t[0] += float((a * b).sum())
+                    t[1] += float((a * a).sum())
+                    t[2] += float((b * b).sum())
+            cos = {g: t[0] / max(1e-30, (t[1] * t[2]) ** 0.5) for g, t in acc.items()}
+            nrm = {g: (t[1] / max(1e-30, t[2])) ** 0.5 for g, t in acc.items()}
+            self.res["grad_cos"] = {"cos": cos, "norm_ratio": nrm, "ref": path}
+            print("[grad-ref] cosine vs ref: " + " ".join(f"{g}={cos[g]:.4f}(x{nrm[g]:.3f})" for g in
+                  ["all", "pre", "post"] + [f"b{i}" for i in range(40) if f"b{i}" in cos]), flush=True)
+
+        def pre_optim_step(self):
+            if grad_ref and int(self.step) == 1:
+                self._grad_ref()
+            # forward + backward peak, read BEFORE post_step: GPUMemoryMonitorCallback.post_step (and the online
+            # router callback) reset the allocator's peak, and this callback's post_step runs last (priority -100),
+            # so a peak read there only saw what was allocated after the reset (memscale, 2026-11-17)
+            torch.cuda.synchronize()
+            self._fb_peak = float(torch.cuda.max_memory_allocated())
 
         def post_step(self):
             torch.cuda.synchronize()
             dt = time.time() - self._t_step
             self._train_s += dt
-            pk0 = float(torch.cuda.max_memory_allocated())
+            pk0 = max(float(torch.cuda.max_memory_allocated()), float(getattr(self, "_fb_peak", 0.0)))
+            self._fb_peak = 0.0
             # [peak, peak - pre-step baseline (the step's own transient: activations, gradients, temporaries)]
             pk = torch.tensor([pk0, pk0 - self._base_mem], device="cuda", dtype=torch.float64)
             if dist.is_initialized():
@@ -233,6 +319,12 @@ def build_callback(cfg: Dict[str, str]):
                                       "peak_gib": float(pk[0]) / 2**30, "transient_gib": float(pk[1]) / 2**30,
                                       "batch_hash_rank0": self._hash, "tokens_rank0": self._ntok,
                                       "flops": self._flops()})
+            if trace_steps and self._tracing:
+                self._tracing = False
+                self.res.setdefault("memtrace", {})[str(int(self.step))] = self._trace
+                if self._rank() == 0:
+                    print(f"[memtrace] step {int(self.step)} base {self._base_mem / 2**30:.2f} GiB | " + " ".join(
+                        f"{t}{i}:{n}:{a}/{m}" for t, i, n, a, m in self._trace), flush=True)
             probed = self.step in steps
             if probed:
                 self._probe(int(self.step))

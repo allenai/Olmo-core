@@ -1730,6 +1730,9 @@ class Attention(SequenceMixer):
         local_k_slice: Optional[slice] = None,
         cache_leftpad: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        pkv = self.__dict__.get("_prefix_kv")
+        if pkv is not None:  # chunked online-router prefix (olmo_core.nn.prefix_chunk): earlier chunks' K/V + causal
+            return pkv.attend(self, q, k, v)
         if self.kv_cache_manager is not None:
             self.kv_cache_manager.record_leftpad(cache_leftpad)
         # shape: (batch_size, seq_len, n_heads, head_dim)
@@ -1950,6 +1953,7 @@ class Attention(SequenceMixer):
         summary_roles: Optional[torch.Tensor] = None,
         causal_example: Optional[torch.Tensor] = None,
         token_weight: Optional[torch.Tensor] = None,
+        prefix_state: Optional[Any] = None,
     ) -> torch.Tensor:
         """
         Apply attention to the input.
@@ -2012,6 +2016,10 @@ class Attention(SequenceMixer):
         """
         # Not applicable to plain attention; see the parameter docs above.
         del chunk_ids, summary_roles, causal_example
+        if prefix_state is not None or "_prefix_kv" in self.__dict__:
+            from ..prefix_chunk import prefix_attn_kv
+
+            prefix_attn_kv(self, prefix_state)  # chunked online-router prefix: K/V of the earlier chunks
         B, T, _ = x.shape
 
         # shape: (batch_size, seq_len, n_heads (local), head_dim),
