@@ -43,6 +43,23 @@ python3 research/token_routing/early_loss_proxy/score.py --results /net/mooney/d
 - Larger FLOP-matched training runs (`recipes/train/research_trainer/beaker_ctc_suite.py`) can use the same pool via
   `--data-root /weka/.../early_loss_proxy/shards/mtb16k` and `--base-checkpoint` above.
 
-## Measured (H100, 2 GPUs)
+## Measured (2026-11-17, 2 x H100 on jupiter, pool mtb16k, held-out v2 = 184 rows: 12 sets x 16, suite16k/reorder has 8)
 
-See the bottom of this file (filled in from the smoke jobs).
+| | recipe (`bksmoke4`, 10 steps, probes 5,10) | denselora (`bksmoke5`, 2 steps) |
+|---|---|---|
+| submit -> running | 20 s | 29 s |
+| process start -> base loaded (`t_pre_train`) | 55 s | 53 s |
+| step-0 probe (full, 184 rows; later runs use the cache) | 71 s | 70 s |
+| later probes | 24.8 s | 24.8 s |
+| train s/step | 13.7, 19.2, then 5.4-10.8 (steps 3-10) | 15.2, 14.5 |
+| peak GiB (max over ranks) | 18.2-18.7 | 17.6 |
+| flop meter after last step | 10.78 PF actual / 39.99 PF dense-equivalent (0.27x) | 5.74 / 7.75 PF |
+| process wall | 386 s | 295 s |
+
+- Queueing varies: the very first job of the session pended 30.5 min on jupiter (+7 min image pull/start) while
+  later ones started in 20-30 s. Gantry setup itself is ~6 s. Check `ops status`; a job pending > 15 min with
+  minRuntime set is just the queue.
+- Step-0 CE on the OLD pool / held-out v1 (suite8k, 8 rows/task, 12,288) vs the Berkeley H200 `results/v1` rows: task
+  means agree within 0.003 for contradiction / nq / outlier and differ by 0.024 for oolong (per-row |diff| up to 0.096
+  there, signs mixed). Different GPU and kernels; keep Beaker and Berkeley runs in separate comparisons when a
+  difference is that small. (No Berkeley step-0 on held-out v2 existed yet to compare.)
