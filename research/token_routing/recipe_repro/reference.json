@@ -1,0 +1,1987 @@
+{
+ "fast8k": {
+  "source": "ops results (experiment tokdrop_lr), native ladder, eval_size 500/cell, 1 seed per run (recipe f1952 has 2 seeds)",
+  "points": [
+   {
+    "run": "f8k-mt4-dense-f488-tde-lr5e-06-cub",
+    "arm": "dense",
+    "budget": "f488",
+    "seed": 0,
+    "pf": 379.0,
+    "beaker": "slurm (cubbins)",
+    "cells": {
+     "contradiction@2k": [
+      0.932,
+      500
+     ],
+     "contradiction@8k": [
+      0.888,
+      500
+     ],
+     "nq@2k": [
+      0.978,
+      500
+     ],
+     "nq@8k": [
+      0.896,
+      500
+     ],
+     "oolong@2k": [
+      0.803,
+      500
+     ],
+     "oolong@8k": [
+      0.541,
+      500
+     ],
+     "outlier@2k": [
+      0.509,
+      500
+     ],
+     "outlier@8k": [
+      0.344,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-dense-f976-tde-lr5e-06-cub",
+    "arm": "dense",
+    "budget": "f976",
+    "seed": 0,
+    "pf": 762.0,
+    "beaker": "slurm (cubbins)",
+    "cells": {
+     "contradiction@2k": [
+      0.971,
+      500
+     ],
+     "contradiction@8k": [
+      0.951,
+      500
+     ],
+     "nq@2k": [
+      0.98,
+      500
+     ],
+     "nq@8k": [
+      0.916,
+      500
+     ],
+     "oolong@2k": [
+      0.835,
+      500
+     ],
+     "oolong@8k": [
+      0.599,
+      500
+     ],
+     "outlier@2k": [
+      0.477,
+      500
+     ],
+     "outlier@8k": [
+      0.38,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-dense-f1952-tde-lr5e-06",
+    "arm": "dense",
+    "budget": "f1952",
+    "seed": 0,
+    "pf": 1531.25,
+    "beaker": "01M5QGZ7BXVERPKX365GRS0VH4",
+    "cells": {
+     "contradiction@2k": [
+      0.987,
+      500
+     ],
+     "contradiction@8k": [
+      0.973,
+      500
+     ],
+     "nq@2k": [
+      0.98,
+      500
+     ],
+     "nq@8k": [
+      0.924,
+      500
+     ],
+     "oolong@2k": [
+      0.853,
+      500
+     ],
+     "oolong@8k": [
+      0.656,
+      500
+     ],
+     "outlier@2k": [
+      0.911,
+      500
+     ],
+     "outlier@8k": [
+      0.817,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-dense-f3904-tde-lr5e-06",
+    "arm": "dense",
+    "budget": "f3904",
+    "seed": 0,
+    "pf": 3063.15,
+    "beaker": "01M5QH036NM7RNSPY6V56CCG2G",
+    "cells": {
+     "contradiction@2k": [
+      0.992,
+      500
+     ],
+     "contradiction@8k": [
+      0.983,
+      500
+     ],
+     "nq@2k": [
+      0.978,
+      500
+     ],
+     "nq@8k": [
+      0.946,
+      500
+     ],
+     "oolong@2k": [
+      0.872,
+      500
+     ],
+     "oolong@8k": [
+      0.691,
+      500
+     ],
+     "outlier@2k": [
+      0.968,
+      500
+     ],
+     "outlier@8k": [
+      0.976,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-dense-f5856-tde-lr5e-06",
+    "arm": "dense",
+    "budget": "f5856",
+    "seed": 0,
+    "pf": 4594.93,
+    "beaker": "01M5RX8TEC0VTPFG16BEPV6NXJ",
+    "cells": {
+     "contradiction@2k": [
+      0.992,
+      500
+     ],
+     "contradiction@8k": [
+      0.983,
+      500
+     ],
+     "nq@2k": [
+      0.974,
+      500
+     ],
+     "nq@8k": [
+      0.942,
+      500
+     ],
+     "oolong@2k": [
+      0.869,
+      500
+     ],
+     "oolong@8k": [
+      0.699,
+      500
+     ],
+     "outlier@2k": [
+      0.984,
+      500
+     ],
+     "outlier@8k": [
+      0.981,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-dense-f7808-tde-lr5e-06",
+    "arm": "dense",
+    "budget": "f7808",
+    "seed": 0,
+    "pf": 6128.22,
+    "beaker": "01M5RXA2XQPHWS71B23GA21NPZ",
+    "cells": {
+     "contradiction@2k": [
+      0.995,
+      500
+     ],
+     "contradiction@8k": [
+      0.99,
+      500
+     ],
+     "nq@2k": [
+      0.984,
+      500
+     ],
+     "nq@8k": [
+      0.95,
+      500
+     ],
+     "oolong@2k": [
+      0.874,
+      500
+     ],
+     "oolong@8k": [
+      0.689,
+      500
+     ],
+     "outlier@2k": [
+      0.979,
+      500
+     ],
+     "outlier@8k": [
+      0.987,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-lora64all32r20to7-f1952-tde-lr1e-05",
+    "arm": "recipe",
+    "budget": "f1952",
+    "seed": 0,
+    "pf": 345.33,
+    "beaker": "01M5VH5APW70Y48FW01Y7W3BVF",
+    "cells": {
+     "contradiction@2k": [
+      0.977,
+      500
+     ],
+     "contradiction@8k": [
+      0.959,
+      500
+     ],
+     "nq@2k": [
+      0.97,
+      500
+     ],
+     "nq@8k": [
+      0.912,
+      500
+     ],
+     "oolong@2k": [
+      0.856,
+      500
+     ],
+     "oolong@8k": [
+      0.648,
+      500
+     ],
+     "outlier@2k": [
+      0.88,
+      500
+     ],
+     "outlier@8k": [
+      0.862,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-lora64all32r20to7sd1-f1952-tde-lr1e-05",
+    "arm": "recipe",
+    "budget": "f1952",
+    "seed": 1,
+    "pf": 343.21,
+    "beaker": "01M6F3ZAR3PENM133YFNVHDTB5",
+    "cells": {
+     "contradiction@2k": [
+      0.975,
+      500
+     ],
+     "contradiction@8k": [
+      0.956,
+      500
+     ],
+     "nq@2k": [
+      0.97,
+      500
+     ],
+     "nq@8k": [
+      0.922,
+      500
+     ],
+     "oolong@2k": [
+      0.852,
+      500
+     ],
+     "oolong@8k": [
+      0.649,
+      500
+     ],
+     "outlier@2k": [
+      0.881,
+      500
+     ],
+     "outlier@8k": [
+      0.861,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-lora64all32r20to7-f3904-tde-lr1e-05",
+    "arm": "recipe",
+    "budget": "f3904",
+    "seed": 0,
+    "pf": 688.13,
+    "beaker": "01M5VH6FK7J23RHG272XB796M5",
+    "cells": {
+     "contradiction@2k": [
+      0.988,
+      500
+     ],
+     "contradiction@8k": [
+      0.977,
+      500
+     ],
+     "nq@2k": [
+      0.976,
+      500
+     ],
+     "nq@8k": [
+      0.918,
+      500
+     ],
+     "oolong@2k": [
+      0.858,
+      500
+     ],
+     "oolong@8k": [
+      0.663,
+      500
+     ],
+     "outlier@2k": [
+      0.972,
+      500
+     ],
+     "outlier@8k": [
+      0.97,
+      500
+     ]
+    }
+   },
+   {
+    "run": "f8k-mt4-lora64all32r20to7-f7808-tde-lr1e-05",
+    "arm": "recipe",
+    "budget": "f7808",
+    "seed": 0,
+    "pf": 1373.34,
+    "beaker": "01M5VH7FE3H2ER7VKEV2J50KBE",
+    "cells": {
+     "contradiction@2k": [
+      0.993,
+      500
+     ],
+     "contradiction@8k": [
+      0.987,
+      500
+     ],
+     "nq@2k": [
+      0.978,
+      500
+     ],
+     "nq@8k": [
+      0.938,
+      500
+     ],
+     "oolong@2k": [
+      0.868,
+      500
+     ],
+     "oolong@8k": [
+      0.703,
+      500
+     ],
+     "outlier@2k": [
+      0.938,
+      500
+     ],
+     "outlier@8k": [
+      0.989,
+      500
+     ]
+    }
+   }
+  ]
+ },
+ "mt11": {
+  "source": "ops results (experiment mt11_64k), native ladder 2k-64k on CTC-suite rows, eval_size 500/cell, 1 seed, LR 5e-6 for both arms",
+  "points": [
+   {
+    "run": "m64-dense-f16-lr5e-06",
+    "arm": "dense",
+    "budget": "f16",
+    "seed": 0,
+    "pf": 1175.18,
+    "beaker": "01M5KV26E5X06Z0DMN8D9S936N",
+    "cells": {
+     "contradiction@2k": [
+      0.977,
+      500
+     ],
+     "contradiction@8k": [
+      0.896,
+      500
+     ],
+     "contradiction@16k": [
+      0.799,
+      500
+     ],
+     "contradiction@32k": [
+      0.629,
+      500
+     ],
+     "contradiction@64k": [
+      0.454,
+      500
+     ],
+     "grouping@2k": [
+      0.729,
+      500
+     ],
+     "grouping@8k": [
+      0.384,
+      500
+     ],
+     "grouping@16k": [
+      0.157,
+      500
+     ],
+     "grouping@32k": [
+      0.005,
+      500
+     ],
+     "hotpotqa@2k": [
+      0.985,
+      500
+     ],
+     "hotpotqa@8k": [
+      0.905,
+      500
+     ],
+     "hotpotqa@16k": [
+      0.833,
+      500
+     ],
+     "hotpotqa@32k": [
+      0.789,
+      500
+     ],
+     "hotpotqa@64k": [
+      0.742,
+      500
+     ],
+     "nq@2k": [
+      0.976,
+      500
+     ],
+     "nq@8k": [
+      0.9,
+      500
+     ],
+     "nq@16k": [
+      0.896,
+      500
+     ],
+     "nq@32k": [
+      0.902,
+      500
+     ],
+     "nq@64k": [
+      0.856,
+      500
+     ],
+     "oolong@2k": [
+      0.79,
+      500
+     ],
+     "oolong@8k": [
+      0.632,
+      500
+     ],
+     "oolong@16k": [
+      0.538,
+      500
+     ],
+     "oolong@32k": [
+      0.553,
+      500
+     ],
+     "oolong@64k": [
+      0.505,
+      500
+     ],
+     "outlier@2k": [
+      0.941,
+      500
+     ],
+     "outlier@8k": [
+      0.579,
+      500
+     ],
+     "outlier@16k": [
+      0.348,
+      500
+     ],
+     "outlier@32k": [
+      0.13,
+      500
+     ],
+     "outlier@64k": [
+      0.044,
+      500
+     ],
+     "qdmatch_nq@2k": [
+      0.992,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.906,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.768,
+      500
+     ],
+     "qdmatch_nq@32k": [
+      0.465,
+      500
+     ],
+     "qdmatch_nq@64k": [
+      0.157,
+      500
+     ],
+     "reorder@2k": [
+      0.177,
+      500
+     ],
+     "reorder@8k": [
+      -0.001,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "strmatch@2k": [
+      0.983,
+      500
+     ],
+     "strmatch@8k": [
+      0.967,
+      500
+     ],
+     "strmatch@16k": [
+      0.923,
+      500
+     ],
+     "strmatch@32k": [
+      0.884,
+      500
+     ],
+     "xabsence@2k": [
+      0.999,
+      500
+     ],
+     "xabsence@8k": [
+      0.653,
+      500
+     ],
+     "xabsence@16k": [
+      0.264,
+      500
+     ],
+     "xabsence@32k": [
+      0.069,
+      500
+     ]
+    }
+   },
+   {
+    "run": "m64-dense-f8-lr5e-06",
+    "arm": "dense",
+    "budget": "f8",
+    "seed": 0,
+    "pf": 2287.33,
+    "beaker": "01M5KR0BQXMHGHHKXQ6QWZGJJR",
+    "cells": {
+     "contradiction@2k": [
+      0.984,
+      500
+     ],
+     "contradiction@8k": [
+      0.933,
+      500
+     ],
+     "contradiction@16k": [
+      0.849,
+      500
+     ],
+     "contradiction@32k": [
+      0.726,
+      500
+     ],
+     "contradiction@64k": [
+      0.557,
+      500
+     ],
+     "grouping@2k": [
+      0.776,
+      500
+     ],
+     "grouping@8k": [
+      0.394,
+      500
+     ],
+     "grouping@16k": [
+      0.178,
+      500
+     ],
+     "grouping@32k": [
+      0.005,
+      500
+     ],
+     "hotpotqa@2k": [
+      0.985,
+      500
+     ],
+     "hotpotqa@8k": [
+      0.929,
+      500
+     ],
+     "hotpotqa@16k": [
+      0.87,
+      500
+     ],
+     "hotpotqa@32k": [
+      0.825,
+      500
+     ],
+     "hotpotqa@64k": [
+      0.801,
+      500
+     ],
+     "nq@2k": [
+      0.978,
+      500
+     ],
+     "nq@8k": [
+      0.918,
+      500
+     ],
+     "nq@16k": [
+      0.916,
+      500
+     ],
+     "nq@32k": [
+      0.908,
+      500
+     ],
+     "nq@64k": [
+      0.886,
+      500
+     ],
+     "oolong@2k": [
+      0.797,
+      500
+     ],
+     "oolong@8k": [
+      0.678,
+      500
+     ],
+     "oolong@16k": [
+      0.56,
+      500
+     ],
+     "oolong@32k": [
+      0.58,
+      500
+     ],
+     "oolong@64k": [
+      0.514,
+      500
+     ],
+     "outlier@2k": [
+      0.965,
+      500
+     ],
+     "outlier@8k": [
+      0.756,
+      500
+     ],
+     "outlier@16k": [
+      0.448,
+      500
+     ],
+     "outlier@32k": [
+      0.177,
+      500
+     ],
+     "outlier@64k": [
+      0.117,
+      500
+     ],
+     "qdmatch_nq@2k": [
+      0.991,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.906,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.776,
+      500
+     ],
+     "qdmatch_nq@32k": [
+      0.535,
+      500
+     ],
+     "qdmatch_nq@64k": [
+      0.233,
+      500
+     ],
+     "reorder@2k": [
+      0.267,
+      500
+     ],
+     "reorder@8k": [
+      0.003,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "strmatch@2k": [
+      0.995,
+      500
+     ],
+     "strmatch@8k": [
+      0.984,
+      500
+     ],
+     "strmatch@16k": [
+      0.974,
+      500
+     ],
+     "strmatch@32k": [
+      0.938,
+      500
+     ],
+     "xabsence@2k": [
+      0.999,
+      500
+     ],
+     "xabsence@8k": [
+      0.815,
+      500
+     ],
+     "xabsence@16k": [
+      0.451,
+      500
+     ],
+     "xabsence@32k": [
+      0.131,
+      500
+     ]
+    }
+   },
+   {
+    "run": "m64-dense-f4-lr5e-06",
+    "arm": "dense",
+    "budget": "f4",
+    "seed": 0,
+    "pf": 4624.72,
+    "beaker": "01M5M8PY3ZYDNHS7V27WWB2QWQ",
+    "cells": {
+     "contradiction@2k": [
+      0.993,
+      500
+     ],
+     "contradiction@8k": [
+      0.968,
+      500
+     ],
+     "contradiction@16k": [
+      0.926,
+      500
+     ],
+     "contradiction@32k": [
+      0.841,
+      500
+     ],
+     "contradiction@64k": [
+      0.716,
+      500
+     ],
+     "grouping@2k": [
+      0.777,
+      500
+     ],
+     "grouping@8k": [
+      0.411,
+      500
+     ],
+     "grouping@16k": [
+      0.218,
+      500
+     ],
+     "grouping@32k": [
+      0.004,
+      500
+     ],
+     "hotpotqa@2k": [
+      0.986,
+      500
+     ],
+     "hotpotqa@8k": [
+      0.931,
+      500
+     ],
+     "hotpotqa@16k": [
+      0.889,
+      500
+     ],
+     "hotpotqa@32k": [
+      0.861,
+      500
+     ],
+     "hotpotqa@64k": [
+      0.845,
+      500
+     ],
+     "nq@2k": [
+      0.984,
+      500
+     ],
+     "nq@8k": [
+      0.944,
+      500
+     ],
+     "nq@16k": [
+      0.938,
+      500
+     ],
+     "nq@32k": [
+      0.922,
+      500
+     ],
+     "nq@64k": [
+      0.928,
+      500
+     ],
+     "oolong@2k": [
+      0.831,
+      500
+     ],
+     "oolong@8k": [
+      0.724,
+      500
+     ],
+     "oolong@16k": [
+      0.614,
+      500
+     ],
+     "oolong@32k": [
+      0.612,
+      500
+     ],
+     "oolong@64k": [
+      0.557,
+      500
+     ],
+     "outlier@2k": [
+      0.996,
+      500
+     ],
+     "outlier@8k": [
+      0.824,
+      500
+     ],
+     "outlier@16k": [
+      0.566,
+      500
+     ],
+     "outlier@32k": [
+      0.271,
+      500
+     ],
+     "outlier@64k": [
+      0.147,
+      500
+     ],
+     "qdmatch_nq@2k": [
+      0.993,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.932,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.851,
+      500
+     ],
+     "qdmatch_nq@32k": [
+      0.615,
+      500
+     ],
+     "qdmatch_nq@64k": [
+      0.304,
+      500
+     ],
+     "reorder@2k": [
+      0.422,
+      500
+     ],
+     "reorder@8k": [
+      0.008,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "strmatch@2k": [
+      0.999,
+      500
+     ],
+     "strmatch@8k": [
+      0.997,
+      500
+     ],
+     "strmatch@16k": [
+      0.986,
+      500
+     ],
+     "strmatch@32k": [
+      0.959,
+      500
+     ],
+     "xabsence@2k": [
+      1.0,
+      500
+     ],
+     "xabsence@8k": [
+      0.885,
+      500
+     ],
+     "xabsence@16k": [
+      0.567,
+      500
+     ],
+     "xabsence@32k": [
+      0.229,
+      500
+     ]
+    }
+   },
+   {
+    "run": "m64-dense-f2-lr5e-06",
+    "arm": "dense",
+    "budget": "f2",
+    "seed": 0,
+    "pf": 9294.35,
+    "beaker": "01M5NFVJS7Y4D046KXFE9AFE81",
+    "cells": {
+     "contradiction@2k": [
+      0.995,
+      500
+     ],
+     "contradiction@8k": [
+      0.977,
+      500
+     ],
+     "contradiction@16k": [
+      0.942,
+      500
+     ],
+     "contradiction@32k": [
+      0.875,
+      500
+     ],
+     "contradiction@64k": [
+      0.808,
+      500
+     ],
+     "grouping@2k": [
+      0.8,
+      500
+     ],
+     "grouping@8k": [
+      0.489,
+      500
+     ],
+     "grouping@16k": [
+      0.266,
+      500
+     ],
+     "grouping@32k": [
+      0.004,
+      500
+     ],
+     "hotpotqa@2k": [
+      0.993,
+      500
+     ],
+     "hotpotqa@8k": [
+      0.951,
+      500
+     ],
+     "hotpotqa@16k": [
+      0.898,
+      500
+     ],
+     "hotpotqa@32k": [
+      0.907,
+      500
+     ],
+     "hotpotqa@64k": [
+      0.873,
+      500
+     ],
+     "nq@2k": [
+      0.988,
+      500
+     ],
+     "nq@8k": [
+      0.954,
+      500
+     ],
+     "nq@16k": [
+      0.954,
+      500
+     ],
+     "nq@32k": [
+      0.95,
+      500
+     ],
+     "nq@64k": [
+      0.938,
+      500
+     ],
+     "oolong@2k": [
+      0.847,
+      500
+     ],
+     "oolong@8k": [
+      0.777,
+      500
+     ],
+     "oolong@16k": [
+      0.65,
+      500
+     ],
+     "oolong@32k": [
+      0.653,
+      500
+     ],
+     "oolong@64k": [
+      0.556,
+      500
+     ],
+     "outlier@2k": [
+      0.997,
+      500
+     ],
+     "outlier@8k": [
+      0.908,
+      500
+     ],
+     "outlier@16k": [
+      0.745,
+      500
+     ],
+     "outlier@32k": [
+      0.423,
+      500
+     ],
+     "outlier@64k": [
+      0.323,
+      500
+     ],
+     "qdmatch_nq@2k": [
+      0.995,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.952,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.869,
+      500
+     ],
+     "qdmatch_nq@32k": [
+      0.626,
+      500
+     ],
+     "qdmatch_nq@64k": [
+      0.329,
+      500
+     ],
+     "reorder@2k": [
+      0.514,
+      500
+     ],
+     "reorder@8k": [
+      0.02,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "strmatch@2k": [
+      0.999,
+      500
+     ],
+     "strmatch@8k": [
+      0.997,
+      500
+     ],
+     "strmatch@16k": [
+      0.994,
+      500
+     ],
+     "strmatch@32k": [
+      0.98,
+      500
+     ],
+     "xabsence@2k": [
+      1.0,
+      500
+     ],
+     "xabsence@8k": [
+      0.925,
+      500
+     ],
+     "xabsence@16k": [
+      0.718,
+      500
+     ],
+     "xabsence@32k": [
+      0.44,
+      500
+     ]
+    }
+   },
+   {
+    "run": "m64-dense-f1-lr5e-06",
+    "arm": "dense",
+    "budget": "f1",
+    "seed": 0,
+    "pf": 18591.51,
+    "beaker": "01M5NRQYFBSQ2ZPME1X0MDSC2G",
+    "cells": {
+     "contradiction@2k": [
+      0.997,
+      500
+     ],
+     "contradiction@8k": [
+      0.992,
+      500
+     ],
+     "contradiction@16k": [
+      0.977,
+      500
+     ],
+     "contradiction@32k": [
+      0.933,
+      500
+     ],
+     "contradiction@64k": [
+      0.861,
+      500
+     ],
+     "grouping@2k": [
+      0.813,
+      500
+     ],
+     "grouping@8k": [
+      0.519,
+      500
+     ],
+     "grouping@16k": [
+      0.314,
+      500
+     ],
+     "grouping@32k": [
+      0.005,
+      500
+     ],
+     "hotpotqa@2k": [
+      0.993,
+      500
+     ],
+     "hotpotqa@8k": [
+      0.955,
+      500
+     ],
+     "hotpotqa@16k": [
+      0.914,
+      500
+     ],
+     "hotpotqa@32k": [
+      0.913,
+      500
+     ],
+     "hotpotqa@64k": [
+      0.901,
+      500
+     ],
+     "nq@2k": [
+      0.984,
+      500
+     ],
+     "nq@8k": [
+      0.952,
+      500
+     ],
+     "nq@16k": [
+      0.956,
+      500
+     ],
+     "nq@32k": [
+      0.952,
+      500
+     ],
+     "nq@64k": [
+      0.962,
+      500
+     ],
+     "oolong@2k": [
+      0.88,
+      500
+     ],
+     "oolong@8k": [
+      0.797,
+      500
+     ],
+     "oolong@16k": [
+      0.677,
+      500
+     ],
+     "oolong@32k": [
+      0.683,
+      500
+     ],
+     "oolong@64k": [
+      0.573,
+      500
+     ],
+     "outlier@2k": [
+      0.997,
+      500
+     ],
+     "outlier@8k": [
+      0.981,
+      500
+     ],
+     "outlier@16k": [
+      0.907,
+      500
+     ],
+     "outlier@32k": [
+      0.694,
+      500
+     ],
+     "outlier@64k": [
+      0.605,
+      500
+     ],
+     "qdmatch_nq@2k": [
+      0.999,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.965,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.897,
+      500
+     ],
+     "qdmatch_nq@32k": [
+      0.671,
+      500
+     ],
+     "qdmatch_nq@64k": [
+      0.343,
+      500
+     ],
+     "reorder@2k": [
+      0.588,
+      500
+     ],
+     "reorder@8k": [
+      0.063,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "strmatch@2k": [
+      1.0,
+      500
+     ],
+     "strmatch@8k": [
+      0.999,
+      500
+     ],
+     "strmatch@16k": [
+      0.996,
+      500
+     ],
+     "strmatch@32k": [
+      0.989,
+      500
+     ],
+     "xabsence@2k": [
+      1.0,
+      500
+     ],
+     "xabsence@8k": [
+      0.986,
+      500
+     ],
+     "xabsence@16k": [
+      0.88,
+      500
+     ],
+     "xabsence@32k": [
+      0.606,
+      500
+     ]
+    }
+   },
+   {
+    "run": "m64-lora64r20to7f16-f4-lr5e-06",
+    "arm": "recipe",
+    "budget": "f4",
+    "seed": 0,
+    "pf": 1695.79,
+    "beaker": "01M5RG35YY70PX7XSAEYXWENPF",
+    "cells": {
+     "contradiction@2k": [
+      0.988,
+      500
+     ],
+     "contradiction@8k": [
+      0.956,
+      500
+     ],
+     "contradiction@16k": [
+      0.905,
+      500
+     ],
+     "contradiction@32k": [
+      0.792,
+      500
+     ],
+     "contradiction@64k": [
+      0.637,
+      500
+     ],
+     "grouping@2k": [
+      0.762,
+      500
+     ],
+     "grouping@8k": [
+      0.395,
+      500
+     ],
+     "grouping@16k": [
+      0.199,
+      500
+     ],
+     "hotpotqa@2k": [
+      0.985,
+      500
+     ],
+     "hotpotqa@8k": [
+      0.917,
+      500
+     ],
+     "hotpotqa@16k": [
+      0.87,
+      500
+     ],
+     "hotpotqa@32k": [
+      0.858,
+      500
+     ],
+     "hotpotqa@64k": [
+      0.819,
+      500
+     ],
+     "nq@2k": [
+      0.982,
+      500
+     ],
+     "nq@8k": [
+      0.914,
+      500
+     ],
+     "nq@16k": [
+      0.91,
+      500
+     ],
+     "nq@32k": [
+      0.898,
+      500
+     ],
+     "nq@64k": [
+      0.896,
+      500
+     ],
+     "oolong@2k": [
+      0.794,
+      500
+     ],
+     "oolong@8k": [
+      0.695,
+      500
+     ],
+     "oolong@16k": [
+      0.58,
+      500
+     ],
+     "oolong@32k": [
+      0.581,
+      500
+     ],
+     "oolong@64k": [
+      0.55,
+      500
+     ],
+     "outlier@2k": [
+      0.97,
+      500
+     ],
+     "outlier@8k": [
+      0.801,
+      500
+     ],
+     "outlier@16k": [
+      0.49,
+      500
+     ],
+     "outlier@32k": [
+      0.172,
+      500
+     ],
+     "outlier@64k": [
+      0.077,
+      500
+     ],
+     "qdmatch_nq@2k": [
+      0.994,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.924,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.8,
+      500
+     ],
+     "qdmatch_nq@32k": [
+      0.53,
+      500
+     ],
+     "qdmatch_nq@64k": [
+      0.247,
+      500
+     ],
+     "reorder@2k": [
+      0.26,
+      500
+     ],
+     "reorder@8k": [
+      -0.001,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "strmatch@2k": [
+      0.991,
+      500
+     ],
+     "strmatch@8k": [
+      0.984,
+      500
+     ],
+     "strmatch@16k": [
+      0.975,
+      500
+     ],
+     "strmatch@32k": [
+      0.957,
+      500
+     ],
+     "xabsence@2k": [
+      1.0,
+      500
+     ],
+     "xabsence@8k": [
+      0.89,
+      500
+     ],
+     "xabsence@16k": [
+      0.566,
+      500
+     ],
+     "xabsence@32k": [
+      0.246,
+      500
+     ]
+    }
+   }
+  ],
+  "notes": [
+   "the recipe here is lora64r20to7f16 (LoRA on blocks 0-6 only, floor 16 tokens/doc), not the whole-model-LoRA recipe",
+   "dense f2/f1 and the recipe ran on 4 GPUs, dense f16/f8/f4 on 8 (FLOPs do not depend on it)"
+  ]
+ },
+ "new4": {
+  "source": "early-loss-proxy validation 2026-11-17 (results.json, ops runs elpv-*), suite rows 4k/8k/16k, eval_size 500/cell, 1 seed (recipe f1 2 seeds)",
+  "points": [
+   {
+    "run": "elpv-denselora-f1",
+    "arm": "denselora",
+    "budget": "f1",
+    "seed": 0,
+    "pf": 1496.24738,
+    "beaker": "01M7MDKKGSKDY11XF76WB33918",
+    "cells": {
+     "contradiction@4k": [
+      0.983,
+      500
+     ],
+     "contradiction@8k": [
+      0.962,
+      500
+     ],
+     "contradiction@16k": [
+      0.929,
+      500
+     ],
+     "outlier@4k": [
+      0.949,
+      500
+     ],
+     "outlier@8k": [
+      0.811,
+      500
+     ],
+     "outlier@16k": [
+      0.523,
+      500
+     ],
+     "reorder@4k": [
+      0.15,
+      500
+     ],
+     "reorder@8k": [
+      0.022,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "qdmatch_nq@4k": [
+      0.977,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.944,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.863,
+      500
+     ]
+    }
+   },
+   {
+    "run": "elpv-denselora-f2",
+    "arm": "denselora",
+    "budget": "f2",
+    "seed": 0,
+    "pf": 753.58853,
+    "beaker": "01M7MDME61QTME97ZQ1BA0E0RN",
+    "cells": {
+     "contradiction@4k": [
+      0.965,
+      500
+     ],
+     "contradiction@8k": [
+      0.941,
+      500
+     ],
+     "contradiction@16k": [
+      0.898,
+      500
+     ],
+     "outlier@4k": [
+      0.828,
+      500
+     ],
+     "outlier@8k": [
+      0.671,
+      500
+     ],
+     "outlier@16k": [
+      0.369,
+      500
+     ],
+     "reorder@4k": [
+      0.083,
+      500
+     ],
+     "reorder@8k": [
+      0.007,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "qdmatch_nq@4k": [
+      0.98,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.93,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.84,
+      500
+     ]
+    }
+   },
+   {
+    "run": "elpv-denselora-f4",
+    "arm": "denselora",
+    "budget": "f4",
+    "seed": 0,
+    "pf": 374.45357,
+    "beaker": "01M7MDN8KX1CF57W41ZRFPN47S",
+    "cells": {
+     "contradiction@4k": [
+      0.945,
+      500
+     ],
+     "contradiction@8k": [
+      0.897,
+      500
+     ],
+     "contradiction@16k": [
+      0.793,
+      500
+     ],
+     "outlier@4k": [
+      0.647,
+      500
+     ],
+     "outlier@8k": [
+      0.466,
+      500
+     ],
+     "outlier@16k": [
+      0.245,
+      500
+     ],
+     "reorder@4k": [
+      0.051,
+      500
+     ],
+     "reorder@8k": [
+      0.003,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "qdmatch_nq@4k": [
+      0.969,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.917,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.808,
+      500
+     ]
+    }
+   },
+   {
+    "run": "elpv-recipe-f1",
+    "arm": "recipe",
+    "budget": "f1",
+    "seed": 0,
+    "pf": 441.5157,
+    "beaker": "01M7MDP5V7KNRFN2BADHXHM19Q",
+    "cells": {
+     "contradiction@4k": [
+      0.979,
+      500
+     ],
+     "contradiction@8k": [
+      0.957,
+      500
+     ],
+     "contradiction@16k": [
+      0.895,
+      500
+     ],
+     "outlier@4k": [
+      0.967,
+      500
+     ],
+     "outlier@8k": [
+      0.898,
+      500
+     ],
+     "outlier@16k": [
+      0.647,
+      500
+     ],
+     "reorder@4k": [
+      0.095,
+      500
+     ],
+     "reorder@8k": [
+      0.016,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "qdmatch_nq@4k": [
+      0.98,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.937,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.833,
+      500
+     ]
+    }
+   },
+   {
+    "run": "elpv-recipe-f1-sd1",
+    "arm": "recipe",
+    "budget": "f1",
+    "seed": 1,
+    "pf": 441.55928,
+    "beaker": "01M7MDQ0K1TDQC07S78HZGSSNV",
+    "cells": {
+     "contradiction@4k": [
+      0.973,
+      500
+     ],
+     "contradiction@8k": [
+      0.959,
+      500
+     ],
+     "contradiction@16k": [
+      0.897,
+      500
+     ],
+     "outlier@4k": [
+      0.942,
+      500
+     ],
+     "outlier@8k": [
+      0.886,
+      500
+     ],
+     "outlier@16k": [
+      0.645,
+      500
+     ],
+     "reorder@4k": [
+      0.079,
+      500
+     ],
+     "reorder@8k": [
+      0.006,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "qdmatch_nq@4k": [
+      0.985,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.931,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.84,
+      500
+     ]
+    }
+   },
+   {
+    "run": "elpv-recipe-f2",
+    "arm": "recipe",
+    "budget": "f2",
+    "seed": 0,
+    "pf": 223.1077,
+    "beaker": "01M7MDQVEYS78Q80RPZJV0D8RY",
+    "cells": {
+     "contradiction@4k": [
+      0.937,
+      500
+     ],
+     "contradiction@8k": [
+      0.907,
+      500
+     ],
+     "contradiction@16k": [
+      0.833,
+      500
+     ],
+     "outlier@4k": [
+      0.857,
+      500
+     ],
+     "outlier@8k": [
+      0.721,
+      500
+     ],
+     "outlier@16k": [
+      0.456,
+      500
+     ],
+     "reorder@4k": [
+      0.055,
+      500
+     ],
+     "reorder@8k": [
+      0.005,
+      500
+     ],
+     "reorder@16k": [
+      -0.0,
+      500
+     ],
+     "qdmatch_nq@4k": [
+      0.969,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.922,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.798,
+      500
+     ]
+    }
+   },
+   {
+    "run": "elpv-dense-f1",
+    "arm": "dense",
+    "budget": "f1",
+    "seed": 0,
+    "pf": 1981.85336,
+    "beaker": "01M7MDRTZNKZ8RPWJ1997MX27D",
+    "cells": {
+     "contradiction@4k": [
+      0.989,
+      500
+     ],
+     "contradiction@8k": [
+      0.971,
+      500
+     ],
+     "contradiction@16k": [
+      0.945,
+      500
+     ],
+     "outlier@4k": [
+      0.987,
+      500
+     ],
+     "outlier@8k": [
+      0.921,
+      500
+     ],
+     "outlier@16k": [
+      0.742,
+      500
+     ],
+     "reorder@4k": [
+      0.138,
+      500
+     ],
+     "reorder@8k": [
+      0.017,
+      500
+     ],
+     "reorder@16k": [
+      0.0,
+      500
+     ],
+     "qdmatch_nq@4k": [
+      0.989,
+      500
+     ],
+     "qdmatch_nq@8k": [
+      0.945,
+      500
+     ],
+     "qdmatch_nq@16k": [
+      0.863,
+      500
+     ]
+    }
+   }
+  ],
+  "notes": [
+   "reorder excluded from every mean: its strict-permutation grader scores every arm ~0 (parse rate ~0.65)",
+   "FTM is against the dense-LoRA curve (f4/f2/f1); dense full fine-tune has one point (f1) and beats the recipe there"
+  ]
+ }
+}

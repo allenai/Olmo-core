@@ -41,8 +41,16 @@ from olmo_core.internal.common import build_launch_config, get_root_dir, get_wor
 from olmo_core.launch.beaker import BeakerEnvVar, OLMoCoreBeakerImage
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-WANDB_ENTITY = "prasanns-allen-institute-for-ai"
-WANDB_PROJECT = "memory-networks"
+import os  # noqa: E402
+
+# Per-user settings (defaults = Prasann's). Another user sets these env vars instead of editing the file:
+# WANDB_ENTITY / WANDB_PROJECT (wandb), BEAKER_WORKSPACE / BEAKER_BUDGET (Beaker), CTC_USER_DIR (the weka folder
+# under checkpoints/ that the run's save folder goes in: checkpoints/$CTC_USER_DIR/ctc_suite/ckpts/<run>).
+WANDB_ENTITY = os.environ.get("WANDB_ENTITY", "prasanns-allen-institute-for-ai")
+WANDB_PROJECT = os.environ.get("WANDB_PROJECT", "memory-networks")
+BEAKER_WORKSPACE = os.environ.get("BEAKER_WORKSPACE", "ai2/flex2")
+BEAKER_BUDGET = os.environ.get("BEAKER_BUDGET", "ai2/oe-other")
+CTC_USER_DIR = os.environ.get("CTC_USER_DIR", "prasanns")
 
 # GPUs/node default for this family (H100 80GB jupiter nodes). Overridable per launch: sub-node
 # slots (2/4 GPUs) backfill into freed slices far faster than whole nodes when the cluster is
@@ -352,7 +360,7 @@ def main() -> None:
         if opts.exact_run_name
         else f"{opts.run_name}-{datetime.now().astimezone().strftime('%Y%m%dT%H%M%S%z')}"
     )
-    save_folder = f"{root_dir}/checkpoints/prasanns/ctc_suite/ckpts/{run_name}"
+    save_folder = f"{root_dir}/checkpoints/{CTC_USER_DIR}/ctc_suite/ckpts/{run_name}"
     wandb_group = opts.wandb_group or f"ctc-suite-{opts.task}"
     world_size = opts.num_nodes * opts.num_gpus
     global_batch = opts.global_batch or world_size  # 1 instance/GPU/step, grad-accum 1
@@ -435,8 +443,8 @@ def main() -> None:
         cluster=opts.cluster,
         root_dir=root_dir,
         beaker_image=OLMoCoreBeakerImage.stable,
-        workspace="ai2/flex2",
-        budget="ai2/oe-other",
+        workspace=BEAKER_WORKSPACE,
+        budget=BEAKER_BUDGET,
         num_nodes=opts.num_nodes,
         num_gpus=opts.num_gpus,
     )

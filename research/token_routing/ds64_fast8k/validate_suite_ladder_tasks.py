@@ -59,7 +59,7 @@ class _Count(logging.Handler):
 
 #: ladder base task -> (suite subset, {rung tokens: file tokens}) for --base-tasks defaults
 BASE_SUBSETS = {"nq": ("nq", {}), "outlier": ("outlier", {}), "oolong": ("oolong", {}),
-                "contradiction": ("contradiction_iid", {"2048": "2560"}), "rerank": ("rerank", {})}
+                "contradiction": ("contradiction_iid", {"2048": "2560"})}
 
 
 def _perturb(text):
@@ -89,7 +89,7 @@ def main() -> None:
     ap.add_argument("--rungs", nargs="+", default=["2048", "8192"])
     ap.add_argument("--tasks", nargs="+", default=None, help="SUITE_TASKS subset (default all)")
     ap.add_argument("--base-tasks", nargs="*", default=[],
-                    help="nq/outlier/oolong/contradiction/rerank: graded by the ctc spec (--ctc-grade)")
+                    help="nq/outlier/oolong/contradiction: graded by the ctc spec (--ctc-grade)")
     ap.add_argument("--files", default=None,
                     help='JSON {task: {rung: path}} replacing the default rung files of a task')
     ap.add_argument("--out", default=None, help="write the summary JSON here")
@@ -226,7 +226,8 @@ def main() -> None:
                 "prefill_tokens_max": max(prefill_lens), "eval_size": len(exs),
                 "prefill_tokens_p50": sorted(prefill_lens)[len(prefill_lens) // 2],
                 "prefill_tokens_top5": sorted(prefill_lens)[-5:],
-                **{f"prefill_over_{c}": sum(x > c for x in prefill_lens) for c in (65536, 68608, 73728, 77000)},
+                **{f"prefill_over_{c}": sum(x > c for x in prefill_lens)
+                   for c in (16384, 20000, 24576, 65536, 73728)},
                 "gold_text_example": golds[0][:160],
             }
             if task in native_fns:  # native grader beside the ctc one

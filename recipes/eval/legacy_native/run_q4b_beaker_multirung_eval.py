@@ -91,6 +91,10 @@ SUITE_LONG_RUNGS = {
     **{s: ("16k", "32k") for s in ("xabsence", "strmatch", "grouping")},
     "reorder": ("16k",),
 }
+# r4k (2026-11-17, early_loss_proxy validation): staged add-only for the four mtb16k tasks by
+# research/token_routing/early_loss_proxy/validation/stage_r4k_rows_beaker.sh (MANIFEST_elpv.json)
+for _s in ("contradiction_iid", "outlier", "reorder", "qdmatch_nq"):
+    SUITE_LONG_RUNGS[_s] = ("4k",) + SUITE_LONG_RUNGS[_s]
 #: rows staged by stage_suite_rows_beaker.sh (verified against ds64_fast8k/suite_rows_MANIFEST.json)
 SUITE_ROWS_ROOT = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/_eval_bundle/ctc_suite_rows"
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -217,8 +221,8 @@ def build_eval_launch_config(
         root_dir=root_dir,
         task_name="eval",
         beaker_image=OLMoCoreBeakerImage.stable,
-        workspace="ai2/flex2",
-        budget="ai2/oe-other",
+        workspace=os.environ.get("BEAKER_WORKSPACE", "ai2/flex2"),
+        budget=os.environ.get("BEAKER_BUDGET", "ai2/oe-other"),
         num_nodes=1,
         num_gpus=ngpu,
     )
