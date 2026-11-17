@@ -1,7 +1,7 @@
 #!/bin/bash
 # Lambda twin of run_proxy.sbatch: same trainer flags / probe flags / arm loop, 2 A100-80GB. Do NOT execute directly;
 # launch_proxy_lambda.py submits it with sbatch (env: CODE STEPS SETS HELDOUT TAG DATA SEQLEN NGPU GB MICRO
-# STOPCE MAXTRAIN SPEC (path to the TSV spec on Lambda)). Differences from Berkeley: conda-pack env, NFS paths under
+# STOPCE MAXTRAIN MAXPF PFPOINTS SPEC (path to the TSV spec on Lambda)). Differences from Berkeley: conda-pack env, NFS paths under
 # LROOT/elp (Lambda has no usable /data), runs/work dirs on node-local /tmp, own step-0 cache.
 #SBATCH --partition=lambda
 #SBATCH --account=site
@@ -45,7 +45,7 @@ while IFS=$'\t' read -r NAME VARIANT LR SEED FLAGS; do
   # shellcheck disable=SC2086
   "$PY" -m torch.distributed.run --nproc_per_node=$NGPU --master_port=$((29000 + RANDOM % 1000)) \
     research/token_routing/early_loss_proxy/dense_probe.py \
-    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" ${STOPCE:+--probe-stop-ce $STOPCE} ${MAXTRAIN:+--probe-max-train-s $MAXTRAIN} -- \
+    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" ${STOPCE:+--probe-stop-ce $STOPCE} ${MAXTRAIN:+--probe-max-train-s $MAXTRAIN} ${MAXPF:+--probe-max-pf $MAXPF} ${PFPOINTS:+--probe-pf-points $PFPOINTS} -- \
     --task mt4 --variant "$VARIANT" --model-family qwen3_5 --model-scale 4b \
     --run-name "$NAME" --base-checkpoint "$BASE" --data "$DATA" --work-dir "$LOCAL/work_${SLURM_JOB_ID}" \
     --save-folder "$SAVE" --seq-len $SEQLEN --epochs 1 --lr "$LR" --global-batch $GB --micro-batch-instances $MICRO \

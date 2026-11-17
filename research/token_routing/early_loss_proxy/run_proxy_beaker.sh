@@ -2,7 +2,7 @@
 # Beaker payload of the early dense-loss proxy: the run_proxy.sbatch loop, flag for flag, on a 2-GPU Beaker job.
 # Launched by launch_proxy_beaker.py (gantry clones the PUSHED commit; cwd = repo root; python = image system python).
 # Env: STEPS SETS TAG SPEC_B64 (TSV: name<TAB>variant<TAB>lr<TAB>seed<TAB>trainer flags), optional DATA HELDOUT BASE
-# SEQLEN NGPU GB MICRO STEP0 STOPCE MAXTRAIN FORCE. Results JSON + log per run on weka in $ROOT/results/$TAG/, each
+# SEQLEN NGPU GB MICRO STEP0 STOPCE MAXTRAIN MAXPF PFPOINTS FORCE. Results JSON + log per run on weka in $ROOT/results/$TAG/, each
 # mirrored to s3://ai2-llm/checkpoints/prasanns/early_loss_proxy/results/$TAG/ as soon as the run ends
 # (fetch_beaker_results.sh pulls them to Berkeley). Checkpoints and work dirs stay on the node's local disk.
 set -o pipefail
@@ -45,7 +45,7 @@ while IFS=$'\t' read -r NAME VARIANT LR SEED FLAGS; do
   # shellcheck disable=SC2086
   "$PY" -m torch.distributed.run --nproc_per_node=$NGPU --master_port=$((29000 + RANDOM % 1000)) \
     research/token_routing/early_loss_proxy/dense_probe.py \
-    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" ${STOPCE:+--probe-stop-ce $STOPCE} ${MAXTRAIN:+--probe-max-train-s $MAXTRAIN} -- \
+    --probe-steps "$STEPS" --probe-sets "$SETS" --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-step0-cache "$STEP0" ${STOPCE:+--probe-stop-ce $STOPCE} ${MAXTRAIN:+--probe-max-train-s $MAXTRAIN} ${MAXPF:+--probe-max-pf $MAXPF} ${PFPOINTS:+--probe-pf-points $PFPOINTS} -- \
     --task mt4 --variant "$VARIANT" --model-family qwen3_5 --model-scale 4b \
     --run-name "$NAME" --base-checkpoint "$BASE" --data "$DATA" --work-dir "$LOC/work" \
     --save-folder "$SAVE" --seq-len $SEQLEN --epochs 1 --lr "$LR" --global-batch $GB --micro-batch-instances $MICRO \

@@ -80,6 +80,11 @@ def build_callback(cfg: Dict[str, str]):
     out_path = cfg["out"]
     stop_ce = float(cfg.get("stop_ce", 0) or 0)  # stop once the mean held-out CE at a probe is <= this
     max_train_s = float(cfg.get("max_train_s", 0) or 0)  # stop (after a final probe) once training took this long
+    # FLOP-matched budget (Prasann, 2026-11-17: cheaper arms get proportionally more steps; reference = 50 dense
+    # steps): stop (after a final probe) once the flop meter's cumulative actual PF reaches max_pf, and also probe
+    # the first time it crosses each of pf_points. The meter's total is all-reduced, so every rank decides alike.
+    max_pf = float(cfg.get("max_pf", 0) or 0)
+    pf_points = sorted(float(x) for x in str(cfg.get("pf_points", "") or "").split(",") if x)
     # step-0 cache: the dense loss of the untrained base is the same for every arm (LoRA B = 0), so it is scored once
     # per (held-out file, sets, base) and reused; each rank still scores ONE row and the run falls back to a full
     # step-0 probe if that row disagrees with the cache (an arm that changes the model at init).
@@ -326,9 +331,18 @@ def build_callback(cfg: Dict[str, str]):
                     print(f"[memtrace] step {int(self.step)} base {self._base_mem / 2**30:.2f} GiB | " + " ".join(
                         f"{t}{i}:{n}:{a}/{m}" for t, i, n, a, m in self._trace), flush=True)
             probed = self.step in steps
+            pf_now = float((self._flops() or {}).get("actual_pf", 0.0))
+            while pf_points and pf_now >= pf_points[0]:  # crossed a FLOP probe point at this step
+                pf_points.pop(0)
+                probed = True
             if probed:
                 self._probe(int(self.step))
             stop = ""
+            if max_pf > 0 and pf_now >= max_pf:
+                if not probed:
+                    self._probe(int(self.step))
+                    probed = True
+                stop = f"FLOP budget {pf_now:.1f} PF >= {max_pf:.1f} PF"
             if max_train_s > 0:
                 ts = torch.tensor([self._train_s], device="cuda", dtype=torch.float64)
                 if dist.is_initialized():
