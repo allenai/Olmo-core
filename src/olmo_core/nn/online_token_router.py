@@ -99,7 +99,10 @@ class OnlineRouterConfig:
     drop point: ``random`` (uniform; also ``explore_frac >= 1``) or ``first_last`` (each document's first and
     last tokens). Controls still fit and log the router, so the fidelity metrics stay comparable.
     ``dh`` (mid-stack only): a fixed, gold-blind, fit-free RULE -- each document's top tokens by the residual
-    change ||h_t^L - h_t^0|| through blocks [0, L), read off the forward itself (no exploration)."""
+    change ||h_t^L - h_t^0|| through blocks [0, L), read off the forward itself (no exploration).
+    ``tail``: a fixed, content-blind RULE -- each document keeps its LAST body tokens (score = minus the distance to the
+    document's end in the original row, so later pyramid stages keep a nested tail). No exploration; the router is
+    still fit and logged (the dense-warmup gate needs a fit), but its scoring / target / fit FLOPs are not charged."""
     use_hidden: bool = True
     use_query: bool = True
     use_gold: bool = False
@@ -237,6 +240,11 @@ class OnlineRouterConfig:
     min_per_doc: int = 0
     """Per-document token FLOOR: every document keeps max(its share, ``min_per_doc``) body tokens (its top ones by score;
     all of a shorter document), counted against the budget. 0 = no floor."""
+    reset_positions: bool = False
+    """ABLATION (default off): after each mid-stack cut, renumber the kept row's ``position_ids`` contiguously (0..k-1 in
+    row order, as if the dropped tokens never existed) instead of keeping each token's ORIGINAL position. RoPE in the
+    full-attention blocks then sees the compacted distances; eval is dense, so train and test positions disagree.
+    Applies at every stage (stage 2 renumbers stage 1's renumbered row) and on packed rows (per document)."""
     keep_first: int = 0
     """Always keep each document's first ``keep_first`` body tokens (its header / id span); they count against the
     budget (and their document's share), and the router picks the rest. 0 = everything is routable."""
@@ -291,8 +299,8 @@ class OnlineRouterConfig:
             raise ValueError(f"online router min_per_doc must be >= 0, got {self.min_per_doc}")
         if self.keep_first < 0:
             raise ValueError(f"online router keep_first must be >= 0, got {self.keep_first}")
-        if self.score not in ("router", "random", "first_last", "dh"):
-            raise ValueError(f"online router score must be router / random / first_last / dh, got {self.score!r}")
+        if self.score not in ("router", "random", "first_last", "dh", "tail"):
+            raise ValueError(f"online router score must be router / random / first_last / dh / tail, got {self.score!r}")
         if self.score == "dh" and self.drop_layer <= 0:
             raise ValueError("online router score 'dh' needs the mid-stack drop (drop_layer > 0)")
         if self.target not in TARGETS:
@@ -733,6 +741,11 @@ class OnlineTokenRouter:
     def _flop(self, model, n: float) -> None:
         model._flop_extra_actual = float(getattr(model, "_flop_extra_actual", 0.0)) + float(n)
 
+    def _flop_router(self, model, n: float) -> None:
+        """Router scoring / target / fit FLOPs: not charged under the fixed ``tail`` rule (it never reads the fit)."""
+        if self.cfg.score != "tail":
+            self._flop(model, n)
+
     def _hidden(self, model, input_ids: torch.Tensor) -> torch.Tensor:
         """(B, T, D) hidden state at ``feature_layer`` on the full row, no grad."""
         with torch.no_grad():
@@ -819,7 +832,7 @@ class OnlineTokenRouter:
         )
         rep = torch.log1p(cnt[key]) / 5.0
         out: Dict[str, torch.Tensor] = {"body": body, "query": qm, "_edge": torch.minimum(offs["j"], offs["r"]),
-                                        "_j": offs["j"], "_cid": chunk_ids.to(torch.long)}
+                                        "_j": offs["j"], "_r": offs["r"], "_cid": chunk_ids.to(torch.long)}
         out["_s0"] = torch.cat([struct, (in_q * body).unsqueeze(-1), (rep * body).unsqueeze(-1)], dim=-1)
         if c.use_gold:
             out["_gold"] = (self._row_gold(input_ids, chunk_ids) * body).unsqueeze(-1)
@@ -981,7 +994,7 @@ class OnlineTokenRouter:
         score = None
         if self.w is not None:
             score = self.score(fp)
-            self._flop(model, 2.0 * self.n_features * (1 + self.cfg.mlp_hidden * int(getattr(self, "_mlp", None)
+            self._flop_router(model, 2.0 * self.n_features * (1 + self.cfg.mlp_hidden * int(getattr(self, "_mlp", None)
                                                                                    is not None)) * float(body.sum()))
         if dense:
             keep = body.clone()
@@ -994,6 +1007,9 @@ class OnlineTokenRouter:
             elif c.score == "first_last":
                 # fixed gold-blind rule (control): each document's first and last tokens, same allocation
                 score, c_explore = -fp["_edge"].to(torch.float32) + 1e-3 * u, 0.0
+            elif c.score == "tail":
+                # fixed content-blind rule: each document's last tokens (r = 0 is its last body token)
+                score, c_explore = -fp["_r"].to(torch.float32), 0.0
             elif c.score == "dh":
                 # fixed fit-free rule: residual change through blocks [0, L) (set by mid_compact)
                 score, c_explore = fp["_dh"] + 1e-6 * u, 0.0
@@ -1201,7 +1217,11 @@ class OnlineTokenRouter:
         valid = torch.arange(W, device=h.device)[None, :] < counts[:, None]
         h_new = torch.gather(src, 1, order[..., None].expand(B, W, D)) * valid[..., None].to(h.dtype)
         pnew = torch.gather(pid_src, 1, order)
-        kw["position_ids"] = torch.where(valid, pnew, pid.max(dim=1, keepdim=True).values.expand_as(pnew))
+        if self.cfg.reset_positions:
+            # ablation: contiguous positions over the kept row (pads continue the count; they are masked out)
+            kw["position_ids"] = torch.arange(W, device=h.device, dtype=pid.dtype)[None, :].expand(B, W).contiguous()
+        else:
+            kw["position_ids"] = torch.where(valid, pnew, pid.max(dim=1, keepdim=True).values.expand_as(pnew))
         if self.mod_layers:
             return self._mod_begin(model, h, block_kwargs, entry, real, counts, order, valid, kw["position_ids"])
         self._mid_gather = (order, valid, n_extra)
@@ -1312,6 +1332,10 @@ class OnlineTokenRouter:
         if pid is None:
             pid = (torch.arange(h.shape[1], device=dev)[None, :])
         pos_new = pid[:, kidx]
+        if self.cfg.reset_positions:
+            # ablation: each document's kept tokens renumbered 0..k_d-1
+            start = (torch.cumsum(counts, 0) - counts).repeat_interleave(counts)
+            pos_new = (torch.arange(W, device=dev) - start).to(pid.dtype)[None, :]
         cu = block_kwargs["cu_doc_lens"]
         dl = counts.to(cu.dtype)
         if tail:
@@ -1610,7 +1634,7 @@ class OnlineTokenRouter:
             entry["hsel"] = h.detach()[hrows, cols].float()
         self._pending.append(entry)
         n_sel = int(rows.numel())
-        self._flop(model, 2.0 * self.d_model * n_sel * (2 if self.cfg.target == "gxh" else 1))
+        self._flop_router(model, 2.0 * self.d_model * n_sel * (2 if self.cfg.target == "gxh" else 1))
 
         def hook(g: torch.Tensor) -> None:
             gs = g.detach()[hrows, cols].float()
@@ -1733,7 +1757,7 @@ class OnlineTokenRouter:
             dist.all_reduce(b)
             dist.all_reduce(cnt)
         if model is not None:
-            self._flop(model, 2.0 * F * F * Xc.shape[0] + 2.0 * F * Xc.shape[0])
+            self._flop_router(model, 2.0 * F * F * Xc.shape[0] + 2.0 * F * Xc.shape[0])
         if self.XtX is None:
             self.XtX, self.Xty = G, b
         else:
@@ -1765,7 +1789,7 @@ class OnlineTokenRouter:
             except RuntimeError as exc:  # pragma: no cover - numerically singular
                 log.warning("[online-router] ridge solve failed (%s); keeping previous weights", exc)
             if model is not None:
-                self._flop(model, F**3 / 3.0 + 4.0 * F * F)
+                self._flop_router(model, F**3 / 3.0 + 4.0 * F * F)
         if self.cfg.per_task_key_tokens > 0:
             self._fit_per_task(model, Xc, yc, torch.cat(tks).to(dev) if len(tks) == len(X) and tks else None, dev)
         if self.cfg.mlp_hidden > 0 and self.w is not None:
@@ -1812,7 +1836,7 @@ class OnlineTokenRouter:
         self._stat("mlp_resid_mse", losses[-1])
         self._stat("mlp_resid_var", float(r.var()) if r.numel() > 1 else float("nan"))
         if model is not None:
-            self._flop(model, 6.0 * F * H * X.shape[0] * c.mlp_steps)
+            self._flop_router(model, 6.0 * F * H * X.shape[0] * c.mlp_steps)
 
     def _mlp_score(self, fp: Dict[str, torch.Tensor]) -> Optional[torch.Tensor]:
         """(B, T) residual MLP score, or None before it exists."""
@@ -1865,7 +1889,7 @@ class OnlineTokenRouter:
             except RuntimeError as exc:  # pragma: no cover - numerically singular
                 log.warning("[online-router] task %d ridge solve failed (%s); keeping its previous weights", k, exc)
             if model is not None:
-                self._flop(model, 2.0 * F * F * Xk.shape[0] + 2.0 * F * Xk.shape[0] + F**3 / 3.0 + 4.0 * F * F)
+                self._flop_router(model, 2.0 * F * F * Xk.shape[0] + 2.0 * F * Xk.shape[0] + F**3 / 3.0 + 4.0 * F * F)
         self._stat("task_routers", float(len(self.task_w)))
 
     def metrics(self) -> Dict[str, float]:

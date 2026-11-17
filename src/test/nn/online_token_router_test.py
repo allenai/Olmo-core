@@ -1748,3 +1748,112 @@ def test_pyramid_per_row_budget_with_floor_cpu(floor):
     assert m1["online_router/s1_keep_frac_abs"] == pytest.approx(k1 / n_body)
     for v in (m0["online_router/leak_auc"], m1["online_router/s1_leak_auc_abs"]):
         assert 0.0 <= v <= 1.0
+
+
+def _routed_positions(reset, B=2, packed=False):
+    """Two-stage drop (blocks 1 and 2): the position_ids each block receives on a routed step, and the step's loss."""
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0, reset_positions=reset)
+    seen = {}
+    for i, b in enumerate(model.blocks.values()):
+        b.register_forward_pre_hook(
+            (lambda i: lambda mod, args, kw: seen.__setitem__(i, kw.get("position_ids")))(i), with_kwargs=True)
+    ids, cid, labels = _row(B=B)
+    for n in (1, 2):  # step 1 is the dense warmup, step 2 routes
+        model.zero_grad(set_to_none=True)
+        for r in router.chain():
+            r.begin_step(n, model=model)
+            r.metrics()
+        seen.clear()
+        out = model(ids, labels=labels)
+        out.loss.backward()
+    return seen, out.loss.detach(), ids
+
+
+def test_reset_positions_renumbers_kept_tokens_cpu():
+    """reset_positions: after each cut the kept row's positions are 0..W-1 (stage 2 renumbers stage 1's row); the default
+    keeps every kept token's ORIGINAL position (gaps where tokens were dropped). Stage 1 picks the same tokens either way
+    (its choice precedes any position change), so the two runs differ only through RoPE from block 1 on."""
+    base, loss0, ids = _routed_positions(False)
+    reset, loss1, _ = _routed_positions(True)
+    T = ids.shape[1]
+    assert torch.equal(base[0], reset[0])  # block 0 (before the first cut): the full row, unchanged
+    for i in (1, 2, 3):
+        W = reset[i].shape[1]
+        assert torch.equal(reset[i], torch.arange(W)[None, :].expand(ids.shape[0], W))
+    W1, W2 = base[1].shape[1], base[2].shape[1]
+    assert W2 < W1 < T and reset[1].shape[1] == W1
+    # default: original positions -- strictly increasing with gaps, reaching the row's last real token
+    assert bool((base[1][:, 1:] > base[1][:, :-1]).all()) and int(base[1].max()) == T - 1
+    assert int(base[2].max()) == T - 1 and int(base[2][0, -1]) > W2
+    assert not torch.equal(loss0, loss1)
+
+
+def test_reset_positions_off_matches_default_cpu():
+    """reset_positions=False is the default path: identical positions and a bit-identical loss."""
+    a, la, _ = _routed_positions(False)
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0)
+    assert router.cfg.reset_positions is False
+    ids, cid, labels = _row(B=2)
+    for n in (1, 2):
+        model.zero_grad(set_to_none=True)
+        for r in router.chain():
+            r.begin_step(n, model=model)
+            r.metrics()
+        out = model(ids, labels=labels)
+        out.loss.backward()
+    assert torch.equal(out.loss.detach(), la)
+
+
+def _expected_tail(ids, cid, fracs):
+    """Original columns kept after nested per-document tail cuts: every real non-body token, plus each document's last
+    ceil(f * |entering body|) body tokens at each stage in turn (at least 1)."""
+    import math
+
+    from olmo_core.nn.online_token_router import structural_features as sf
+
+    _, body = sf(ids, cid, doc_start_id=DS, doc_end_id=DE)
+    out = []
+    for b in range(ids.shape[0]):
+        keep = {int(t) for t in ((cid[b] != -2) & ~body[b]).nonzero().flatten()}
+        for d in sorted({int(x) for x in cid[b][body[b]]}):
+            cols = [int(t) for t in (body[b] & (cid[b] == d)).nonzero().flatten()]
+            for f in fracs:
+                cols = cols[len(cols) - max(1, math.ceil(f * len(cols))):]
+            keep |= set(cols)
+        out.append(keep)
+    return out
+
+
+@pytest.mark.parametrize("stages,fracs", [("1:0.5", [0.5]), ("1:0.5,2:0.25", [0.5, 0.5])])
+def test_tail_rule_keeps_exactly_each_documents_tail_cpu(stages, fracs):
+    """score='tail': on a routed step each stage keeps exactly every document's last ceil(f * |body|) body tokens (the
+    second stage a nested tail of the first), every non-body token, no exploration; the router is still fit, but none
+    of its scoring / target / fit FLOPs are charged."""
+    import inspect
+
+    model, router = _mid_model(4, stages=stages, dense_every=0, score="tail", samples_per_row=8)
+    seen, charged = {}, []
+    for i, b in enumerate(model.blocks.values()):
+        b.register_forward_pre_hook(
+            (lambda i: lambda mod, args, kw: seen.__setitem__(i, kw.get("position_ids")))(i), with_kwargs=True)
+    for r in router.chain():
+        orig = r._flop
+        r._flop = (lambda o: lambda m, v: (charged.append(inspect.stack()[1].function), o(m, v)))(orig)
+    ids, cid, labels = _row(B=2)
+    for n in (1, 2, 3):  # step 1 dense warmup, then routed
+        model.zero_grad(set_to_none=True)
+        for r in router.chain():
+            r.begin_step(n, model=model)
+            r.metrics()
+        seen.clear()
+        model(ids, labels=labels).loss.backward()
+    assert all(r.w is not None for r in router.chain())  # the fit ran
+    assert "_flop_router" not in charged and "mid_compact" in charged
+    n_st = len(fracs)
+    for s in range(1, n_st + 1):
+        blk = 1 if s == 1 else 2  # first block after each cut
+        pos = seen[blk]
+        exp = _expected_tail(ids, cid, fracs[:s])
+        for b in range(ids.shape[0]):
+            got = {int(p) for p in pos[b]}  # original positions = original columns (pads repeat the row's max)
+            assert got == exp[b], (s, b, sorted(got ^ exp[b]))
