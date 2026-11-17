@@ -11,18 +11,19 @@
 #
 #   TASK=nq bash research/token_routing/ds64_fast8k/build_mt4_fresh_beaker.sh            # one job per task
 #   MERGE=1 ROWS="1952 3904 5856 7808" bash research/token_routing/ds64_fast8k/build_mt4_fresh_beaker.sh
+#   MERGE=1 SKIP_STATS=1 ROWS="488 976" bash ...   # merge only (overlap already checked on these pools; 2026-11-10)
 set -uo pipefail
 WEKA=/weka/oe-training-default/ai2-llm/checkpoints/prasanns
 N="${N:-8200}"            # pool rows per task (8k rung); merged sizes use first-N prefixes
 SEED="${SEED:-5310}"      # ds64 used 4200+i; the fresh pool must differ
-TASK="${TASK:-}"; MERGE="${MERGE:-0}"; ROWS="${ROWS:-1952 3904 5856 7808}"
+TASK="${TASK:-}"; MERGE="${MERGE:-0}"; SKIP_STATS="${SKIP_STATS:-0}"; ROWS="${ROWS:-1952 3904 5856 7808}"
 NAME="fast8k-fresh-${TASK:-merge}-$(date +%m%d%H%M)"
 gantry run --name "$NAME" -w ai2/flex2 -b ai2/oe-other \
   --cluster ai2/phobos --cluster ai2/hammond --cluster 'ai2/jupiter*' --cluster 'ai2/ceres*' \
   --gpus 0 --cpus 8 --memory 64GiB --priority urgent --min-runtime 1h \
   --beaker-image tylerr/olmo-core-tch291cu128-2025-11-25 --install false \
   --weka oe-training-default:/weka/oe-training-default \
-  --env WEKA="$WEKA" --env N="$N" --env SEED="$SEED" --env TASK="$TASK" --env MERGE="$MERGE" --env ROWS="$ROWS" \
+  --env WEKA="$WEKA" --env N="$N" --env SEED="$SEED" --env TASK="$TASK" --env MERGE="$MERGE" --env SKIP_STATS="$SKIP_STATS" --env ROWS="$ROWS" \
   --allow-dirty --timeout 0 --yes -- bash -c '
 set -uo pipefail
 export PYTHONWARNINGS=ignore TOKENIZERS_PARALLELISM=false HF_HUB_DISABLE_PROGRESS_BARS=1
@@ -32,7 +33,7 @@ TOK=$WEKA/hf_tokenizers/Qwen3.5-0.8B-Base
 $PYB -m pip install -q -e . -e ./ctc 2>&1 | tail -2
 $PYB -c "import numpy, transformers, torch, olmo_core, ctc.data.cli" || { echo "!!! deps missing"; exit 1; }
 if [ "$MERGE" = 1 ]; then
-  for T in contradiction nq outlier oolong; do  # train/eval overlap of each fresh pool (must be ~0) before merging
+  [ "$SKIP_STATS" = 1 ] || for T in contradiction nq outlier oolong; do  # train/eval overlap of each fresh pool (must be ~0) before merging
     for RUNG in 8192 2048; do
       $PYB research/token_routing/ds64_fast2k/fast2k_stats.py --arm-jsonl $F/pool_fresh_$T/$T/train.jsonl \
         --shard-dir $F/shards/${T}_fresh --eval-jsonl $WEKA/outlier_lengthmix/eval_rungs/$T/rung_$RUNG.jsonl \

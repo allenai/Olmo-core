@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Move an oracle run trained on a Berkeley node (/data/prasann/oracle/runs/<run>) to weka, so the standard Beaker
 # evals (launch_oracle.py eval) read it from $CKPTS/<run> exactly as for the Beaker-trained arms.
-#   step up:   bash push_local_run.sh up   <run> <node>   # sbatch on <node>: boto3 upload to S3 (s3_sync.py)
+#   step up:   bash push_local_run.sh up   <run> <node>   # sbatch on <node>: boto3 upload to S3 (s3_push_run.py: model-only ckpt + jsons; stepN stay on the node)
 #   step down: bash push_local_run.sh down <run> [<run> ...]  # gantry CPU job: S3 -> weka ctc_suite/ckpts/<run>/
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -11,9 +11,8 @@ REL=checkpoints/prasanns/_transfer/oracle
 if [ "$MODE" = up ]; then
   RUN=$1; NODE=$2
   sbatch -p jsteinhardt --qos=preemptive_high -w "$NODE" -c 4 --mem 16G -t 180 -J "s3up-$RUN" \
-    -o /data/prasann/joblogs/s3up-$RUN-%j.out --wrap "cd $REPO/research/token_routing/olmo3_cptdrop && \
-    /data/prasann/conda/envs/corpus-reasoning-olmo/bin/python -c \"import sys, s3_sync as s; s.ROOT='$REL'; \
-    sys.argv=['s3_sync','up','/data/prasann/oracle/runs/$RUN','runs/$RUN']; s.main()\" | tail -3 && echo S3UP_DONE"
+    -o /data/prasann/joblogs/s3up-$RUN-%j.out --wrap "/data/prasann/conda/envs/corpus-reasoning-olmo/bin/python \
+    $HERE/s3_push_run.py /data/prasann/oracle/runs/$RUN $RUN | tail -3 && echo S3UP_DONE"
   exit
 fi
 [ "$MODE" = down ] || { echo "mode up|down"; exit 2; }
