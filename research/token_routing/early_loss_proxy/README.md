@@ -26,7 +26,10 @@ python3 research/token_routing/early_loss_proxy/analyze.py --results /net/mooney
     --tag v1 --out research/token_routing/early_loss_proxy/results_v1.json --fig research/token_routing/early_loss_proxy/proxy_v1.png
 ```
 
-Cost: see the record (load, per-step and per-probe wall clock are in every run JSON).
+Cost (2 H200, mooney): model load ~49 s; recipe-like arms 4.2 s/step, dense full FT 10.2 s/step, oracle arms 22 s/step;
+a 64-row suite8k probe ~7.5 s (the 256-row sweep probe ~24 s). So 10 steps + 1 probe ≈ 51-54 s after load, 20 steps ≈ 95 s,
+50 steps ≈ 215 s. The step-0 probe scores the same base model for every arm and could be cached (not implemented: `dense_probe.py` always runs it, +~7.5 s at 64 rows). Per-run timings: `cost_v1.json` and each run JSON.
+`make_tables.py` writes the record's tables from `results_v1.json` / `cost_v1.json`.
 
 Ported for this check (minimal hunks; FLOP accounting of the tail rule not ported, irrelevant here): oracle token
 selection (`src/olmo_core/nn/oracle_token_select.py` + router `score="oracle"`) from `claude/oracle-thresh-sweep-69bc7d`,

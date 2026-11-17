@@ -2,12 +2,13 @@
 experiment: tokdrop_lr
 title: LR ablation for token-drop training — dense vs gold_fl20p8_noslot (gfl20p8ns) × LR {5e-6, 1.5e-5, 5e-5}, ONE multi-task job per (arm, LR) on contradiction+nq+outlier+oolong (fast8k mt4 shard), Qwen3.5-4B base
 status: active
-updated: 2026-11-13
+updated: 2026-11-16
 branch: prasann/flopdrop_clean @ 9bdff38d0 (pushed)
 launcher: research/token_routing/ds64_fast8k/launch_fast8k.py (env F8K_SUFFIX=-lra, OPS_EXPERIMENT=tokdrop_lr)
 records:
   - records/flopdrop-final-figures-plan.md
   - records/docdrop-nongold-baseline.md (branch claude/docdrop-nongold-42bb6b, unmerged: random non-gold document drop at the recipe's FLOPs; negative)
+  - records/early-dense-loss-proxy.md (branch claude/early-loss-proxy-d6e886, unmerged: early dense-eval loss as a cheap predictor of the final 8k score; partly)
 results:
 artifacts:
   - https://claude.ai/artifact/RFpSfNnqnz8M9ygi8kK1U5
@@ -107,6 +108,19 @@ See `next_step` above.
   FTM < 1.08x (below dense f488). Contradiction 0.70-0.80 vs 0.96: no over-prediction, a 2k->8k transfer loss.
 - ddcg (compact + group-aware) 0.661 8k (2k 0.934). Done; nothing running. Not pursued further (clearly below; no seeds, no 3,904).
 - Flop meter fix (this branch): --lora-rank + per-example now credits the frozen base at each example's length.
+
+## Early dense-loss proxy (2026-11-16, branch claude/early-loss-proxy-d6e886; record early-dense-loss-proxy.md)
+- Prasann 11-16: does the dense eval loss in the first few steps predict a method's final score, in under a minute?
+  Code research/token_routing/early_loss_proxy/ (callback on the unmodified trainer; oracle + tail rule ported).
+- 19 arms x 2 seeds (all known 1,952-row outcomes, 0.554-0.853), real schedules, mooney 2 H200. Dense answer CE on
+  32 eval-rung rows/task at 8k (probe, eval_size 128 total, not a score).
+  - Steps 1-5 are uninformative (warmup + answer format).
+  - Spearman vs the final 8k mean: 0.83 at step 10, 0.84 at step 20. Step 20 separates >=0.84 from <0.80 except wtsS1.
+  - 30-50 steps (9 arms): Spearman 0.95; the step-50 outlier CE ranks outlier collapses at 0.97.
+  - Doc-drop is flagged (+0.15 CE over dense LoRA at step 20).
+- Limits: cannot resolve final gaps < ~0.03-0.05 (seed noise, median 0.027 CE); nq / oolong carry no signal.
+- Cost after a ~49 s load: ~51-54 s for 10 steps, ~95 s for 20, ~215 s for 50 (recipe-like); oracle arms ~22 s/step.
+- Done; nothing running (slurm 5149824/5149825/5149886/5149887 finished).
 
 ## Open issues / traps
 - The Beaker image (OLMoCoreBeakerImage.stable) now ships torch 2.13.0+cu129, while this branch was

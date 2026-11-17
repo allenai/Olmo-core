@@ -50,10 +50,6 @@ FINAL = {
 }
 
 
-def final_mean(arm):
-    return float(np.mean(FINAL[arm]))
-
-
 def spearman(x, y):
     x, y = np.asarray(x, float), np.asarray(y, float)
     rx = np.argsort(np.argsort(x)).astype(float)
@@ -100,8 +96,15 @@ def curves(d, max_rows=0):
     return out, per_row
 
 
+MEAN_TASKS = list(TASKS)  # --mean-tasks: the tasks the "4-task mean" averages over (e.g. drop oolong)
+
+
 def mean4(c):
-    return float(np.mean([c[t] for t in TASKS]))
+    return float(np.mean([c[t] for t in MEAN_TASKS]))
+
+
+def final_mean(arm):
+    return float(np.mean([FINAL[arm][TASKS.index(t)] for t in MEAN_TASKS]))
 
 
 def main():
@@ -112,14 +115,16 @@ def main():
     ap.add_argument("--fig", default="")
     ap.add_argument("--fig-set", default="suite8k")
     ap.add_argument("--fig-step", type=int, default=10)
+    ap.add_argument("--mean-tasks", default=",".join(TASKS), help="tasks in the mean (proxy and final score alike)")
     ap.add_argument("--rows-per-task", type=int, default=0, help="use only the first N held-out rows per (set, task)")
     a = ap.parse_args()
+    MEAN_TASKS[:] = a.mean_tasks.split(",")
     runs = load(a.results, a.tag)
     arms = sorted({k[0] for k in runs}, key=lambda x: -final_mean(x) if x in FINAL else 0)
     C = {k: curves(d, a.rows_per_task) for k, d in runs.items()}
     steps = sorted(set.intersection(*[set(c[0]) for c in C.values()]))
     sets = sorted(next(iter(C.values()))[0][0].keys())
-    res = {"tag": a.tag, "rows_per_task": a.rows_per_task or "all", "steps": steps, "sets": sets, "arms": {}, "corr": {}, "step0": {}, "noise": {}}
+    res = {"tag": a.tag, "mean_tasks": MEAN_TASKS, "rows_per_task": a.rows_per_task or "all", "steps": steps, "sets": sets, "arms": {}, "corr": {}, "step0": {}, "noise": {}}
 
     # step 0 agreement (same base, same rows): max abs spread across all runs per set/task
     for s in sets:
@@ -171,10 +176,10 @@ def main():
                         continue
                     # SE of the 4-task mean difference: per task var/n, averaged over 4 tasks
                     var = 0.0
-                    for t in TASKS:
+                    for t in MEAN_TASKS:
                         dd = C[k][1][(st, s, t)] - C[dk][1][(st, s, t)]
                         var += dd.var(ddof=1) / len(dd)
-                    diffs.append(np.sqrt(var) / len(TASKS))
+                    diffs.append(np.sqrt(var) / len(MEAN_TASKS))
                 se[st] = float(np.mean(diffs)) if diffs else None
             A["paired_se_vs_dense"][s] = se
         res["arms"][arm] = A

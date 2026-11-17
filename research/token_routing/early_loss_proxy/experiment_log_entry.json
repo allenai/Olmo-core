@@ -1,0 +1,350 @@
+{
+ "date": "2026-11-16",
+ "status": "done (partly)",
+ "track": "mechanism",
+ "who": "side session (early-loss-proxy)",
+ "title": "Early dense-eval loss as a cheap predictor of a FLOP-drop method's final 8k score",
+ "result": "Partly. Train each method with its own forward, optimiser and real LR schedule for 10-50 steps from the repaired base on the same mt4 batches; score the DENSE forward's answer CE on fixed held-out 8k eval-rung rows (32/task, a probe, not a score). Steps 1-5 are uninformative (warmup + answer format: every arm 1.69 -> ~0.4). Step-10 / 20 CE vs the known final 8k mean over 19 arms x 2 seeds: Spearman 0.83 / 0.84 (0.82 / 0.85 with 16 rows/task; 0.75 / 0.83 on train-distribution rows). Step 20 separates every >=0.84 arm from every <0.80 arm except wtsS1 (outlier collapse invisible); step 10 also misses oracle 0.80. Both document-drop arms are flagged (excess +0.15 over dense LoRA at step 20, mostly contradiction). 30-50 steps (9 arms): Spearman 0.95; the step-50 outlier CE ranks outlier collapses at 0.97 (catches wtsS1). Limits: cannot resolve final gaps < ~0.03-0.05 (seed |diff| of the drop median 0.027, max 0.07; paired row SE ~0.013); nq / oolong carry no signal. Cost after a ~49 s load on 2 H200: ~51-54 s (10 steps), ~95 s (20), ~130 s (30), ~215 s (50) for recipe-like arms; oracle arms ~22 s/step.",
+ "match": "each arm's full-run flags; same base, batches (verified by hash) and held-out rows; step 0 identical across all 38 runs",
+ "record": "records/early-dense-loss-proxy.md",
+ "branch": "claude/early-loss-proxy-d6e886",
+ "tables": [
+  {
+   "title": "suite8k dense-eval answer CE (4-task mean, 2-seed mean) at steps 10/20 vs final 8k mean (1,952 rows/task, eval_size 500/task)",
+   "cols": [
+    "arm",
+    "final 8k",
+    "CE 10",
+    "CE 20",
+    "excess vs dense LoRA 10",
+    "excess 20",
+    "outlier drop 20",
+    "s/step"
+   ],
+   "rows": [
+    [
+     "denselora",
+     0.853,
+     0.271,
+     0.269,
+     0.0,
+     0.0,
+     0.845,
+     10.4
+    ],
+    [
+     "orc95",
+     0.85,
+     0.281,
+     0.299,
+     0.01,
+     0.03,
+     0.8,
+     22.0
+    ],
+    [
+     "recipe",
+     0.846,
+     0.316,
+     0.289,
+     0.045,
+     0.02,
+     0.839,
+     4.2
+    ],
+    [
+     "dense",
+     0.843,
+     0.318,
+     0.271,
+     0.047,
+     0.002,
+     0.849,
+     10.2
+    ],
+    [
+     "rnd19",
+     0.84,
+     0.352,
+     0.337,
+     0.081,
+     0.068,
+     0.795,
+     3.9
+    ],
+    [
+     "orc85",
+     0.837,
+     0.334,
+     0.331,
+     0.063,
+     0.062,
+     0.809,
+     21.7
+    ],
+    [
+     "wtsS0wr",
+     0.837,
+     0.327,
+     0.313,
+     0.056,
+     0.044,
+     0.821,
+     4.2
+    ],
+    [
+     "orc90",
+     0.824,
+     0.322,
+     0.318,
+     0.051,
+     0.049,
+     0.784,
+     21.7
+    ],
+    [
+     "rnd17",
+     0.813,
+     0.363,
+     0.381,
+     0.093,
+     0.112,
+     0.765,
+     4.0
+    ],
+    [
+     "rnd11",
+     0.797,
+     0.392,
+     0.406,
+     0.122,
+     0.137,
+     0.643,
+     4.2
+    ],
+    [
+     "wtsS1",
+     0.79,
+     0.333,
+     0.319,
+     0.063,
+     0.05,
+     0.811,
+     4.2
+    ],
+    [
+     "tail20to7",
+     0.781,
+     0.371,
+     0.418,
+     0.101,
+     0.149,
+     0.555,
+     4.2
+    ],
+    [
+     "rnd9",
+     0.769,
+     0.385,
+     0.361,
+     0.115,
+     0.092,
+     0.714,
+     4.2
+    ],
+    [
+     "tail10",
+     0.747,
+     0.385,
+     0.391,
+     0.115,
+     0.122,
+     0.613,
+     4.2
+    ],
+    [
+     "orc80",
+     0.721,
+     0.347,
+     0.357,
+     0.076,
+     0.088,
+     0.685,
+     21.7
+    ],
+    [
+     "ddpg",
+     0.665,
+     0.373,
+     0.416,
+     0.102,
+     0.147,
+     0.716,
+     4.3
+    ],
+    [
+     "orc70",
+     0.648,
+     0.418,
+     0.389,
+     0.147,
+     0.12,
+     0.687,
+     21.7
+    ],
+    [
+     "orc60",
+     0.643,
+     0.468,
+     0.471,
+     0.197,
+     0.202,
+     0.439,
+     21.7
+    ],
+    [
+     "ddp",
+     0.554,
+     0.38,
+     0.415,
+     0.11,
+     0.146,
+     0.584,
+     4.3
+    ]
+   ]
+  },
+  {
+   "title": "30 and 50 steps (9 arms x 2 seeds)",
+   "cols": [
+    "arm",
+    "final 8k",
+    "CE 30",
+    "CE 50",
+    "outlier drop 50",
+    "excess vs dense LoRA 50"
+   ],
+   "rows": [
+    [
+     "denselora",
+     0.853,
+     0.218,
+     0.21,
+     0.88,
+     0.0
+    ],
+    [
+     "recipe",
+     0.846,
+     0.269,
+     0.244,
+     0.872,
+     0.034
+    ],
+    [
+     "dense",
+     0.843,
+     0.243,
+     0.224,
+     0.856,
+     0.014
+    ],
+    [
+     "rnd19",
+     0.84,
+     0.277,
+     0.264,
+     0.847,
+     0.054
+    ],
+    [
+     "wtsS1",
+     0.79,
+     0.289,
+     0.263,
+     0.818,
+     0.053
+    ],
+    [
+     "tail20to7",
+     0.781,
+     0.438,
+     0.297,
+     0.845,
+     0.087
+    ],
+    [
+     "rnd9",
+     0.769,
+     0.315,
+     0.27,
+     0.842,
+     0.06
+    ],
+    [
+     "ddpg",
+     0.665,
+     0.462,
+     0.329,
+     0.799,
+     0.119
+    ],
+    [
+     "ddp",
+     0.554,
+     0.452,
+     0.378,
+     0.638,
+     0.168
+    ]
+   ]
+  },
+  {
+   "title": "Spearman vs final 8k (suite8k)",
+   "cols": [
+    "probe",
+    "4-task mean",
+    "methods only",
+    "contradiction",
+    "outlier"
+   ],
+   "rows": [
+    [
+     "step 5 (19 arms)",
+     0.68,
+     0.84,
+     0.54,
+     0.5
+    ],
+    [
+     "step 10 (19 arms)",
+     0.83,
+     0.77,
+     0.93,
+     0.71
+    ],
+    [
+     "step 20 (19 arms)",
+     0.84,
+     0.79,
+     0.94,
+     0.78
+    ],
+    [
+     "step 30 (9 arms)",
+     0.95,
+     0.93,
+     0.97,
+     0.72
+    ],
+    [
+     "step 50 (9 arms)",
+     0.95,
+     0.93,
+     0.97,
+     0.97
+    ]
+   ]
+  }
+ ]
+}
