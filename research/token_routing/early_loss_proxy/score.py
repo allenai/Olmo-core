@@ -119,12 +119,18 @@ def main():
         ref_last = min(x["curve"][-1]["all"] for x in rs)
         ref_last_pf = min((x["curve"][-1]["pf"] for x in rs if x["curve"][-1]["all"] <= ref_last + 1e-12))
         ref_peak = max(x["peak_gib"] for x in rs)
-        ref_tr = max(x["transient_gib"] for x in rs)
+        ref_tr = min(x["transient_gib"] for x in rs)  # the leaner reference (dense LoRA)
         need = [pf_to_reach(x["curve"], la) for x in rs]
         need = [n for n in need if n is not None]
         lb = not need
         ref_pf = min(need) if need else max(x["curve"][-1]["pf"] for x in rs)
         cross = pf_to_reach(r["curve"], ref_last)
+        # iso-loss FLOP ratio vs the recipe baseline of the reference tag (same seed if present): > 1 = cheaper than it
+        recs = [x for x in runs.values() if x["arm"] == "recipe" and x["tag"] == (a.ref_tag or x["tag"])]
+        recs = [x for x in recs if x["seed"] == seed] or recs
+        need_rec = [pf_to_reach(x["curve"], la) for x in recs]
+        need_rec = [n for n in need_rec if n is not None]
+        iso_rec = (min(need_rec) / fa) if need_rec and fa > 0 else None
         # speedup at each reference level: (cheapest reference PF to reach the level) / (run PF to reach it), on the
         # mean loss ("x") and requiring every task to reach its own reference level ("xw", worst task)
         best = min(rs, key=lambda x: x["curve"][-1]["all"])
@@ -146,7 +152,7 @@ def main():
             "ce0": l0, "ce_last": la, "drop": l0 - la, "pf": fa, "dense_pf": last["dense_pf"],
             "pf_per_step_vs_dense": (fa / last["dense_pf"]) if last["dense_pf"] else None,
             "frac": (l0 - la) / max(1e-9, l0 - ref_last),
-            "iso": (ref_pf / fa) if fa > 0 else None, "iso_lb": lb,
+            "iso": (ref_pf / fa) if fa > 0 else None, "iso_lb": lb, "iso_rec": iso_rec,
             "to_target": (ref_last_pf / cross) if cross else None, "x": xs, "xw": xw,
             "peak_vs_ref": (r["peak_gib"] / ref_peak) if ref_peak else None,
             "transient_vs_ref": (r["transient_gib"] / ref_tr) if ref_tr else None,
@@ -171,7 +177,7 @@ def main():
             return float(np.mean(v)) if v else None
         board.append({"tag": tag, "arm": arm, "seeds": sorted(x["seed"] for x in rs), "steps": rs[0]["steps"],
                       "eval_size": rs[0]["eval_size"], "is_ref": rs[0]["is_ref"],
-                      **{k: mean(k) for k in ("ce_last", "drop", "frac", "pf", "pf_per_step_vs_dense", "iso",
+                      **{k: mean(k) for k in ("ce_last", "drop", "frac", "pf", "pf_per_step_vs_dense", "iso", "iso_rec",
                                               "to_target", "peak_gib", "peak_vs_ref", "transient_gib", "transient_vs_ref",
                                               "train_s", "wall_s",
                                               "d_vs_ref", "d_vs_ref_se")},
@@ -189,12 +195,13 @@ def main():
     print(f"reference seeds {ref_seeds}; ranked by deepest reference level reached, then FLOP speedup there "
           f"(x@k = cheapest reference PF to reach the reference's step-k loss / run PF to reach it; xw = worst task)")
     print(f"{'tag/arm':34s} {'sd':>4s} {'steps':>5s} {'CE':>6s} {'frac':>5s} {'PF':>7s} {'step/dense':>10s} "
-          f"{'x@lvl':>10s} {'xw@lvl':>10s} {'peakGiB':>7s} {'transGiB':>8s} {'tr/ref':>6s} {'train_s':>7s}")
+          f"{'x@lvl':>10s} {'xw@lvl':>10s} {'iso':>5s} {'isoRec':>6s} {'peakGiB':>7s} {'transGiB':>8s} {'tr/ref':>6s} {'train_s':>7s}")
     f = lambda v, w, p: (f"{v:{w}.{p}f}" if v is not None else " " * (w - 1) + "-")  # noqa: E731
     for b in board:
         print(f"{(b['tag'] + '/' + b['arm'])[:34]:34s} {len(b['seeds']):>4d} {b['steps']:>5d} {f(b['ce_last'], 6, 3)} "
               f"{f(b['frac'], 5, 2)} {f(b['pf'], 7, 2)} {f(b['pf_per_step_vs_dense'], 10, 3)} "
               f"{deepest(b)[1]:5.2f}@{deepest(b)[0]:<4d} {deepest(b, 'xw')[1]:5.2f}@{deepest(b, 'xw')[0]:<4d} "
+              f"{f(b['iso'], 5, 2)} {f(b['iso_rec'], 6, 2)} "
               f"{f(b['peak_gib'], 7, 1)} {f(b['transient_gib'], 8, 1)} "
               f"{f(b['transient_vs_ref'], 6, 2)} {f(b['train_s'], 7, 0)}")
     if a.out:

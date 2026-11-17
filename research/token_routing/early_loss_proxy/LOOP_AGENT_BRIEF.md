@@ -97,3 +97,13 @@ about two paired SEs (`d_vs_ref_se`) are noise. Seed 0 for screening; rerun seed
 Until `mtb16k` / `heldout_v2.npz` exist on the node, smoke-test on mooney with the old 8k pool by adding
 `--data /data/prasann/oracle/shards/mt4f1952 --heldout /data/prasann/early_loss_proxy/heldout_v1.npz --sets suite8k:8 --seq-len 12288`
 to `launch_proxy.py`. Real runs use the defaults (new pool, 16,384).
+
+## Where to run (updated 2026-11-17 00:40)
+- Berkeley: `launch_proxy.py --node sneetches|mooney` (8 GPUs at preemptive_high in total across all agents; the
+  references live on sneetches: `/net/sneetches/data/prasann/early_loss_proxy/results/v2`). Pending GPU jobs on a node
+  block CPU-only jobs there, so do not leave jobs queued on mooney.
+- Lambda (2 x A100, ~2.3x slower, startup ~4 min): `launch_proxy_lambda.py`, see `LAMBDA.md`. Cheap arms only.
+- Beaker (2 x H100, about recipe speed of H200 x 1.2, starts in 20-30 s once warm): `launch_proxy_beaker.py`, see
+  `BEAKER.md`. Needs your branch PUSHED (`git push -u origin <your-branch>`; never main / prasann/flopdrop_clean) and
+  merged with `origin/claude/early-loss-proxy-d6e886`. Arms that read files only on Berkeley `/data` are refused.
+- Data and held-out rows: `POOL_V2.md`. Memory to report: `transient_gib` (peak minus pre-step baseline).
