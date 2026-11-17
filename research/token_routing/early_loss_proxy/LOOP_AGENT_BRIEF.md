@@ -116,3 +116,13 @@ to `launch_proxy.py`. Real runs use the defaults (new pool, 16,384).
 - Memory (Prasann 11-17 12:15): savings at 16k do not matter (transient ~3 GiB vs ~12 GiB of weights + optimizer
   state). What matters is an algorithm whose peak stays nearly flat at 256k, 1M tokens or longer: report
   `transient_gib` per 1k tokens and say what would hold the peak at 256k+.
+
+## Scoring rule (Prasann, 2026-11-17 15:00): only the deepest dense loss counts
+- He wants methods that scale to large data / high FLOP counts: a method counts only if it reaches the DEEPEST loss the
+  dense reference reaches (full-epoch dense LoRA: 0.071 mean held-out CE at 1,496 PF on heldout_v2; 0.121 on the 16k
+  sets of heldout_v3), and it may take more training steps / data than dense to get there.
+- Ratios at shallow levels (dense LoRA's step 10-100 losses) are screening signals only; never report them as the
+  speedup. Score with `python3 deep.py` (all lengths) and `python3 v3.py` (16k): deepest dense level reached, ratio
+  there, and whether the loss was still falling when the run ended.
+- A short screen may kill an idea; a surviving idea must be rerun long enough (more rows, more steps) to reach the dense
+  final loss before it is called a gain. Dense full fine-tuning is the stronger reference on generation evals.
