@@ -16,6 +16,7 @@ from torch.optim import Optimizer
 
 from olmo_core.data.utils import get_labels
 from olmo_core.distributed.checkpoint import (
+    get_optimizer_state_dict,
     merge_state_dicts,
     prune_state_dict,
     swap_param_keys,
@@ -717,7 +718,7 @@ class TransformerPipelineTrainModule(TrainModule):
             state_dict["optim"] = {
                 k: v
                 for sd in map(
-                    partial(dist_cp_sd.get_optimizer_state_dict, options=sd_options),
+                    partial(get_optimizer_state_dict, options=sd_options),
                     self.model_parts,
                     self._require_optimizers(),
                 )

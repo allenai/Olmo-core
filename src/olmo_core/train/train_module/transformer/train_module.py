@@ -18,6 +18,7 @@ from torch.optim import Optimizer
 
 from olmo_core.data.utils import get_labels, split_batch
 from olmo_core.distributed.checkpoint import (
+    get_optimizer_state_dict,
     merge_state_dicts,
     prune_state_dict,
     swap_param_keys,
@@ -675,7 +676,7 @@ class TransformerTrainModule(TrainModule):
         }
         if optim:
             assert self.optim is not None, "cannot include optimizer state in eval_only mode"
-            state_dict["optim"] = dist_cp_sd.get_optimizer_state_dict(
+            state_dict["optim"] = get_optimizer_state_dict(
                 self.model, self.optim, options=sd_options
             )
         return state_dict

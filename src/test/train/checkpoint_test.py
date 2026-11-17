@@ -41,6 +41,18 @@ def run_checkpointer(base_dir, work_dir, model_factory):
     assert train_state["rank"] == get_rank()
 
 
+def test_basic_train_module_state_dict_does_not_advance_fresh_optimizer(tiny_model):
+    optim = torch.optim.AdamW(tiny_model.parameters())
+    train_module = BasicTrainModule(tiny_model, optim, 128)
+
+    state_dict = train_module.state_dict_to_save()
+
+    assert all(float(state["step"]) == 0 for state in optim.state.values())
+    saved_steps = [state["step"] for state in state_dict["optim"]["state"].values()]
+    assert len(saved_steps) == 6
+    assert all(float(step) == 0 for step in saved_steps)
+
+
 def test_checkpointer_with_local_dir(tmp_path, tiny_model_factory):
     run_distributed_test(
         run_checkpointer,
