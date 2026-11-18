@@ -1685,3 +1685,100 @@ def test_nonfinite_targets_are_dropped_from_the_fit():
     r._current = None
     r.begin_step(2, model=m)
     assert r.w is not None and bool(torch.isfinite(r.w).all())
+
+
+def _gc_pass(model, chain, ids, labels, mode, step=None, calls=None):
+    """One forward/backward with grad_comp ``mode`` on every stage, after ``begin_step(step)`` (None: same step, same
+    fit); ``calls`` restores the routers' draw counters so two passes route the same tokens. Returns (logits, grad at
+    block 1's output, targets per stage, the draw counters before the pass)."""
+    for r in chain:
+        r.cfg.grad_comp = mode
+    if step is not None:
+        for r in chain:
+            r.begin_step(step, model=model)
+    for r in chain:
+        r.metrics()
+        r._pending = []
+    if calls is not None:
+        for r, c in zip(chain, calls):
+            r._calls = c
+    calls = [r._calls for r in chain]
+    seen = {}
+
+    def keep(m, a, out):
+        out.retain_grad()
+        seen["h"] = out
+
+    hk = model.blocks["1"].register_forward_hook(keep)
+    model.zero_grad(set_to_none=True)
+    out = model(ids, labels=labels)
+    out.loss.backward()
+    hk.remove()
+    return (out.logits.detach().clone(), seen["h"].grad.detach().clone(), [r._pending[-1]["gn"].clone() for r in chain],
+            calls)
+
+
+@pytest.mark.parametrize("mode", ["inv_keep", "sqrt_inv_keep", "inv_mass"])
+def test_grad_comp_scales_only_the_kept_document_gradient_cpu(mode):
+    """grad_comp: forward outputs bit-identical with and without it; below the cut (block 1's output, one cut at block 2)
+    the gradient of every kept document body token is scaled by the row's s and every other token's gradient is
+    unchanged; the router's own targets (read above the scale) are unchanged."""
+    model, router = _mid_model(4, drop_layer=2, dense_every=0)
+    chain = router.chain()
+    ids, cid, labels = _row(B=1)
+    for n in (1, 2):  # warmup (dense), then a routed step so the fit exists
+        _gc_pass(model, chain, ids, labels, "", n)
+    lo0, g0, t0, c = _gc_pass(model, chain, ids, labels, "", 3)
+    lo1, g1, t1, _ = _gc_pass(model, chain, ids, labels, mode, calls=c)
+    s = router.metrics()["online_router/gc_scale"]
+    assert torch.equal(lo0, lo1)
+    assert torch.equal(t0[0], t1[0])
+    order, valid, _ = router._mid_gather
+    kept = torch.zeros(ids.shape, dtype=torch.bool)
+    kept[0, order[0][valid[0]]] = True
+    _, body = structural_features(ids, cid, doc_start_id=DS, doc_end_id=DE)
+    kb = kept & body
+    assert 0 < int(kb.sum()) < int(body.sum())
+    nb, nk = float(body.sum()), float(kb.sum())
+    if mode == "inv_keep":
+        assert s == pytest.approx(min(4.0, nb / nk))
+    elif mode == "sqrt_inv_keep":
+        assert s == pytest.approx(min(4.0, math.sqrt(nb / nk)))
+    assert 1.0 < s <= 4.0
+    assert torch.allclose(g1[kb], s * g0[kb], rtol=1e-4, atol=1e-7)
+    assert torch.equal(g1[~kb], g0[~kb])
+    assert g0[kb].abs().sum() > 0
+
+
+def test_grad_comp_stages_keep_targets_unscaled_cpu():
+    """Two stages: forward bit-identical, the deeper stage's targets exactly unchanged, and the first stage's targets
+    (whose gradient now carries the deeper stage's scale) brought back towards the unscaled ones by dividing s out."""
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0)
+    chain = router.chain()
+    ids, cid, labels = _row(B=1)
+    for n in (1, 2):
+        _gc_pass(model, chain, ids, labels, "", n)
+    lo0, _, t0, c = _gc_pass(model, chain, ids, labels, "", 3)
+    lo1, _, t1, _ = _gc_pass(model, chain, ids, labels, "inv_keep", calls=c)
+    s1 = chain[1].metrics()["online_router/s1_gc_scale"]
+    assert s1 > 1.0
+    assert torch.equal(lo0, lo1)
+    assert torch.equal(t0[1], t1[1])
+    e0 = chain[0]._pending[-1]
+    corr = e0["gc_log"]
+    assert bool((corr > 0).any())
+    raw = t1[0] + corr  # what the stage-0 target would have been without dividing s out
+    err_fix = (t1[0] - t0[0])[e0["ok"]].abs().mean()
+    err_raw = (raw - t0[0])[e0["ok"]].abs().mean()
+    print(f"stage-0 |log target - unscaled|: corrected {float(err_fix):.4f}, uncorrected {float(err_raw):.4f}")
+    assert err_fix < err_raw
+
+
+def test_grad_comp_validate():
+    with pytest.raises(ValueError):
+        OnlineRouterConfig(grad_comp="inv_keep").validate()  # no mid-stack drop
+    with pytest.raises(ValueError):
+        OnlineRouterConfig(grad_comp="bogus", drop_layer=2).validate()
+    with pytest.raises(ValueError):
+        OnlineRouterConfig(grad_comp="inv_keep", drop_layer=2, grad_comp_max=0.5).validate()
+    OnlineRouterConfig(grad_comp="inv_mass", stages="7:0.2,16:0.07").validate()

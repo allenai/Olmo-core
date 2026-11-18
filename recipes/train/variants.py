@@ -355,6 +355,8 @@ class SoftTokenOptions(VariantOptions):
     st_otr_keep_sched: str = ""
     st_otr_mass_target: float = 0.0
     st_otr_max_keep_frac: float = 1.0
+    st_otr_grad_comp: str = ""
+    st_otr_grad_comp_max: float = 4.0
     st_otr_mod_layers: str = ""
     st_otr_per_task_key_tokens: int = 0
     st_otr_log_every: int = 10
@@ -1242,6 +1244,8 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         keep_sched=o.st_otr_keep_sched,
         mass_target=o.st_otr_mass_target,
         max_keep_frac=o.st_otr_max_keep_frac,
+        grad_comp=o.st_otr_grad_comp,
+        grad_comp_max=o.st_otr_grad_comp_max,
         mod_layers=o.st_otr_mod_layers,
         per_task_key_tokens=o.st_otr_per_task_key_tokens,
         seed=ctx.seed,

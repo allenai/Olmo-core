@@ -2040,6 +2040,11 @@ def parse_args() -> argparse.Namespace:
                     "--st-otr-max-keep-frac cap. --st-otr-keep-frac then only sizes exploration. 0 = fixed keep")
     ap.add_argument("--st-otr-max-keep-frac", type=float, default=1.0,
                     help="online router, with --st-otr-mass-target: cap on each row's kept body share (peak memory)")
+    ap.add_argument("--st-otr-grad-comp", default="", choices=["", "inv_keep", "inv_mass", "sqrt_inv_keep"],
+                    help="online router GRADIENT COMPENSATION at each cut: gradient-only per-row scale s on the kept "
+                    "document tokens (forward unchanged): inv_keep = 1 / kept share, sqrt_inv_keep = its sqrt, "
+                    "inv_mass = 1 / kept share of the predicted gradient mass. Empty = off")
+    ap.add_argument("--st-otr-grad-comp-max", type=float, default=4.0, help="cap on the --st-otr-grad-comp scale")
     ap.add_argument("--st-otr-freeze-schedule", default="",
                     help="online router PROGRESSIVE freeze, e.g. '4:0.25,7:0.5,12:0.75': freeze embeddings + blocks "
                     "[0, 4) after 25%% of the steps, [0, 7) after 50%%, [0, 12) after 75%% (gradients and optimizer state "

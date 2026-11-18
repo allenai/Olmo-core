@@ -303,6 +303,17 @@ class OnlineRouterConfig:
     ``min_per_doc`` floor, then the per-row ``max_keep_frac`` cap (peak memory). ``keep_frac`` only sizes the
     exploration draw (``explore_frac`` x ``keep_frac`` x |body|); ``doc_share`` is unused. Learned scorer only.
     0 = off (fixed ``keep_frac``)."""
+    grad_comp: str = ""
+    """GRADIENT COMPENSATION at each cut (mid-stack drop / stages): the hidden states of the kept DOCUMENT body tokens
+    leaving the cut get a gradient-only scale s (forward values unchanged), so the blocks below see the kept tokens
+    stand in for the dropped ones' gradient. Per row: ``inv_keep`` s = 1 / (kept share of the body tokens entering
+    this stage); ``sqrt_inv_keep`` its square root; ``inv_mass`` s = 1 / (share of the router's predicted gradient
+    mass exp(2 x score) over the entering body tokens that the kept ones cover; ``inv_keep`` on warmup-random steps
+    or without a fit). Capped at ``grad_comp_max``. The router targets stay unscaled: this stage's hook reads the
+    gradient above the scale, and an earlier stage's target divides out a later stage's s on the tokens it scaled
+    (exact on the residual path). No extra FLOPs. Empty = off."""
+    grad_comp_max: float = 4.0
+    """Cap on the ``grad_comp`` scale."""
     max_keep_frac: float = 1.0
     """With ``mass_target``: hard cap on the kept share of each row's body tokens (bounds the kept row, so peak
     memory); the exploration / forced / floor tokens rank first, the rest by score."""
@@ -475,6 +486,14 @@ class OnlineRouterConfig:
                 raise ValueError(f"online router keep_sched must be 'a:b' with a, b > 0, got {self.keep_sched!r}")
         if self.per_task_key_tokens < 0:
             raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
+        if self.grad_comp:
+            if self.grad_comp not in ("inv_keep", "inv_mass", "sqrt_inv_keep") or self.grad_comp_max < 1.0:
+                raise ValueError(f"online router grad_comp must be inv_keep / inv_mass / sqrt_inv_keep with "
+                                 f"grad_comp_max >= 1, got {self.grad_comp!r} / {self.grad_comp_max}")
+            if (self.drop_layer <= 0 and not self.stages) or self.mod_layers or self.target_layer or self.merge_dropped \
+                    or self.wts:
+                raise ValueError("online router grad_comp needs the mid-stack drop (drop_layer > 0 or stages) and is "
+                                 "exclusive with mod_layers / target_layer / merge_dropped / wts")
         if self.wts:
             parse_wts(self.wts)
             if (self.drop_layer <= 0 and not self.stages) or self.mod_layers or self.merge_dropped or self.mass_target > 0 \
@@ -1110,8 +1129,10 @@ class OnlineTokenRouter:
             self._stat("warmup_random", 1.0)
         explore = torch.zeros_like(body)
         score = None
+        self._gc_score, self._gc_warm = None, warm_rand
         if self.w is not None:
             score = self.score(fp)
+            self._gc_score = score
             self._flop(model, 2.0 * self.n_features * (1 + self.cfg.mlp_hidden * int(getattr(self, "_mlp", None)
                                                                                    is not None)) * float(body.sum()))
         self._last_p = None
@@ -1507,6 +1528,9 @@ class OnlineTokenRouter:
         if self.mod_layers:
             return self._mod_begin(model, h, block_kwargs, entry, real, counts, order, valid, kw["position_ids"])
         self._mid_gather = (order, valid, n_extra)
+        self._gc_entry, self._gc_order = entry, (order, valid, Tr, Tw)
+        if self.cfg.grad_comp and not entry["dense"] and h_new.requires_grad:
+            h_new = self._grad_comp(h_new, body, keep_body, order, valid, Tr, Tw)
         # targets at this layer, on the kept (gathered) columns
         newcol = torch.zeros(B, src.shape[1], dtype=torch.long, device=h.device)
         newcol.scatter_(1, order, torch.arange(W, device=h.device)[None, :].expand(B, W))
@@ -1570,6 +1594,46 @@ class OnlineTokenRouter:
             self._next._nograd_until = 0
             self._next._ignore_index = getattr(self, "_ignore_index", -100)
         return h_new, kw
+
+    def _grad_comp(self, h_new, body, keep_body, order, valid, Tr, Tw) -> torch.Tensor:
+        """Gradient-only per-row scale on the kept document body tokens of the gathered row ``h_new`` (see
+        ``OnlineRouterConfig.grad_comp``); records log s on the earlier stages' target entries to divide it out."""
+        c = self.cfg
+        B = body.shape[0]
+        kb = body & keep_body
+        nb, nk = body.sum(dim=1).float(), kb.sum(dim=1).float()
+        share = nk / nb.clamp(min=1.0)
+        sc = getattr(self, "_gc_score", None)
+        if c.grad_comp == "inv_mass" and sc is not None and not getattr(self, "_gc_warm", False):
+            sc = sc.float()
+            mx = torch.where(body, sc, torch.full_like(sc, -float("inf"))).amax(dim=1, keepdim=True)
+            m = torch.where(body, torch.exp(2.0 * (sc - mx.clamp(min=-1e30))), torch.zeros_like(sc))
+            share = (m * kb).sum(dim=1) / m.sum(dim=1).clamp(min=1e-30)
+            self._stat("gc_mass_share", float(share[nk > 0].mean()) if bool((nk > 0).any()) else float("nan"))
+        s = 1.0 / share.clamp(min=1e-6)
+        if c.grad_comp == "sqrt_inv_keep":
+            s = s.sqrt()
+        s = torch.where(nk > 0, s.clamp(max=float(c.grad_comp_max)), torch.ones_like(s))
+        if bool((nk > 0).any()):
+            self._stat("gc_scale", float(s[nk > 0].mean()))
+        lg = torch.where(kb, torch.log(s)[:, None].expand_as(kb), torch.zeros(kb.shape, device=s.device))  # (B, Tr)
+        # earlier stages' targets: this stage's columns are the previous stage's output columns
+        chain = self._root.chain()
+        for j in range(self.stage_idx - 1, -1, -1):
+            prev = chain[j]
+            e = getattr(prev, "_gc_entry", None)
+            if e is not None and e.get("cols") is not None:
+                add = lg[e["rows"], e["cols"].clamp(max=lg.shape[1] - 1)]
+                e["gc_log"] = add if e.get("gc_log") is None else e["gc_log"] + add
+            o, v, tr, tw = prev._gc_order  # lg on prev's input columns, for the stage before it (o: unique columns)
+            lin = torch.zeros(B, tw, device=lg.device)
+            lin.scatter_(1, o, torch.where(v, lg, torch.zeros_like(lg)))
+            lg = lin[:, :tr]
+        smap = torch.ones(B, Tw, device=h_new.device)
+        smap[:, :Tr] = torch.where(kb, s[:, None].expand_as(kb), torch.ones(kb.shape, device=s.device))
+        g = torch.where(valid, torch.gather(smap, 1, order), torch.ones_like(order, dtype=smap.dtype))
+        hd = h_new.detach()
+        return hd + (h_new - hd) * g[..., None].to(h_new.dtype)
 
     def _mid_compact_packed(self, model, h, block_kwargs, fp, ids, cid, Tr):
         """Mid-stack drop on a PACKED row (segment mode, ``cu_doc_lens``): the router chose on the unpacked documents
@@ -1916,6 +1980,9 @@ class OnlineTokenRouter:
 
         def hook(g: torch.Tensor) -> None:
             gs = g.detach()[hrows, cols].float()
+            if entry.get("gc_log") is not None:
+                # grad_comp: a later stage scaled the gradient of the tokens it kept; divide it back out
+                gs = gs * torch.exp(-entry["gc_log"].to(gs.dtype))[:, None]
             gn = torch.log(gs.norm(dim=-1) + 1e-12)
             entry["gn"] = gn
             tgt = self.cfg.target
