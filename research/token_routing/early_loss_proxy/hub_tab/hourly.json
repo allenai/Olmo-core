@@ -88,5 +88,15 @@
   "xw": null,
   "mem": null,
   "note": "Exact ratio now that the dense frontier reaches 7,934 PF. Same arm: 2.2x at 495 PF, 2.1x at 991 PF. Seed-1 repeats of this arm and of the dense points are running."
+ },
+ {
+  "t": "11-18 09:30",
+  "arm": "lo-r50to20-b3964 (16x pool)",
+  "idea": "budget",
+  "x": 1.97,
+  "level": "3,975 PF: 16k CE 0.064; dense full fine-tune needs 7,934 PF for 0.064 (320 rows, one seed)",
+  "xw": null,
+  "mem": null,
+  "note": "Largest budget so far. LoRA 50% / 20% / 7% at the same budget: 0.065 (1.88x). The gain is about 2x from 495 PF to 3,975 PF."
  }
 ]

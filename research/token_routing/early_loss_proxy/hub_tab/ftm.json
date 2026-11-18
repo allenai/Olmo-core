@@ -7,7 +7,11 @@
    "pool": "mtb16kx4",
    "steps": 122,
    "pf": 490.9397234593321,
-   "ce": 0.18877402463549514
+   "ce": 0.18877402463549514,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1888
+   ]
   },
   {
    "run": "bud-denselora-b991-sd0",
@@ -16,25 +20,25 @@
    "pool": "mtb16kx4",
    "steps": 323,
    "pf": 989.9762569094748,
-   "ce": 0.13859085752628744
+   "ce": 0.13859085752628744,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1386
+   ]
   },
   {
-   "run": "v3-denselora-sd0",
+   "run": "v3-denselora-sd0+1",
    "arm": "denselora",
    "kind": "dense_lora",
    "pool": "mtb16k",
    "steps": 488,
    "pf": 1496.2473821169735,
-   "ce": 0.12125086314408691
-  },
-  {
-   "run": "w2-denselora-sd1",
-   "arm": "denselora",
-   "kind": "dense_lora",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 1496.2473821169735,
-   "ce": 0.11777590980418609
+   "ce": 0.11951338647413651,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1213,
+    0.1178
+   ]
   },
   {
    "run": "x4-denselora-x4-sd0",
@@ -43,7 +47,11 @@
    "pool": "mtb16kx4",
    "steps": 642,
    "pf": 1962.9764123291832,
-   "ce": 0.10097499140720174
+   "ce": 0.10097499140720174,
+   "seeds": 1,
+   "ce_seeds": [
+    0.101
+   ]
   },
   {
    "run": "x4-dense-x4-sd0",
@@ -52,7 +60,11 @@
    "pool": "mtb16kx4",
    "steps": 976,
    "pf": 3959.5715586265005,
-   "ce": 0.08123491436672339
+   "ce": 0.08123491436672339,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0812
+   ]
   },
   {
    "run": "x16-denselora-b3964-sd0",
@@ -61,7 +73,11 @@
    "pool": "mtb16kx16",
    "steps": 1293,
    "pf": 3985.8157673260225,
-   "ce": 0.07788173692279088
+   "ce": 0.07788173692279088,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0779
+   ]
   },
   {
    "run": "x4-denselora-x4full-sd0",
@@ -70,7 +86,11 @@
    "pool": "mtb16kx4",
    "steps": 1952,
    "pf": 5990.170039437634,
-   "ce": 0.06848292428367131
+   "ce": 0.06848292428367131,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0685
+   ]
   },
   {
    "run": "x4-dense-x4full-sd0",
@@ -79,7 +99,11 @@
    "pool": "mtb16kx4",
    "steps": 1952,
    "pf": 7934.330738346092,
-   "ce": 0.06360968585067894
+   "ce": 0.06360968585067894,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0636
+   ]
   }
  ],
  "frontier_dense_ft": [
@@ -90,7 +114,11 @@
    "pool": "mtb16kx4",
    "steps": 122,
    "pf": 490.9397234593321,
-   "ce": 0.18877402463549514
+   "ce": 0.18877402463549514,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1888
+   ]
   },
   {
    "run": "bud-dense-b991-sd0",
@@ -99,16 +127,25 @@
    "pool": "mtb16kx4",
    "steps": 244,
    "pf": 991.974072917545,
-   "ce": 0.1507228497575852
+   "ce": 0.1507228497575852,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1507
+   ]
   },
   {
-   "run": "w1-dense-sd0",
+   "run": "w1-dense-sd0+1",
    "arm": "dense",
    "kind": "dense_ft",
    "pool": "mtb16k",
    "steps": 488,
    "pf": 1981.8533581207541,
-   "ce": 0.11371779909313773
+   "ce": 0.11659363793223747,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1137,
+    0.1195
+   ]
   },
   {
    "run": "x4-dense-x4-sd0",
@@ -117,7 +154,11 @@
    "pool": "mtb16kx4",
    "steps": 976,
    "pf": 3959.5715586265005,
-   "ce": 0.08123491436672339
+   "ce": 0.08123491436672339,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0812
+   ]
   },
   {
    "run": "x4-dense-x4full-sd0",
@@ -126,10 +167,58 @@
    "pool": "mtb16kx4",
    "steps": 1952,
    "pf": 7934.330738346092,
-   "ce": 0.06360968585067894
+   "ce": 0.06360968585067894,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0636
+   ]
   }
  ],
  "runs": [
+  {
+   "run": "x16-lo-r50to20-b3964-sd0",
+   "arm": "lo-r50to20-b3964",
+   "kind": "drop",
+   "pool": "mtb16kx16",
+   "steps": 3008,
+   "pf": 3975.356567709525,
+   "ce": 0.06380234735725025,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0638
+   ],
+   "base_pf": 7846.649730937504,
+   "x_base": 1.9738228753297709,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 7874.276177609673,
+   "x_dense_ft": 1.9807723014256764,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "x16-lo-p50-20-7-b3964-sd0",
+   "arm": "lo-p50-20-7-b3964",
+   "kind": "drop",
+   "pool": "mtb16kx16",
+   "steps": 3364,
+   "pf": 3973.1181837877502,
+   "ce": 0.06466589779056449,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0647
+   ],
+   "base_pf": 7465.397613880386,
+   "x_base": 1.8789769819440132,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 7610.63455577124,
+   "x_dense_ft": 1.9155318829493473,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
   {
    "run": "x4-lo-p50-20-7-x4-sd0",
    "arm": "lo-p50-20-7-x4",
@@ -138,6 +227,10 @@
    "steps": 1683,
    "pf": 1980.0191803263929,
    "ce": 0.07165015621776546,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0717
+   ],
    "base_pf": 5221.792634124521,
    "x_base": 2.6372434600677677,
    "x_base_exact": true,
@@ -156,6 +249,10 @@
    "steps": 1525,
    "pf": 2005.8144236574055,
    "ce": 0.07789280875622354,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0779
+   ],
    "base_pf": 3985.7288261568538,
    "x_base": 1.9870875287102925,
    "x_base_exact": true,
@@ -174,13 +271,17 @@
    "steps": 1108,
    "pf": 1970.3412602968572,
    "ce": 0.08211231411660265,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0821
+   ],
    "base_pf": 3837.9872676000064,
    "x_base": 1.9478794587196353,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 3886.2369553601106,
-   "x_dense_ft": 1.9723674439901844,
+   "dense_ft_pf": 3892.150410955098,
+   "x_dense_ft": 1.9753686781997832,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -192,13 +293,17 @@
    "steps": 2188,
    "pf": 1980.0500110613636,
    "ce": 0.08249481006077986,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0825
+   ],
    "base_pf": 3786.158861023628,
    "x_base": 1.9121531475834483,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 3854.693882288855,
-   "x_dense_ft": 1.946765920433812,
+   "dense_ft_pf": 3863.1191366604426,
+   "x_dense_ft": 1.9510209919342896,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -210,13 +315,17 @@
    "steps": 1952,
    "pf": 1761.6272882779076,
    "ce": 0.08252682643760637,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0825
+   ],
    "base_pf": 3781.8525002359493,
    "x_base": 2.146794912522574,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 3852.065246989169,
-   "x_dense_ft": 2.1866516672518084,
+   "dense_ft_pf": 3860.6989514559045,
+   "x_dense_ft": 2.19155264972647,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -228,13 +337,17 @@
    "steps": 905,
    "pf": 1972.6518694885376,
    "ce": 0.08797549111186527,
+   "seeds": 1,
+   "ce_seeds": [
+    0.088
+   ],
    "base_pf": 3115.9610419737896,
    "x_base": 1.5795797982244506,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 3429.8492788718713,
-   "x_dense_ft": 1.7386997330457252,
+   "dense_ft_pf": 3470.148385013065,
+   "x_dense_ft": 1.7591286322166886,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -246,13 +359,17 @@
    "steps": 762,
    "pf": 1978.2991626286228,
    "ce": 0.08814490590120841,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0881
+   ],
    "base_pf": 3097.2532367241056,
    "x_base": 1.5656141877999366,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 3417.490967271104,
-   "x_dense_ft": 1.7274894676345038,
+   "dense_ft_pf": 3458.660135008887,
+   "x_dense_ft": 1.7482998528964984,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -264,13 +381,17 @@
    "steps": 752,
    "pf": 988.4291954623112,
    "ce": 0.09745597027576877,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0975
+   ],
    "base_pf": 2224.534773104545,
    "x_base": 2.2505757451489266,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2802.518577934629,
-   "x_dense_ft": 2.8353255759749447,
+   "dense_ft_pf": 2882.415548316825,
+   "x_dense_ft": 2.916157840692527,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -282,13 +403,17 @@
    "steps": 841,
    "pf": 988.6982205562531,
    "ce": 0.09973676276022161,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0997
+   ],
    "base_pf": 2051.3037053976464,
    "x_base": 2.0747520959869425,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2669.5831126870526,
-   "x_dense_ft": 2.70009903647355,
+   "dense_ft_pf": 2756.5639990973577,
+   "x_dense_ft": 2.7880741987645967,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -300,13 +425,17 @@
    "steps": 2608,
    "pf": 2015.2914023524006,
    "ce": 0.10034622164457688,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1003
+   ],
    "base_pf": 2007.3429474319269,
    "x_base": 0.996055927737698,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2635.1411802381476,
-   "x_dense_ft": 1.307573275587943,
+   "dense_ft_pf": 2723.8751957952286,
+   "x_dense_ft": 1.351603640354797,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -318,13 +447,17 @@
    "steps": 1094,
    "pf": 986.43427813745,
    "ce": 0.10076261803587841,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1008
+   ],
    "base_pf": 1977.8508961563184,
    "x_base": 2.0050508584219378,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2611.865514547957,
-   "x_dense_ft": 2.6477846243133283,
+   "dense_ft_pf": 2701.7646272932357,
+   "x_dense_ft": 2.7389200549626187,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -336,13 +469,17 @@
    "steps": 1209,
    "pf": 1079.4224511516322,
    "ce": 0.10487582212990673,
-   "base_pf": 1843.0554155673706,
-   "x_base": 1.7074458786743048,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1049
+   ],
+   "base_pf": 1853.9764902505265,
+   "x_base": 1.7175633953810439,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2392.7082389724446,
-   "x_dense_ft": 2.2166559871157694,
+   "dense_ft_pf": 2492.7692243081597,
+   "x_dense_ft": 2.3093546198234365,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -354,31 +491,17 @@
    "steps": 557,
    "pf": 993.0809120605272,
    "ce": 0.11254611140611814,
-   "base_pf": 1628.197225339271,
-   "x_base": 1.639541356162965,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1125
+   ],
+   "base_pf": 1656.9831269230538,
+   "x_base": 1.6685278176226415,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2031.9527068160337,
-   "x_dense_ft": 2.0461099212953036,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w1-ft-c7ramp-sd0",
-   "arm": "ft-c7ramp",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 1268.312949602442,
-   "ce": 0.11310232175492274,
-   "base_pf": 1613.628041196347,
-   "x_base": 1.2722633177420017,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 2008.0141388229824,
-   "x_dense_ft": 1.5832166181480707,
+   "dense_ft_pf": 2145.2536205576102,
+   "x_dense_ft": 2.160200235957067,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -390,13 +513,17 @@
    "steps": 488,
    "pf": 1289.6741528493005,
    "ce": 0.11532899177982472,
-   "base_pf": 1556.5973499229567,
-   "x_base": 1.2069694864272018,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1153
+   ],
+   "base_pf": 1590.8082817478466,
+   "x_base": 1.2334962891465608,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1923.0240055512356,
-   "x_dense_ft": 1.491092925529029,
+   "dense_ft_pf": 2031.5241704274094,
+   "x_dense_ft": 1.575222831239291,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -408,13 +535,41 @@
    "steps": 1304,
    "pf": 1006.093621947796,
    "ce": 0.1169766950974008,
-   "base_pf": 1515.6971259119846,
-   "x_base": 1.5065169809720063,
+   "seeds": 1,
+   "ce_seeds": [
+    0.117
+   ],
+   "base_pf": 1552.8796006579316,
+   "x_base": 1.5434742520796014,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1864.6672326865257,
-   "x_dense_ft": 1.8533734753993691,
+   "dense_ft_pf": 1966.5182718886397,
+   "x_dense_ft": 1.9546076319234216,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "w1-ft-c7ramp-sd0+0+1",
+   "arm": "ft-c7ramp",
+   "kind": "drop",
+   "pool": "mtb16k",
+   "steps": 488,
+   "pf": 1269.1939897498341,
+   "ce": 0.1174306523361641,
+   "seeds": 3,
+   "ce_seeds": [
+    0.1131,
+    0.1192,
+    0.12
+   ],
+   "base_pf": 1542.5897225947967,
+   "x_base": 1.2154089406764765,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1948.4983756865374,
+   "x_dense_ft": 1.5352250258217803,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -426,13 +581,17 @@
    "steps": 488,
    "pf": 1559.4015599908819,
    "ce": 0.1174951899345615,
-   "base_pf": 1503.0503979748175,
-   "x_base": 0.9638635977660598,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1175
+   ],
+   "base_pf": 1541.132390998564,
+   "x_base": 0.9882844999895828,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1846.6725662443978,
-   "x_dense_ft": 1.1842187500794827,
+   "dense_ft_pf": 1945.9499880978587,
+   "x_dense_ft": 1.247882545474199,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -444,13 +603,17 @@
    "steps": 488,
    "pf": 1429.83786613244,
    "ce": 0.11765413923640153,
-   "base_pf": 1499.1946023636526,
-   "x_base": 1.048506713854778,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1177
+   ],
+   "base_pf": 1537.5490053186863,
+   "x_base": 1.0753310160106428,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1841.1909932874535,
-   "x_dense_ft": 1.2876921481088481,
+   "dense_ft_pf": 1939.6877820419695,
+   "x_dense_ft": 1.3565788317584704,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -462,13 +625,17 @@
    "steps": 488,
    "pf": 1918.926210407537,
    "ce": 0.11793282945873215,
-   "base_pf": 1496.2473821169735,
-   "x_base": 0.7797315884278865,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1179
+   ],
+   "base_pf": 1531.2862552194915,
+   "x_base": 0.7979912134788553,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1831.6192445865358,
-   "x_dense_ft": 0.9545021766092512,
+   "dense_ft_pf": 1928.756685345421,
+   "x_dense_ft": 1.0051229040932201,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -480,13 +647,17 @@
    "steps": 488,
    "pf": 1065.673748552279,
    "ce": 0.11883378890561289,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.404038885399617,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1188
+   ],
+   "base_pf": 1511.21382675403,
+   "x_base": 1.4180830003619949,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1801.014509081819,
-   "x_dense_ft": 1.6900242795025238,
+   "dense_ft_pf": 1893.8379742439672,
+   "x_dense_ft": 1.7771273589283323,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -498,49 +669,17 @@
    "steps": 488,
    "pf": 1191.930597639864,
    "ce": 0.11893476475015632,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.2553141811106165,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1189
+   ],
+   "base_pf": 1508.9806520374516,
+   "x_base": 1.265997076528933,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1797.6164828292121,
-   "x_dense_ft": 1.5081553291682117,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w1-ft-r50to20-sd1",
-   "arm": "ft-r50to20",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 869.2398264497951,
-   "ce": 0.11913497300993185,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.7213286098820884,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1790.898045953063,
-   "x_dense_ft": 2.060303717637471,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w2-ft-c7ramp-sd1",
-   "arm": "ft-c7ramp",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 1269.8537576201768,
-   "ce": 0.11923512689827476,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.1782832260315388,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1787.5465859666913,
-   "x_dense_ft": 1.4076790931553556,
+   "dense_ft_pf": 1889.9640373719697,
+   "x_dense_ft": 1.5856326208206069,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -552,31 +691,17 @@
    "steps": 488,
    "pf": 902.9276531442605,
    "ce": 0.11991734468829236,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.6571066097118619,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1199
+   ],
+   "base_pf": 1483.2184845526433,
+   "x_base": 1.642676995645929,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1764.8837234554512,
-   "x_dense_ft": 1.9546236260564236,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "ks-ft-c7ramp-sd0",
-   "arm": "ft-c7ramp",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 1269.4152620268837,
-   "ce": 0.11995450835529482,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.1786902417794358,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1763.6574543653724,
-   "x_dense_ft": 1.3893463448275616,
+   "dense_ft_pf": 1852.6786478913089,
+   "x_dense_ft": 2.0518572461921343,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -588,13 +713,17 @@
    "steps": 488,
    "pf": 1206.4208520711493,
    "ce": 0.1199884779707645,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.2402366715961999,
+   "seeds": 1,
+   "ce_seeds": [
+    0.12
+   ],
+   "base_pf": 1480.9359930095882,
+   "x_base": 1.2275450896485742,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1762.5373229882305,
-   "x_dense_ft": 1.4609639082102701,
+   "dense_ft_pf": 1850.0081235418313,
+   "x_dense_ft": 1.5334682920688825,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -606,13 +735,17 @@
    "steps": 488,
    "pf": 954.5006528591886,
    "ce": 0.1203568522912974,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.5675708315494525,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1204
+   ],
+   "base_pf": 1469.1718439981707,
+   "x_base": 1.5392046507221282,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1750.4359534016407,
-   "x_dense_ft": 1.833876119579639,
+   "dense_ft_pf": 1836.239875822573,
+   "x_dense_ft": 1.9237701622541077,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -624,13 +757,17 @@
    "steps": 488,
    "pf": 1181.713323325719,
    "ce": 0.1206658171453455,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.2661678197094834,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1207
+   ],
+   "base_pf": 1459.3770452166832,
+   "x_base": 1.2349670740019496,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1740.3503199678416,
-   "x_dense_ft": 1.4727347873762981,
+   "dense_ft_pf": 1824.7711416162467,
+   "x_dense_ft": 1.5441741288663458,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -642,31 +779,40 @@
    "steps": 488,
    "pf": 869.1934508119259,
    "ce": 0.12081904194783419,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.721420451016178,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1208
+   ],
+   "base_pf": 1454.5437647548902,
+   "x_base": 1.6734407782251237,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1735.3701328411157,
-   "x_dense_ft": 1.99652923203699,
+   "dense_ft_pf": 1819.1100559999852,
+   "x_dense_ft": 2.0928713329589965,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "w3-lo-p50-20-7-sd1",
+   "run": "w2-lo-p50-20-7-sd0+1",
    "arm": "lo-p50-20-7",
    "kind": "drop",
    "pool": "mtb16k",
    "steps": 488,
-   "pf": 575.3663445670624,
-   "ce": 0.1211271084684995,
-   "base_pf": 1496.2473821169735,
-   "x_base": 2.600512519102648,
+   "pf": 575.347503207391,
+   "ce": 0.12184543842449784,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1226,
+    0.1211
+   ],
+   "base_pf": 1422.577562891846,
+   "x_base": 2.472553639255232,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1725.4002939113623,
-   "x_dense_ft": 2.998785574101748,
+   "dense_ft_pf": 1781.638727552001,
+   "x_dense_ft": 3.0966306755828357,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -678,13 +824,17 @@
    "steps": 488,
    "pf": 1738.2521891861695,
    "ce": 0.12203134064911865,
-   "base_pf": 1468.6879327736756,
-   "x_base": 0.8449222396557424,
+   "seeds": 1,
+   "ce_seeds": [
+    0.122
+   ],
+   "base_pf": 1416.8634025313413,
+   "x_base": 0.8151080788770363,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1696.4665414205458,
-   "x_dense_ft": 0.9759611131079966,
+   "dense_ft_pf": 1774.934902536046,
+   "x_dense_ft": 1.0211032171154928,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -696,13 +846,17 @@
    "steps": 488,
    "pf": 869.1934508119259,
    "ce": 0.12247856144240359,
-   "base_pf": 1453.125489153233,
-   "x_base": 1.6718090636737402,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1225
+   ],
+   "base_pf": 1403.2108230416557,
+   "x_base": 1.6143826460391488,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1682.3361453413738,
-   "x_dense_ft": 1.9355140605004326,
+   "dense_ft_pf": 1758.910812048184,
+   "x_dense_ft": 2.0236125921164736,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -714,49 +868,40 @@
    "steps": 488,
    "pf": 864.8542450801543,
    "ce": 0.12248292836957261,
-   "base_pf": 1452.974344110174,
-   "x_base": 1.6800222145819643,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1225
+   ],
+   "base_pf": 1403.0781618420979,
+   "x_base": 1.6223290454128039,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1682.198749675114,
-   "x_dense_ft": 1.9450661880247908,
+   "dense_ft_pf": 1758.7550587231112,
+   "x_dense_ft": 2.0335855073014186,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "w2-lo-p50-20-7-sd0",
-   "arm": "lo-p50-20-7",
+   "run": "w1-ft-r50to20-sd0+1",
+   "arm": "ft-r50to20",
    "kind": "drop",
    "pool": "mtb16k",
    "steps": 488,
-   "pf": 575.3286618477197,
-   "ce": 0.12256376838049618,
-   "base_pf": 1450.1792034603893,
-   "x_base": 2.5206100436627104,
+   "pf": 869.2166386308605,
+   "ce": 0.12252813576124028,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1259,
+    0.1191
+   ],
+   "base_pf": 1401.7055606436236,
+   "x_base": 1.6126078337058856,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1679.6573238058882,
-   "x_dense_ft": 2.9194744416374423,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w2-lo-r50to20-sd1",
-   "arm": "lo-r50to20",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 643.3198838210695,
-   "ce": 0.1229661175981164,
-   "base_pf": 1436.3472724878714,
-   "x_base": 2.232710831128875,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1667.0653767150638,
-   "x_dense_ft": 2.591347506334399,
+   "dense_ft_pf": 1757.1434762101294,
+   "x_dense_ft": 2.021525357565497,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -768,13 +913,17 @@
    "steps": 488,
    "pf": 869.2972319314194,
    "ce": 0.12323805118066958,
-   "base_pf": 1427.0735534150497,
-   "x_base": 1.641640512583197,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1232
+   ],
+   "base_pf": 1380.3261506640247,
+   "x_base": 1.5878644265289934,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1658.6084297534712,
-   "x_dense_ft": 1.9079877041231876,
+   "dense_ft_pf": 1732.0287579962146,
+   "x_dense_ft": 1.9924471105791555,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -786,13 +935,40 @@
    "steps": 488,
    "pf": 561.228822831312,
    "ce": 0.12325691203150199,
-   "base_pf": 1426.4325689377788,
-   "x_base": 2.541623863403253,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1233
+   ],
+   "base_pf": 1379.7626169493421,
+   "x_base": 2.4584671364322572,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1658.023463789749,
-   "x_dense_ft": 2.9542735446573807,
+   "dense_ft_pf": 1731.3664345673603,
+   "x_dense_ft": 3.084956374537014,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "w1-lo-r50to20-sd0+1",
+   "arm": "lo-r50to20",
+   "kind": "drop",
+   "pool": "mtb16k",
+   "steps": 488,
+   "pf": 643.3022764657086,
+   "ce": 0.12382784753608575,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1247,
+    0.123
+   ],
+   "base_pf": 1362.8123862052216,
+   "x_base": 2.1184634907441784,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1711.436715137766,
+   "x_dense_ft": 2.6603927543057506,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -804,13 +980,17 @@
    "steps": 488,
    "pf": 718.1888499150398,
    "ce": 0.12391274793335469,
-   "base_pf": 1404.3221977754067,
-   "x_base": 1.9553661936432667,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1239
+   ],
+   "base_pf": 1360.3096660730994,
+   "x_base": 1.8940835216726368,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1637.8106333176288,
-   "x_dense_ft": 2.280473490379833,
+   "dense_ft_pf": 1708.4927439420362,
+   "x_dense_ft": 2.3788906554928375,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -822,31 +1002,17 @@
    "steps": 488,
    "pf": 806.8933284230811,
    "ce": 0.1241129751499102,
-   "base_pf": 1397.6404195899581,
-   "x_base": 1.7321253880254275,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1241
+   ],
+   "base_pf": 1354.4254924710283,
+   "x_base": 1.678568213121794,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1631.6888785479582,
-   "x_dense_ft": 2.0221866027034605,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w1-lo-r50to20-sd0",
-   "arm": "lo-r50to20",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 643.2846691103476,
-   "ce": 0.12468957747405511,
-   "base_pf": 1378.5757068922903,
-   "x_base": 2.143025899869242,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1614.187341853358,
-   "x_dense_ft": 2.509289307462827,
+   "dense_ft_pf": 1701.5697866995233,
+   "x_dense_ft": 2.108791492953494,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -858,31 +1024,39 @@
    "steps": 488,
    "pf": 958.6227052002265,
    "ce": 0.12500617015757598,
-   "base_pf": 1368.2187442928866,
-   "x_base": 1.4272755452908954,
+   "seeds": 1,
+   "ce_seeds": [
+    0.125
+   ],
+   "base_pf": 1328.4852188667264,
+   "x_base": 1.3858269908068233,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1604.6578062215062,
-   "x_dense_ft": 1.6739200913109429,
+   "dense_ft_pf": 1671.0272111917975,
+   "x_dense_ft": 1.743154217114826,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "w1-ft-r50to20-sd0",
-   "arm": "ft-r50to20",
+   "run": "bud-recipe-fz7-b991-sd0",
+   "arm": "recipe-fz7-b991",
    "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 869.1934508119259,
-   "ce": 0.12592129851254869,
-   "base_pf": 1338.7168320719286,
-   "x_base": 1.540182833661959,
+   "pool": "mtb16kx4",
+   "steps": 1815,
+   "pf": 1120.6933290386676,
+   "ce": 0.12788978519420197,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1279
+   ],
+   "base_pf": 1248.082022767994,
+   "x_base": 1.1136695386940516,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1577.4273288905338,
-   "x_dense_ft": 1.8148173199154187,
+   "dense_ft_pf": 1576.1150922528004,
+   "x_dense_ft": 1.4063750103739747,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -894,13 +1068,17 @@
    "steps": 488,
    "pf": 875.8571893600474,
    "ce": 0.12823719596708544,
-   "base_pf": 1266.8676542913022,
-   "x_base": 1.4464317581464965,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1282
+   ],
+   "base_pf": 1238.7296950037644,
+   "x_base": 1.414305562655543,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1510.5622575176758,
-   "x_dense_ft": 1.7246673040628702,
+   "dense_ft_pf": 1565.050406172207,
+   "x_dense_ft": 1.786878529039334,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -912,13 +1090,17 @@
    "steps": 488,
    "pf": 1164.857152068789,
    "ce": 0.12844655505468835,
-   "base_pf": 1260.5656593083381,
-   "x_base": 1.0821632996540138,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1284
+   ],
+   "base_pf": 1233.1276054292898,
+   "x_base": 1.0586084338661204,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1504.659125237031,
-   "x_dense_ft": 1.2917112819926058,
+   "dense_ft_pf": 1558.4200728275935,
+   "x_dense_ft": 1.3378636771554657,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -930,13 +1112,17 @@
    "steps": 488,
    "pf": 706.365125008341,
    "ce": 0.12850189914024668,
-   "base_pf": 1258.9049719332659,
-   "x_base": 1.782229794992215,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1285
+   ],
+   "base_pf": 1231.6509313640968,
+   "x_base": 1.74364629248868,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1503.102490782599,
-   "x_dense_ft": 2.1279398395622233,
+   "dense_ft_pf": 1556.6720429264878,
+   "x_dense_ft": 2.2037781705433237,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -948,13 +1134,17 @@
    "steps": 488,
    "pf": 534.2622134487581,
    "ce": 0.12945744307507995,
-   "base_pf": 1230.57488165844,
-   "x_base": 2.3033163317219447,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1295
+   ],
+   "base_pf": 1206.4324284447189,
+   "x_base": 2.258127934328318,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1476.4789137047078,
-   "x_dense_ft": 2.763584765191932,
+   "dense_ft_pf": 1526.798708674361,
+   "x_dense_ft": 2.8577703424290526,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -966,13 +1156,17 @@
    "steps": 488,
    "pf": 947.8462224170586,
    "ce": 0.13017895743978442,
-   "base_pf": 1209.6065517335537,
-   "x_base": 1.2761632880162694,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1302
+   ],
+   "base_pf": 1187.7331045192277,
+   "x_base": 1.253086288079985,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1456.6888431291068,
-   "x_dense_ft": 1.536840901696556,
+   "dense_ft_pf": 1504.622347279543,
+   "x_dense_ft": 1.587411873038514,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -984,13 +1178,17 @@
    "steps": 488,
    "pf": 651.3750004597542,
    "ce": 0.13105424428649712,
-   "base_pf": 1184.6483957332482,
-   "x_base": 1.8186887659137951,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1311
+   ],
+   "base_pf": 1165.4371364847837,
+   "x_base": 1.7891953723464877,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1433.0367620670868,
-   "x_dense_ft": 2.200018055736894,
+   "dense_ft_pf": 1478.151604047982,
+   "x_dense_ft": 2.2692789913715927,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1002,13 +1200,17 @@
    "steps": 488,
    "pf": 530.9688059382538,
    "ce": 0.13126291096705245,
-   "base_pf": 1178.774839314587,
-   "x_base": 2.2200453701449017,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1313
+   ],
+   "base_pf": 1160.1839006768093,
+   "x_base": 2.185032129386009,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1427.4550771375941,
-   "x_dense_ft": 2.688397248902777,
+   "dense_ft_pf": 1471.910084283892,
+   "x_dense_ft": 2.7721215781837474,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1020,13 +1222,17 @@
    "steps": 488,
    "pf": 869.1934508119259,
    "ce": 0.13167260940244888,
-   "base_pf": 1167.32721970248,
-   "x_base": 1.3430004777556288,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1317
+   ],
+   "base_pf": 1149.9384276204507,
+   "x_base": 1.322994813808453,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1416.5591049221146,
-   "x_dense_ft": 1.6297397358423336,
+   "dense_ft_pf": 1459.731984013384,
+   "x_dense_ft": 1.679409782310057,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1038,13 +1244,17 @@
    "steps": 488,
    "pf": 534.9753250819476,
    "ce": 0.1318902940787666,
-   "base_pf": 1161.2900632256712,
-   "x_base": 2.1707357494437423,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1319
+   ],
+   "base_pf": 1144.5315689536922,
+   "x_base": 2.1394100163000465,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1410.8036343500894,
-   "x_dense_ft": 2.637137767305403,
+   "dense_ft_pf": 1453.302449018079,
+   "x_dense_ft": 2.716578467979737,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1056,13 +1266,17 @@
    "steps": 488,
    "pf": 1173.7825084335657,
    "ce": 0.1318961528260843,
-   "base_pf": 1161.1280118953848,
-   "x_base": 0.9892190448850116,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1319
+   ],
+   "base_pf": 1144.3864010599298,
+   "x_base": 0.9749560867005375,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1410.6490556721662,
-   "x_dense_ft": 1.201797646102857,
+   "dense_ft_pf": 1453.1297969584532,
+   "x_dense_ft": 1.237988968584718,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1074,31 +1288,17 @@
    "steps": 488,
    "pf": 1535.2262093506345,
    "ce": 0.13447996524264455,
-   "base_pf": 1091.8201420257697,
-   "x_base": 0.7111786754133025,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1345
+   ],
+   "base_pf": 1082.1264837607443,
+   "x_base": 0.7048645190981068,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1344.1016947566934,
-   "x_dense_ft": 0.8755072617768932,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w1-ft-r20to7-sd1",
-   "arm": "ft-r20to7",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 601.3718146948614,
-   "ce": 0.13475043023718172,
-   "base_pf": 1084.808796162386,
-   "x_base": 1.8038903215190132,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1337.3198587709928,
-   "x_dense_ft": 2.2237820697492356,
+   "dense_ft_pf": 1378.9519509546158,
+   "x_dense_ft": 0.8982076664375609,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1110,13 +1310,17 @@
    "steps": 420,
    "pf": 493.31400473454005,
    "ce": 0.13556723713190877,
-   "base_pf": 1063.9065951109426,
-   "x_base": 2.156651919264784,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1356
+   ],
+   "base_pf": 1056.950863777046,
+   "x_base": 2.1425519114256804,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1317.045658838191,
-   "x_dense_ft": 2.6697917476454247,
+   "dense_ft_pf": 1348.8811391146237,
+   "x_dense_ft": 2.7343256549963093,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1128,13 +1332,17 @@
    "steps": 488,
    "pf": 1074.460840516484,
    "ce": 0.13606911214010325,
-   "base_pf": 1051.2637974619422,
-   "x_base": 0.9784105272339276,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1361
+   ],
+   "base_pf": 1045.5284311734204,
+   "x_base": 0.9730726255885174,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1304.7412198936308,
-   "x_dense_ft": 1.2143217981461782,
+   "dense_ft_pf": 1335.2227983618204,
+   "x_dense_ft": 1.2426909832469932,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1146,13 +1354,40 @@
    "steps": 488,
    "pf": 1311.4611736538513,
    "ce": 0.13658359890032443,
-   "base_pf": 1038.459229581543,
-   "x_base": 0.7918337579817938,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1366
+   ],
+   "base_pf": 1033.9470833871264,
+   "x_base": 0.7883932091610878,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1292.246893041985,
-   "x_dense_ft": 0.9853489519950228,
+   "dense_ft_pf": 1321.3647780273463,
+   "x_dense_ft": 1.0075515803078658,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "w1-ft-r20to7-sd0+1",
+   "arm": "ft-r20to7",
+   "kind": "drop",
+   "pool": "mtb16k",
+   "steps": 488,
+   "pf": 601.3429869890019,
+   "ce": 0.13659881371240773,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1384,
+    0.1348
+   ],
+   "base_pf": 1033.6065505842557,
+   "x_base": 1.7188303064107397,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1320.957154622643,
+   "x_dense_ft": 2.1966784068387284,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1164,13 +1399,17 @@
    "steps": 488,
    "pf": 982.434553190758,
    "ce": 0.13749132653174456,
-   "base_pf": 1016.2468152519529,
-   "x_base": 1.0344168086834682,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1375
+   ],
+   "base_pf": 1013.8256500682029,
+   "x_base": 1.0319523542565687,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1270.493759200812,
-   "x_dense_ft": 1.2932095629927645,
+   "dense_ft_pf": 1297.2643871214566,
+   "x_dense_ft": 1.3204588365791818,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1182,31 +1421,17 @@
    "steps": 488,
    "pf": 877.9248575989352,
    "ce": 0.13806480967978133,
-   "base_pf": 1002.4590341650894,
-   "x_base": 1.141850609979021,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1381
+   ],
+   "base_pf": 1001.3156828342065,
+   "x_base": 1.1405482760480627,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1256.939734196868,
-   "x_dense_ft": 1.4317167617676445,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w1-ft-r20to7-sd0",
-   "arm": "ft-r20to7",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 601.3141592831423,
-   "ce": 0.1384471971876337,
-   "base_pf": 993.3697140702698,
-   "x_base": 1.6519978762091967,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1247.9826189511577,
-   "x_dense_ft": 2.075425299212881,
+   "dense_ft_pf": 1282.2653596833673,
+   "x_dense_ft": 1.4605639065628873,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1218,31 +1443,17 @@
    "steps": 376,
    "pf": 494.8886859017973,
    "ce": 0.14014308449040982,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1401
+   ],
    "base_pf": 968.7310763821606,
    "x_base": 1.9574726680544676,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1209.0208734662797,
-   "x_dense_ft": 2.443015789021676,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "v3-recipe-sd1",
-   "arm": "recipe",
-   "kind": "drop",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 441.55927715061074,
-   "ce": 0.14537557401417872,
-   "base_pf": 900.4168370636311,
-   "x_base": 2.0391754485921703,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1096.309637608243,
-   "x_dense_ft": 2.4828141867672833,
+   "dense_ft_pf": 1229.3479868454378,
+   "x_dense_ft": 2.4840899011568474,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1254,31 +1465,40 @@
    "steps": 547,
    "pf": 495.06148314207405,
    "ce": 0.1462052398288506,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1462
+   ],
    "base_pf": 890.0364390206173,
    "x_base": 1.797830106619691,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1079.4296013491778,
-   "x_dense_ft": 2.180395038002583,
+   "dense_ft_pf": 1087.1420143602095,
+   "x_dense_ft": 2.1959737353435322,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "v3-recipe-sd0",
+   "run": "v3-recipe-sd0+1",
    "arm": "recipe",
    "kind": "drop",
    "pool": "mtb16k",
    "steps": 488,
-   "pf": 441.515695679421,
-   "ce": 0.14989943143082202,
-   "base_pf": 845.2499715119797,
-   "x_base": 1.9144279122654453,
+   "pf": 441.5374864150159,
+   "ce": 0.14763750272250037,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1499,
+    0.1454
+   ],
+   "base_pf": 872.3974471976296,
+   "x_base": 1.9758173972518247,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1007.3687742570372,
-   "x_dense_ft": 2.2816148646920924,
+   "dense_ft_pf": 1056.0209669853418,
+   "x_dense_ft": 2.3916903988368325,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1290,6 +1510,10 @@
    "steps": 488,
    "pf": 601.3141592831423,
    "ce": 0.150921354762977,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1509
+   ],
    "base_pf": 833.2635797119358,
    "x_base": 1.3857374998541734,
    "x_base_exact": true,
@@ -1308,6 +1532,10 @@
    "steps": 488,
    "pf": 462.9866564459536,
    "ce": 0.15218634225893765,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1522
+   ],
    "base_pf": 818.6613920908339,
    "x_base": 1.768218113185298,
    "x_base_exact": true,
@@ -1326,6 +1554,10 @@
    "steps": 604,
    "pf": 540.0479022126822,
    "ce": 0.15264927907846867,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1526
+   ],
    "base_pf": 813.38174944106,
    "x_base": 1.5061288935823571,
    "x_base_exact": true,
@@ -1344,6 +1576,10 @@
    "steps": 488,
    "pf": 601.3141592831423,
    "ce": 0.1534099463664461,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1534
+   ],
    "base_pf": 804.7804240059955,
    "x_base": 1.3383693225607989,
    "x_base_exact": true,
@@ -1362,6 +1598,10 @@
    "steps": 488,
    "pf": 601.3141592831423,
    "ce": 0.1599843609277741,
+   "seeds": 1,
+   "ce_seeds": [
+    0.16
+   ],
    "base_pf": 734.1295427275638,
    "x_base": 1.220875197089584,
    "x_base_exact": true,
@@ -1380,6 +1620,10 @@
    "steps": 517,
    "pf": 533.5986368442708,
    "ce": 0.16355978931096615,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1636
+   ],
    "base_pf": 698.34645884032,
    "x_base": 1.308748581087793,
    "x_base_exact": true,
@@ -1398,6 +1642,10 @@
    "steps": 907,
    "pf": 560.2920775245383,
    "ce": 0.17449144517013337,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1745
+   ],
    "base_pf": 599.4032584119161,
    "x_base": 1.0698049864638055,
    "x_base_exact": true,
@@ -1416,6 +1664,10 @@
    "steps": 1952,
    "pf": 7934.330738346092,
    "ce": 0.06360968585067894,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0636
+   ],
    "base_pf": 7934.330738346099,
    "x_base": 1.0000000000000009,
    "x_base_exact": true,
@@ -1434,6 +1686,10 @@
    "steps": 1952,
    "pf": 5990.170039437634,
    "ce": 0.06848292428367131,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0685
+   ],
    "base_pf": 5990.170039437629,
    "x_base": 0.9999999999999992,
    "x_base_exact": true,
@@ -1452,6 +1708,10 @@
    "steps": 1293,
    "pf": 3985.8157673260225,
    "ce": 0.07788173692279088,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0779
+   ],
    "base_pf": 3985.8157673260203,
    "x_base": 0.9999999999999994,
    "x_base_exact": true,
@@ -1470,6 +1730,10 @@
    "steps": 976,
    "pf": 3959.5715586265005,
    "ce": 0.08123491436672339,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0812
+   ],
    "base_pf": 3959.5715586265,
    "x_base": 0.9999999999999999,
    "x_base_exact": true,
@@ -1488,26 +1752,35 @@
    "steps": 642,
    "pf": 1962.9764123291832,
    "ce": 0.10097499140720174,
+   "seeds": 1,
+   "ce_seeds": [
+    0.101
+   ],
    "base_pf": 1962.9764123291834,
    "x_base": 1.0000000000000002,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2600.0735806375387,
-   "x_dense_ft": 1.3245567110775436,
+   "dense_ft_pf": 2690.5568470266403,
+   "x_dense_ft": 1.3706516441703656,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "w1-dense-sd0",
+   "run": "w1-dense-sd0+1",
    "arm": "dense",
    "kind": "dense_ft",
    "pool": "mtb16k",
    "steps": 488,
    "pf": 1981.8533581207541,
-   "ce": 0.11371779909313773,
-   "base_pf": 1597.6583318606154,
-   "x_base": 0.8061435652209694,
+   "ce": 0.11659363793223747,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1137,
+    0.1195
+   ],
+   "base_pf": 1561.6157594103454,
+   "x_base": 0.7879572688925435,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1517,56 +1790,25 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "w2-denselora-sd1",
+   "run": "v3-denselora-sd0+1",
    "arm": "denselora",
    "kind": "dense_lora",
    "pool": "mtb16k",
    "steps": 488,
    "pf": 1496.2473821169735,
-   "ce": 0.11777590980418609,
+   "ce": 0.11951338647413651,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1213,
+    0.1178
+   ],
    "base_pf": 1496.2473821169735,
    "x_base": 1.0,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1837.002587275653,
-   "x_dense_ft": 1.2277398839465705,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "w1-dense-sd1",
-   "arm": "dense",
-   "kind": "dense_ft",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 1981.8533581207541,
-   "ce": 0.11946947677133721,
-   "base_pf": 1496.2473821169735,
-   "x_base": 0.7549738107443806,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1779.728998704762,
-   "x_dense_ft": 0.8980124545603859,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "v3-denselora-sd0",
-   "arm": "denselora",
-   "kind": "dense_lora",
-   "pool": "mtb16k",
-   "steps": 488,
-   "pf": 1496.2473821169735,
-   "ce": 0.12125086314408691,
-   "base_pf": 1496.2473821169735,
-   "x_base": 1.0,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1721.411413369079,
-   "x_dense_ft": 1.1504858313827295,
+   "dense_ft_pf": 1867.9175382611927,
+   "x_dense_ft": 1.2484015414739504,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1578,13 +1820,17 @@
    "steps": 323,
    "pf": 989.9762569094748,
    "ce": 0.13859085752628744,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1386
+   ],
    "base_pf": 989.9762569094751,
    "x_base": 1.0000000000000002,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1244.634012097182,
-   "x_dense_ft": 1.257236225020893,
+   "dense_ft_pf": 1268.659512458074,
+   "x_dense_ft": 1.2815049892394363,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1596,6 +1842,10 @@
    "steps": 244,
    "pf": 991.974072917545,
    "ce": 0.1507228497575852,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1507
+   ],
    "base_pf": 835.5785163843527,
    "x_base": 0.8423390683254358,
    "x_base_exact": true,
@@ -1614,6 +1864,10 @@
    "steps": 122,
    "pf": 490.9397234593321,
    "ce": 0.18877402463549514,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1888
+   ],
    "base_pf": 490.9397234593321,
    "x_base": 1.0,
    "x_base_exact": false,
@@ -1632,6 +1886,10 @@
    "steps": 183,
    "pf": 507.422405474134,
    "ce": 0.20464909503934905,
+   "seeds": 1,
+   "ce_seeds": [
+    0.2046
+   ],
    "base_pf": 490.9397234593321,
    "x_base": 0.9675168423053756,
    "x_base_exact": false,

@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 09:30 x16 @3,975 PF: lo-r50to20 0.064 (x1.97), lo-p50-20-7 0.065 (x1.88); recipe-b3964 finishing. ~2x from 495 to 3,975 PF.
+  ftm.py now averages seeds per (arm, pool, steps). In flight: seed-1 repeats (bud/x4), ds agent (5 runs, tag ds), recipe-b3964, recipe-fz7-b991.
 - 09:00 DENSE FRONTIER COMPLETE to 7,934 PF: denselora-b3964 (x16) 0.078 @3,986; denselora-x4full 0.068 @5,990; dense-x4full 0.064 @7,934.
   EXACT FTM (ftm.py): lo-p50-20-7 x2.16 @495, x2.07 @991, x2.64 @1,980; lo-r50to20 x1.96 / x2.25 / x1.99; recipe x1.80 / x2.01 / x2.15 (x4) / x1.91 (x16);
   lo-r10to3 x1.51 @991, x1.00 @2,015. fz7 CLOSED negative (b991 recipe-fz7 still finishing). Seed-1 repeats launched 09:00 (tags bud / x4, --seeds 1):

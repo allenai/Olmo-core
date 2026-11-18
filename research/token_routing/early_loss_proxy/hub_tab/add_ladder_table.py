@@ -126,11 +126,11 @@ if os.path.exists(fp):
     def nm(r):
         arm = r["arm"]; base = arm.rsplit("-b", 1)[0] if re.search(r"-b\d+$", arm) else (arm[:-3] if arm.endswith("-x4") else arm)
         return e(DESC.get(base, DESC.get(arm, arm)))
-    fr = "".join(f'<tr><td>{nm(q)}<br><code>{e(q["run"])}</code></td><td class="n">{q["pool"]}</td><td class="n">{q["steps"]:,}</td><td class="n">{q["pf"]:,.0f}</td><td class="n">{q["ce"]:.3f}</td></tr>' for q in Fm["frontier"])
+    fr = "".join(f'<tr><td>{nm(q)}<br><code>{e(q["run"])}</code></td><td class="n">{q["pool"]}</td><td class="n">{q["steps"]:,}</td><td class="n">{q["pf"]:,.0f}</td><td class="n">{q["ce"]:.3f}{" (" + " / ".join(f"{c:.3f}" for c in q["ce_seeds"]) + ")" if q.get("seeds", 1) > 1 else ""}</td></tr>' for q in Fm["frontier"])
     dr = [r for r in Fm["runs"] if r["kind"] == "drop"]
     big = [r for r in dr if r["pool"] != "mtb16k"]; one = [r for r in dr if r["pool"] == "mtb16k"]
     row = lambda r: (f'<tr><td>{nm(r)}<br><code>{e(r["run"])}</code></td><td class="n">{r["pool"]}</td><td class="n">{r["steps"]:,}</td><td class="n">{r["pf"]:,.0f}</td>'
-                     f'<td class="n">{r["ce"]:.3f}</td><td class="n">{ratio(r, "base")}</td><td class="n">{ratio(r, "dense_ft")}</td></tr>')
+                     f'<td class="n">{r["ce"]:.3f}{" (" + " / ".join(f"{c:.3f}" for c in r["ce_seeds"]) + ")" if r.get("seeds", 1) > 1 else ""}</td><td class="n">{ratio(r, "base")}</td><td class="n">{ratio(r, "dense_ft")}</td></tr>')
     hd = '<tr><th>drop arm</th><th class="n">pool</th><th class="n">steps</th><th class="n">total PF</th><th class="n">final 16k CE</th><th class="n">FLOPs-to-match vs dense baseline family</th><th class="n">vs dense full fine-tune only</th></tr>'
     ftm_block = f'''<details class="sec" open id="ar-ftm-sec"><summary><h2 id="ar-ftm">FLOPs-to-match from finished runs (complete schedules)</h2><span class="n">3 tables · {len(dr)} drop runs</span></summary><div class="secbody">
 <p class="note sv">Each finished run is one point: total training PF and final 16k held-out CE. The baseline is the Pareto frontier of the dense runs (dense full fine-tune and dense LoRA at every budget run so far, since LoRA and more rows are available to dense training). A drop arm's ratio is the PF that frontier needs for the arm's final loss (log-linear interpolation between frontier points) divided by the arm's PF. "&gt;" marks arms whose loss is below every dense point so far: the ratio is then only a lower bound, and it tightens as the larger dense runs finish.</p>
