@@ -1,6 +1,6 @@
 """Prepare six detached Gantry commands; submit only with an explicit --submit.
 
-All training jobs: one GPU, one replica, Jupiter, urgent, minimum runtime 1h.
+All training jobs: two GPUs, one replica, Jupiter, urgent, minimum runtime 1h.
 A pushed source SHA containing the LeakySFT implementation is required to submit.
 """
 import argparse
@@ -10,7 +10,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sweep_settings import ARMS, CLUSTER, DATA_ROOT, SEQUENCE_LENGTH
+from sweep_settings import ARMS, CLUSTER, DATA_ROOT, GPUS, PACKED_WINDOWS, SEQUENCE_LENGTH
 
 FAMILY = "src/scripts/train/memexpress/leaky_sft"
 
@@ -39,7 +39,7 @@ def build_command(arm, name, ref, output_dir):
         "--min-runtime",
         "1h",
         "--gpus",
-        "1",
+        str(GPUS),
         "--replicas",
         "1",
         "--torchrun",
@@ -91,7 +91,9 @@ def make_plan(prefix, ref, output_dir):
             cpt_loss_scaler=alpha,
             run_name=f"{prefix}-{arm}",
             epochs=1,
-            gpus=1,
+            steps_per_epoch=PACKED_WINDOWS // GPUS,
+            global_batch_tokens=GPUS * SEQUENCE_LENGTH,
+            gpus=GPUS,
             replicas=1,
             cluster=CLUSTER,
             priority="urgent",

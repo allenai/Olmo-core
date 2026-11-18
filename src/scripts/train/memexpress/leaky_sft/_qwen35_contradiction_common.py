@@ -4,12 +4,12 @@ Contrast: alpha=0/.1/.3/.5/.7/1 on the dense Qwen3.5-4B hybrid CPT checkpoint.
 Readout: held-out contradiction F1 by context length, plus output/context CE.
 Data-controlled: one loader epoch, same seed, BFD packing and retained documents.
 Not compute-matched: nonzero alpha backpropagates context loss; zero only logs it.
-This is a new single-GPU pilot, not a reproduction of the multi-task or 256K runs.
+This is a new two-GPU pilot, not a reproduction of the multi-task or 256K runs.
 """
 
 from dataclasses import replace
 
-from sweep_settings import ARMS, DATA_ROOT, SEQUENCE_LENGTH
+from sweep_settings import ARMS, DATA_ROOT, GPUS, SEQUENCE_LENGTH
 
 from olmo_core.config import DType
 from olmo_core.data import TokenizerConfig
@@ -42,10 +42,10 @@ WORK_DIR = "/weka/oe-training-default/amandab/leakysft/xlong256k-filter32k-cache
 
 
 def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig:
-    """Build a single-GPU arm; use launch_sweep.py for minimum-runtime enforcement."""
+    """Build a two-GPU arm; use launch_sweep.py for minimum-runtime enforcement."""
     if context.cmd in (SubCmd.launch, SubCmd.launch_prep):
         raise ValueError(
-            "Use launch_sweep.py: it enforces one GPU, Jupiter, urgent, min-runtime=1h"
+            "Use launch_sweep.py: it enforces two GPUs, Jupiter, urgent, min-runtime=1h"
         )
     alpha = ARMS[arm]
     tokenizer = TokenizerConfig.qwen3_5()
@@ -80,7 +80,7 @@ def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig
             tokenizer=doc_tokenizer,
             work_dir=WORK_DIR,
             seed=SEED,
-            global_batch_size=SEQUENCE_LENGTH,
+            global_batch_size=GPUS * SEQUENCE_LENGTH,
             num_workers=0,
             generate_doc_lengths=True,
         ),
@@ -98,12 +98,12 @@ def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig
             ),
             scheduler=LinearWithWarmup(warmup_fraction=0.03, alpha_f=0.0),
             compile_model=False,
-            # torchrun with exactly one process still enables FSDP's bf16 compute policy.
+            # FSDP shards FP32 parameters, gradients and Adam state across two GPUs.
             dp_config=TransformerDataParallelConfig(
                 name=DataParallelType.fsdp,
                 param_dtype=DType.bfloat16,
                 reduce_dtype=DType.float32,
-                shard_degree=1,
+                shard_degree=GPUS,
                 num_replicas=1,
                 wrapping_strategy=TransformerDataParallelWrappingStrategy.full,
             ),
@@ -155,18 +155,18 @@ def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig
     if (
         config.train_module.cpt_loss_scaler != alpha
         or config.trainer.max_duration != Duration.epochs(1)
-        or config.data_loader.global_batch_size != SEQUENCE_LENGTH
+        or config.data_loader.global_batch_size != GPUS * SEQUENCE_LENGTH
         or config.train_module.max_sequence_length != SEQUENCE_LENGTH
         or config.train_module.rank_microbatch_size != SEQUENCE_LENGTH
         or config.train_module.cp_config is not None
         or config.train_module.tp_config is not None
         or config.train_module.pp_config is not None
-        or config.train_module.dp_config.shard_degree != 1
+        or config.train_module.dp_config.shard_degree != GPUS
         or config.dataset[0].sequence_length != SEQUENCE_LENGTH
         or config.dataset[0].long_doc_strategy != LongDocStrategy.exclude
         or config.dataset[0].sources != [source]
     ):
         raise ValueError(
-            "LeakySFT sweep requires the selected alpha, one epoch, one GPU and 32K windows on the filtered 256K corpus"
+            "LeakySFT sweep requires the selected alpha, one epoch, two GPUs and 32K windows on the filtered 256K corpus"
         )
     return config

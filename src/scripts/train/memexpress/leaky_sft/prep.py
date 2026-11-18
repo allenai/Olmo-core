@@ -13,7 +13,7 @@ from _qwen35_contradiction_common import (
     SEQUENCE_LENGTH,
     build_leaky_experiment,
 )
-from sweep_settings import CLUSTER
+from sweep_settings import CLUSTER, GPUS
 from olmo_core.data.utils import get_leaky_labels
 from olmo_core.internal.experiment import CliContext, SubCmd
 
@@ -52,7 +52,7 @@ def main():
         raise ValueError("No examples remain after the 32K filter")
     loader = config.data_loader.build(packed)
     loader.reshuffle(epoch=1)
-    assert len(loader) == len(packed), "one window/step must consume every window"
+    assert len(loader) * GPUS == len(packed), "epoch must consume every packed window"
     batch = loader.get_mock_batch()
     labels, output = get_leaky_labels(batch)
     assert (labels != -100).any() and output.any()

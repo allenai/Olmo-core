@@ -1,4 +1,4 @@
-"""Protect the six-arm comparison and the requested single-GPU launch resources."""
+"""Protect the six-arm comparison and the requested two-GPU launch resources."""
 import importlib
 from pathlib import Path
 
@@ -32,9 +32,10 @@ def test_six_configs_differ_only_in_alpha_and_names(family):
         assert cfg.train_module.cpt_loss_scaler == alpha
         assert cfg.trainer.max_duration.value == 1 and cfg.trainer.max_duration.unit == "epochs"
         assert cfg.train_module.cp_config is None
-        assert cfg.train_module.dp_config.shard_degree == 1
+        assert cfg.train_module.dp_config.shard_degree == 2
         assert cfg.train_module.dp_config.num_replicas == 1
-        assert cfg.data_loader.global_batch_size == cfg.train_module.rank_microbatch_size == 32768
+        assert cfg.data_loader.global_batch_size == 65536
+        assert cfg.train_module.rank_microbatch_size == 32768
         assert cfg.trainer.cancel_check_interval == 1
         assert cfg.trainer.load_optim_state is False and cfg.trainer.load_trainer_state is False
         assert cfg.train_module.state_dict_load_opts is None  # strict default
@@ -62,7 +63,7 @@ def test_requested_resources_on_every_command(family, tmp_path):
     for row in plan:
         cmd = row["command"]
         for flag, value in [
-            ("--gpus", "1"),
+            ("--gpus", "2"),
             ("--replicas", "1"),
             ("--priority", "urgent"),
             ("--min-runtime", "1h"),
@@ -72,6 +73,8 @@ def test_requested_resources_on_every_command(family, tmp_path):
             assert cmd[cmd.index(flag) + 1] == value
         assert "--torchrun" in cmd and "--no-logs" in cmd
         assert row["min_runtime"] == "1h" and row["epochs"] == 1
+        assert row["steps_per_epoch"] * row["gpus"] == 4986
+        assert row["global_batch_tokens"] == 65536
         assert row["cpt_loss_scaler"] == family.ARMS[row["arm"]]
 
 
