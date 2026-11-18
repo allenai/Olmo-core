@@ -53,6 +53,9 @@ def main():
         arms = R["arms"]
         ref = arms[a.ref].get("0") or arms[a.ref].get(0)
         steps = ref["steps"]
+        if len(steps) < 3:
+            print(f"\n=== {L}: reference {a.ref} has only probes {steps}; skipped")
+            continue
         last = steps[-1]
         i_mid = min(range(1, len(steps)), key=lambda i: abs(steps[i] - 0.5 * last))
         lv = {"mid": ref["ce"][i_mid], "deep": ref["ce"][-1]}

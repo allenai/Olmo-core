@@ -20,7 +20,13 @@
     ref, k70, k40, k20, k10, k5, k2p5.
 - Score: fetch each tag into one dir, `analyze_kl.py --root <dir> --lens 2k,...,64k --ref dft --out kl_results.json`,
   then `summarize_kl.py --scored kl_results.json --out-json kl_summary.json --png keepfrac_vs_length.png`.
-- Next: seeds 1 on the deciding arms per length (best router arm and its neighbours + dft), record, ops result add.
+- 16:40 wave 5: 32k k70 sd0 (k40 beat k20 1.27x at 32k) + seed 1 of 32k k40/k20/k10/grJc, 64k k40/k20/k10,
+  16k k40/k20/k10, 8k k70/k40/k20 (ops ids in `ops runs`, tags kl<L>).
+- Scored so far (score_all.sh -> /tmp/claude-3018/keepfrac_len_results/summary.txt): 2k, 4k, 8k, 16k complete for
+  seed 0; 32k router arms done, 32k dft still running (micro-1 relaunch); 64k all running (dft/ref on 8 GPUs).
+  Early read: best keep ~40% at 8k/16k/32k, not lower; 2k/4k saturate (held-out CE ~0.01: unresolvable).
+- Next: when 32k dft + 64k land, rerun score_all.sh, write records/keep-fraction-vs-length.md, chart, ops result
+  add --check, experiment_log_entry.json, hub_keeplen_block.html.
 
 ## previous session (2026-11-17 ~15:10 PT, usage limit)
 
