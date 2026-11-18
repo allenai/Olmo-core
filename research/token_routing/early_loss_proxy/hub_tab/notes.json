@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 08:05",
+   "text": "Early-blocks-forward-only is negative at 495 PF: dense LoRA from block 7 0.205 (dense full fine-tune 0.189), frozen LoRA 50%/20% 0.164 against 0.140 unfrozen. The recipe on the 16x pool with a complete schedule at 1,980 PF ends at 0.082 (1.9x); LoRA 10%/3% at 991 PF 0.117 (1.5x): cheaper token budgets lose. Started an agent on input document subsampling combined with the token drop (branch loop/docsub, tag ds)."
+  },
+  {
    "t": "11-18 07:00",
    "text": "Dense full fine-tune with 2x the rows (976 steps, 3,960 PF) ends at 0.081; LoRA 50%/20%/7% at 1,980 PF ends at 0.072 and LoRA 50%/20% at 0.078, so both need under half the FLOPs. Budget-matched at 991 PF: LoRA 50%/20% 0.097, 50%/20%/7% 0.100, recipe 0.101, dense LoRA 0.139, dense full fine-tune 0.151: 2.0-2.3x. The ratio is about 2x at 495, 991 and 1,980 PF. The first launch of the early-blocks-forward-only arms failed at startup (multi-stage cuts inherited the freeze flag); fixed in the router (commit 81d0924be) and relaunched."
   },

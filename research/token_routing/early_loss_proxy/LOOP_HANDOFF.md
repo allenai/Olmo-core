@@ -42,6 +42,11 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 08:05 fz7 NEGATIVE at b495: denselora-s7 0.205 (dense 0.189); lo-r50to20-fz7 0.164 @534 PF (unfrozen 0.140); lo-p50-20-7-fz7 0.153 (unfrozen 0.136). b991 fz7 arms
+  still running (let them finish, then close). x16-recipe-b1982 0.082 (x1.9). lo-r10to3-b991 0.117 (x1.5). Agent docsub (adf5d3eb50381a0be, branch loop/docsub, tag ds):
+  input document subsampling (from loop/longpos) + lo-p50-20-7, constant and ramped, b495. ks agent's last arm ks-ft-lo10h50 running.
+  REMAINING IDEAS if docsub fails: per-row adaptive budgets by loss (hard rows keep more), early blocks trained on a subset of rows only, the user's
+  10-20x target looks out of reach with token dropping alone on this task mix: say so plainly with the frontier table.
 - 07:00 dense-x4 (976 steps, 3,960 PF) = 0.081. x4 finals ~1,980 PF: lo-p50-20-7 0.072, lo-r50to20 0.078 (both > x2.0 lower bound), recipe 0.083 @1,762 (x2.15),
   ft-r50to20 0.082 (x1.95), ramp / lo-c16k50 0.088 (x1.6). b991: lo-r50to20 0.097 (x2.25), lo-p50-20-7 0.100 (x2.07), recipe 0.101 (x2.0), denselora 0.139, dense 0.151.
   => ~2x at 495 / 991 / 1,980 PF vs the dense frontier; no decay with data. fz7 arms: first launch FAILED (later stages inherited freeze_early); fixed in
