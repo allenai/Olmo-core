@@ -1,5 +1,5 @@
 {
- "status": "PAUSED since 13:15 on 11-17 (Prasann); nothing is running. Scoring rules changed on 11-17 afternoon: the reference is dense full fine-tuning (not dense LoRA); a method counts only if it reaches the deepest loss the dense reference reaches, with as many extra steps as it needs; screens give every arm the FLOPs of 50 dense steps (203 PF). Under these rules nothing qualifies yet. On generation evals (3 tasks x 4k / 8k / 16k, eval_size 500 per cell) dense full fine-tuning scores 0.928 at 1,982 PF, the recipe 0.897 at 442 PF and dense LoRA 0.882 at 1,496 PF. The dense full fine-tune held-out loss curve exists only to step 100 (0.135 at 409 PF); the recipe reaches that level with 2.4-2.8x fewer FLOPs. First runs on resume: a full-epoch dense full fine-tune with held-out probes, and the recipe on 2-3x the rows. Memory: chunked early blocks with a kept-token cap and host offload bring the slope from 0.37 (dense LoRA) to 0.040 GiB per 1k tokens (a 1M-token row trains on one H200); learning at 64k and beyond is untested.",
+ "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Wave 1 (launched 00:30-00:45, full epoch on the standard pool, 16k held-out loss on 320 rows): 2 dense full fine-tune references (standard pool; 80/20 re-mix with 3x rows), 14 drop arms (ladder of keep shares and cut depths with full fine-tuning and with LoRA, dense steps mixed in, keep ramp, adaptive keep by gradient mass), one agent implementing dense-forward / sparse-backward. No result yet. Earlier ideas on this page were scored against dense LoRA at shallow loss levels; those using LoRA or a row re-mix as the lever are now baseline, not methods.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -8,10 +8,22 @@
   "Data caveats: the 16k training cells use fewer documents per row than the eval (contradiction 324 vs 379, outlier 96 vs 111, reorder 90 vs 116) so rows fit in 16,384 tokens; the 16k held-out rows are the short tail of the eval rung (70, 303, 8 and 497 of 500 rows fit for contradiction, outlier, reorder, qdmatch_nq). About 46% of the documents in a qdmatch_nq held-out row also occur in training rows (no gold overlap, no prompt overlap).",
   "For runs that stop before reaching a reference level, the table also gives iso-loss ratios at the run's own final loss: FLOPs the dense-LoRA reference (and the recipe) need to reach that loss divided by the run's FLOPs. These are generous to a run whose final loss is shallow, because the reference curves are only probed every 10-25 steps.",
   "Deep comparisons (from 11-17 11:30) use the full-epoch dense-LoRA curve (488 steps, probes every 50) as the reference and give the FLOP ratio at fixed held-out CE levels 0.160 / 0.140 / 0.125 / 0.115 / 0.105 / 0.095.",
-  "From 11-17 12:00 the primary measure is the 16k held-out loss. Until the larger 16k set is in place, 16k readings come from 56 rows (8 for reorder) and are noisy.",
-  "Memory: values logged by the proxy before 11-17 13:10 were wrong (the peak was reset before being read) and are not shown; the fix is merged. Valid measurements are in the memory idea and the log."
+  "Memory: values logged by the proxy before 11-17 13:10 were wrong (the peak was reset before being read) and are not shown; the fix is merged. Valid measurements are in the memory idea and the log.",
+  "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 00:45",
+   "text": "Wave 1 launched: 13 Beaker jobs and 4 jobs on sneetches (2 GPUs each), all full epoch (488 steps; the re-mix reference 1,464) with probes at steps 50-488 on heldout_v3. Arms: dense full fine-tune (reference), dense full fine-tune on the 80/20 re-mix x3; full fine-tune + drop at 20%/7%, 50%/20%, 50% after block 7, 50% after block 16; LoRA + drop at 50%/20% and 50% after block 16; recipe and full-fine-tune drop with every 4th step dense or the last 20% dense; keep ramp 20% to 90%; adaptive keep covering 99 / 95 / 90% of predicted gradient mass. Agent started on dense-forward / sparse-backward (branch loop/sparsebwd)."
+  },
+  {
+   "t": "11-18 00:28",
+   "text": "Smoke of the FLOP-budget flags on sneetches: a run with --max-pf 12 stopped at 12.6 PF after a final probe, probes fired at the PF points. Full fine-tuning with the recipe's drop (no LoRA) runs at 1.22 PF per step, 0.30x dense full fine-tune."
+  },
+  {
+   "t": "11-18 00:20",
+   "text": "Loop resumed by Prasann with a new scope rule: anything that can be done with LoRA or a fixed data re-mix is part of the dense baseline; main methods must drop FLOPs dynamically during training; start from methods that learn like dense at a higher step cost and reduce the step cost gradually. Existing 16k full-epoch data read under this rule: the recipe (drop + LoRA) stays 0.025-0.03 CE behind dense LoRA at every probe from step 150 to 488 (0.150 / 0.145 against 0.121 at step 488, 320 rows), so it reaches only dense LoRA's step-200 to step-300 level, at 2.1-2.3x fewer FLOPs."
+  },
   {
    "t": "11-17 16:25",
    "text": "State refreshed while paused (no runs launched). Results that landed during the pause are below."

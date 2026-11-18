@@ -134,5 +134,53 @@
   "what": "Short rows only show the attention blocks distances below 2k. Give them positions that span 16k (stretching), and thin long rows by dropping whole documents at the input while keeping the survivors' original positions, so cheap rows carry long-range structure and fewer full long rows are needed for the 16k loss.",
   "status": "done",
   "result": "Mixed (one seed, 16k reading from 320 rows). Position-preserving document subsampling of long rows works: keeping 25% of the non-gold documents (45% of the tokens) on the all-long pool needs 1.23-1.35x fewer FLOPs than the plain recipe for the same 16k loss (about 3.1x vs dense LoRA at LR 2e-5) and ties the 80/20 pool where their FLOPs overlap; keeping 50% gives 1.10-1.16x. Position stretching of short rows does not help: a tie or slightly worse on the 80/20 pool (0.92x), and short rows alone stay far behind at 16k even when stretched (16k loss 0.46-0.57). Not yet tried: subsampling the long rows inside the 80/20 pool. Branch loop/longpos."
+ },
+ {
+  "id": "densebase",
+  "family": "reference",
+  "title": "Dense baseline family: full fine-tune, LoRA, fixed re-mix",
+  "what": "Under the 11-18 rule LoRA and a fixed short/long row mix belong to the dense baseline. Full-epoch dense full fine-tune on the standard pool (488 steps, 1,982 PF) and on the 80/20 re-mix with 3x the rows (1,464 steps), with 16k held-out probes; dense LoRA full epoch already exists. Each drop arm is compared with the dense run that uses the same adapter and pool.",
+  "status": "running",
+  "result": ""
+ },
+ {
+  "id": "ladder",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Drop ladder: from near-dense to the recipe",
+  "what": "Find where token dropping stops tracking dense per step. Same router, full fine-tuning, full epoch: keep 50% after block 16 (gentlest), keep 50% after block 7, keep 50% then 20%, keep 20% then 7% (the recipe's budgets); and with LoRA: 50% then 20%, 50% after block 16. Read: 16k held-out loss at the same step as the dense run with the same adapter, out to step 488.",
+  "status": "running",
+  "result": ""
+ },
+ {
+  "id": "densemix",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Dense steps mixed into dropped training",
+  "what": "The recipe trains on a truncated forward but is scored on the dense forward. Every 4th step dense, or the last 20% of the steps dense, with LoRA and with full fine-tuning; cost rises from 0.22-0.30x to about 0.4x dense per step.",
+  "status": "running",
+  "result": ""
+ },
+ {
+  "id": "keepramp",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Keep ramp over training",
+  "what": "One cut after block 7 whose keep share rises linearly from 20% to 90% over the epoch (full fine-tuning): cheap steps early, near-dense steps at the end where the loss is deepest.",
+  "status": "running",
+  "result": ""
+ },
+ {
+  "id": "massdial",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Adaptive keep by predicted gradient mass",
+  "what": "Per document, keep the fewest tokens whose predicted gradient mass covers 99% / 95% / 90% (one cut after block 7, full fine-tuning). The budget is set per row by the router instead of a fixed share; a target of 100% is dense, so the target is a single dial from dense downwards.",
+  "status": "running",
+  "result": ""
+ },
+ {
+  "id": "sparsebwd",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Dense forward, sparse backward",
+  "what": "Every token stays in the forward pass (identical to the dense forward used for scoring); gradients flow only through the tokens the router keeps (20% above block 7, 7% above block 16). Separates the two things the recipe changes at once: no gradient for dropped tokens, and a truncated context for kept tokens. Ideal cost about 0.4-0.5x dense per step.",
+  "status": "running",
+  "result": ""
  }
 ]

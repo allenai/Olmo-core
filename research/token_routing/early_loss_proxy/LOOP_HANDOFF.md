@@ -5,6 +5,23 @@
 # Hub tab: never publish from this session with hub_tab/build_autoresearch_tab.py (stale). Hand hub_tab/loop_state.json to the
 # hub-reorg session (local_9a6d1692-d798-4df3-b6c6-023470949c95) or use hub_live/ in the main checkout after reading the live page.
 
+## IN FLIGHT (wave 1, launched 2026-11-18 00:30-00:45 PT; tag w1; heldout_v3; full epoch; probes 50,100,150,200,300,400,488)
+- Beaker (2 GPUs each; `bash fetch_beaker_results.sh w1` then `python3 ladder.py --live --json hub_tab/ladder.json`):
+  dense (full FT reference, exp 01M7PW8ST2VPK94RSAK7FTNTN9, ~3.5 h), dense-mix80x3 (dense FT on mtbmix80x3, 1,464 steps,
+  01M7PW9JCK4421CR8XR0HA20HQ, up to 10 h), lo-r50to20, lo-c16k50 (LoRA + drop), rc-de4, rc-tail20 (recipe + dense every 4th
+  step / dense last 20%), ft-r20to7-de4, ft-r20to7-tail20, ft-c7ramp (cut 7, keep 0.2 -> 0.9), ft-m99 / ft-m95 / ft-m90
+  (--st-otr-mass-target, cut 7).
+- sneetches slurm 5202808-5202811 (8 GPUs = the whole jsteinhardt preemptive_high cap until they end, ~1-1.5 h):
+  ft-r20to7, ft-r50to20, ft-c7k50, ft-c16k50 -> /net/sneetches/data/prasann/early_loss_proxy/results/w1/ (code_16af1bb05).
+- Agent sparsebwd (ad0d4e2aae6f7333a, branch loop/sparsebwd, Beaker tag sbw): dense forward, gradients only through kept tokens.
+- ft-* arms = softtoken, LR 5e-6, RECIPE without the three --st-otr-early-lora* flags (full fine-tune + drop, 0.30x dense/step).
+- Scoring: ladder.py (same-adapter dense baseline: ft-* -> w1/dense, LoRA arms -> v3/denselora, *-mix80x3 -> w1/dense-mix80x3).
+  Known from v3: recipe (LoRA) is +0.025-0.03 CE behind dense LoRA at 16k at every probe 150-488.
+- NEXT: read which rungs track dense at steps 300-488; take the cheapest that does and lower its cost in small moves
+  (more arms between it and the first rung that lags); FLOP-matched 203 PF screens (--max-pf 203 --pf-points 50,100,150
+  --steps 2000, smoke passed) for new mechanisms; second seed for any arm within 0.01 CE of dense at step 488.
+- Hub: sent loop_state.json to hub-reorg at 00:50; ask it again when hub_tab/ladder.json has finished arms.
+
 # Auto-research loop: state file (updated 2026-11-17 12:05 PT)
 
 PRIORITY (Prasann 11-17 12:00): 16k held-out loss first; ideas that gain more as rows get longer. Heartbeat cron 13,43 * * * * restarts the loop.
