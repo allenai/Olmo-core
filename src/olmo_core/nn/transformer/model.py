@@ -1,4 +1,5 @@
 import logging
+import os
 from collections import defaultdict
 from functools import cached_property
 from typing import (
@@ -1844,6 +1845,15 @@ class Transformer(nn.Module):
                 sbw = getattr(self, "_otr_sbw", None)
                 if sbw is not None:
                     # online router sparse_bwd: rows a cut dropped stay in the forward but carry no gradient
+                    n_chk = int(getattr(self, "_sbw_checks", 0))
+                    if block_idx == len(self.blocks) - 1 and n_chk < int(os.environ.get("OLMO_OTR_SBW_CHECKS", "8")):
+                        # check (first few forwards): the last block's raw output gradient on dropped vs kept rows
+                        self._sbw_checks = n_chk + 1
+                        m_ = sbw.clone()
+                        h.register_hook(lambda g, m_=m_: log.info(
+                            "[sbw-check] last-block grad |g| dropped max %.3e (n=%d), kept mean %.3e (n=%d)",
+                            float(g[~m_].abs().max()) if bool((~m_).any()) else 0.0, int((~m_).sum()),
+                            float(g[m_].abs().mean()) if bool(m_.any()) else 0.0, int(m_.sum())))
                     h = torch.where(sbw[..., None], h, h.detach())
             if self.budget_attach and h.requires_grad:
                 h = self._attach_block_budget(h, block_idx)
