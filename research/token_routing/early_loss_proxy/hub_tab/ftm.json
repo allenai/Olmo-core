@@ -1178,28 +1178,6 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "ds-ds-p-k25-b495-sd0",
-   "arm": "ds-p-k25-b495",
-   "kind": "drop",
-   "pool": "mtb16kx4",
-   "steps": 554,
-   "pf": 464.52740014165255,
-   "ce": 0.12834471074602333,
-   "seeds": 1,
-   "ce_seeds": [
-    0.1283
-   ],
-   "base_pf": 1277.985493251701,
-   "x_base": 2.7511520157088545,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1561.6419325538711,
-   "x_dense_ft": 3.3617864782091766,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
    "run": "sbw-ft-sbw-c7k20-sd0",
    "arm": "ft-sbw-c7k20",
    "kind": "drop",
@@ -1284,6 +1262,29 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 1504.622347279543,
    "x_dense_ft": 1.587411873038514,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "ds-ds-p-k25-b495-sd0+1",
+   "arm": "ds-p-k25-b495",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 554,
+   "pf": 462.62363576935144,
+   "ce": 0.13018741390878857,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1283,
+    0.132
+   ],
+   "base_pf": 1236.6241705470682,
+   "x_base": 2.6730674244313954,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1504.3643494091923,
+   "x_dense_ft": 3.2518103985487192,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1417,6 +1418,28 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 1391.8384757186827,
    "x_dense_ft": 2.816711906658682,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "ds-ds-p-k25-l6k-b495-sd0",
+   "arm": "ds-p-k25-l6k-b495",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 747,
+   "pf": 491.4752394232828,
+   "ce": 0.13428394471557112,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1343
+   ],
+   "base_pf": 1149.4061415964725,
+   "x_base": 2.3386857554517553,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1384.4442088727328,
+   "x_dense_ft": 2.816915477771162,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },

@@ -34,6 +34,8 @@ DESC = {  # arm -> plain description
     "ft-r50to20-ex50": "full FT, keep 50% then 20%, half of the budget random", "ft-r50to20-rnd": "full FT, keep 50% then 20%, random tokens",
     "lo-p50-10-5": "LoRA, keep 50% / 10% / 5% at blocks 7 / 16 / 24", "lo-r10to3": "LoRA, keep 10% then 3%",
     "ds-p-k25": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on 16k rows", "ds-p-k50": "LoRA 50% / 20% / 7% + keep 50% of distractor documents on 16k rows",
+    "ds-p-k25-l6k": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on 8k and 16k rows", "ds-p-k25-l3k": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on every row",
+    "ds-p-k25-b1980-x16": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on 16k rows", "ds-dl-k25": "dense LoRA + keep 25% of distractor documents on 16k rows (no token drop)",
     "ds-p-r25": "LoRA 50% / 20% / 7% + document keep ramp 25% to 100%", "ds-p-r50": "LoRA 50% / 20% / 7% + document keep ramp 50% to 100%",
     "ds-dl-k50": "dense LoRA + keep 50% of distractor documents on 16k rows (no token drop)", "ds-p-k10": "LoRA 50% / 20% / 7% + keep 10% of distractor documents on 16k rows",
     "recipe-fz7": "LoRA 20% / 7%, blocks 0-6 forward-only", "lo-p50-20-7-fz7": "LoRA 50% / 20% / 7%, blocks 0-6 forward-only", "lo-r50to20-fz7": "LoRA 50% / 20%, blocks 0-6 forward-only",

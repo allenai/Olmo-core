@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 15:00",
+   "text": "Document-drop follow-up complete except one failed control: keep 25% at 463 PF is 0.130 on two seeds (2.7x); subsampling the 8k rows too gives 0.134 (no gain). Verdict: a small-budget gain (2.7-2.9x at 465-990 PF) that is gone by 1,971 PF."
+  },
+  {
    "t": "11-18 14:30",
    "text": "Document drop at the larger budget: keep 25% + token drop at 1,971 PF on the 16x pool ends at 0.073 (2.5x), level with the token drop alone at 1,980 PF (0.074 on two seeds, 2.4x). So the document-drop gain shrinks with data: +0.006 at 495 PF, +0.007 at 991 PF (two seeds), +0.001 at 1,980 PF (one seed). Subsampling every row (4k and 8k too) is clearly worse (0.167 at 488 PF)."
   },
