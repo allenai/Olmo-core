@@ -29,7 +29,7 @@ def series(S, r, t, what):
             v, ci = e[f"k_cos{t}"], e[f"k_cos{t}_ci"]
         else:
             v, ci = e[f"tokens_row_cos{t}"], [c / 16 for c in e[f"tokens_step_cos{t}_ci"]]
-        if not np.isfinite(v):
+        if not np.isfinite(v) or v <= 0:  # a zero share cannot be drawn on a log axis
             continue
         xs.append(s["T_mean"])
         ys.append(v * (100 if what == "frac" else 1))

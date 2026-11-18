@@ -2,7 +2,7 @@
 experiment: grad_composition
 title: Per-token x per-block gradient / activation composition of the answer loss over CTC fine-tuning (Qwen3.5-4B), to guide train-time token / layer router design
 status: done
-updated: 2026-11-17
+updated: 2026-11-18
 branch: claude/grad-composition-6f09c7
 launcher: research/token_routing/grad_composition/launch.py (Beaker, SFT), run_probe_lambda.sbatch (Lambda), run_cpt_probe.sbatch (cubbins 8xH200, CPT)
 records:
@@ -16,7 +16,7 @@ results:
 artifacts:
   - https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ
 wandb_group:
-next_step: Length sweep DONE 2026-11-17 (branch claude/grad-sparsity-vs-length, record grad-sparsity-vs-length.md; ops gsl-m11f1-* / gsl-f7808-*; artifact pending, main agent). Open: the Gated DeltaNet forward breaks past ~262k tokens (blocks a 512k point; 8 H200s fit 524,288 in memory). Earlier: CPT gradient maps DONE 2026-11-10 (branch claude/cpt-gradmaps-34a768; record cpt-gradient-maps.md; artifact section 'CPT gradient maps'; ops gradcomp_cptmap_* / gradcomp_cptoracle_*). Open: projection-ranked CPT oracle (fairer upper bound than energy); Qwen3.5-4B CPT contrast needs its cpt_u1B checkpoints staged from weka.
+next_step: Length sweep DONE 2026-11-17, base-model arm DONE 2026-11-18 (branch claude/grad-sparsity-vs-length, record grad-sparsity-vs-length.md; ops gsl-m11f1-* / gsl-f7808-*; artifact pending, main agent). Open: the Gated DeltaNet forward breaks past ~262k tokens (blocks a 512k point; 8 H200s fit 524,288 in memory). Earlier: CPT gradient maps DONE 2026-11-10 (branch claude/cpt-gradmaps-34a768; record cpt-gradient-maps.md; artifact section 'CPT gradient maps'; ops gradcomp_cptmap_* / gradcomp_cptoracle_*). Open: projection-ranked CPT oracle (fairer upper bound than energy); Qwen3.5-4B CPT contrast needs its cpt_u1B checkpoints staged from weka.
 ---
 
 # grad_composition
@@ -97,6 +97,11 @@ quota 6.1% (2k) -> 8.6% (64k) -> 17.0% (256k, eval_size 80); slope of log share 
 mt4 f7808 (8k-trained), which reproduces the published 8k table. CE rises with length (confound). Max valid length
 256k: 8 H200s fit 524,288 tokens (121 GiB/GPU) but the dense forward gives CE 2-4 at 306-350k and NaN from 368k
 (Gated DeltaNet), YaRN or not. Record: records/grad-sparsity-vs-length.md.
+2026-11-18 (Prasann, via main agent: is the rise an in-distribution artifact?): added the untrained base
+q35-4b-base-markerfix on the same rows. Inside the context the base gets SPARSER with length (rows needing any body
+tokens: geometric-mean share 1.66% -> 0.15%, slope -0.49 [-0.56, -0.41]) vs mt11 +0.13 / mt4 +0.28; base step-level
+shares ~0 (its gradient is in prompt/query/answer, body 9-18% of energy). The rise comes from fine-tuning spreading
+the context gradient (contradiction, outlier). ops gsl-base-*.
 
 ## Current best numbers
 <!-- One line per number: task, rung, metric=value, eval_size, ±SE, cot label, source path.

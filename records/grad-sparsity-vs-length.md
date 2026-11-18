@@ -1,14 +1,14 @@
 ---
 title: Gradient sparsity vs context length - how many context tokens carry the training gradient, 2k to 256k
 date: 2026-11-17
-updated: 2026-11-17
+updated: 2026-11-18
 experiment: grad_composition
 area: token_routing
 kind: result
 status: current
 superseded_by: 
 artifact: 
-summary: Under the gradient-concentration table's protocol (frozen dense Qwen3.5-4B, blocks 7-31 weight gradient, 16-row steps, cos 0.95), the share of context tokens a per-row quota must keep does not fall with length; it rises slowly, 6.1% at 2k -> 8.6% at 64k -> 17% at 256k on the mt11 dense f1 checkpoint (log-log slope +0.19 [0.15, 0.23], so kept tokens per row grow ~T^1.19); global oracle 0.64% -> 4.5% (slope +0.47), per-document quota 12% -> 22-25%, random ~53-77%. Constant token count (slope -1) is excluded. Same rise on the 8k-trained mt4 f7808 checkpoint, which also reproduces the published 8k table. Longest valid row 256k: 8 H200s fit 524,288 tokens in memory, but the dense forward breaks numerically past ~262k tokens. eval_size 512 per length to 64k, 192 at 128k, 80 at 256k.
+summary: Under the gradient-concentration table's protocol (frozen Qwen3.5-4B, blocks 7-31 weight gradient, 16-row steps, cos 0.95), the share of context tokens a per-row quota must keep does not fall with length on fine-tuned checkpoints; it rises slowly (mt11 dense f1: 6.1% at 2k, 8.6% at 64k, 17% at 256k; slope +0.19 [0.15, 0.23], tokens ~T^1.19; global oracle slope +0.47), same on mt4 f7808. On the untrained base model the rise does not survive inside the context: for rows that need any context tokens the share falls with length (geometric mean 1.7% at 2k to 0.15% at 256k, row slope -0.49 [-0.56, -0.41], tokens ~T^0.5), and its step-level numbers are ~0 because the base gradient sits in prompt/query/answer tokens. So the trained-model rise comes from fine-tuning spreading the gradient over the context, mostly on contradiction and outlier. Longest valid row 256k (8 H200s fit 524,288 tokens, but the forward breaks past ~262k). eval_size 512 per length to 64k, 192 at 128k, 80 at 256k.
 ---
 # Gradient sparsity vs context length
 
@@ -53,11 +53,139 @@ fraction (slope 0). Without the two long, small points the slope is the same: +0
   part (128k/256k past mt11's 64k training length) adds to this; the slope over 2k-64k alone (in-distribution) is
   per-row +0.14 [0.10, 0.20], global +0.55 [0.49, 0.61] (6.1% -> 8.6% and 0.64% -> 3.4%).
 
+**Third checkpoint, the untrained base (added 2026-11-18; details below).** The rise with length does not survive
+on the base model where it matters:
+- Inside the context, the base gets *sparser* with length. Restrict to rows that need any context tokens, and score
+  each row against its own gradient. The base's geometric-mean share falls from 1.66% at 2k to 0.38% at 64k and 0.15%
+  at 256k: row-level slope **-0.49 [-0.56, -0.41]**, tokens ∝ T^0.51. On the same rows, mt11 gives
+  **+0.13 [0.08, 0.18]** (2.0% → 3.2-3.5%) and mt4 f7808 gives **+0.28 [0.19, 0.36]**.
+- The base's step-level numbers are near zero and not comparable as a trend. Its gradient sits almost entirely in the
+  always-kept prompt / query / answer tokens: body tokens hold 9-18% of the energy score, and answer CE is 1.6-2.0. So
+  cos 0.95 needs about 0 body tokens up to 8k. The per-row quota then rises to 1.6% at 64k and falls back to 0.27% at
+  256k as the body's share of the energy drops again (18% → 9%).
+- 27-52% of base rows need no body tokens at any length; on mt11 this falls from 74% to 5%.
+- With log CE in the row-level regression the base slope is +0.43 [0.32, 0.54], but with a log-CE coefficient of -4.
+  On the base, CE separates tasks (oolong 2.6-3.3, nq 1.7-2.4, contradiction 0.6-1.6) rather than row difficulty, so
+  that coefficient is a task effect and this regression is not a usable control there.
+- Per task, the base is flat or falling everywhere except contradiction (row slopes: contradiction +0.18, nq -0.18,
+  oolong -0.05, outlier -0.84). On mt11 they are +0.64, -0.24, -0.03 and +0.16.
+
+**Reading.** The rise on fine-tuned checkpoints is not a property of long context as such. Fine-tuning moves the
+gradient into the context (body share of the energy goes from about 10% to about 40% on mt11), and the trained model
+spreads that context gradient over more tokens as rows grow, mostly on contradiction and outlier. The base model, which
+has not learned the tasks, concentrates its small context gradient on fewer and fewer tokens. This does not separate
+"in-distribution" from "learned the task": both fine-tuned models rise, including mt4 well past its 8k training length
+(8k → 64k). Difficulty within a fine-tuned model still matters (mt11's log-CE coefficient is +0.19).
+
 **What this means for token dropping.** A router that keeps a fixed fraction of each row's context (the recipe's
 20%/7%) is consistent with this; a router that keeps a fixed token count would fall below the 0.95 attribution
 bound well before 64k. This agrees with the keep-fraction thread (`records/keep-fraction-vs-length.md`, branch
 `claude/keepfrac-vs-length-4bf10c`: the best keep stays at 20-40% from 8k to 64k and low keeps break harder at long
 rows). Attribution is an upper bound only (`records/oracle-tokens-under-routing.md`: forward removal breaks it).
+
+## Results: base Qwen3.5-4B (q35-4b-base-markerfix, no fine-tuning; added 2026-11-18)
+
+Same rows (seed 20261117, query "both" layout as mt11), protocol, rules and eval sizes as the mt11 run. Checkpoint:
+the weka `ctc_suite/bases/q35-4b-base-markerfix` (the base mt11 was trained from), via its existing model-only bf16 S3
+copy `_transfer/gradconc/q35-4b-base-markerfix`.
+
+cos 0.95:
+
+| rule | 2k (T≈2k) | 4k (T≈4k) | 8k (T≈8k) | 16k (T≈17k) | 32k (T≈34k) | 64k (T≈67k) | 128k (T≈134k) | 256k (T≈253k) |
+|---|---|---|---|---|---|---|---|---|
+| eval_size rows (steps) | 512 (32) | 512 (32) | 512 (32) | 512 (32) | 512 (32) | 512 (32) | 192 (12) ⚠ | 80 (5) ⚠ |
+| Global oracle (16-row step) | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.01] | 0.01% [0.00, 0.02] | 0.14% [0.10, 0.18] | 0.32% [0.24, 0.40] | 0.71% [0.60, 0.82] | 0.54% [0.30, 0.86] | 0.15% [0.00, 0.45] |
+| Per-row quota | 0.00% [0.00, 0.00] | 0.01% [0.00, 0.04] | 0.01% [0.00, 0.03] | 0.19% [0.12, 0.28] | 0.49% [0.34, 0.64] | 1.56% [1.25, 1.88] | 1.45% [0.39, 2.98] | 0.27% [0.00, 0.82] |
+| Per-document quota | 0.00% [0.00, 0.00] | 0.04% [0.00, 0.12] | 0.06% [0.03, 0.10] | 0.53% [0.36, 0.74] | 1.42% [1.07, 1.81] | 2.90% [2.45, 3.36] | 1.89% [0.92, 3.20] | 0.12% [0.02, 0.28] |
+| Random | 0.00% [0.00, 0.00] | 0.95% [0.00, 2.45] | 2.51% [1.08, 4.21] | 19.28% [15.83, 22.79] | 29.34% [26.03, 32.92] | 40.65% [36.25, 44.83] | 28.69% [20.50, 36.24] | 5.29% [1.07, 12.48] |
+| Global oracle (16-row step): tokens per row | 0 | 0 | 1 | 22 | 104 | 464 | 704 | 370 |
+| Per-row quota: tokens per row | 0 | 1 | 1 | 31 | 158 | 1,011 | 1,882 | 674 |
+| Per-document quota: tokens per row | 0 | 2 | 5 | 86 | 463 | 1,885 | 2,454 | 284 |
+| Row vs its own gradient (mean / median) | 1.54% / 0.00% | 1.50% / 0.19% | 1.33% / 0.29% | 1.59% / 0.26% | 1.94% / 0.10% | 2.47% / 0.07% | 2.62% / 0.04% | 2.16% / 0.01% |
+| Row vs its own gradient: geometric mean over rows with k > 0 | 1.66% | 1.43% | 1.10% | 0.73% | 0.44% | 0.38% | 0.25% | 0.15% |
+| Row vs its own gradient: tokens per row | 35 | 58 | 106 | 257 | 628 | 1,551 | 3,296 | 5,317 |
+| body tokens per row | 2,043 | 3,909 | 8,001 | 16,282 | 32,574 | 64,983 | 130,036 | 246,306 |
+| body tokens' share of the down7 energy score | 11% | 12% | 14% | 17% | 18% | 18% | 15% | 9% |
+| rows needing 0 body tokens (row vs own, this cos) | 52% | 45% | 41% | 32% | 29% | 27% | 27% | 29% |
+| answer CE (mean) | 1.599 | 1.662 | 1.721 | 1.789 | 1.908 | 2.036 | 2.004 | 2.015 |
+
+cos 0.9:
+
+| rule | 2k (T≈2k) | 4k (T≈4k) | 8k (T≈8k) | 16k (T≈17k) | 32k (T≈34k) | 64k (T≈67k) | 128k (T≈134k) | 256k (T≈253k) |
+|---|---|---|---|---|---|---|---|---|
+| eval_size rows (steps) | 512 (32) | 512 (32) | 512 (32) | 512 (32) | 512 (32) | 512 (32) | 192 (12) ⚠ | 80 (5) ⚠ |
+| Global oracle (16-row step) | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.01] | 0.04% [0.00, 0.12] | 0.00% [0.00, 0.00] |
+| Per-row quota | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.01% [0.00, 0.02] | 0.16% [0.00, 0.46] | 0.00% [0.00, 0.00] |
+| Per-document quota | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.03% [0.01, 0.06] | 0.26% [0.15, 0.41] | 0.29% [0.00, 0.83] | 0.00% [0.00, 0.00] |
+| Random | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 0.00% [0.00, 0.00] | 1.77% [0.51, 3.38] | 7.09% [4.48, 10.17] | 4.24% [0.00, 9.92] | 0.00% [0.00, 0.00] |
+| Global oracle (16-row step): tokens per row | 0 | 0 | 0 | 0 | 0 | 3 | 56 | 0 |
+| Per-row quota: tokens per row | 0 | 0 | 0 | 0 | 0 | 6 | 207 | 0 |
+| Per-document quota: tokens per row | 0 | 0 | 0 | 0 | 9 | 172 | 377 | 0 |
+| Row vs its own gradient (mean / median) | 0.18% / 0.00% | 0.17% / 0.00% | 0.15% / 0.00% | 0.25% / 0.00% | 0.41% / 0.00% | 0.70% / 0.00% | 0.81% / 0.00% | 0.51% / 0.00% |
+| Row vs its own gradient: geometric mean over rows with k > 0 | 0.32% | 0.24% | 0.17% | 0.18% | 0.22% | 0.21% | 0.26% | 0.19% |
+| Row vs its own gradient: tokens per row | 4 | 7 | 12 | 40 | 133 | 440 | 1,016 | 1,254 |
+| body tokens per row | 2,043 | 3,909 | 8,001 | 16,282 | 32,574 | 64,983 | 130,036 | 246,306 |
+| body tokens' share of the down7 energy score | 11% | 12% | 14% | 17% | 18% | 18% | 15% | 9% |
+| rows needing 0 body tokens (row vs own, this cos) | 69% | 65% | 59% | 52% | 57% | 58% | 64% | 74% |
+| answer CE (mean) | 1.599 | 1.662 | 1.721 | 1.789 | 1.908 | 2.036 | 2.004 | 2.015 |
+
+Per task (row vs its own gradient, cos 0.95):
+
+| task | 2k | 4k | 8k | 16k | 32k | 64k | 128k | 256k |
+|---|---|---|---|---|---|---|---|---|
+| contradiction: row vs own gradient | 5.27% (121 tok) | 4.98% (189 tok) | 4.21% (331 tok) | 5.36% (865 tok) | 7.17% (2,324 tok) | 9.50% (5,962 tok) | 10.21% (12,837 tok) | 8.55% (21,007 tok) |
+| nq: row vs own gradient | 0.02% (0 tok) | 0.05% (2 tok) | 0.04% (3 tok) | 0.17% (28 tok) | 0.23% (76 tok) | 0.17% (109 tok) | 0.10% (135 tok) | 0.06% (160 tok) |
+| oolong: row vs own gradient | 0.04% (1 tok) | 0.05% (2 tok) | 0.26% (21 tok) | 0.03% (5 tok) | 0.03% (10 tok) | 0.12% (77 tok) | 0.11% (148 tok) | 0.02% (46 tok) |
+| outlier: row vs own gradient | 0.85% (18 tok) | 0.91% (38 tok) | 0.81% (68 tok) | 0.79% (130 tok) | 0.31% (103 tok) | 0.08% (56 tok) | 0.05% (64 tok) | 0.02% (55 tok) |
+| contradiction: documents per row (CE) | 56 (0.555) | 92 (0.669) | 187 (0.785) | 379 (0.953) | 762 (1.144) | 1,461 (1.311) | 2,907 (1.449) | 5,646 (1.578) |
+| nq: documents per row (CE) | 11 (1.808) | 23 (1.728) | 48 (1.749) | 104 (1.748) | 208 (1.858) | 413 (2.102) | 825 (2.362) | 1,615 (2.304) |
+| oolong: documents per row (CE) | 39 (3.307) | 78 (3.323) | 151 (3.251) | 303 (3.168) | 584 (3.199) | 1,136 (3.195) | 2,237 (2.583) | 4,851 (2.642) |
+| outlier: documents per row (CE) | 14 (0.726) | 28 (0.930) | 57 (1.099) | 111 (1.286) | 220 (1.432) | 451 (1.535) | 901 (1.623) | 1,680 (1.536) |
+| rows per task | 128 | 128 | 128 | 128 | 128 | 128 | 48 | 20 |
+
+Fits. The step-level fits are unreliable on the base: shares are about 0 up to 8k and fall again past 64k. A length
+whose mean share is below 0.1% is left out of the log fit, and the range used is shown.
+
+| quantity | slope of log(share) vs log(T) [95% CI] | implied tokens ∝ T^ |
+|---|---|---|
+| docq7_body|cos0.9 (67k-134k) | 0.133 [-4.955, 1.803] | 1.13 |
+| rand7_body|cos0.9 (34k-134k) | 0.633 [-3.945, 1.777] | 1.63 |
+| rowself|cos0.9 (2k-253k) | 0.353 [0.227, 0.433] | 1.35 |
+| down7_body|cos0.95 (17k-253k) | 0.117 [-0.765, 0.462] | 1.12 |
+| rowq7_body|cos0.95 (17k-253k) | 0.277 [-0.843, 0.643] | 1.28 |
+| docq7_body|cos0.95 (17k-253k) | -0.393 [-0.897, -0.109] | 0.61 |
+| rand7_body|cos0.95 (4k-253k) | 0.568 [0.254, 1.339] | 1.57 |
+| rowself|cos0.95 (2k-253k) | 0.127 [0.053, 0.184] | 1.13 |
+| row-level log k ~ log T + log CE, cos0.9 | 1.017 [0.883, 1.162] (log CE coef -4.33) | 2.02 |
+| row-level log k ~ log T (no CE term, rows with k > 0, n=1326), cos0.9 | -0.040 [-0.144, 0.065] | 0.96 |
+| row-level, solved rows only (CE<0.01, n=0), cos0.9 | 0.000 [0.000, 0.000] | 1.00 |
+| row-level, contradiction, cos0.9 | 0.404 [0.321, 0.488] | 1.40 |
+| row-level, nq, cos0.9 | -0.468 [-0.707, -0.212] | 0.53 |
+| row-level, oolong, cos0.9 | -1.003 [-1.662, -0.493] | -0.00 |
+| row-level, outlier, cos0.9 | -0.672 [-0.871, -0.464] | 0.33 |
+| row-level log k ~ log T + log CE, cos0.95 | 0.428 [0.322, 0.537] (log CE coef -3.96) | 1.43 |
+| row-level log k ~ log T (no CE term, rows with k > 0, n=2106), cos0.95 | -0.486 [-0.558, -0.409] | 0.51 |
+| row-level, solved rows only (CE<0.01, n=0), cos0.95 | 0.000 [0.000, 0.000] | 1.00 |
+| row-level, contradiction, cos0.95 | 0.177 [0.149, 0.205] | 1.18 |
+| row-level, nq, cos0.95 | -0.184 [-0.311, -0.051] | 0.82 |
+| row-level, oolong, cos0.95 | -0.053 [-0.582, 0.392] | 0.95 |
+| row-level, outlier, cos0.95 | -0.835 [-0.912, -0.758] | 0.16 |
+
+mt11, extra rows for comparison (cos 0.95):
+
+| quantity | 2k | 4k | 8k | 16k | 32k | 64k | 128k | 256k |
+|---|---|---|---|---|---|---|---|---|
+| Row vs its own gradient: geometric mean over rows with k > 0 | 2.01% | 1.97% | 2.82% | 3.02% | 3.01% | 3.44% | 3.45% | 3.15% |
+| body tokens' share of the down7 energy score | 10% | 16% | 30% | 36% | 39% | 41% | 43% | 39% |
+| rows needing 0 body tokens (row vs own, this cos) | 74% | 58% | 30% | 15% | 10% | 6% | 6% | 5% |
+
+Figures: `grad_sparsity_rowlevel.png` (three checkpoints: rows needing no body tokens; geometric-mean share for the
+rest). `grad_sparsity_vs_length.png` now shows the base as dotted x lines; zero shares are not drawn on the log axis.
+
+**Query layout check (base, 8k, 512 rows each):** the query-after layout gives somewhat larger step-level shares than
+query-both. Per-row quota at cos 0.95 is 0.19% vs 0.01%, global oracle 0.05% vs 0.01%, random 9.8% vs 2.5%. Both are
+tiny next to mt11's 8.7%. Row-level numbers barely move: 40% vs 41% of rows need no body tokens, geometric mean 0.99%
+vs 1.10%, CE 1.722 vs 1.721 (`data/base_8k_query_layout.json`). The layout does not change the picture.
 
 ## Max length on 8 GPUs
 
@@ -255,8 +383,8 @@ count.
   `--memprobe`, `--ce-only`), `gen_rows.py` (+ `.sbatch`), `run_sweep.sbatch` (1 node-local GPU), `run_sweep8.sbatch`
   / `run_memprobe8.sbatch` (8 GPUs, self-staging from S3), `analyze_sweep.py`, `plot_sweep.py`, `make_tables.py`,
   `export_results.py`, `stage_rows_weka.sh`, `HANDOFF.md`, `experiment_log_entry.json`.
-- Data: `research/token_routing/grad_concentration/length_sweep/data/` (summaries `sweep_mt11_dense_f1.json`, `sweep_mt4_dense_f7808.json`,
+- Data: `research/token_routing/grad_concentration/length_sweep/data/` (summaries `sweep_mt11_dense_f1.json`, `sweep_mt4_dense_f7808.json`, `sweep_base_q35_4b_markerfix.json`, `base_8k_query_layout.json`,
   `smoke8k_f7808_original_rows.json`; memory probes; CE scans; `results_*.jsonl` = the `ops result` rows). Per-step
   arrays: mooney `/data/prasann/gradlen/results/<label>/step_XXXX.npz` + `rows_XXXX.json`. Rows: mooney
   `/data/prasann/gradlen/tok/{after,both}/`, S3 `_transfer/gradlen/tok/`, weka `prasanns/gradlen/tok/`.
-- `ops result` rows: experiment `grad_composition`, run ids `gsl-m11f1-<len>` / `gsl-f7808-<len>`.
+- `ops result` rows: experiment `grad_composition`, run ids `gsl-m11f1-<len>` / `gsl-f7808-<len>` / `gsl-base-<len>`. The base rows include exact 0.0 shares that `--check` flags; they are real (cos already reached with 0 body tokens), not a bug.

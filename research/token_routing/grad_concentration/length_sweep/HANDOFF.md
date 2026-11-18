@@ -30,9 +30,21 @@ Branch `claude/grad-sparsity-vs-length` (cut from `claude/merge-side-branches-11
 - Not done: artifact (main agent), a CE-matched comparison across lengths beyond the row-level regression, model
   seeds.
 
+## 2026-11-18: base-model arm (done, nothing running)
+- Checkpoint q35-4b-base-markerfix: the S3 model-only copy `_transfer/gradconc/q35-4b-base-markerfix` (the weka base
+  mt11 trained from) -> mooney `/data/prasann/gradconc/ckpts/q35-4b-base-markerfix`. A second, older copy exists at
+  mooney `/data/prasann/ctc_suite/bases/q35-4b-base-markerfix` (13 GB, Aug 27; not used).
+- Runs: `base-<len>` (2k-256k, query both, same eval sizes as mt11) + `base-8k-after` (layout check); slurm
+  5202812-5202828 on mooney, `--qos=preemptive`.
+- Outputs: `data/sweep_base_q35_4b_markerfix.json`, `data/base_8k_query_layout.json`, `data/results_base.jsonl` (ops
+  rows gsl-base-*; exact-0.0 warnings are real), `grad_sparsity_rowlevel.png`, base lines in the main plot.
+- Result: the rise does not survive inside the context on the base (row slope -0.49); see the record.
+
 ## Traps hit
 - `sbatch --export=ALL,X=a,b` splits on commas: export comma lists in the environment, then `--export=ALL`.
 - Long time limits showed `ReqNodeNotAvail` on mooney for a while (short ones started); it cleared by itself.
 - The results dir name `results/` is gitignored repo-wide (`research/**/results*/`): committed outputs live in `data/`.
+- On the base model the CE term in the row-level regression is a task effect (CE separates tasks), not a
+  difficulty control; use the no-CE row slope and per-task slopes there.
 - `--memprobe` tiles a short row: memory and speed only, its CE means nothing; use `--ce-only` on real rows for
   numerics.
