@@ -80,3 +80,13 @@ Validation: `src/test/scripts/leaky_sft_sweep_test.py` checks the exact six
 scalers, identical normalized configs, one epoch, strict initialization, model
 construction, resource flags, selected source and the exact 32K filter boundary. The original frozen
 LeakySFT tests remain unchanged.
+
+## Regular-SFT throughput control
+
+`Qwen3.5-4B-contradiction-32k-SFT-speed.py` uses `cpt_loss_scaler=None`,
+selecting the original SFT path without context-loss diagnostics. It hard-stops
+at 300 steps while retaining the original one-epoch LR schedule, two GPUs,
+65,536-token global batch, checkpoint cadence, seed, and input stream.
+Compare steps 51–300 with the same steps in the LeakySFT jobs; report checkpoint
+intervals separately from steady-state throughput. Launch with the same Gantry
+resources (Jupiter, urgent, minimum runtime 1h) and a fresh run/save name.

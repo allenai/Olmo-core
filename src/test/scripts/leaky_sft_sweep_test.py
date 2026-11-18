@@ -120,3 +120,22 @@ def test_filter_boundary_preserves_complete_examples(tmp_path, family):
         )
     assert retained.count(1) == 32766 and retained.count(2) == 32767
     assert retained.count(99) == 2 and 3 not in retained
+
+
+def test_regular_sft_speed_benchmark_only_changes_loss_path_and_hard_stop(family):
+    import importlib.util
+
+    path = Path(family.__file__).with_name("Qwen3.5-4B-contradiction-32k-SFT-speed.py")
+    spec = importlib.util.spec_from_file_location("regular_sft_speed", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    ctx = context("a00")
+    baseline = family.build_leaky_experiment(ctx, arm="a00").as_config_dict()
+    cfg = module.build_experiment_config(ctx)
+    assert cfg.train_module.cpt_loss_scaler is None
+    assert cfg.trainer.hard_stop.value == 300 and cfg.trainer.hard_stop.unit == "steps"
+    result = cfg.as_config_dict()
+    result["train_module"]["cpt_loss_scaler"] = baseline["train_module"]["cpt_loss_scaler"]
+    assert "hard_stop" not in baseline["trainer"]
+    result["trainer"].pop("hard_stop")
+    assert result == baseline
