@@ -340,8 +340,9 @@ def main():
     if a.steps:
         s0, s1 = (int(v) for v in a.steps.split(":"))
         s1 = min(s1, nsteps)
-    log(f"{len(order)} rows = {nsteps} steps of {STEP_ROWS}; this job: steps {s0}..{s1 - 1}; lengths "
-        f"{min(len(r['ids']) for r in order)}-{max(len(r['ids']) for r in order)}")
+    if order:
+        log(f"{len(order)} rows = {nsteps} steps of {STEP_ROWS}; this job: steps {s0}..{s1 - 1}; lengths "
+            f"{min(len(r['ids']) for r in order)}-{max(len(r['ids']) for r in order)}")
 
     model = build_model(P.find_ckpt(a.ckpt), devices, a.yarn)
     lins_all = P.list_linears(model)
@@ -364,7 +365,7 @@ def main():
         return {str(d): round(torch.cuda.max_memory_allocated(d) / 2**30, 1) for d in devices}
 
     if a.memprobe:
-        base = order[0]
+        base = next(iter(rows_by_task.values()))[0]
         reps = int(np.ceil(a.memprobe / len(base["ids"])))
         ids = np.tile(base["ids"][:-1], reps)[:a.memprobe - len(base["ids"])]
         row = dict(ids=np.concatenate([ids, base["ids"]]),
