@@ -1,6 +1,6 @@
 # recipe_cpt handoff (current state; keep this file current)
 
-Updated 2026-11-17 19:50 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
+Updated 2026-11-17 21:40 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
 from `origin/claude/early-loss-proxy-d6e886` @ d52756c12. Design and smoke numbers: `README.md`.
 
 ## Running (Beaker, ai2/flex2, budget ai2/oe-other, urgent, jupiter, 1 node x 8 H100)
@@ -16,8 +16,8 @@ ETA ~21:30 PT.
 
 **Recipe run DONE 19:37 PT** (resumed job loaded step 1936 and exited 0; final export written). Metered total 5,818.6 PF actual vs 32,402 PF dense-equivalent (0.180x). Earlier, at 18:50 PT: all 1,938 steps trained, then it crashed (gloo "Connection reset by peer", the known
 end-of-run crash) before the final export. The step-1936 async save started 13 s before the crash. Relaunched with
-`--resume` into the same folder: Beaker 01M7P93PVEW7CGMJJHM8FB62F4 (minRuntime 1h). The dense run may crash the same
-way at its end; relaunch it the same way:
+`--resume` into the same folder: Beaker 01M7P93PVEW7CGMJJHM8FB62F4 (minRuntime 1h). **Dense run, 21:31 PT:** same end-of-run gloo crash after step 1938; relaunched with `--resume` as Beaker
+01M7PJBFE2JKZ1VC5JT48SFJTT (minRuntime 1h). Command used:
 `launch_recipe_cpt.py --arms dense --resume --min-runtime 1h launch`.
 
 Step-242 export + dev-CE jobs are already queued (WAITMAX 1 h): recipe 01M7P31BY9F7YMYMBQE1ARXANK, dense
@@ -50,7 +50,7 @@ CE per kept target on training rows (⚠ 320 training rows, not held out).
 | 242 | 124.9M | 1.4206 | 3.18 | 1.2584 |
 | 484 | 249.8M | 1.4139 | 3.17 | 1.2505 |
 | 968 | 499.6M | 1.4057 | 3.26 | 1.2474 |
-| 1936 | 999.2M | 1.4051 | 3.14 | |
+| 1936 | 999.2M | 1.4051 | 3.14 | 1.2284 |
 | final (1938) | 1.000B | 1.4051 | (= step 1936, 2 more steps) | |
 
 ## Next (in order)
