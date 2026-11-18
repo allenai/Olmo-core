@@ -6,7 +6,9 @@ for TAG in "$@"; do
   O=/tmp/claude-3018/elp_beaker_results/$TAG; mkdir -p "$O"
   python3 - "$HERE/state_beaker.json" "$TAG" <<'P' | while read -r ID RUN; do
 import json, sys
-for k, v in json.load(open(sys.argv[1])).items():
+s = json.load(open(sys.argv[1]))
+if len(s) == 1 and isinstance(next(iter(s.values())), dict) and "tag" not in next(iter(s.values())): s = next(iter(s.values()))
+for k, v in s.items():
     if isinstance(v, dict) and v.get("tag") == sys.argv[2]:
         for r in v["runs"]: print(k, r)
 P

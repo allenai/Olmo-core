@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 02:35",
+   "text": "Pool mtb16kx4 finished (31,232 rows = every mtb16k row plus 3x new rows; 0 prompt overlap with heldout v2 / v3 / v4; on mooney, sneetches and weka). Equal-FLOP runs launched on it (Beaker, tag x4, 1,982 PF each with the schedule stretched to the arm's step count): LoRA 50%/20% 1,525 steps, LoRA 50% after block 16 905 steps, recipe 20%/7% 1,952 steps, full fine-tune 50%/20% 1,108 steps, dense LoRA 642 steps. Wave-1 additions: adaptive keep by gradient mass keeps most tokens (0.79-0.97x cost for CE 0.117-0.122), no useful dial; mixture-of-depths dropped (0.134-0.137 at 0.66-0.77x). Hub tab republished as version 121 with the new-phase table."
+  },
+  {
    "t": "11-18 02:00",
    "text": "Wave 1: 12 of 18 arms finished (16k CE at step 488, 320 rows, seed 0). LoRA + drop tracks dense LoRA (0.121 at 0.76x dense per step) at keep 50% after block 16 (0.119, 0.54x) and nearly at keep 50% then 20% (0.125, 0.32x); the recipe's 20% then 7% does not (0.145-0.150, 0.22x). Keep ramp 20% to 90% with full fine-tuning is the best drop arm (0.113, 0.64x). Dense steps mixed into the recipe (0.129-0.131 at 0.33-0.36x) do not beat a gentler constant drop; mixture-of-depths is worse than plain dropping (0.137 at 0.66x). Dense full fine-tune reference still running. Wave 2 launched on Beaker (10 jobs): rungs between 50%/20% and 20%/7% (35%/12%, 50%/10%, three stages 50/20/7, earlier first cut 50/30/15), keep ramps with LoRA and cheaper ramps, seed-1 repeats of dense LoRA, LoRA 50%/20% and the full fine-tune ramp."
   },

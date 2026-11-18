@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-18 01:58 PT",
+ "updated": "2026-11-18 02:26 PT",
  "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Wave 1 (18 full-epoch arms) is two-thirds done and wave 2 (10 arms) is running; the dense full fine-tune reference is not in yet, so no speedup is stated. Reading so far at 16k (320 rows, one seed): with LoRA, dropping to 50% then 20% of the tokens stays within 0.01 CE of dense LoRA at 0.42x its step cost; the recipe's 20% then 7% does not.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 02:35",
+   "text": "Pool mtb16kx4 finished (31,232 rows = every mtb16k row plus 3x new rows; 0 prompt overlap with heldout v2 / v3 / v4; on mooney, sneetches and weka). Equal-FLOP runs launched on it (Beaker, tag x4, 1,982 PF each with the schedule stretched to the arm's step count): LoRA 50%/20% 1,525 steps, LoRA 50% after block 16 905 steps, recipe 20%/7% 1,952 steps, full fine-tune 50%/20% 1,108 steps, dense LoRA 642 steps. Wave-1 additions: adaptive keep by gradient mass keeps most tokens (0.79-0.97x cost for CE 0.117-0.122), no useful dial; mixture-of-depths dropped (0.134-0.137 at 0.66-0.77x). Hub tab republished as version 121 with the new-phase table."
+  },
   {
    "t": "11-18 02:00",
    "text": "Wave 1: 12 of 18 arms finished (16k CE at step 488, 320 rows, seed 0). LoRA + drop tracks dense LoRA (0.121 at 0.76x dense per step) at keep 50% after block 16 (0.119, 0.54x) and nearly at keep 50% then 20% (0.125, 0.32x); the recipe's 20% then 7% does not (0.145-0.150, 0.22x). Keep ramp 20% to 90% with full fine-tuning is the best drop arm (0.113, 0.64x). Dense steps mixed into the recipe (0.129-0.131 at 0.33-0.36x) do not beat a gentler constant drop; mixture-of-depths is worse than plain dropping (0.137 at 0.66x). Dense full fine-tune reference still running. Wave 2 launched on Beaker (10 jobs): rungs between 50%/20% and 20%/7% (35%/12%, 50%/10%, three stages 50/20/7, earlier first cut 50/30/15), keep ramps with LoRA and cheaper ramps, seed-1 repeats of dense LoRA, LoRA 50%/20% and the full fine-tune ramp."
@@ -305,7 +309,7 @@
    "title": "Dense baseline family: full fine-tune, LoRA, fixed re-mix",
    "what": "Under the 11-18 rule LoRA and a fixed short/long row mix belong to the dense baseline. Full-epoch dense full fine-tune on the standard pool (488 steps, 1,982 PF) and on the 80/20 re-mix with 3x the rows (1,464 steps), with 16k held-out probes; dense LoRA full epoch already exists. Each drop arm is compared with the dense run that uses the same adapter and pool.",
    "status": "running",
-   "result": ""
+   "result": "Interim: the 4x-row pool (mtb16kx4, 31,232 rows, 1,952 steps; contains every mtb16k row plus 3x new rows; prompt overlap with all held-out sets 0) is built and staged. Dense LoRA is running on it for the FLOPs of one dense full fine-tune epoch (642 steps); dense full fine-tune references (2 seeds, standard pool) and the 80/20 re-mix reference are still running."
   },
   {
    "id": "ladder",
@@ -336,8 +340,8 @@
    "family": "dynamic drop (11-18 rules)",
    "title": "Adaptive keep by predicted gradient mass",
    "what": "Per document, keep the fewest tokens whose predicted gradient mass covers 99% / 95% / 90% (one cut after block 7, full fine-tuning). The budget is set per row by the router instead of a fixed share; a target of 100% is dense, so the target is a single dial from dense downwards.",
-   "status": "running",
-   "result": ""
+   "status": "done",
+   "result": "No useful dial (seed 0, 16k CE at step 488, 320 rows). Covering 99 / 95 / 90% of the predicted gradient mass keeps most tokens: step cost 0.97x / 0.88x / 0.79x dense, CE 0.118 / 0.122 / 0.117. A fixed keep of 50% after block 7 gets 0.121 at 0.60x, so the mass target saves less for the same loss; the predicted mass is spread over too many tokens for a coverage threshold to cut deeply."
   },
   {
    "id": "sparsebwd",
@@ -352,8 +356,16 @@
    "family": "dynamic drop (11-18 rules)",
    "title": "Mixture-of-depths: dropped tokens skip blocks but stay in the pass",
    "what": "From block 8 on, 80% of the document tokens skip 3 of every 4 blocks (or every other block) and rejoin at the others, so no token leaves the forward pass and kept tokens see the full context at the refresh blocks. Full fine-tuning.",
+   "status": "dropped",
+   "result": "Worse than plain dropping (seed 0, 16k CE at step 488, 320 rows): skipping 3 of every 4 blocks 0.137 at 0.66x dense per step, skipping every other block 0.134 at 0.77x, against 0.121 at 0.60x for dropping 50% of the tokens after block 7. Dropped."
+  },
+  {
+   "id": "morerows",
+   "family": "dynamic drop (11-18 rules)",
+   "title": "Equal FLOPs, more rows: do cheap arms reach the dense final loss?",
+   "what": "Give each arm the FLOPs of one dense full fine-tune epoch (1,982 PF) on a pool with 4x the rows, with its LR schedule stretched over its own step count: LoRA keep 50% then 20% (1,525 steps), LoRA keep 50% after block 16 (905), the old recipe 20% then 7% (1,952, the whole pool), full fine-tune keep 50% then 20% (1,108), and dense LoRA as the equal-FLOP baseline (642). The test of the deepest-loss rule: at equal FLOPs, which arm ends lowest, and how many FLOPs does each need to reach the dense full fine-tune final loss.",
    "status": "running",
-   "result": "Interim (seed 0, 320 rows): skipping 3 of every 4 blocks gives 16k CE 0.137 at step 488 at 0.66x dense per step, worse than simply dropping 50% of the tokens after block 7 (0.121 at 0.60x). The every-other-block arm is still running."
+   "result": ""
   }
  ],
  "best_by_hour": [

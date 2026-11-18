@@ -29,6 +29,12 @@
   lo-e50-30-15 (3:0.5,7:0.3,16:0.15), lo-c7ramp (0.2->0.9), lo-c7ramp10to60, ft-c7ramp10to90, seed 1: lo-r50to20, ft-c7ramp, denselora.
 - NEXT after dense FT lands: state FLOP ratios vs dense FT at its deepest level; when mtb16kx4 is staged run the tracking rungs
   (lo-r50to20, best ramp) on it at the FLOPs of one dense FT epoch; keep lowering cost from the cheapest rung that tracks.
+- 02:35 pool mtb16kx4 DONE (agent pool4x finished, commit ab7640b81; mooney + sneetches /data/prasann/early_loss_proxy/shards/mtb16kx4, weka same rel path).
+  EQUAL-FLOP RUNS (Beaker tag x4, --data mtb16kx4, --extra "--max-tokens steps*262144" so the LR schedule spans the arm's own steps, 1,982 PF each):
+  lo-r50to20-x4 1,525 steps, lo-c16k50-x4 905, recipe-x4 1,952 (whole pool, no max-tokens), denselora-x4 642 (baseline), ft-r50to20-x4 1,108. ~3-3.5 h.
+  CHECK at first probe: LR at step 100 of lo-r50to20-x4 should be ~9.6e-6 (schedule over 1,525 steps); if it is ~9.7e-6+ the token budget maps differently.
+  w1 extra readings: ft-m99/m95/m90 0.118/0.122/0.117 at 0.97/0.88/0.79x (no dial: done); ft-mod8s2 0.134/0.77x (mod dropped); ft-r50to20 sd1 0.119.
+  w2 at step 150 (live): lo-p50-20-7 +0.007 vs dense LoRA, lo-r50to10 +0.010, lo-r35to12 +0.012, lo-c7ramp +0.014, lo-e50-30-15 +0.061 (early cut at block 3 hurts).
 - Agent sparsebwd (ad0d4e2aae6f7333a, branch loop/sparsebwd, Beaker tag sbw): dense forward, gradients only through kept tokens.
 - ft-* arms = softtoken, LR 5e-6, RECIPE without the three --st-otr-early-lora* flags (full fine-tune + drop, 0.30x dense/step).
 - Scoring: ladder.py (same-adapter dense baseline: ft-* -> w1/dense, LoRA arms -> v3/denselora, *-mix80x3 -> w1/dense-mix80x3).
