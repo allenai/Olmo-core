@@ -3,40 +3,74 @@
   {
    "run": "bud-dense-b495-sd0",
    "baseline": "w1-dense-sd0",
-   "done": false,
+   "done": true,
    "eval_size": 320,
-   "steps": 60,
-   "pf": null,
-   "cost_vs_dense_ft": null,
-   "ce16k_last": 0.2468,
+   "steps": 122,
+   "pf": 490.9397234593321,
+   "cost_vs_dense_ft": 0.9911566733815154,
+   "ce16k_last": 0.18877402463549514,
    "track": [
     [
      30,
-     0.32577,
+     0.3257820651633665,
      null
     ],
     [
      60,
-     0.2468,
+     0.24680954571231267,
+     null
+    ],
+    [
+     90,
+     0.20842731947632273,
+     null
+    ],
+    [
+     122,
+     0.18877402463549514,
      null
     ]
    ],
-   "vs_same": null,
-   "vs_dense_ft": null
+   "vs_same": {
+    "ref_step": 100,
+    "level": 0.21010888674063607,
+    "x": 1.1417262414195155,
+    "final": false,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   },
+   "vs_dense_ft": {
+    "ref_step": 100,
+    "level": 0.21010888674063607,
+    "x": 1.1417262414195155,
+    "final": false,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
   },
   {
    "run": "bud-dense-b991-sd0",
    "baseline": "w1-dense-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 60,
+   "steps": 180,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.265395,
+   "ce16k_last": 0.16403000000000004,
    "track": [
     [
      60,
      0.265395,
+     null
+    ],
+    [
+     120,
+     0.19293,
+     null
+    ],
+    [
+     180,
+     0.16403000000000004,
      null
     ]
    ],
@@ -48,14 +82,19 @@
    "baseline": "v3-denselora-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 80,
+   "steps": 160,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.21152,
+   "ce16k_last": 0.17767,
    "track": [
     [
      80,
      0.21152,
+     null
+    ],
+    [
+     160,
+     0.17767,
      null
     ]
    ],
@@ -67,14 +106,19 @@
    "baseline": "w1-dense-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 140,
+   "steps": 280,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.19175,
+   "ce16k_last": 0.164575,
    "track": [
     [
      140,
      0.19175,
+     null
+    ],
+    [
+     280,
+     0.164575,
      null
     ]
    ],
@@ -86,15 +130,63 @@
    "baseline": "v3-denselora-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 100,
+   "steps": 320,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.211295,
+   "ce16k_last": 0.142675,
    "track": [
     [
      100,
      0.211295,
      0.21320960031589492
+    ],
+    [
+     210,
+     0.16602,
+     null
+    ],
+    [
+     320,
+     0.142675,
+     null
+    ]
+   ],
+   "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "bud-lo-p50-20-7-b991-sd0",
+   "baseline": "v3-denselora-sd0",
+   "done": false,
+   "eval_size": 320,
+   "steps": 210,
+   "pf": null,
+   "cost_vs_dense_ft": null,
+   "ce16k_last": 0.18115499999999998,
+   "track": [
+    [
+     210,
+     0.18115499999999998,
+     null
+    ]
+   ],
+   "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "bud-lo-r10to3-b991-sd0",
+   "baseline": "v3-denselora-sd0",
+   "done": false,
+   "eval_size": 320,
+   "steps": 330,
+   "pf": null,
+   "cost_vs_dense_ft": null,
+   "ce16k_last": 0.195795,
+   "track": [
+    [
+     330,
+     0.195795,
+     null
     ]
    ],
    "vs_same": null,
@@ -105,14 +197,48 @@
    "baseline": "v3-denselora-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 90,
+   "steps": 280,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.22023,
+   "ce16k_last": 0.15165,
    "track": [
     [
      90,
      0.22023,
+     null
+    ],
+    [
+     190,
+     0.17260499999999998,
+     null
+    ],
+    [
+     280,
+     0.15165,
+     null
+    ]
+   ],
+   "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "bud-lo-r50to20-b991-sd0",
+   "baseline": "v3-denselora-sd0",
+   "done": false,
+   "eval_size": 320,
+   "steps": 380,
+   "pf": null,
+   "cost_vs_dense_ft": null,
+   "ce16k_last": 0.13951,
+   "track": [
+    [
+     190,
+     0.17453499999999997,
+     null
+    ],
+    [
+     380,
+     0.13951,
      null
     ]
    ],
@@ -124,14 +250,43 @@
    "baseline": "v3-denselora-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 140,
+   "steps": 410,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.23851500000000003,
+   "ce16k_last": 0.158205,
    "track": [
     [
      140,
      0.23851500000000003,
+     null
+    ],
+    [
+     270,
+     0.18254,
+     null
+    ],
+    [
+     410,
+     0.158205,
+     null
+    ]
+   ],
+   "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "bud-recipe-b991-sd0",
+   "baseline": "v3-denselora-sd0",
+   "done": false,
+   "eval_size": 320,
+   "steps": 270,
+   "pf": null,
+   "cost_vs_dense_ft": null,
+   "ce16k_last": 0.19023,
+   "track": [
+    [
+     270,
+     0.19023,
      null
     ]
    ],
@@ -4105,10 +4260,10 @@
    "baseline": null,
    "done": false,
    "eval_size": 320,
-   "steps": 600,
+   "steps": 700,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.11006500000000001,
+   "ce16k_last": 0.09178500000000002,
    "track": [
     [
      100,
@@ -4139,6 +4294,11 @@
      600,
      0.11006500000000001,
      null
+    ],
+    [
+     700,
+     0.09178500000000002,
+     null
     ]
    ],
    "vs_same": null,
@@ -4149,10 +4309,10 @@
    "baseline": "w1-dense-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 400,
+   "steps": 600,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.140685,
+   "ce16k_last": 0.11618500000000001,
    "track": [
     [
      100,
@@ -4173,6 +4333,16 @@
      400,
      0.140685,
      0.12216186731930065
+    ],
+    [
+     488,
+     0.12098,
+     0.11371779909313773
+    ],
+    [
+     600,
+     0.11618500000000001,
+     null
     ]
    ],
    "vs_same": null,
@@ -4239,10 +4409,10 @@
    "baseline": "v3-denselora-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 400,
+   "steps": 600,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.14672999999999997,
+   "ce16k_last": 0.11693499999999998,
    "track": [
     [
      100,
@@ -4263,6 +4433,16 @@
      400,
      0.14672999999999997,
      0.12302149172464852
+    ],
+    [
+     488,
+     0.13033,
+     0.12125086314408691
+    ],
+    [
+     600,
+     0.11693499999999998,
+     null
     ]
    ],
    "vs_same": null,
@@ -4463,10 +4643,10 @@
    "baseline": "x4-denselora-x4-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 1000,
+   "steps": 1200,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.088935,
+   "ce16k_last": 0.081755,
    "track": [
     [
      100,
@@ -4506,6 +4686,11 @@
     [
      1000,
      0.088935,
+     null
+    ],
+    [
+     1200,
+     0.081755,
      null
     ]
    ],
@@ -4598,71 +4783,95 @@
   {
    "run": "x4-recipe-x4-sd0",
    "baseline": "x4-denselora-x4-sd0",
-   "done": false,
+   "done": true,
    "eval_size": 320,
-   "steps": 1600,
-   "pf": null,
-   "cost_vs_dense_ft": null,
-   "ce16k_last": 0.090555,
+   "steps": 1952,
+   "pf": 1761.6272882779076,
+   "cost_vs_dense_ft": 0.22228398917340153,
+   "ce16k_last": 0.08252682643760637,
    "track": [
     [
      100,
-     0.26110500000000003,
+     0.26110079358913935,
      0.20275102252198848
     ],
     [
      200,
-     0.20260000000000003,
+     0.20261482986970805,
      0.17224306702992181
     ],
     [
      300,
-     0.18844,
+     0.1884259527665563,
      0.1490808588525397
     ],
     [
      400,
-     0.1618,
+     0.1618090451025637,
      0.13098088929764345
     ],
     [
      488,
-     0.151975,
+     0.15197098551871022,
      0.11703302017776877
     ],
     [
      600,
-     0.13921,
+     0.13920706582648562,
      0.1026731460238807
     ],
     [
      800,
-     0.11758999999999997,
+     0.11758983301915578,
      null
     ],
     [
      1000,
-     0.11010500000000001,
+     0.11010370345102274,
      null
     ],
     [
      1200,
-     0.098765,
+     0.0987646869791206,
      null
     ],
     [
      1400,
-     0.09386000000000001,
+     0.09386634167130978,
      null
     ],
     [
      1600,
-     0.090555,
+     0.09055127279789303,
+     null
+    ],
+    [
+     1800,
+     0.08329993005936558,
+     null
+    ],
+    [
+     1952,
+     0.08252682643760637,
      null
     ]
    ],
-   "vs_same": null,
-   "vs_dense_ft": null
+   "vs_same": {
+    "ref_step": 642,
+    "level": 0.10097499140720174,
+    "x": 1.873140294383969,
+    "final": true,
+    "ref_final": 0.10097499140720174,
+    "ref_steps": 642
+   },
+   "vs_dense_ft": {
+    "ref_step": 488,
+    "level": 0.11371779909313773,
+    "x": 2.4314244752775225,
+    "final": true,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
   }
  ],
  "eval_size": 320,

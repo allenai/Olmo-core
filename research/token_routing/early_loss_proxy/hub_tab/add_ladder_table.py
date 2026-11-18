@@ -32,7 +32,7 @@ DESC = {  # arm -> plain description
     "ft-sbw-c0k20": "full FT, dense forward, gradient only through kept 20% (input)", "ft-c3ramp": "full FT, keep ramp 20% to 90% (block 3)",
     "ft-c7ramp10to60": "full FT, keep ramp 10% to 60% (block 7)", "ft-c7ramp-tail10": "full FT, keep ramp 20% to 90% + last 10% dense",
     "ft-r50to20-ex50": "full FT, keep 50% then 20%, half of the budget random", "ft-r50to20-rnd": "full FT, keep 50% then 20%, random tokens",
-    "lo-p50-10-5": "LoRA, keep 50% / 10% / 5% at blocks 7 / 16 / 24",
+    "lo-p50-10-5": "LoRA, keep 50% / 10% / 5% at blocks 7 / 16 / 24", "lo-r10to3": "LoRA, keep 10% then 3%",
     "ft-hold50": "full FT, 20% / 7% held for half the run, then ramp to 90% / 90%", "ft-hold70": "full FT, 20% / 7% held for 70% of the run, then ramp to dense",
     "ft-r2ramp": "full FT, both cuts ramp 20% / 7% to 90% / 90%", "ft-rlow": "full FT, both cuts ramp 20% / 7% to 60% / 40%",
     "r20to7-invkeep": "full FT 20% / 7%, gradient x 1/keep at the cuts", "r20to7-invmass": "full FT 20% / 7%, gradient x 1/covered mass", "r20to7-sqrt": "full FT 20% / 7%, gradient x sqrt(1/keep)",
@@ -114,6 +114,35 @@ if os.path.exists(ep):
 </table></div>
 </div></details>
 <!-- AR:LADDER:END -->''')
+# ---- FLOPs-to-match table (hub_tab/ftm.json, written by ftm.py): finished runs only, against the dense baseline frontier ----
+fp = os.path.join(os.path.dirname(lp), "ftm.json")
+if os.path.exists(fp):
+    Fm = json.load(open(fp))
+    def ratio(r, key):
+        x = r.get("x_" + key)
+        if x is None: return ""
+        if r.get(f"x_{key}_exact"): return f"<b>{x:.2f}×</b>"
+        return (f"&gt; {x:.2f}× (dense has no point this deep)" if r.get(f"x_{key}_lower_bound") else f"&lt; {x:.2f}×")
+    def nm(r):
+        arm = r["arm"]; base = arm.rsplit("-b", 1)[0] if re.search(r"-b\d+$", arm) else (arm[:-3] if arm.endswith("-x4") else arm)
+        return e(DESC.get(base, DESC.get(arm, arm)))
+    fr = "".join(f'<tr><td>{nm(q)}<br><code>{e(q["run"])}</code></td><td class="n">{q["pool"]}</td><td class="n">{q["steps"]:,}</td><td class="n">{q["pf"]:,.0f}</td><td class="n">{q["ce"]:.3f}</td></tr>' for q in Fm["frontier"])
+    dr = [r for r in Fm["runs"] if r["kind"] == "drop"]
+    big = [r for r in dr if r["pool"] != "mtb16k"]; one = [r for r in dr if r["pool"] == "mtb16k"]
+    row = lambda r: (f'<tr><td>{nm(r)}<br><code>{e(r["run"])}</code></td><td class="n">{r["pool"]}</td><td class="n">{r["steps"]:,}</td><td class="n">{r["pf"]:,.0f}</td>'
+                     f'<td class="n">{r["ce"]:.3f}</td><td class="n">{ratio(r, "base")}</td><td class="n">{ratio(r, "dense_ft")}</td></tr>')
+    hd = '<tr><th>drop arm</th><th class="n">pool</th><th class="n">steps</th><th class="n">total PF</th><th class="n">final 16k CE</th><th class="n">FLOPs-to-match vs dense baseline family</th><th class="n">vs dense full fine-tune only</th></tr>'
+    ftm_block = f'''<details class="sec" open id="ar-ftm-sec"><summary><h2 id="ar-ftm">FLOPs-to-match from finished runs (complete schedules)</h2><span class="n">3 tables · {len(dr)} drop runs</span></summary><div class="secbody">
+<p class="note sv">Each finished run is one point: total training PF and final 16k held-out CE. The baseline is the Pareto frontier of the dense runs (dense full fine-tune and dense LoRA at every budget run so far, since LoRA and more rows are available to dense training). A drop arm's ratio is the PF that frontier needs for the arm's final loss (log-linear interpolation between frontier points) divided by the arm's PF. "&gt;" marks arms whose loss is below every dense point so far: the ratio is then only a lower bound, and it tightens as the larger dense runs finish.</p>
+<p class="note">⚠ eval_size 320, below 500; one seed per point; differences under about 0.007 CE are noise, which moves a ratio by roughly 10-20% on the flat part of the dense curve.</p>
+<h3>Dense baseline frontier</h3>
+<div class="tbl"><table><tr><th>dense run</th><th class="n">pool</th><th class="n">steps</th><th class="n">total PF</th><th class="n">final 16k CE</th></tr>{fr}</table></div>
+<h3>Drop arms on the larger pools (equal-FLOP and budget-matched runs)</h3>
+<div class="tbl"><table>{hd}{"".join(row(r) for r in big)}</table></div>
+<details class="more tblmore"><summary>One-epoch drop arms on the standard pool <span class="mh">{len(one)} rows</span></summary><div class="tbl"><table>{hd}{"".join(row(r) for r in one)}</table></div></details>
+</div></details>
+'''
+    block = block.replace('<details class="sec" open id="ar-ladder-sec">', ftm_block + '<details class="sec" id="ar-ladder-sec">')
 h = re.sub(r"<!-- AR:LADDER:START -->.*?<!-- AR:LADDER:END -->\n?", "", h, flags=re.S)
 anchor = '<details class="sec" open id="ar-progress-sec">'
 if anchor not in h:
