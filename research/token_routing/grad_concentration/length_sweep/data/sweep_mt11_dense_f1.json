@@ -510,6 +510,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.09529429271788104,
    "rowself_k_cos0.9": 0.002745771984500705,
    "rowself_k_cos0.9_median": 0.0,
    "rowself_k_cos0.9_ci": [
@@ -3613,6 +3614,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.1612216294620339,
    "rowself_k_cos0.9": 0.004518598999743045,
    "rowself_k_cos0.9_median": 0.0,
    "rowself_k_cos0.9_ci": [
@@ -6716,6 +6718,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.30218007615940223,
    "rowself_k_cos0.9": 0.012133231117201366,
    "rowself_k_cos0.9_median": 0.0011238317294483722,
    "rowself_k_cos0.9_ci": [
@@ -9819,6 +9822,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.3625591309792071,
    "rowself_k_cos0.9": 0.013136326190773276,
    "rowself_k_cos0.9_median": 0.004597038350743184,
    "rowself_k_cos0.9_ci": [
@@ -12922,6 +12926,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.38604035251864843,
    "rowself_k_cos0.9": 0.012762678258911444,
    "rowself_k_cos0.9_median": 0.005279627776221005,
    "rowself_k_cos0.9_ci": [
@@ -16025,6 +16030,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.4144339689839853,
    "rowself_k_cos0.9": 0.011680450912582754,
    "rowself_k_cos0.9_median": 0.004983836592123048,
    "rowself_k_cos0.9_ci": [
@@ -18968,6 +18974,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.4299178429161354,
    "rowself_k_cos0.9": 0.012968405900869158,
    "rowself_k_cos0.9_median": 0.0056043104714017765,
    "rowself_k_cos0.9_ci": [
@@ -20255,6 +20262,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.3874179679027293,
    "rowself_k_cos0.9": 0.020307534477737692,
    "rowself_k_cos0.9_median": 0.005278394119326304,
    "rowself_k_cos0.9_ci": [

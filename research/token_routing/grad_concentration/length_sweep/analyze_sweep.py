@@ -201,6 +201,7 @@ def ce_adjusted(runs, rng, t=0.95, solved=0.01):
             bb.append(np.linalg.lstsq(X1[i], y1[i], rcond=None)[0][1])
         return {"slope_logT": float(b), "ci": np.percentile(bb, [2.5, 97.5]).tolist(), "n_rows": int(sel.sum())}
 
+    out["all_rows_no_ce"] = plain(ok)
     out["solved_rows"] = plain(ok & (ce < solved))
     out["per_task"] = {tk: plain(ok & (task == tk)) for tk in sorted(set(task))}
     return out
@@ -236,7 +237,8 @@ def main():
     for k_, v in adj.items():
         if v:
             print(f"row-level {k_}: slope logT {v['slope_logT']:.3f} {np.round(v['slope_logT_ci'], 3)} | logCE "
-                  f"{v['slope_logCE']:.3f}; solved rows {v['solved_rows']['slope_logT']:.3f} "
+                  f"{v['slope_logCE']:.3f}; no CE term {v['all_rows_no_ce']['slope_logT']:.3f} "
+                  f"{np.round(v['all_rows_no_ce']['ci'], 3)}; solved rows {v['solved_rows']['slope_logT']:.3f} "
                   f"{np.round(v['solved_rows']['ci'], 3)} (n={v['solved_rows']['n_rows']}); per task "
                   + ", ".join(f"{tk} {x['slope_logT']:.2f}" for tk, x in v['per_task'].items()))
     json.dump({"runs": runs, "fits": fits, "row_level_regression": adj}, open(a.out, "w"), indent=1)

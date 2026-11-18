@@ -510,6 +510,7 @@
      "rowself_nan_rows_cos0.95": 0
     }
    },
+   "body_energy_share_mean": 0.20058045928064416,
    "rowself_k_cos0.9": 0.004447200587279182,
    "rowself_k_cos0.9_median": 0.0,
    "rowself_k_cos0.9_ci": [
