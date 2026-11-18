@@ -88,7 +88,7 @@ def main():
     if fit:
         sub += f"; per-row quota slope {fit['slope']:.2f} [{fit['ci95'][0]:.2f}, {fit['ci95'][1]:.2f}]"
     fig.suptitle(f"Gradient sparsity vs context length (blocks 7-31 weight gradient, cos {a.t})\n{sub}", fontsize=10)
-    fig.tight_layout(rect=(0, 0.1, 1, 0.93))
+    fig.tight_layout(rect=(0, 0.14, 1, 0.93))
     fig.savefig(a.out, dpi=150)
     print(f"wrote {a.out}")
 

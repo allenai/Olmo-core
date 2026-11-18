@@ -2,19 +2,21 @@
 experiment: grad_composition
 title: Per-token x per-block gradient / activation composition of the answer loss over CTC fine-tuning (Qwen3.5-4B), to guide train-time token / layer router design
 status: done
-updated: 2026-11-10
+updated: 2026-11-17
 branch: claude/grad-composition-6f09c7
 launcher: research/token_routing/grad_composition/launch.py (Beaker, SFT), run_probe_lambda.sbatch (Lambda), run_cpt_probe.sbatch (cubbins 8xH200, CPT)
 records:
+  - records/grad-sparsity-vs-length.md
   - records/grad-composition.md
   - records/cpt-gradient-maps.md
 results:
+  - research/token_routing/grad_concentration/length_sweep/data/ (length sweep summaries, branch claude/grad-sparsity-vs-length; per-step arrays mooney /data/prasann/gradlen/results/)
   - research/token_routing/grad_concentration/gradmaps_cpt/ (CPT maps, summaries, oracle tables; raw arrays cubbins /data/prasann/grad_composition/cpt_gradmap*, cpt_oracle/)
   - research/token_routing/grad_composition/results/ (gitignored; <label>/probe.json + probe_stats.npz; Lambda copy /accounts/projects/sewonm/prasann/ctc_suite/gradcomp_out/)
 artifacts:
   - https://claude.ai/artifact/BVaPjZdAKjETHdQDdGqqtQ
 wandb_group:
-next_step: CPT gradient maps DONE 2026-11-10 (branch claude/cpt-gradmaps-34a768; record cpt-gradient-maps.md; artifact section 'CPT gradient maps'; ops gradcomp_cptmap_* / gradcomp_cptoracle_*). Open: projection-ranked CPT oracle (fairer upper bound than energy); Qwen3.5-4B CPT contrast needs its cpt_u1B checkpoints staged from weka.
+next_step: Length sweep DONE 2026-11-17 (branch claude/grad-sparsity-vs-length, record grad-sparsity-vs-length.md; ops gsl-m11f1-* / gsl-f7808-*; artifact pending, main agent). Open: the Gated DeltaNet forward breaks past ~262k tokens (blocks a 512k point; 8 H200s fit 524,288 in memory). Earlier: CPT gradient maps DONE 2026-11-10 (branch claude/cpt-gradmaps-34a768; record cpt-gradient-maps.md; artifact section 'CPT gradient maps'; ops gradcomp_cptmap_* / gradcomp_cptoracle_*). Open: projection-ranked CPT oracle (fairer upper bound than energy); Qwen3.5-4B CPT contrast needs its cpt_u1B checkpoints staged from weka.
 ---
 
 # grad_composition
@@ -86,6 +88,15 @@ later layers, gradient vs activation targets, and why strmatch / grouping resist
   the full gradient (16 x 32k, jobs 4431064-71): dense CPT 34% own label, 37% rest of the same 1k chunk, 18.5% 1-4k,
   8.7% 4-16k, 2.1% >16k (base 22 / 29 / 29 / 16 / 4). Ran at most 2 GPUs at a time from 14:20 at the main session's
   request (shared 8-GPU cap with ctxfid).
+
+## 2026-11-17: gradient sparsity vs context length (2k-256k)
+Prasann: the concentration table "for increasing context lengths (whatever the maximum is that can fit on 8 GPUs)".
+probe.py protocol unchanged (block 7, blocks 7-31 weight gradient, 16-row steps). mt11 dense f1, cos 0.95: per-row
+quota 6.1% (2k) -> 8.6% (64k) -> 17.0% (256k, eval_size 80); slope of log share on log T +0.19 [0.15, 0.23] (tokens
+~T^1.19), never 1/T; global oracle 0.64% -> 4.5% (+0.47); per-document 12% -> 22-25%; random 53-77%. Same rise on
+mt4 f7808 (8k-trained), which reproduces the published 8k table. CE rises with length (confound). Max valid length
+256k: 8 H200s fit 524,288 tokens (121 GiB/GPU) but the dense forward gives CE 2-4 at 306-350k and NaN from 368k
+(Gated DeltaNet), YaRN or not. Record: records/grad-sparsity-vs-length.md.
 
 ## Current best numbers
 <!-- One line per number: task, rung, metric=value, eval_size, ±SE, cot label, source path.
