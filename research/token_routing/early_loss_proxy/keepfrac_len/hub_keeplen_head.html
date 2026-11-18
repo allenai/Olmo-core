@@ -1,6 +1,6 @@
 <h3>Keep vs length: does the best keep fall as rows get longer?</h3>
 <p><b>No.</b> Best router keep is 20-40% at every length the proxy resolves (8k 40% tied with 20%; 16k 20-40% tie;
-32k 40-70% beat the 20%/7% recipe at matched FLOPs on both seeds; 64k 20%). Low keeps break harder the longer the
+32k 40% beats the 20%/7% recipe at matched FLOPs on both seeds, 70% ties; 64k 20%, 40% slightly worse on both seeds). Low keeps break harder the longer the
 rows (10%/3.5% vs the recipe at matched FLOPs: +0.003 CE at 8k, +0.08 at 64k; 2.5% and 1.25% collapse at 32k/64k).
 Constant fraction fits; a constant kept-token count is rejected. 2k/4k saturate. Gold-aware keep <code>grJ</code>: 6-8x
 vs dense full FT on the mean but stalls on outlier; <code>grJc</code> (doc drop on contradiction only) is outlier-safe at

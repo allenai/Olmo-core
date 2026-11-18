@@ -5,7 +5,7 @@
   "track": "64k",
   "who": "side session (keepfrac-len)",
   "title": "Does the recipe's best keep fraction fall as context grows? Keep 70%..1.25% at 2k-64k, single-length pools, dense held-out-loss proxy",
-  "result": "No. Best keep is 20-40% at every length the proxy resolves and does not fall with length: 8k 40% (tied with 20%), 16k 20-40% tie, 32k 40-70% beat the recipe at matched FLOPs (40%: -0.019 / -0.010 CE on 2 seeds; 70%: -0.022, 1 seed), 64k 20% (40% +0.015, 1 seed). Low keeps break harder the longer the rows: 10% is +0.003 CE vs the recipe at matched FLOPs at 8k, +0.002/+0.014 at 16k, +0.011/+0.031 at 32k, +0.080 at 64k; 2.5% collapses at 32k/64k and 1.25% at 64k (+0.60). Constant fraction fits; constant kept-token count (would predict 20/10/5% at 16/32/64k) is rejected. 2k/4k saturate (held-out CE ~0.01): unresolvable. Below 20% the per-step FLOP saving flattens (64k: 0.185 -> 0.140x dense) because blocks 0-6 stay dense. Seed 1 of 64k 40/20/10% and a 70% arm at 32k (seed 1) / 64k still running. Proxy: eval_size 144 per length (below 500), ranks only, cannot resolve < ~0.03-0.05 CE.",
+  "result": "No. Best keep is 20-40% at every length the proxy resolves and does not fall with length: 8k 40% (tied with 20%), 16k 20-40% tie, 32k 40% beats the recipe at matched FLOPs on both seeds (-0.019 / -0.010 CE; 70% ties: -0.022 / -0.002), 64k 20% (40% +0.015 / +0.017 on both seeds). Low keeps break harder the longer the rows: 10% vs the recipe at matched FLOPs +0.003 CE at 8k, +0.002/+0.014 at 16k, +0.011/+0.031 at 32k, +0.080/+0.033 at 64k; 2.5% collapses at 32k/64k and 1.25% at 64k (+0.60). Constant fraction fits; a constant kept-token count (would predict 20/10/5% at 16/32/64k) is rejected. 2k/4k saturate (held-out CE ~0.01): unresolvable. Below 20% the per-step FLOP saving flattens (64k: 0.185 -> 0.140x dense) because blocks 0-6 stay dense. Margins between 20% and 40% are no larger than the seed spread (up to 0.027 CE at 64k). A 70% arm at 64k is still running. Proxy: eval_size 144 per length (below 500), ranks only, cannot resolve < ~0.03-0.05 CE.",
   "match": "same base (q35-4b-base-markerfix), per-length pool (3 tasks x 1,200 rows) and held-out rows (48/task), one epoch = 225 steps with the real LR schedule; FLOPs from the trainer meter; reference = dense full fine-tune",
   "record": "records/keep-fraction-vs-length.md",
   "branch": "claude/keepfrac-vs-length-4bf10c",
@@ -24,29 +24,29 @@
       "k70",
       "+0.006 / +0.018",
       "+0.007",
-      "-0.022",
+      "-0.022 / -0.002",
       "-"
      ],
      [
       "k40",
-      "-0.004 / -0.004",
+      "-0.003 / -0.004",
       "-0.001 / +0.014",
       "-0.019 / -0.010",
-      "+0.015"
+      "+0.014 / +0.017"
      ],
      [
       "k20",
       "+0.000 / +0.000",
       "+0.000 / +0.000",
       "+0.000 / +0.000",
-      "+0.000"
+      "+0.000 / +0.000"
      ],
      [
       "k10",
       "+0.003",
-      "+0.002 / +0.014",
+      "+0.001 / +0.014",
       "+0.011 / +0.031",
-      "+0.080"
+      "+0.080 / +0.033"
      ],
      [
       "k5",
@@ -98,7 +98,7 @@
       "2.63",
       "2.99 / 2.53",
       "2.94",
-      "3.57",
+      "3.57 / 2.54",
       "-"
      ],
      [
@@ -108,7 +108,7 @@
       "3.57 / 3.11",
       "3.27 / 2.76",
       "3.50 / 2.98",
-      "2.87"
+      "2.87 / 2.30"
      ],
      [
       "k20",
@@ -117,7 +117,7 @@
       "3.37 / 3.23",
       "2.89 / 3.49",
       "2.70 / 3.01",
-      "3.61"
+      "3.61 / 2.72"
      ],
      [
       "k10",
@@ -126,7 +126,7 @@
       "3.21",
       "3.13 / 2.80",
       "not reached / not reached",
-      "not reached"
+      "not reached / not reached"
      ],
      [
       "k5",

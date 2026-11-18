@@ -1,6 +1,13 @@
 # keepfrac_len handoff
 
-## 2026-11-17 18:25 PT (takeover session, latest)
+## 2026-11-17 19:35 PT (takeover session, latest)
+- 64k seed 1 (k40/k20/k10) and 32k k70 seed 1 landed, scored (finalize.sh), record verdict + hub head + log entry
+  updated, 20 new ops rows added (411 total for this study). Only 64k k70 sd0 is still running
+  (elp-kl64k-bkBX8XWK0M = 01M7P6T8EEKK6T00K0BX8XWK0M, ~21:30 PT). When it lands: `bash finalize.sh`, add the 64k k70
+  line to the record verdict / hub head / experiment_log_entry.json (then status done), and add its ops rows
+  (run id elp-kl64k-k70-sd0-probe only).
+
+## 2026-11-17 18:25 PT
 - Record written: `records/keep-fraction-vs-length.md` (verdict: best keep 20-40% at every resolvable length, does
   not fall; low keeps break harder with length; constant fraction fits). Chart `keepfrac_vs_length.png`, hub block
   `hub_keeplen_block.html`, `experiment_log_entry.json` (2 entries: tracks 64k [running] and mechanism [done]),
