@@ -120,6 +120,9 @@ def summarize_run(label, d, rng):
             out[f"rowself_tokens_cos{t}"] = float(np.nanmean(kr * nbr))
             out[f"rowself_tokens_cos{t}_ci"] = boot(kr * nbr, rng)
             out[f"_rows_rowself_cos{t}"] = kr.tolist()
+        out["_rows_ce"] = [x["ce"] for x in rows]
+        out["_rows_T"] = [x["T"] for x in rows]
+        out["_rows_task"] = [x["task"] for x in rows]
         for task in sorted({x["task"] for x in rows}):
             sel = np.array([x["task"] == task for x in rows])
             tr = [x for x in rows if x["task"] == task]
@@ -162,6 +165,45 @@ def fit(points, rng, key="rowq7_body", t=0.95, kind="step"):
             "lengths": [float(np.exp(x)) for x in xs]}
 
 
+def ce_adjusted(runs, rng, t=0.95, solved=0.01):
+    """Row level, pooled over lengths: log k_row = a + b log T + c log CE (OLS), with a bootstrap over rows; plus the
+    plain slope over lengths restricted to solved rows (CE < ``solved``) and per task."""
+    k, T, ce, task = [], [], [], []
+    for s in runs:
+        if "_rows_ce" not in s:
+            return None
+        k += s[f"_rows_rowself_cos{t}"]
+        T += s["_rows_T"]
+        ce += s["_rows_ce"]
+        task += s["_rows_task"]
+    k, T, ce, task = (np.array(v) for v in (k, T, ce, task))
+    ok = np.isfinite(k) & (k > 0)
+    X = np.c_[np.ones(ok.sum()), np.log(T[ok]), np.log(np.maximum(ce[ok], 1e-4))]
+    y = np.log(k[ok])
+    beta = np.linalg.lstsq(X, y, rcond=None)[0]
+    bs = []
+    for _ in range(B):
+        i = rng.integers(0, len(y), len(y))
+        bs.append(np.linalg.lstsq(X[i], y[i], rcond=None)[0])
+    bs = np.array(bs)
+    out = {"n_rows": int(ok.sum()), "slope_logT": float(beta[1]), "slope_logT_ci": np.percentile(bs[:, 1], [2.5, 97.5]).tolist(),
+           "slope_logCE": float(beta[2]), "slope_logCE_ci": np.percentile(bs[:, 2], [2.5, 97.5]).tolist()}
+
+    def plain(sel):
+        X1 = np.c_[np.ones(sel.sum()), np.log(T[sel])]
+        y1 = np.log(k[sel])
+        b = np.linalg.lstsq(X1, y1, rcond=None)[0][1]
+        bb = []
+        for _ in range(B):
+            i = rng.integers(0, len(y1), len(y1))
+            bb.append(np.linalg.lstsq(X1[i], y1[i], rcond=None)[0][1])
+        return {"slope_logT": float(b), "ci": np.percentile(bb, [2.5, 97.5]).tolist(), "n_rows": int(sel.sum())}
+
+    out["solved_rows"] = plain(ok & (ce < solved))
+    out["per_task"] = {tk: plain(ok & (task == tk)) for tk in sorted(set(task))}
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", required=True, help="label=dir,... (one checkpoint series; label = length tag)")
@@ -188,7 +230,14 @@ def main():
             fits[f"{r}|cos{t}"] = fit([s for s in runs if s["steps"] >= a.min_steps_fit], rng, r, t)
         if all("_rows_rowself_cos0.95" in s for s in runs):
             fits[f"rowself|cos{t}"] = fit(runs, rng, t=t, kind="row")
-    json.dump({"runs": runs, "fits": fits}, open(a.out, "w"), indent=1)
+    adj = {f"cos{t}": ce_adjusted(runs, rng, t) for t in TARGETS}
+    for k_, v in adj.items():
+        if v:
+            print(f"row-level {k_}: slope logT {v['slope_logT']:.3f} {np.round(v['slope_logT_ci'], 3)} | logCE "
+                  f"{v['slope_logCE']:.3f}; solved rows {v['solved_rows']['slope_logT']:.3f} "
+                  f"{np.round(v['solved_rows']['ci'], 3)} (n={v['solved_rows']['n_rows']}); per task "
+                  + ", ".join(f"{tk} {x['slope_logT']:.2f}" for tk, x in v['per_task'].items()))
+    json.dump({"runs": runs, "fits": fits, "row_level_regression": adj}, open(a.out, "w"), indent=1)
     for k, v in fits.items():
         if v:
             print(f"fit {k}: slope {v['slope']:.3f} [{v['ci95'][0]:.3f}, {v['ci95'][1]:.3f}]")
