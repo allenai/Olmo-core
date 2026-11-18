@@ -1,6 +1,6 @@
 # recipe_cpt handoff (current state; keep this file current)
 
-Updated 2026-11-17 21:40 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
+Updated 2026-11-17 22:05 PT. **Both CPT runs DONE; every checkpoint exported and scored.** Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
 from `origin/claude/early-loss-proxy-d6e886` @ d52756c12. Design and smoke numbers: `README.md`.
 
 ## Running (Beaker, ai2/flex2, budget ai2/oe-other, urgent, jupiter, 1 node x 8 H100)
@@ -16,7 +16,7 @@ ETA ~21:30 PT.
 
 **Recipe run DONE 19:37 PT** (resumed job loaded step 1936 and exited 0; final export written). Metered total 5,818.6 PF actual vs 32,402 PF dense-equivalent (0.180x). Earlier, at 18:50 PT: all 1,938 steps trained, then it crashed (gloo "Connection reset by peer", the known
 end-of-run crash) before the final export. The step-1936 async save started 13 s before the crash. Relaunched with
-`--resume` into the same folder: Beaker 01M7P93PVEW7CGMJJHM8FB62F4 (minRuntime 1h). **Dense run, 21:31 PT:** same end-of-run gloo crash after step 1938; relaunched with `--resume` as Beaker
+`--resume` into the same folder: Beaker 01M7P93PVEW7CGMJJHM8FB62F4 (minRuntime 1h). **Dense run DONE 21:58 PT** (resumed from step 1936, exit 0, export written; metered 31,884.8 PF). Earlier, at 21:31 PT: same end-of-run gloo crash after step 1938; relaunched with `--resume` as Beaker
 01M7PJBFE2JKZ1VC5JT48SFJTT (minRuntime 1h). Command used:
 `launch_recipe_cpt.py --arms dense --resume --min-runtime 1h launch`.
 
@@ -51,11 +51,11 @@ CE per kept target on training rows (⚠ 320 training rows, not held out).
 | 484 | 249.8M | 1.4139 | 3.17 | 1.2505 |
 | 968 | 499.6M | 1.4057 | 3.26 | 1.2474 |
 | 1936 | 999.2M | 1.4051 | 3.14 | 1.2284 |
-| final (1938) | 1.000B | 1.4051 | (= step 1936, 2 more steps) | |
+| final (1938) | 1.000B | 1.4051 | (= step 1936, 2 more steps) | 1.2285 |
 
 ## Next (in order)
 
-1. As each checkpoint lands (check with `ops status`, or the save folder via a Beaker job), export it and score
+1. DONE for all checkpoints of both runs (exports in `recipe_cpt/bases/rcpt-q35-4b-{recipe,dense}-u1B-step{242,484,968,1936,final}`). For reference: as each checkpoint lands (check with `ops status`, or the save folder via a Beaker job), export it and score
    dev CE, one 1-GPU job each (~6 min). Recipe:
    `RUN=rcpt-q35-4b-recipe-u1B STEP=242 ARM=recipe bash research/token_routing/recipe_cpt/post_ckpt_beaker.sh`.
    Dense: `ARM=dense`. Final: `STEP=final`. Gantry must be on PATH:

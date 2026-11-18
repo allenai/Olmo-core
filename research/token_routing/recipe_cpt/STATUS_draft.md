@@ -1,7 +1,7 @@
 ---
 experiment: recipe_cpt
 title: Continued pre-training of Qwen3.5-4B at 32k with the FLOP-drop recipe (whole-model LoRA r64 + online two-stage router 20%/7%) vs dense full-FT CPT, 1B tokens, checkpoints at 125M/250M/500M/1B as SFT bases
-status: active
+status: active (CPT runs done 2026-11-17; downstream SFT waits on Prasann)
 updated: 2026-11-17
 branch: claude/recipe-cpt-q35-4b (pushed; cut from claude/early-loss-proxy-d6e886 @ d52756c12)
 launcher: research/token_routing/recipe_cpt/launch_recipe_cpt.py
@@ -11,7 +11,7 @@ records:
 artifacts:
 results: ops result show --experiment recipe_cpt
 wandb_group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/rcpt-q35-4b
-next_step: export + dev-CE each checkpoint as it lands (post_ckpt_beaker.sh), then recipe/dense SFT on mt4 s1952 from each base (launch_sft_from_cpt.py)
+next_step: Prasann decides on downstream SFT from the exported bases (launch_sft_from_cpt.py) given the recipe-CPT dev-CE regression; cleanup of extra checkpoints also waits on him
 ---
 
 # recipe_cpt
@@ -44,6 +44,7 @@ Teacher-forced full-attention CE on cpt_dev (held-out source part 28, 64k rows),
 |---|---|---|---|---|---|---|
 | base q35-4b-markerfix | cpt_dev / 64k | full CE 1.3199 | 32 ⚠ eval_size=32 | n/a | no-cot (TF CE) | ops result (job 01M7NYFYY2SCBYFF0P6NZFK703) |
 | recipe step 242 (124.9M tokens, constant LR) | cpt_dev / 64k | full CE 1.4206 vs base 1.3199 (+0.10); rows 1-5 1.202 vs 1.121; bins 0-2k/2-8k/8-16k/16-32k/32k+ 1.597/1.446/1.395/1.360/1.442 vs base 1.551/1.358/1.299/1.262/1.333 | 32 ⚠ eval_size=32 | n/a | no-cot (TF CE) | ops result (job 01M7P31BY9F7YMYMBQE1ARXANK) |
+| recipe vs dense CPT, all checkpoints | cpt_dev / 64k | recipe 1.4206 / 1.4139 / 1.4057 / 1.4051 vs dense 1.2584 / 1.2505 / 1.2474 / 1.2285 at 125M / 250M / 500M / 1B (base 1.3199) | 32 ⚠ eval_size=32 | n/a | no-cot (TF CE) | ops result; HANDOFF.md |
 | 20-step smokes: dense / loradense / recipe 5e-6 / 1e-5 / 2e-5 | cpt_dev / 64k | rows 1-5 CE 1.095 / 1.080 / 1.237 / 1.292 / 1.288 vs base 1.121 | 8 ⚠ eval_size=8 (direction only) | n/a | no-cot (TF CE) | ops result; README |
 
 Smoke throughput (8 x H100): recipe 3.30 s/step, ~20k tok/s/GPU, 19.1 GiB peak active, 0.179x dense FLOPs/step.
