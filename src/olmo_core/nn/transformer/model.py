@@ -1846,7 +1846,7 @@ class Transformer(nn.Module):
                 if sbw is not None:
                     # online router sparse_bwd: rows a cut dropped stay in the forward but carry no gradient
                     n_chk = int(getattr(self, "_sbw_checks", 0))
-                    if block_idx == len(self.blocks) - 1 and n_chk < int(os.environ.get("OLMO_OTR_SBW_CHECKS", "8")):
+                    if block_idx == len(self.blocks) - 1 and n_chk < int(os.environ.get("OLMO_OTR_SBW_CHECKS", "24")):
                         # check (first few forwards): the last block's raw output gradient on dropped vs kept rows
                         self._sbw_checks = n_chk + 1
                         m_ = sbw.clone()
