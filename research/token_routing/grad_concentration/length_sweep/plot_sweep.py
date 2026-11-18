@@ -44,11 +44,14 @@ def main():
     ap.add_argument("--overlay", default="")
     ap.add_argument("--label", default="mt11 dense f1 (rows <= 64k)")
     ap.add_argument("--overlay-label", default="mt4 dense 7,808 rows/task (8k)")
+    ap.add_argument("--overlay2", default="", help="third series, dotted with x markers (e.g. the untrained base)")
+    ap.add_argument("--overlay2-label", default="base Qwen3.5-4B (no fine-tuning)")
     ap.add_argument("--t", type=float, default=0.95)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     S = json.load(open(a.summary))
     O = json.load(open(a.overlay)) if a.overlay else None
+    O2 = json.load(open(a.overlay2)) if a.overlay2 else None
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
     for ax, what in zip(axes, ("frac", "tok")):
         for r, name, col, mk in RULES:
@@ -58,6 +61,9 @@ def main():
             if O:
                 x2, y2, _, _ = series(O, r, a.t, what)
                 ax.plot(x2, y2, color=col, marker=mk, lw=1.5, ms=6, ls="--", mfc="white")
+            if O2:
+                x3, y3, _, _ = series(O2, r, a.t, what)
+                ax.plot(x3, y3, color=col, marker="x", lw=1.5, ms=7, ls=(0, (1, 1.5)))
         if what == "frac":  # guide: what a constant kept-token count (the per-row quota's 2k count) would look like
             x, y, _, _ = series(S, "rowq7_body", a.t, "frac")
             ax.plot(x, y[0] * x[0] / x, color="#999999", ls=":", lw=1.5, label="constant token count (slope -1)")
@@ -82,6 +88,9 @@ def main():
     if O:
         h.append(plt.Line2D([], [], color="#666666", ls="--", mfc="white", marker="o"))
         l.append(f"dashed: {a.overlay_label}")
+    if O2:
+        h.append(plt.Line2D([], [], color="#666666", ls=(0, (1, 1.5)), marker="x"))
+        l.append(f"dotted x: {a.overlay2_label}")
     fig.legend(h, l, loc="lower center", ncol=3, frameon=False, fontsize=9)
     fit = S["fits"].get(f"rowq7_body|cos{a.t}")
     sub = f"solid: {a.label}; bands = 95% bootstrap over steps"
