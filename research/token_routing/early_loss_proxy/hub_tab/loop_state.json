@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-18 14:58 PT",
+ "updated": "2026-11-18 15:29 PT",
  "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline (finished runs with complete schedules, 16k CE on 320 rows; two seeds at 495, 991 and 1,980 PF, one seed at 3,975 PF): token dropping with LoRA and a 50% / 20% / 7% keep over three cuts needs 2.3x, 2.1x and 2.4x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget up to 7,934 PF) at 495, 991 and 1,980 PF, and 1.9-2.0x at 3,975 PF on the 16x pool; the gain does not shrink with data over an 8-fold range of budgets. That is far from the 10-20x target: every attempt to go below about 0.3x dense per step (smaller keep shares, an earlier first cut, more stages, frozen early blocks, keep schedules, gradient compensation) lost per FLOP. In flight: runs at 3,964 PF on a 16x pool, and input document subsampling combined with the token drop.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 15:20",
+   "text": "Per-task FLOPs-to-match computed (ftm_task.py; 80 rows per task, rough): LoRA 50%/20%/7% is about 2x on contradiction, 2.3-2.9x on outlier, about 2x on reorder at every budget; the 20%/7% recipe is 3-3.8x on outlier but 1.2-1.7x on reorder and below 1x at 3,957 PF; qdmatch_nq is on a plateau (0.05-0.06) where ratios are not meaningful. Started an agent on per-task keep budgets (branch loop/taskbudget, tag tb)."
+  },
   {
    "t": "11-18 15:00",
    "text": "Document-drop follow-up complete except one failed control: keep 25% at 463 PF is 0.130 on two seeds (2.7x); subsampling the 8k rows too gives 0.134 (no gain). Verdict: a small-budget gain (2.7-2.9x at 465-990 PF) that is gone by 1,971 PF."
@@ -490,6 +494,14 @@
    "what": "The early blocks run on every token and are the cost floor. Remove a share of the non-gold documents of each row at the input (positions preserved, gold documents kept; uses the gold sidecar), constant or ramped up to the full row over training, and keep the 50% / 20% / 7% token drop above. Budget-matched at 495 PF, with dense LoRA + document subsampling as the control and per-task losses reported because removing distractors changes the outlier task.",
    "status": "running",
    "result": "Gain at small budgets that fades with data (16k CE on 320 rows; branch loop/docsub; uses gold-document labels). Keeping 25% of the distractor documents on 16k rows (gold kept, positions preserved; 8k and 4k rows untouched) on top of the 50% / 20% / 7% token drop: 0.130 at 463 PF on two seeds (2.7x; token drop alone 0.134, 2.3x), 0.093 at 986 PF on two seeds (2.8x; alone 0.100, 2.1-2.2x), but 0.073 at 1,971 PF on the 16x pool (2.5x; alone 0.074 on two seeds, 2.4x). Keep 10% is better still at 494 PF (0.121, 2.9x). Controls: dense LoRA + keep 25% and no token drop 0.175 at 496 PF (1.25x), so the document drop mostly helps the token-drop arm; keep 50% and ramps give nothing and hurt outlier; subsampling the 4k and 8k rows as well is much worse (0.167 at 488 PF). Subsampling the 8k rows as well gives no gain (0.134 at 491 PF). The dense control at 991 PF failed at startup and was not rerun."
+  },
+  {
+   "id": "taskbudget",
+   "family": "dynamic drop (11-18 rules)",
+   "title": "Per-task keep budgets",
+   "what": "The four tasks respond differently to dropping: the aggressive 20% / 7% budget is the best arm on outlier (3-4x per task) but loses on reorder, where every document is needed (1.2-1.7x, fading with data), and reorder is 60-70% of the mean loss; the gentler 50% / 20% / 7% budget holds about 2x on reorder. Give each task its own keep shares in the mixed batch: first hand-set as an existence test at 991 PF, then set online so that every task loses the same share of predicted gradient mass.",
+   "status": "running",
+   "result": ""
   }
  ],
  "best_by_hour": [
