@@ -734,6 +734,8 @@ class Attention(SequenceMixer):
         self.clip_qkv = clip_qkv
         self.use_head_qk_norm = use_head_qk_norm
         self.scalable_softmax = scalable_softmax
+        self._ssmax_cp_rank = 0
+        self._ssmax_cp_size = 1
         self.ssmax_scale: Optional[nn.Parameter] = None
         if scalable_softmax:
             if window_size is not None:
@@ -899,19 +901,30 @@ class Attention(SequenceMixer):
     ) -> torch.Tensor:
         if not self.scalable_softmax:
             return q
-        if self.cp_enabled:
+        if self.cp_enabled and getattr(self.backend, "uly", None) is None:
             raise NotImplementedError("Scalable-Softmax is not supported with context parallelism")
         if self.kv_cache_manager is not None:
             raise NotImplementedError("Scalable-Softmax is not supported with KV caching")
 
         if cu_doc_lens is None:
-            visible_lengths = torch.arange(1, q.shape[1] + 1, device=q.device)
+            offset = self._ssmax_cp_rank * q.shape[1] if self.cp_enabled else 0
+            visible_lengths = torch.arange(1 + offset, q.shape[1] + 1 + offset, device=q.device)
             visible_lengths = visible_lengths.unsqueeze(0).expand(q.shape[0], -1)
         else:
             boundaries = cu_doc_lens.to(device=q.device)
             token_indices = torch.arange(
                 q.shape[0] * q.shape[1], device=q.device, dtype=boundaries.dtype
             )
+            if self.cp_enabled:
+                # Ulysses scales Q before the head/sequence exchange. The
+                # local shard retains all heads, but document positions must
+                # use the original sequence coordinates, including pack cuts.
+                batch_indices = token_indices // q.shape[1]
+                token_indices = (
+                    batch_indices * q.shape[1] * self._ssmax_cp_size
+                    + token_indices % q.shape[1]
+                    + self._ssmax_cp_rank * q.shape[1]
+                )
             document_indices = torch.searchsorted(boundaries[1:], token_indices, right=True)
             document_starts = boundaries[document_indices]
             visible_lengths = (token_indices - document_starts + 1).view(q.shape[0], q.shape[1])
@@ -1224,7 +1237,10 @@ class Attention(SequenceMixer):
         uly: Optional[UlyssesContextParallelStyle] = None,
     ):
         """
-        Prepare the module for context-parallelism (ring attention).
+        Prepare the module for context parallelism.
+
+        Scalable-Softmax supports Ulysses, using original sequence/document
+        positions for the contiguous query shards. Ring layouts remain unsupported.
 
         .. important::
             This requires a backend that supports CP, such as "flash_2" or "te".
@@ -1233,11 +1249,11 @@ class Attention(SequenceMixer):
         :param ring: The ring context parallel style.
         :param uly: The ulysses context parallel style.
         """
-        if self.scalable_softmax:
-            raise OLMoConfigurationError(
-                "Scalable-Softmax is not supported with context parallelism"
-            )
+        if self.scalable_softmax and (ring is not None or uly is None):
+            raise OLMoConfigurationError("Scalable-Softmax context parallelism requires Ulysses")
         self.backend.apply_cp(cp_mesh, ring=ring, uly=uly)
+        self._ssmax_cp_rank = cp_mesh.get_local_rank()
+        self._ssmax_cp_size = cp_mesh.size()
 
     def init_weights(
         self,
