@@ -98,5 +98,15 @@
   "xw": null,
   "mem": null,
   "note": "Largest budget so far. LoRA 50% / 20% / 7% at the same budget: 0.065 (1.88x). The gain is about 2x from 495 PF to 3,975 PF."
+ },
+ {
+  "t": "11-18 11:00",
+  "arm": "lo-p50-20-7 (two seeds)",
+  "idea": "budget",
+  "x": 2.38,
+  "level": "1,980 PF: 16k CE 0.074 (mean of two seeds: 0.072 / 0.076); 320 rows",
+  "xw": null,
+  "mem": null,
+  "note": "Seed-averaged FLOPs-to-match against the seed-averaged dense frontier: 2.34x at 495 PF, 2.08x at 991 PF, 2.38x at 1,980 PF."
  }
 ]

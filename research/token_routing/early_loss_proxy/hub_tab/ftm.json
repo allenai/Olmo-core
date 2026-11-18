@@ -15,16 +15,17 @@
    ]
   },
   {
-   "run": "bud-denselora-b991-sd0",
+   "run": "bud-denselora-b991-sd0+1",
    "arm": "denselora-b991",
    "kind": "dense_lora",
    "pool": "mtb16kx4",
    "steps": 323,
-   "pf": 989.9762569094748,
-   "ce": 0.13859085752628744,
-   "seeds": 1,
+   "pf": 986.5991094492892,
+   "ce": 0.14283867570375153,
+   "seeds": 2,
    "ce_seeds": [
-    0.1386
+    0.1386,
+    0.1471
    ]
   },
   {
@@ -222,28 +223,6 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "x4-lo-p50-20-7-x4-sd0",
-   "arm": "lo-p50-20-7-x4",
-   "kind": "drop",
-   "pool": "mtb16kx4",
-   "steps": 1683,
-   "pf": 1980.0191803263929,
-   "ce": 0.07165015621776546,
-   "seeds": 1,
-   "ce_seeds": [
-    0.0717
-   ],
-   "base_pf": 5221.792634124521,
-   "x_base": 2.6372434600677677,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 5778.345813013855,
-   "x_dense_ft": 2.918328201275976,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
    "run": "x16-recipe-b3964-sd0",
    "arm": "recipe-b3964",
    "kind": "drop",
@@ -262,6 +241,29 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 5366.9923819948635,
    "x_dense_ft": 1.3561587101162915,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "x4-lo-p50-20-7-x4-sd0+1",
+   "arm": "lo-p50-20-7-x4",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1683,
+   "pf": 1980.326710860998,
+   "ce": 0.07404250544923344,
+   "seeds": 2,
+   "ce_seeds": [
+    0.0717,
+    0.0764
+   ],
+   "base_pf": 4707.45714639879,
+   "x_base": 2.3771113728765,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 5258.119690628207,
+   "x_dense_ft": 2.6551778864519298,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -420,24 +422,25 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "bud-lo-p50-20-7-b991-sd0",
+   "run": "bud-lo-p50-20-7-b991-sd0+1",
    "arm": "lo-p50-20-7-b991",
    "kind": "drop",
    "pool": "mtb16kx4",
    "steps": 841,
-   "pf": 988.6982205562531,
-   "ce": 0.09973676276022161,
-   "seeds": 1,
+   "pf": 988.4591658316074,
+   "ce": 0.09962248441279371,
+   "seeds": 2,
    "ce_seeds": [
-    0.0997
+    0.0997,
+    0.0995
    ],
-   "base_pf": 2051.3037053976464,
-   "x_base": 2.0747520959869425,
+   "base_pf": 2059.6532499153614,
+   "x_base": 2.083700896417446,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2756.5639990973577,
-   "x_dense_ft": 2.7880741987645967,
+   "dense_ft_pf": 2762.736941735321,
+   "x_dense_ft": 2.7949934981997804,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -719,8 +722,8 @@
    "ce_seeds": [
     0.1199
    ],
-   "base_pf": 1483.2184845526433,
-   "x_base": 1.642676995645929,
+   "base_pf": 1485.4948120811002,
+   "x_base": 1.6451980476045551,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -741,8 +744,8 @@
    "ce_seeds": [
     0.12
    ],
-   "base_pf": 1480.9359930095882,
-   "x_base": 1.2275450896485742,
+   "base_pf": 1483.6094018441167,
+   "x_base": 1.2297610732582234,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -763,8 +766,8 @@
    "ce_seeds": [
     0.1204
    ],
-   "base_pf": 1469.1718439981707,
-   "x_base": 1.5392046507221282,
+   "base_pf": 1473.8837401976166,
+   "x_base": 1.5441411546263755,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -785,8 +788,8 @@
    "ce_seeds": [
     0.1207
    ],
-   "base_pf": 1459.3770452166832,
-   "x_base": 1.2349670740019496,
+   "base_pf": 1465.77576081843,
+   "x_base": 1.2403818522526837,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -807,8 +810,8 @@
    "ce_seeds": [
     0.1208
    ],
-   "base_pf": 1454.5437647548902,
-   "x_base": 1.6734407782251237,
+   "base_pf": 1461.7713344028923,
+   "x_base": 1.6817560383565142,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -830,8 +833,8 @@
     0.1226,
     0.1211
    ],
-   "base_pf": 1422.577562891846,
-   "x_base": 2.472553639255232,
+   "base_pf": 1435.2277853645444,
+   "x_base": 2.494540738186186,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -852,8 +855,8 @@
    "ce_seeds": [
     0.122
    ],
-   "base_pf": 1416.8634025313413,
-   "x_base": 0.8151080788770363,
+   "base_pf": 1430.4719971443985,
+   "x_base": 0.8229369743029806,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -874,8 +877,8 @@
    "ce_seeds": [
     0.1225
    ],
-   "base_pf": 1403.2108230416557,
-   "x_base": 1.6143826460391488,
+   "base_pf": 1419.0955601520996,
+   "x_base": 1.6326579069670881,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -896,8 +899,8 @@
    "ce_seeds": [
     0.1225
    ],
-   "base_pf": 1403.0781618420979,
-   "x_base": 1.6223290454128039,
+   "base_pf": 1418.9849211414764,
+   "x_base": 1.6407214616955086,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -919,8 +922,8 @@
     0.1259,
     0.1191
    ],
-   "base_pf": 1401.7055606436236,
-   "x_base": 1.6126078337058856,
+   "base_pf": 1417.840068478633,
+   "x_base": 1.6311699586330193,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -941,8 +944,8 @@
    "ce_seeds": [
     0.1232
    ],
-   "base_pf": 1380.3261506640247,
-   "x_base": 1.5878644265289934,
+   "base_pf": 1399.9825105440239,
+   "x_base": 1.6104762089642444,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -963,8 +966,8 @@
    "ce_seeds": [
     0.1233
    ],
-   "base_pf": 1379.7626169493421,
-   "x_base": 2.4584671364322572,
+   "base_pf": 1399.511155245513,
+   "x_base": 2.493655169357121,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -986,8 +989,8 @@
     0.1247,
     0.123
    ],
-   "base_pf": 1362.8123862052216,
-   "x_base": 2.1184634907441784,
+   "base_pf": 1385.317657853264,
+   "x_base": 2.153447467128789,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1008,8 +1011,8 @@
    "ce_seeds": [
     0.1239
    ],
-   "base_pf": 1360.3096660730994,
-   "x_base": 1.8940835216726368,
+   "base_pf": 1383.2193577516496,
+   "x_base": 1.9259827800379823,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1030,8 +1033,8 @@
    "ce_seeds": [
     0.1241
    ],
-   "base_pf": 1354.4254924710283,
-   "x_base": 1.678568213121794,
+   "base_pf": 1378.2833509543552,
+   "x_base": 1.708135762688665,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1052,8 +1055,8 @@
    "ce_seeds": [
     0.125
    ],
-   "base_pf": 1328.4852188667264,
-   "x_base": 1.3858269908068233,
+   "base_pf": 1356.4779470084422,
+   "x_base": 1.4150279767524556,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1074,8 +1077,8 @@
    "ce_seeds": [
     0.1279
    ],
-   "base_pf": 1248.082022767994,
-   "x_base": 1.1136695386940516,
+   "base_pf": 1288.4079188298103,
+   "x_base": 1.1496525279890875,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1096,8 +1099,8 @@
    "ce_seeds": [
     0.1282
    ],
-   "base_pf": 1238.7296950037644,
-   "x_base": 1.414305562655543,
+   "base_pf": 1280.441042290913,
+   "x_base": 1.4619290197600343,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1118,8 +1121,8 @@
    "ce_seeds": [
     0.1283
    ],
-   "base_pf": 1235.8496125120344,
-   "x_base": 2.6604450289373145,
+   "base_pf": 1277.985493251701,
+   "x_base": 2.7511520157088545,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1140,8 +1143,8 @@
    "ce_seeds": [
     0.1284
    ],
-   "base_pf": 1233.1276054292898,
-   "x_base": 1.0586084338661204,
+   "base_pf": 1275.6637963324101,
+   "x_base": 1.0951246631973957,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1162,8 +1165,8 @@
    "ce_seeds": [
     0.1285
    ],
-   "base_pf": 1231.6509313640968,
-   "x_base": 1.74364629248868,
+   "base_pf": 1274.403912448616,
+   "x_base": 1.8041716207797878,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1184,8 +1187,8 @@
    "ce_seeds": [
     0.1295
    ],
-   "base_pf": 1206.4324284447189,
-   "x_base": 2.258127934328318,
+   "base_pf": 1252.8465295399478,
+   "x_base": 2.3450030677868825,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1206,8 +1209,8 @@
    "ce_seeds": [
     0.1302
    ],
-   "base_pf": 1187.7331045192277,
-   "x_base": 1.253086288079985,
+   "base_pf": 1236.8108932827581,
+   "x_base": 1.3048645065323192,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1228,8 +1231,8 @@
    "ce_seeds": [
     0.1311
    ],
-   "base_pf": 1165.4371364847837,
-   "x_base": 1.7891953723464877,
+   "base_pf": 1217.6329385230904,
+   "x_base": 1.8693270967778306,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1250,8 +1253,8 @@
    "ce_seeds": [
     0.1313
    ],
-   "base_pf": 1160.1839006768093,
-   "x_base": 2.185032129386009,
+   "base_pf": 1213.1050223661368,
+   "x_base": 2.2847011138865443,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1272,8 +1275,8 @@
    "ce_seeds": [
     0.1317
    ],
-   "base_pf": 1149.9384276204507,
-   "x_base": 1.322994813808453,
+   "base_pf": 1204.263787833488,
+   "x_base": 1.3854956991548524,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1294,8 +1297,8 @@
    "ce_seeds": [
     0.1319
    ],
-   "base_pf": 1144.5315689536922,
-   "x_base": 2.1394100163000465,
+   "base_pf": 1199.5924268752065,
+   "x_base": 2.2423322546538995,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1316,13 +1319,36 @@
    "ce_seeds": [
     0.1319
    ],
-   "base_pf": 1144.3864010599298,
-   "x_base": 0.9749560867005375,
+   "base_pf": 1199.4669529764485,
+   "x_base": 1.0218817748248432,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
    "dense_ft_pf": 1453.1297969584532,
    "x_dense_ft": 1.237988968584718,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "bud-lo-p50-20-7-b495-sd0+1",
+   "arm": "lo-p50-20-7-b495",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 420,
+   "pf": 494.13590095188255,
+   "ce": 0.13402126552537083,
+   "seeds": 2,
+   "ce_seeds": [
+    0.1356,
+    0.1325
+   ],
+   "base_pf": 1154.809398312124,
+   "x_base": 2.3370279230623554,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1391.8384757186827,
+   "x_dense_ft": 2.816711906658682,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1338,35 +1364,13 @@
    "ce_seeds": [
     0.1345
    ],
-   "base_pf": 1082.1264837607443,
-   "x_base": 0.7048645190981068,
+   "base_pf": 1145.3905184728035,
+   "x_base": 0.7460728011914788,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
    "dense_ft_pf": 1378.9519509546158,
    "x_dense_ft": 0.8982076664375609,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
-   "run": "bud-lo-p50-20-7-b495-sd0",
-   "arm": "lo-p50-20-7-b495",
-   "kind": "drop",
-   "pool": "mtb16kx4",
-   "steps": 420,
-   "pf": 493.31400473454005,
-   "ce": 0.13556723713190877,
-   "seeds": 1,
-   "ce_seeds": [
-    0.1356
-   ],
-   "base_pf": 1056.950863777046,
-   "x_base": 2.1425519114256804,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 1348.8811391146237,
-   "x_dense_ft": 2.7343256549963093,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1382,8 +1386,8 @@
    "ce_seeds": [
     0.1361
    ],
-   "base_pf": 1045.5284311734204,
-   "x_base": 0.9730726255885174,
+   "base_pf": 1113.3493200784258,
+   "x_base": 1.0361934824383627,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1404,8 +1408,8 @@
    "ce_seeds": [
     0.1366
    ],
-   "base_pf": 1033.9470833871264,
-   "x_base": 0.7883932091610878,
+   "base_pf": 1103.16926437467,
+   "x_base": 0.8411756951226693,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1427,8 +1431,8 @@
     0.1384,
     0.1348
    ],
-   "base_pf": 1033.6065505842557,
-   "x_base": 1.7188303064107397,
+   "base_pf": 1102.869632933044,
+   "x_base": 1.8340109667782898,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1449,8 +1453,8 @@
    "ce_seeds": [
     0.1371
    ],
-   "base_pf": 1021.3966571032541,
-   "x_base": 2.1578799493934167,
+   "base_pf": 1092.1147795358124,
+   "x_base": 2.307284411797624,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1471,8 +1475,8 @@
    "ce_seeds": [
     0.1375
    ],
-   "base_pf": 1013.8256500682029,
-   "x_base": 1.0319523542565687,
+   "base_pf": 1085.434686453744,
+   "x_base": 1.1048417250069853,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1493,8 +1497,8 @@
    "ce_seeds": [
     0.1381
    ],
-   "base_pf": 1001.3156828342065,
-   "x_base": 1.1405482760480627,
+   "base_pf": 1074.3776051557948,
+   "x_base": 1.2237694329491302,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1515,8 +1519,8 @@
    "ce_seeds": [
     0.1395
    ],
-   "base_pf": 978.6631207105103,
-   "x_base": 2.0403635395307003,
+   "base_pf": 1048.1143416465125,
+   "x_base": 2.1851587565721187,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1537,8 +1541,8 @@
    "ce_seeds": [
     0.1401
    ],
-   "base_pf": 969.6538959422618,
-   "x_base": 1.9593373693224299,
+   "base_pf": 1035.2426302997183,
+   "x_base": 2.091869666434737,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1559,8 +1563,8 @@
    "ce_seeds": [
     0.1411
    ],
-   "base_pf": 957.8165204467132,
-   "x_base": 2.0624006053982495,
+   "base_pf": 1018.3913196477803,
+   "x_base": 2.192832164968649,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1581,8 +1585,8 @@
    "ce_seeds": [
     0.1462
    ],
-   "base_pf": 894.2032966502422,
-   "x_base": 1.8062469553779068,
+   "base_pf": 939.6903878239302,
+   "x_base": 1.8981286563839899,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1604,8 +1608,8 @@
     0.1499,
     0.1454
    ],
-   "base_pf": 877.2521101256262,
-   "x_base": 1.98681230272953,
+   "base_pf": 920.4162017622674,
+   "x_base": 2.0845709143190105,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1626,8 +1630,8 @@
    "ce_seeds": [
     0.1509
    ],
-   "base_pf": 839.5899996472236,
-   "x_base": 1.3962584893196965,
+   "base_pf": 877.7040327920457,
+   "x_base": 1.4596430488821386,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1648,8 +1652,8 @@
    "ce_seeds": [
     0.1522
    ],
-   "base_pf": 825.5172649055952,
-   "x_base": 1.7830260406262082,
+   "base_pf": 861.7846315350384,
+   "x_base": 1.8613595435998018,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1670,8 +1674,8 @@
    "ce_seeds": [
     0.1526
    ],
-   "base_pf": 820.4263517708378,
-   "x_base": 1.519173296312031,
+   "base_pf": 856.0311898292247,
+   "x_base": 1.5851023331854397,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1692,8 +1696,8 @@
    "ce_seeds": [
     0.1534
    ],
-   "base_pf": 812.129383826903,
-   "x_base": 1.3505908206037995,
+   "base_pf": 846.6608041019906,
+   "x_base": 1.4080174082568397,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1714,8 +1718,8 @@
    "ce_seeds": [
     0.16
    ],
-   "base_pf": 743.8270232426722,
-   "x_base": 1.2370023418863558,
+   "base_pf": 769.8302336517523,
+   "x_base": 1.2802463101309751,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1736,8 +1740,8 @@
    "ce_seeds": [
     0.1636
    ],
-   "base_pf": 709.1248162237148,
-   "x_base": 1.3289479531235586,
+   "base_pf": 731.0153524067299,
+   "x_base": 1.3699723011475282,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1758,8 +1762,8 @@
    "ce_seeds": [
     0.1704
    ],
-   "base_pf": 647.5572172938067,
-   "x_base": 1.3538492879837218,
+   "base_pf": 662.5425175492711,
+   "x_base": 1.3851790879446693,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1780,8 +1784,8 @@
    "ce_seeds": [
     0.1745
    ],
-   "base_pf": 612.7496225905413,
-   "x_base": 1.0936253557211963,
+   "base_pf": 624.0660042333577,
+   "x_base": 1.1138226458431877,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1947,24 +1951,25 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "bud-denselora-b991-sd0",
+   "run": "bud-denselora-b991-sd0+1",
    "arm": "denselora-b991",
    "kind": "dense_lora",
    "pool": "mtb16kx4",
    "steps": 323,
-   "pf": 989.9762569094748,
-   "ce": 0.13859085752628744,
-   "seeds": 1,
+   "pf": 986.5991094492892,
+   "ce": 0.14283867570375153,
+   "seeds": 2,
    "ce_seeds": [
-    0.1386
+    0.1386,
+    0.1471
    ],
-   "base_pf": 989.9762569094751,
+   "base_pf": 986.5991094492895,
    "x_base": 1.0000000000000002,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 1268.659512458074,
-   "x_dense_ft": 1.2815049892394363,
+   "dense_ft_pf": 1163.9521839398624,
+   "x_dense_ft": 1.179762045994112,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1980,8 +1985,8 @@
    "ce_seeds": [
     0.1507
    ],
-   "base_pf": 841.8200015210621,
-   "x_base": 0.8486310524680779,
+   "base_pf": 880.2287017250259,
+   "x_base": 0.8873505122327854,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,

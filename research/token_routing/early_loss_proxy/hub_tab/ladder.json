@@ -195,26 +195,50 @@
   {
    "run": "bud-denselora-b991-sd1",
    "baseline": "w2-denselora-sd1",
-   "done": false,
+   "done": true,
    "eval_size": 320,
-   "steps": 160,
-   "pf": null,
-   "cost_vs_dense_ft": null,
-   "ce16k_last": 0.171215,
+   "steps": 323,
+   "pf": 983.2219619891036,
+   "cost_vs_dense_ft": 0.7497612911506228,
+   "ce16k_last": 0.14708649388121559,
    "track": [
     [
      80,
-     0.22587499999999996,
+     0.2258775026886724,
      null
     ],
     [
      160,
-     0.171215,
+     0.1712036145676393,
+     null
+    ],
+    [
+     240,
+     0.16165249891055283,
+     null
+    ],
+    [
+     323,
+     0.14708649388121559,
      null
     ]
    ],
-   "vs_same": null,
-   "vs_dense_ft": null
+   "vs_same": {
+    "ref_step": 200,
+    "level": 0.1691508469506516,
+    "x": 1.1480321285179151,
+    "final": false,
+    "ref_final": 0.11777590980418609,
+    "ref_steps": 488
+   },
+   "vs_dense_ft": {
+    "ref_step": 250,
+    "level": 0.1500241729634581,
+    "x": 1.0983277365649606,
+    "final": false,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
   },
   {
    "run": "bud-denselora-s7-b495-sd0",
@@ -363,31 +387,50 @@
   {
    "run": "bud-lo-p50-20-7-b495-sd1",
    "baseline": "w2-denselora-sd1",
-   "done": false,
+   "done": true,
    "eval_size": 320,
-   "steps": 320,
-   "pf": null,
-   "cost_vs_dense_ft": null,
-   "ce16k_last": 0.15137000000000003,
+   "steps": 420,
+   "pf": 494.95779716922505,
+   "cost_vs_dense_ft": 0.29026377971453504,
+   "ce16k_last": 0.1324752939188329,
    "track": [
     [
      100,
-     0.221845,
+     0.22184986709617077,
      0.21590083367191254
     ],
     [
      210,
-     0.173365,
+     0.17336956004146487,
      null
     ],
     [
      320,
-     0.15137000000000003,
+     0.15136996045694104,
+     null
+    ],
+    [
+     420,
+     0.1324752939188329,
      null
     ]
    ],
-   "vs_same": null,
-   "vs_dense_ft": null
+   "vs_same": {
+    "ref_step": 300,
+    "level": 0.14561193466215627,
+    "x": 2.2260301402399216,
+    "final": false,
+    "ref_final": 0.11777590980418609,
+    "ref_steps": 488
+   },
+   "vs_dense_ft": {
+    "ref_step": 300,
+    "level": 0.13528488869924332,
+    "x": 2.566969778034476,
+    "final": false,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
   },
   {
    "run": "bud-lo-p50-20-7-b991-sd0",
@@ -440,26 +483,50 @@
   {
    "run": "bud-lo-p50-20-7-b991-sd1",
    "baseline": "w2-denselora-sd1",
-   "done": false,
+   "done": true,
    "eval_size": 320,
-   "steps": 420,
-   "pf": null,
-   "cost_vs_dense_ft": null,
-   "ce16k_last": 0.13719,
+   "steps": 841,
+   "pf": 988.2201111069616,
+   "cost_vs_dense_ft": 0.2894220787787708,
+   "ce16k_last": 0.09950820606536581,
    "track": [
     [
      210,
-     0.175925,
+     0.17592934133572272,
      null
     ],
     [
      420,
-     0.13719,
+     0.13718665725064055,
+     null
+    ],
+    [
+     630,
+     0.1111225611763075,
+     null
+    ],
+    [
+     841,
+     0.09950820606536581,
      null
     ]
    ],
-   "vs_same": null,
-   "vs_dense_ft": null
+   "vs_same": {
+    "ref_step": 488,
+    "level": 0.11777590980418609,
+    "x": 2.205478086822949,
+    "final": true,
+    "ref_final": 0.11777590980418609,
+    "ref_steps": 488
+   },
+   "vs_dense_ft": {
+    "ref_step": 488,
+    "level": 0.11371779909313773,
+    "x": 2.7649420182881017,
+    "final": true,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
   },
   {
    "run": "bud-lo-p50-20-7-fz7-b495-sd0",
@@ -5898,17 +5965,22 @@
   },
   {
    "run": "x4-denselora-x4-sd1",
-   "baseline": "x4-denselora-x4-sd0",
+   "baseline": null,
    "done": false,
    "eval_size": 320,
-   "steps": 160,
+   "steps": 320,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.17618499999999998,
+   "ce16k_last": 0.14275500000000002,
    "track": [
     [
      160,
      0.17618499999999998,
+     null
+    ],
+    [
+     320,
+     0.14275500000000002,
      null
     ]
    ],
@@ -6297,27 +6369,44 @@
   },
   {
    "run": "x4-lo-p50-20-7-x4-sd1",
-   "baseline": "x4-denselora-x4-sd0",
-   "done": false,
+   "baseline": "x4-denselora-x4-sd1",
+   "done": true,
    "eval_size": 320,
-   "steps": 840,
-   "pf": null,
-   "cost_vs_dense_ft": null,
-   "ce16k_last": 0.09777,
+   "steps": 1683,
+   "pf": 1980.6342413956029,
+   "cost_vs_dense_ft": 0.2898639014596271,
+   "ce16k_last": 0.0764348546807014,
    "track": [
     [
      420,
-     0.147045,
+     0.14707242799631787,
      null
     ],
     [
      840,
-     0.09777,
+     0.09777422249389929,
+     null
+    ],
+    [
+     1260,
+     0.08589326129003894,
+     null
+    ],
+    [
+     1683,
+     0.0764348546807014,
      null
     ]
    ],
    "vs_same": null,
-   "vs_dense_ft": null
+   "vs_dense_ft": {
+    "ref_step": 488,
+    "level": 0.11371779909313773,
+    "x": 2.3929801743527954,
+    "final": true,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
   },
   {
    "run": "x4-lo-r50to20-x4-sd0",
