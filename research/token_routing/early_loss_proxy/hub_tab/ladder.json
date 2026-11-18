@@ -2789,10 +2789,10 @@
    "baseline": "w1-dense-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 150,
+   "steps": 200,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.26653499999999997,
+   "ce16k_last": 0.22911,
    "track": [
     [
      50,
@@ -2808,6 +2808,11 @@
      150,
      0.26653499999999997,
      0.179294875744381
+    ],
+    [
+     200,
+     0.22911,
+     0.16135716414792114
     ]
    ],
    "vs_same": null,
@@ -2818,10 +2823,10 @@
    "baseline": "w1-dense-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 150,
+   "steps": 200,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.209065,
+   "ce16k_last": 0.179465,
    "track": [
     [
      50,
@@ -2837,6 +2842,11 @@
      150,
      0.209065,
      0.179294875744381
+    ],
+    [
+     200,
+     0.179465,
+     0.16135716414792114
     ]
    ],
    "vs_same": null,
@@ -2847,10 +2857,10 @@
    "baseline": "w1-dense-sd0",
    "done": false,
    "eval_size": 320,
-   "steps": 150,
+   "steps": 200,
    "pf": null,
    "cost_vs_dense_ft": null,
-   "ce16k_last": 0.20195500000000002,
+   "ce16k_last": 0.185675,
    "track": [
     [
      50,
@@ -2866,6 +2876,49 @@
      150,
      0.20195500000000002,
      0.179294875744381
+    ],
+    [
+     200,
+     0.185675,
+     0.16135716414792114
+    ]
+   ],
+   "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "w3-ft-r50to20-ex50-sd0",
+   "baseline": "w1-dense-sd0",
+   "done": false,
+   "eval_size": 320,
+   "steps": 50,
+   "pf": null,
+   "cost_vs_dense_ft": null,
+   "ce16k_last": 0.2843,
+   "track": [
+    [
+     50,
+     0.2843,
+     0.25531664467125664
+    ]
+   ],
+   "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "w3-ft-r50to20-rnd-sd0",
+   "baseline": "w1-dense-sd0",
+   "done": false,
+   "eval_size": 320,
+   "steps": 50,
+   "pf": null,
+   "cost_vs_dense_ft": null,
+   "ce16k_last": 0.32248499999999997,
+   "track": [
+    [
+     50,
+     0.32248499999999997,
+     0.25531664467125664
     ]
    ],
    "vs_same": null,

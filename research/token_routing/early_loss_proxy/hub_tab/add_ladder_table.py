@@ -28,6 +28,11 @@ DESC = {  # arm -> plain description
     "ft-c7ramp": "full FT, keep ramp 20% to 90% (block 7)", "ft-c7ramp10to90": "full FT, keep ramp 10% to 90% (block 7)",
     "ft-m99": "full FT, adaptive keep covering 99% of gradient mass", "ft-m95": "full FT, adaptive keep 95%", "ft-m90": "full FT, adaptive keep 90%",
     "ft-mod8s2": "full FT, 80% of tokens skip every other block from 8", "ft-mod8d3": "full FT, 80% of tokens skip 3 of every 4 blocks from 8",
+    "ft-sbw-r20to7": "full FT, dense forward, gradient only through kept 20% / 7%", "ft-sbw-c7k20": "full FT, dense forward, gradient only through kept 20% (block 7)",
+    "ft-sbw-c0k20": "full FT, dense forward, gradient only through kept 20% (input)", "ft-c3ramp": "full FT, keep ramp 20% to 90% (block 3)",
+    "ft-c7ramp10to60": "full FT, keep ramp 10% to 60% (block 7)", "ft-c7ramp-tail10": "full FT, keep ramp 20% to 90% + last 10% dense",
+    "ft-r50to20-ex50": "full FT, keep 50% then 20%, half of the budget random", "ft-r50to20-rnd": "full FT, keep 50% then 20%, random tokens",
+    "lo-p50-10-5": "LoRA, keep 50% / 10% / 5% at blocks 7 / 16 / 24", "lo-q50-30-15-7": "LoRA, keep 50% / 30% / 15% / 7% at blocks 7 / 12 / 16 / 24",
 }
 
 
@@ -40,7 +45,7 @@ rows = []
 for r in L["runs"]:
     arm, sd = arm_seed(r["run"])
     if "mix" in arm and not arm.startswith("dense"): continue  # old re-mix recipe runs: baseline-side lever, no dense partner yet
-    if arm == "denselora2e5": continue
+    if arm == "denselora2e5" or arm.endswith("-x4"): continue  # equal-FLOP runs on the 4x pool get their own table when they finish
     tr = {s: (ce, b) for s, ce, b in r["track"]}
     if not any(s in tr for s in STEPS): continue  # 1,464-step runs: shown when their baseline lands
     fam = 0 if arm.startswith("dense") else (1 if arm.startswith("ft-") else 2)

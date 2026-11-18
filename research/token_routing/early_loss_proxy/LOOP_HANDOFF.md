@@ -62,7 +62,7 @@
 - NEXT: read which rungs track dense at steps 300-488; take the cheapest that does and lower its cost in small moves
   (more arms between it and the first rung that lags); FLOP-matched 203 PF screens (--max-pf 203 --pf-points 50,100,150
   --steps 2000, smoke passed) for new mechanisms; second seed for any arm within 0.01 CE of dense at step 488.
-- Hub: PUBLISHED from this session as version 121 at 02:15 (hub-reorg session unreachable). Procedure: Artifact read of the hub URL, `bash hub_tab/refresh_hub.sh <saved page>`, Artifact publish of the printed new.html to the same URL (no force). The ladder table comes from hub_tab/ladder.json via hub_tab/add_ladder_table.py (interim; should move into the hub builder; new idea ids have no implementation notes in make_idea_impl.py yet).
+- Hub: last published from this session as version 123 at 03:40 (first 121 at 02:15) (hub-reorg session unreachable). Procedure: Artifact read of the hub URL, `bash hub_tab/refresh_hub.sh <saved page>`, Artifact publish of the printed new.html to the same URL (no force). The ladder table comes from hub_tab/ladder.json via hub_tab/add_ladder_table.py (interim; should move into the hub builder; new idea ids have no implementation notes in make_idea_impl.py yet).
 
 # Auto-research loop: state file (updated 2026-11-17 12:05 PT)
 
