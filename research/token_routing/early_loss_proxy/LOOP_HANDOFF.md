@@ -42,6 +42,10 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 10:00 recipe-b3964 (x16) 0.074 @3,957 PF = x1.22: the 20/7 recipe DECAYS with data (1.8-2.2x at <= 1,980 PF), 50/20 and 50/20/7 hold ~2x. fz7 closed
+  (recipe-fz7-b991 0.128). ds (docsub agent, runs are on mtb16kx4 although ftm.py labels them mtb16k): ds-p-k25 0.128 @465 PF (x2.66) vs plain 0.136 (x2.14);
+  k50 0.141, r25 0.137, r50 0.139, dense LoRA + k50 0.170. Agent still running (991 PF follow-up + per-task table). If k25 holds at 991 PF with a second seed,
+  try keep 0.1-0.15 and combine with the gentler token cut; watch the outlier task.
 - 09:30 x16 @3,975 PF: lo-r50to20 0.064 (x1.97), lo-p50-20-7 0.065 (x1.88); recipe-b3964 finishing. ~2x from 495 to 3,975 PF.
   ftm.py now averages seeds per (arm, pool, steps). In flight: seed-1 repeats (bud/x4), ds agent (5 runs, tag ds), recipe-b3964, recipe-fz7-b991.
 - 09:00 DENSE FRONTIER COMPLETE to 7,934 PF: denselora-b3964 (x16) 0.078 @3,986; denselora-x4full 0.068 @5,990; dense-x4full 0.064 @7,934.

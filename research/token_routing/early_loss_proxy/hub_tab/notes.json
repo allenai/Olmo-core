@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 10:00",
+   "text": "The old 20%/7% recipe at 3,957 PF on the 16x pool ends at 0.074 (1.22x), against 0.064-0.065 (1.9-2.0x) for the 50%/20% arms: the aggressive budgets lose their gain as data grows, the gentler ones keep it. Frozen-early recipe at 991 PF 0.128 (1.1x): early-freeze fully closed. First document-subsampling finals at about 470 PF (agent still running its follow-up): keeping 25% of the distractor documents on top of the 50%/20%/7% token drop 0.128 (2.7x) against 0.136 (2.1x) without; keep 50% and the ramps 0.137-0.141 (no gain); dense LoRA with document keep 50% 0.170 (1.4x)."
+  },
+  {
    "t": "11-18 09:30",
    "text": "3,975 PF on the 16x pool: LoRA 50%/20% 0.064 (1.97x against the dense frontier), LoRA 50%/20%/7% 0.065 (1.88x); dense LoRA at 3,986 PF 0.078. The ratio is about 2x at 495, 991, 1,980 and 3,975 PF. ftm.py now averages seeds of the same arm and budget before building the frontier."
   },
