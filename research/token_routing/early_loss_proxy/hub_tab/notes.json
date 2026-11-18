@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 14:30",
+   "text": "Document drop at the larger budget: keep 25% + token drop at 1,971 PF on the 16x pool ends at 0.073 (2.5x), level with the token drop alone at 1,980 PF (0.074 on two seeds, 2.4x). So the document-drop gain shrinks with data: +0.006 at 495 PF, +0.007 at 991 PF (two seeds), +0.001 at 1,980 PF (one seed). Subsampling every row (4k and 8k too) is clearly worse (0.167 at 488 PF)."
+  },
+  {
    "t": "11-18 13:30",
    "text": "Document-drop follow-up, first finals at 495 PF (one seed): keep 10% of distractor documents + token drop 0.121 (2.93x), better than keep 25% (0.128); the control dense LoRA + keep 25% and no token drop 0.175 (1.25x). So the document drop helps the token-drop arm far more than it helps dense LoRA. Seed-1, 1,980 PF and shorter-row runs still in flight; two jobs have been waiting over an hour for Beaker capacity and one failed at startup (the agent is handling them)."
   },

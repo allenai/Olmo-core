@@ -224,6 +224,28 @@
    "x_dense_ft_lower_bound": false
   },
   {
+   "run": "ds-ds-p-k25-b1980-x16-sd0",
+   "arm": "ds-p-k25-b1980-x16",
+   "kind": "drop",
+   "pool": "mtb16kx16",
+   "steps": 2368,
+   "pf": 1971.4760643517675,
+   "ce": 0.07335667677280071,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0734
+   ],
+   "base_pf": 4849.492789217353,
+   "x_base": 2.4598283879301843,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 5402.272086319747,
+   "x_dense_ft": 2.740216928829945,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
    "run": "x16-recipe-b3964-sd0",
    "arm": "recipe-b3964",
    "kind": "drop",
@@ -401,24 +423,25 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "ds-ds-p-k25-b991-sd0",
+   "run": "ds-ds-p-k25-b991-sd0+1",
    "arm": "ds-p-k25-b991",
    "kind": "drop",
    "pool": "mtb16kx4",
    "steps": 1183,
-   "pf": 986.2304302318308,
-   "ce": 0.09092199374827033,
-   "seeds": 1,
+   "pf": 986.0241796146036,
+   "ce": 0.09277187401603443,
+   "seeds": 2,
    "ce_seeds": [
-    0.0909
+    0.0909,
+    0.0946
    ],
-   "base_pf": 2897.0943729968762,
-   "x_base": 2.9375430773474136,
+   "base_pf": 2729.3022348329373,
+   "x_base": 2.767987125731247,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 3275.6725349902545,
-   "x_dense_ft": 3.3214068787354796,
+   "dense_ft_pf": 3159.184986690481,
+   "x_dense_ft": 3.2039629980730053,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1792,6 +1815,28 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 793.0427583868433,
    "x_dense_ft": 1.4862158626883646,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "ds-ds-p-k25-l3k-b495-sd0",
+   "arm": "ds-p-k25-l3k-b495",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 844,
+   "pf": 487.7683937752233,
+   "ce": 0.16723058140123612,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1672
+   ],
+   "base_pf": 693.200319803694,
+   "x_base": 1.4211669485972052,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 743.8762217402524,
+   "x_dense_ft": 1.5250603180390783,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
