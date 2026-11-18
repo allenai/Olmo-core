@@ -1733,7 +1733,7 @@ def test_grad_comp_scales_only_the_kept_document_gradient_cpu(mode):
     s = router.metrics()["online_router/gc_scale"]
     assert torch.equal(lo0, lo1)
     assert torch.equal(t0[0], t1[0])
-    order, valid, _ = router._mid_gather
+    order, valid, _, _ = router._gc_order
     kept = torch.zeros(ids.shape, dtype=torch.bool)
     kept[0, order[0][valid[0]]] = True
     _, body = structural_features(ids, cid, doc_start_id=DS, doc_end_id=DE)
