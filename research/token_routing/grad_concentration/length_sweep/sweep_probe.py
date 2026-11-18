@@ -370,11 +370,29 @@ def main():
 
     if a.ce_only:
         res = []
+        first_bad = {}
+
+        def nan_hook(name):
+            def h(mod, inp, out):
+                o = out[0] if isinstance(out, tuple) else out
+                if name not in first_bad and torch.is_tensor(o) and not bool(torch.isfinite(o).all()):
+                    first_bad[name] = (type(mod).__name__, int((~torch.isfinite(o)).sum()), o.shape[1])
+            return h
+
+        for k, b in model.blocks.items():
+            b.register_forward_hook(nan_hook(f"block{k}"))
+            for n, m in b.named_children():
+                m.register_forward_hook(nan_hook(f"block{k}.{n}"))
+            for n, m in b.named_modules():
+                if n.count(".") == 1:
+                    m.register_forward_hook(nan_hook(f"block{k}.{n}"))
         for t, rs in rows_by_task.items():
             for row in rs[:a.ce_only]:
                 with torch.no_grad():
                     loss, nans = row_loss(model, row)
-                res.append(dict(task=t, T=int(len(row["ids"])), ce=float(loss) / max(nans, 1), n_answer=nans))
+                res.append(dict(task=t, T=int(len(row["ids"])), ce=float(loss) / max(nans, 1), n_answer=nans,
+                                first_nonfinite=sorted(first_bad.items(), key=lambda kv: (int(kv[0].split(".")[0][5:]), kv[0]))[:6]))
+                first_bad.clear()
                 log(f"CE {res[-1]}; peak {peaks()}")
         json.dump(dict(yarn=a.yarn, devices=devices, rung=a.rung, rows=res),
                   open(os.path.join(a.out, f"ce_{a.rung}_y{a.yarn}_d{len(devices)}.json"), "w"), indent=1)
