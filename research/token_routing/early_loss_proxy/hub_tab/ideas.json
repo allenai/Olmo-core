@@ -141,7 +141,7 @@
   "title": "Dense baseline family: full fine-tune, LoRA, fixed re-mix",
   "what": "Under the 11-18 rule LoRA and a fixed short/long row mix belong to the dense baseline. Full-epoch dense full fine-tune on the standard pool (488 steps, 1,982 PF) and on the 80/20 re-mix with 3x the rows (1,464 steps), with 16k held-out probes; dense LoRA full epoch already exists. Each drop arm is compared with the dense run that uses the same adapter and pool.",
   "status": "running",
-  "result": "Interim: the 4x-row pool (mtb16kx4, 31,232 rows, 1,952 steps; contains every mtb16k row plus 3x new rows; prompt overlap with all held-out sets 0) is built and staged. Dense LoRA is running on it for the FLOPs of one dense full fine-tune epoch (642 steps); dense full fine-tune references (2 seeds, standard pool) and the 80/20 re-mix reference are still running."
+  "result": "Dense full fine-tune, full epoch (seed 0, 16k held-out CE on 320 rows): 0.255 / 0.210 / 0.161 / 0.135 / 0.122 / 0.114 at steps 50 / 100 / 200 / 300 / 400 / 488 (1,982 PF). Dense LoRA ends at 0.121 at 0.76x the step cost: it reaches dense full fine-tune's step-400 level at 1.20x fewer FLOPs and does not reach its final loss in one epoch. Seed 1 of both, the 80/20 re-mix reference, dense LoRA at equal FLOPs on 4x the rows (642 steps) and dense full fine-tune on 2x the rows (976 steps) are running."
  },
  {
   "id": "ladder",
@@ -149,7 +149,7 @@
   "title": "Drop ladder: from near-dense to the recipe",
   "what": "Find where token dropping stops tracking dense per step. Same router, full fine-tuning, full epoch: keep 50% after block 16 (gentlest), keep 50% after block 7, keep 50% then 20%, keep 20% then 7% (the recipe's budgets); and with LoRA: 50% then 20%, 50% after block 16. Read: 16k held-out loss at the same step as the dense run with the same adapter, out to step 488.",
   "status": "running",
-  "result": "Interim (seed 0, 16k held-out CE at step 488, 320 rows; step cost vs dense full fine-tune). With LoRA: keep 50% after block 16 reaches 0.119 at 0.54x and keep 50% then 20% reaches 0.125 at 0.32x, against dense LoRA 0.121 at 0.76x: both stay within 0.01 of dense LoRA at every probe from step 200 on, while the recipe's 20% then 7% (0.22x) is 0.025-0.03 behind throughout. With full fine-tuning: 0.118 at 0.72x (50% after block 16), 0.121 at 0.60x (50% after block 7), 0.126 at 0.44x (50% then 20%), 0.138 at 0.30x (20% then 7%); the dense full fine-tune reference is still running. Seed repeats and rungs between 50%/20% and 20%/7% are running (wave 2)."
+  "result": "Against dense full fine-tune (0.114 at step 488, 1,982 PF; seed 0, 320 rows). No constant-budget arm reaches the final loss in one epoch. At dense's step-400 level (0.122): full fine-tune keep 50% then 20% 2.04x fewer FLOPs on seed 1 (0.119) but only the step-350 level on seed 0 (0.126, 1.76x); LoRA keep 50% after block 16 1.74x (0.119); full fine-tune keep 50% after block 7 1.43x (0.121); dense LoRA 1.20x. At the step-350 level (0.129): LoRA keep 50% then 20% 2.51x (0.125 at 0.32x). The 20% then 7% budgets reach only the step-250 level (0.150) at 2.2-2.6x. Wave 2 at step 400 (live): LoRA 50% / 20% / 7% at blocks 7 / 16 / 24 is +0.004 vs dense LoRA, 35% then 12% +0.009, a first cut at block 3 +0.033."
  },
  {
   "id": "densemix",
@@ -165,7 +165,7 @@
   "title": "Keep ramp over training",
   "what": "One cut after block 7 whose keep share rises linearly from 20% to 90% over the epoch (full fine-tuning): cheap steps early, near-dense steps at the end where the loss is deepest.",
   "status": "running",
-  "result": "Interim (seed 0, 320 rows). One cut after block 7 with the keep share rising from 20% to 90% over the epoch, full fine-tuning: 16k CE 0.113 at step 488 at 0.64x dense per step, the lowest loss of any drop arm so far and below constant keep 50% at the same cut (0.121 at 0.60x). Seed 1, a LoRA version and cheaper ramps (10% to 60%, 10% to 90%) are running."
+  "result": "First arm to reach the dense full fine-tune final loss (seed 0, 320 rows): one cut after block 7 with the keep share rising from 20% to 90% over the epoch, full fine-tuning, ends at 16k CE 0.113 against dense 0.114, at 0.64x the step cost: 1.59x fewer FLOPs at the deepest dense level. It is behind dense early (+0.043 at step 50, +0.009 at step 300) and catches up as the keep rises. Seed 1 is at +0.005 at step 300. Running: seed 1, LoRA version, cheaper ramps (10% to 90%, 10% to 60%, first cut at block 3, ramp + dense last 10%), the ramp at equal FLOPs on 4x the rows, and an agent building schedules for both cuts (hold-then-ramp shapes) to lower the average cost."
  },
  {
   "id": "massdial",

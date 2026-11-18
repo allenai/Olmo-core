@@ -48,5 +48,15 @@
   "xw": null,
   "mem": null,
   "note": "New rules (dense full fine-tune as reference, deepest dense loss, FLOP-matched screens). Nothing reaches dense full fine-tuning's full-epoch result: 0.928 on generation evals at 1,982 PF against 0.897 for the recipe at 442 PF. Closest: plain recipe, 2.4-2.8x fewer FLOPs at dense full fine-tune's step-100 loss (a shallow level). Earlier rows in this table are against dense LoRA at shallow levels and are not headline numbers."
+ },
+ {
+  "t": "11-18 02:55",
+  "arm": "ft-c7ramp",
+  "idea": "keepramp",
+  "x": 1.59,
+  "level": "dense full fine-tune final loss (16k CE 0.114 at step 488; 320 rows, seed 0)",
+  "xw": null,
+  "mem": null,
+  "note": "First qualifying result under the 11-18 rules: full fine-tune with one cut after block 7 and the keep share ramped from 20% to 90% ends at 16k CE 0.113 (dense full fine-tune 0.114) at 0.64x the step cost. One seed; seed 1 running."
  }
 ]

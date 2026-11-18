@@ -35,6 +35,13 @@
   CHECK at first probe: LR at step 100 of lo-r50to20-x4 should be ~9.6e-6 (schedule over 1,525 steps); if it is ~9.7e-6+ the token budget maps differently.
   w1 extra readings: ft-m99/m95/m90 0.118/0.122/0.117 at 0.97/0.88/0.79x (no dial: done); ft-mod8s2 0.134/0.77x (mod dropped); ft-r50to20 sd1 0.119.
   w2 at step 150 (live): lo-p50-20-7 +0.007 vs dense LoRA, lo-r50to10 +0.010, lo-r35to12 +0.012, lo-c7ramp +0.014, lo-e50-30-15 +0.061 (early cut at block 3 hurts).
+- 02:55 DENSE FT sd0 DONE: 16k CE 0.114 @488 (1,982 PF); curve 50:.255 100:.210 150:.179 200:.161 250:.150 300:.135 350:.129 400:.122 450:.116.
+  vs dense FT (ladder.py "dense FT" column): ft-c7ramp 0.113 -> final level x1.59 (ONLY arm at final); step-400 level: ft-r50to20 sd1 x2.04,
+  lo-c16k50 x1.74, ft-c7k50 x1.43, dense LoRA x1.20; step-350: lo-r50to20 x2.51; 20/7 budgets only step-250 level (x2.2-2.6).
+  Results recorded with ops result add (task heldout_v3_16k, metric dense_answer_ce_step488, 18 rows).
+  LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
+  Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
+  x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
 - Agent sparsebwd (ad0d4e2aae6f7333a, branch loop/sparsebwd, Beaker tag sbw): dense forward, gradients only through kept tokens.
 - ft-* arms = softtoken, LR 5e-6, RECIPE without the three --st-otr-early-lora* flags (full fine-tune + drop, 0.30x dense/step).
 - Scoring: ladder.py (same-adapter dense baseline: ft-* -> w1/dense, LoRA arms -> v3/denselora, *-mix80x3 -> w1/dense-mix80x3).
