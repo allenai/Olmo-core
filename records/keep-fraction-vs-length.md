@@ -19,8 +19,8 @@ single-length training pool and a same-length held-out set, scored on the cheap 
 
 ## Verdict
 
-**No. The best keep does not fall with length; if anything it rises at 32k, and low keeps break harder the longer
-the rows.** Constant fraction fits; constant kept-token count is rejected.
+**No. The best keep stays at 20-40% from 8k to 64k (40% at 32k, 20% at 64k) and does not fall with length; low
+keeps break harder the longer the rows.** Constant fraction fits; constant kept-token count is rejected.
 
 - **Best keep per length** (headline = held-out CE difference vs the 20%/7% recipe at matched training FLOPs, plus
   FLOP speedup vs dense full fine-tune `dft` at dft's mid-epoch CE):
