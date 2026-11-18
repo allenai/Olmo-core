@@ -357,6 +357,9 @@ class SoftTokenOptions(VariantOptions):
     st_otr_max_keep_frac: float = 1.0
     st_otr_mod_layers: str = ""
     st_otr_per_task_key_tokens: int = 0
+    st_otr_task_stages: str = ""
+    st_otr_task_key_tokens: int = 8
+    st_otr_task_adapt: str = ""
     st_otr_log_every: int = 10
 
 
@@ -1187,6 +1190,77 @@ def build_keep_token_tables(o: SoftTokenOptions, ctx: VariantContext) -> Any:
     )
 
 
+def build_task_key_table(ctx: VariantContext, n_tok: int, max_rows: int = 0) -> str:
+    """``--st-otr-task-stages``: the task-key -> task-name table, ``"key=name,..."``. Each pool part file
+    ``token_ids_part_t<i>_*.npy`` holds one task (name from ``metadata.json`` ``merged_from[i].task``); a row's key
+    hashes the ``n_tok`` tokens after its last document-end marker (the task's fixed question template). Checks the
+    first ``max_rows`` rows of every part: one key per part, distinct across parts, else it refuses to run."""
+    import glob
+
+    import numpy as np
+
+    from olmo_core.nn.online_token_router import task_query_key_np
+
+    assert ctx.data_dir is not None
+    meta = ctx.meta or {}
+    merged = meta.get("merged_from") or []
+    dtype = np.dtype(meta.get("dtype") or "uint32")
+    eos = int(meta.get("subset_eos_id") or meta.get("eos_token_id") or ctx.ids.eos)
+    de = int(ctx.ids.doc_end)
+    if meta.get("doc_end_id") is not None and int(meta["doc_end_id"]) != de:
+        raise SystemExit(f"--st-otr-task-stages: pool doc_end_id {meta['doc_end_id']} != the router's {de}")
+    table: Dict[int, str] = {}
+    report = []
+    i = 0
+    while True:
+        parts = sorted(glob.glob(os.path.join(ctx.data_dir, f"token_ids_part_t{i}_*.npy")))
+        if not parts:
+            break
+        name = merged[i]["task"] if i < len(merged) and merged[i].get("task") else f"t{i}"
+        n_rows = 0
+        keys: set = set()
+        for part in parts:
+            n_total = os.path.getsize(part) // dtype.itemsize
+            arr = np.memmap(part, dtype=dtype, mode="r", shape=(n_total,))
+            if max_rows > 0:
+                arr = arr[: min(n_total, max_rows * int(meta.get("max_example_len") or 16384))]
+            head = np.asarray(arr)
+            ends = np.nonzero(head == eos)[0]
+            if max_rows > 0:
+                ends = ends[:max_rows]
+            starts = np.concatenate([[0], ends[:-1] + 1])
+            # vectorised twin of task_query_key_np: the last doc-end marker before each row's EOS
+            dpos = np.nonzero(head == de)[0]
+            j = np.searchsorted(dpos, ends) - 1
+            ok = (j >= 0) & (dpos[np.maximum(j, 0)] >= starts)
+            if not ok.all():
+                keys.add(-1)
+            p0 = dpos[np.maximum(j, 0)][ok] + 1
+            cols = p0[:, None] + np.arange(n_tok)[None, :]
+            inrow = cols <= ends[ok][:, None]
+            seg = head[np.minimum(cols, head.size - 1)].astype(np.int64) * inrow
+            pw = np.array([pow(1_000_003, t, 2**31 - 1) for t in range(n_tok)], dtype=np.int64)
+            keys |= set(np.unique((seg * pw[None, :]).sum(axis=1)).tolist())
+            if n_rows == 0 and ends.size:
+                assert task_query_key_np(head[starts[0]: ends[0] + 1], de, n_tok) in keys  # the two agree
+            n_rows += int(ends.size)
+        ends = range(n_rows)
+        if len(keys) != 1 or -1 in keys:
+            raise SystemExit(f"--st-otr-task-stages: part t{i} ({name}) has {len(keys)} task keys over its first "
+                             f"{len(ends)} rows (expected one): the question-template key does not identify it")
+        (k,) = keys
+        if k in table:
+            raise SystemExit(f"--st-otr-task-stages: parts {table[k]} and {name} share one task key")
+        table[k] = name
+        report.append(f"{name}={len(ends)} rows")
+        i += 1
+    if not table:
+        raise SystemExit(f"--st-otr-task-stages needs {ctx.data_dir}/token_ids_part_t<i>_*.npy")
+    print(f"[variants] task keys ({n_tok} tokens after the last doc-end marker): {len(table)} tasks, checked "
+          f"{', '.join(report)}: one key per part, all distinct", flush=True)
+    return ",".join(f"{k}={v}" for k, v in table.items())
+
+
 def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) -> Any:
     """The ``st_keep_token_rule=online`` router (:mod:`olmo_core.nn.online_token_router`). With
     ``st_otr_use_gold`` it reads the shard's gold-fingerprint sidecar as a per-document 0/1 feature
@@ -1244,6 +1318,10 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         max_keep_frac=o.st_otr_max_keep_frac,
         mod_layers=o.st_otr_mod_layers,
         per_task_key_tokens=o.st_otr_per_task_key_tokens,
+        task_stages=o.st_otr_task_stages,
+        task_key_table=(build_task_key_table(ctx, o.st_otr_task_key_tokens) if o.st_otr_task_stages else ""),
+        task_key_tokens=o.st_otr_task_key_tokens,
+        task_adapt=o.st_otr_task_adapt,
         seed=ctx.seed,
         log_every=o.st_otr_log_every,
     )

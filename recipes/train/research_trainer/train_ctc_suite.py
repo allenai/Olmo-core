@@ -2052,6 +2052,17 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-per-task-key-tokens", type=int, default=0,
                     help="online router: a separate ridge router per task in a mixed batch, keyed on each row's first "
                     "N tokens (its prompt template; 11 identifies every CTC mix task). 0 = one shared router")
+    ap.add_argument("--st-otr-task-stages", default="",
+                    help="online router: PER-TASK keep shares for --st-otr-stages (same cut layers), e.g. "
+                    "'reorder=0.5/0.2/0.07,*=0.2/0.07/0.07' ('*' = every other task; default = the --st-otr-stages "
+                    "shares). A row's task = its question-template key (tokens after the last doc-end marker), "
+                    "matched to the pool's per-task part files at startup. Empty = off")
+    ap.add_argument("--st-otr-task-key-tokens", type=int, default=8,
+                    help="--st-otr-task-stages: tokens after the last doc-end marker hashed into the task key")
+    ap.add_argument("--st-otr-task-adapt", default="",
+                    help="--st-otr-task-stages: ONLINE per-task keep multipliers, 'k=v,...' (target, gain, ema, lo, hi, "
+                    "budget, start; see TASK_ADAPT_DEFAULTS in online_token_router.py): equalise each task's covered "
+                    "share of the router's predicted gradient mass at the first cut, at a fixed average cost. Empty = off")
     ap.add_argument("--st-otr-keep-first", type=int, default=0,
                     help="online router: always keep each document's first K body tokens (its header / id span); "
                     "they count against the budget and the router picks the rest")

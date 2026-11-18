@@ -359,6 +359,22 @@ class OnlineRouterConfig:
     on the CTC mixes N = 11 identifies every task file, except the two retrieval files that share one template), and
     each task keeps its own ridge statistics and weights. The pooled fit scores a task until its own fit exists. The
     keys are synchronised across ranks every step. 0 = one shared router."""
+    task_stages: str = ""
+    """PER-TASK keep shares for the pyramid ``stages`` (same cut layers for every task, only the shares differ, so one
+    batch mixes them), e.g. ``"reorder=0.5/0.2/0.07,*=0.2/0.07/0.07"``: one ``/``-list per task with as many entries
+    as ``stages`` has cuts, each non-increasing; ``*`` (optional) sets every other task's rows, else they keep the
+    ``stages`` shares. A row's task: :meth:`OnlineTokenRouter.task_query_keys` looked up in ``task_key_table``.
+    Exclusive with keep_sched / mass_target / later_mass_target / keep_mode threshold / wts / dense_keep_frac < 1 /
+    mod_layers. Empty = off."""
+    task_key_table: str = ""
+    """``"key=name,..."``: task key -> task name for ``task_stages`` (built by the trainer from the pool's part files,
+    ``recipes/train/variants.py``: build_task_key_table)."""
+    task_key_tokens: int = 8
+    """``task_stages``: a row's task key hashes the first ``task_key_tokens`` tokens after its LAST document-end marker
+    (the start of the task's fixed question template under query position ``after``)."""
+    task_adapt: str = ""
+    """ONLINE per-task keep multipliers on top of ``task_stages`` (``"k=v,..."``, see :data:`TASK_ADAPT_DEFAULTS`).
+    Empty = the ``task_stages`` shares stay fixed."""
     samples_per_row: int = 2048
     proj_dim: int = 0
     """Random-project the hidden features to this many dims (0: use all d_model dims)."""
@@ -475,6 +491,24 @@ class OnlineRouterConfig:
                 raise ValueError(f"online router keep_sched must be 'a:b' with a, b > 0, got {self.keep_sched!r}")
         if self.per_task_key_tokens < 0:
             raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
+        if self.task_stages:
+            if not self.stages:
+                raise ValueError("online router task_stages needs stages")
+            n_st = len(parse_stages(self.stages))
+            for name, ks in parse_task_stages(self.task_stages).items():
+                if len(ks) != n_st or any(not 0.0 < k <= 1.0 for k in ks) or ks != sorted(ks, reverse=True):
+                    raise ValueError(f"online router task_stages {name}: need {n_st} non-increasing shares in (0, 1], "
+                                     f"got {ks}")
+            if (self.keep_sched or self.mass_target > 0 or self.later_mass_target > 0 or self.keep_mode != "topk"
+                    or self.wts or self.dense_keep_frac < 1.0 or self.mod_layers):
+                raise ValueError("online router task_stages is exclusive with keep_sched / mass_target / "
+                                 "later_mass_target / keep_mode threshold / wts / dense_keep_frac / mod_layers")
+            if not self.task_key_table or self.task_key_tokens <= 0:
+                raise ValueError("online router task_stages needs task_key_table and task_key_tokens > 0")
+        if self.task_adapt:
+            if not self.task_stages:
+                raise ValueError("online router task_adapt needs task_stages")
+            parse_task_adapt(self.task_adapt)
         if self.wts:
             parse_wts(self.wts)
             if (self.drop_layer <= 0 and not self.stages) or self.mod_layers or self.merge_dropped or self.mass_target > 0 \
@@ -654,6 +688,60 @@ def parse_stages(spec: str) -> List[Tuple[int, float]]:
     return out
 
 
+def parse_task_stages(spec: str) -> Dict[str, List[float]]:
+    """``"reorder=0.5/0.2/0.07,*=0.2/0.07/0.07"`` -> ``{"reorder": [0.5, 0.2, 0.07], "*": [0.2, 0.07, 0.07]}``."""
+    out: Dict[str, List[float]] = {}
+    for part in [p.strip() for p in spec.split(",") if p.strip()]:
+        name, _, ks = part.partition("=")
+        out[name.strip()] = [float(k) for k in ks.split("/")]
+    return out
+
+
+def parse_task_key_table(spec: str) -> Dict[int, str]:
+    """``"123=reorder,456=outlier"`` -> ``{123: "reorder", 456: "outlier"}``."""
+    out: Dict[int, str] = {}
+    for part in [p.strip() for p in spec.split(",") if p.strip()]:
+        k, _, name = part.partition("=")
+        out[int(k)] = name.strip()
+    return out
+
+
+def task_query_key_np(row: Any, doc_end_id: int, n_tok: int) -> int:
+    """numpy twin of :meth:`OnlineTokenRouter.task_query_keys` for one row (1-D ids). -1 = the row has no document."""
+    import numpy as np
+
+    row = np.asarray(row)
+    pos = np.nonzero(row == doc_end_id)[0]
+    if pos.size == 0:
+        return -1
+    seg = row[pos[-1] + 1: pos[-1] + 1 + n_tok].astype(np.int64)
+    pw = np.array([pow(1_000_003, i, 2**31 - 1) for i in range(seg.size)], dtype=np.int64)
+    return int((seg * pw).sum())
+
+
+#: ``task_adapt`` (online per-task keep multipliers m_t on the first-cut share; later cuts keep their ratio to it):
+#:   target  0     covered share of the router's predicted gradient mass each task should reach at the first cut;
+#:                 0 = the token-weighted mean coverage over tasks (equalise the lost share across tasks)
+#:   gain    0.5   step of the log-multiplier update: log m_t += gain * (target - cov_t) / max(target, 0.05)
+#:   ema     0.8   smoothing of each task's measured coverage across steps
+#:   lo, hi  0.25, 4  multiplier bounds (and every share is capped at 1)
+#:   budget  1     1 = renormalise every step so the body-token-weighted mean first-cut share equals its task_stages
+#:                 value (fixed average cost); 0 = free
+#:   start   0     first optimizer step that adapts (the router needs a fit first)
+TASK_ADAPT_DEFAULTS: Dict[str, float] = {"target": 0.0, "gain": 0.5, "ema": 0.8, "lo": 0.25, "hi": 4.0, "budget": 1.0,
+                                         "start": 0.0}
+
+
+def parse_task_adapt(spec: str) -> Dict[str, float]:
+    out = dict(TASK_ADAPT_DEFAULTS)
+    for part in [p.strip() for p in spec.split(",") if p.strip()]:
+        k, _, v = part.partition("=")
+        if k not in out:
+            raise ValueError(f"unknown task_adapt option {k!r} (known: {sorted(out)})")
+        out[k] = float(v)
+    return out
+
+
 def parse_freeze_schedule(spec: str) -> List[Tuple[int, float]]:
     """``"4:0.25,7:0.5"`` -> ``[(4, 0.25), (7, 0.5)]`` (blocks frozen, share of the optimizer steps)."""
     out = []
@@ -724,6 +812,7 @@ class OnlineTokenRouter:
         cfg.validate()
         self.stage_idx = 0
         self._next: Optional["OnlineTokenRouter"] = None
+        stages_spec = cfg.stages
         if cfg.stages:
             import dataclasses
 
@@ -737,7 +826,7 @@ class OnlineTokenRouter:
                 # freeze_early is a property of the FIRST cut only ([0, first cut) forward-only); later stages must not carry it
                 # (their validate() would demand early_lora_start == their own drop layer)
                 c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False, freeze_early=False,
-                                        seed=cfg.seed + 1009 * i, keep_first=0)
+                                        seed=cfg.seed + 1009 * i, keep_first=0, task_stages="", task_adapt="")
                 if lmt > 0:
                     c = dataclasses.replace(c, mass_target=lmt, max_keep_frac=lmk)
                 nxt = OnlineTokenRouter(c, doc_start_id=doc_start_id, doc_end_id=doc_end_id, eos_id=eos_id,
@@ -753,6 +842,10 @@ class OnlineTokenRouter:
         self._root: "OnlineTokenRouter" = self
         for r in self.chain():
             r._root = self
+        self._task_on = False
+        self._row_tidx: Optional[torch.Tensor] = None  # this forward's (B,) task index (task_stages)
+        if cfg.task_stages:
+            self._init_task_stages(stages_spec)
         self._logtau = math.log(float(self.wts["tau0"])) if self.wts else 0.0
         self._last_p: Optional[torch.Tensor] = None
         self._wts_marked = False
@@ -1032,6 +1125,164 @@ class OnlineTokenRouter:
         pw = torch.tensor([pow(1_000_003, i, 2**31 - 1) for i in range(N)], dtype=torch.int64, device=input_ids.device)
         return (input_ids[:, :N].to(torch.int64) * pw[None, :]).sum(dim=1)
 
+    # ------------------------------------------------------------------ per-task budgets (task_stages)
+    def _init_task_stages(self, stages_spec: str) -> None:
+        """Root only: the (n_tasks + 1, n_stages) table of ABSOLUTE keep shares (last row = rows of any other / unknown
+        task), the key table, the block span of every stage (cost weights for task_adapt) and the adaptive state."""
+        st = parse_stages(stages_spec)
+        spec = parse_task_stages(self.cfg.task_stages)
+        table = parse_task_key_table(self.cfg.task_key_table)
+        names = sorted(set(table.values()))
+        missing = [n for n in spec if n != "*" and n not in names]
+        if missing:
+            raise ValueError(f"online router task_stages names {missing} are not in the task key table {names}")
+        default = spec.get("*", [k for _, k in st])
+        self._task_names = names
+        self._task_key_list = list(table.keys())
+        self._task_key_idx = [names.index(table[k]) for k in self._task_key_list]
+        self._task_abs = torch.tensor([spec.get(n, default) for n in names] + [default], dtype=torch.float32)
+        layers = [l for l, _ in st]
+        # blocks each stage's share runs (cut i to cut i+1, the last cut to the end of the stack): the cost weights of
+        # task_adapt's fixed-cost renormalisation (36 blocks until begin_step sees the model)
+        self._task_layers = layers
+        self._task_span = torch.tensor([float(b - a) for a, b in zip(layers, layers[1:])] + [float(max(1, 36 - layers[-1]))])
+        self._task_on = True
+        n = len(names) + 1
+        self._task_mult = torch.ones(n)
+        self._task_ta = parse_task_adapt(self.cfg.task_adapt) if self.cfg.task_adapt else None
+        self._task_cov_ema = torch.full((n,), float("nan"))
+        self._task_tok_ema = torch.zeros(n)
+        self._task_acc: Optional[torch.Tensor] = None  # (n, 3): coverage sum over rows, rows, body tokens
+
+    def task_query_keys(self, input_ids: torch.Tensor) -> torch.Tensor:
+        """(B,) int64 task key per row: a polynomial hash of the first ``task_key_tokens`` tokens after the row's LAST
+        document-end marker (the task's fixed question template); -1 for a row without documents."""
+        B, T = input_ids.shape
+        K = int(self.cfg.task_key_tokens)
+        dev = input_ids.device
+        de = input_ids == self.doc_end_id
+        col = torch.arange(T, device=dev)
+        last = torch.where(de, col[None, :], torch.full_like(input_ids, -1, dtype=torch.long)).max(dim=1).values
+        pos = last[:, None] + 1 + torch.arange(K, device=dev)[None, :]
+        ok = pos < T
+        seg = torch.gather(input_ids, 1, pos.clamp(max=T - 1)).to(torch.int64) * ok
+        pw = torch.tensor([pow(1_000_003, i, 2**31 - 1) for i in range(K)], dtype=torch.int64, device=dev)
+        key = (seg * pw[None, :]).sum(dim=1)
+        return torch.where(last >= 0, key, torch.full_like(key, -1))
+
+    def _task_index(self, input_ids: torch.Tensor) -> torch.Tensor:
+        """(B,) index into ``_task_names`` (len(_task_names) = unknown) of every row."""
+        keys = self.task_query_keys(input_ids)
+        kt = torch.tensor(self._task_key_list, dtype=torch.int64, device=keys.device)
+        it = torch.tensor(self._task_key_idx, dtype=torch.long, device=keys.device)
+        hit = keys[:, None] == kt[None, :]
+        idx = torch.where(hit.any(dim=1), it[hit.float().argmax(dim=1)],
+                          torch.full_like(keys, len(self._task_names)))
+        return idx
+
+    def task_abs_shares(self) -> torch.Tensor:
+        """Root: (n_tasks + 1, n_stages) effective absolute keep shares (task_stages x the adaptive multipliers,
+        capped at 1, non-increasing across cuts)."""
+        a = (self._task_abs * self._task_mult[:, None]).clamp(max=1.0)
+        return torch.cummin(a, dim=1).values
+
+    def _task_row_keep(self, dev) -> Optional[torch.Tensor]:
+        """(B,) keep share of the tokens ENTERING this stage for every row of this forward, or None (task_stages off)."""
+        root = self._root
+        if not root._task_on or root._row_tidx is None:
+            return None
+        a = root.task_abs_shares()
+        i = self.stage_idx
+        rel = a[:, 0] if i == 0 else (a[:, i] / a[:, i - 1].clamp(min=1e-9)).clamp(max=1.0)
+        return rel.to(dev)[root._row_tidx.to(dev)]
+
+    def _task_stats(self, keep: torch.Tensor, body: torch.Tensor, score: Optional[torch.Tensor]) -> None:
+        """Per-task realised keep share (every stage) and, at the first cut with task_adapt, each row's covered share
+        of the router's predicted gradient mass (exp of the row-centred log-gnorm prediction), accumulated for the
+        multiplier update in begin_step."""
+        root = self._root
+        tidx = root._row_tidx.to(keep.device)
+        kb, nb = keep.sum(dim=1).float(), body.sum(dim=1).float()
+        for j, name in enumerate(root._task_names + ["other"]):
+            m = tidx == j
+            if bool(m.any()):
+                self._stat(f"keep_{name}", float(kb[m].sum()) / max(1.0, float(nb[m].sum())))
+                if self.stage_idx == 0:
+                    self._stat(f"rows_{name}", float(m.sum()))
+        if self.stage_idx == 0 and root._task_ta is not None and score is not None:
+            sb = torch.where(body, score.float(), torch.full_like(score, -float("inf"), dtype=torch.float32))
+            w = torch.exp(sb - sb.max(dim=1, keepdim=True).values.clamp(min=-1e30))
+            w = torch.where(body, w, torch.zeros_like(w))
+            cov = (w * keep).sum(dim=1) / w.sum(dim=1).clamp(min=1e-30)
+            n = len(root._task_names) + 1
+            acc = torch.zeros(n, 3, device=keep.device)
+            has = nb > 0
+            acc[:, 0].index_add_(0, tidx[has], cov[has])
+            acc[:, 1].index_add_(0, tidx[has], torch.ones_like(cov[has]))
+            acc[:, 2].index_add_(0, tidx[has], nb[has])
+            root._task_acc = acc if root._task_acc is None else root._task_acc + acc
+
+    def _task_adapt_step(self, step: int, model=None) -> None:
+        """Root, begin_step: all-reduce the previous step's per-task coverage, update the EMA and the multipliers
+        (equalise the covered share of predicted gradient mass), renormalise to the fixed average cost."""
+        import torch.distributed as dist
+
+        if model is not None and getattr(model, "blocks", None) is not None:
+            self._task_span[-1] = float(max(1, len(model.blocks) - self._task_layers[-1]))
+        ta = self._task_ta
+        n = len(self._task_names) + 1
+        acc = self._task_acc if self._task_acc is not None else torch.zeros(n, 3)
+        self._task_acc = None
+        if dist.is_available() and dist.is_initialized():
+            dev = torch.device("cuda", torch.cuda.current_device()) if torch.cuda.is_available() else torch.device("cpu")
+            acc = acc.to(dev)
+            dist.all_reduce(acc)
+        acc = acc.float().cpu()
+        seen = acc[:, 1] > 0
+        if bool(seen.any()):
+            cov = acc[:, 0] / acc[:, 1].clamp(min=1)
+            e = float(ta["ema"])
+            old = self._task_cov_ema
+            self._task_cov_ema = torch.where(seen & torch.isnan(old), cov,
+                                             torch.where(seen, e * old + (1 - e) * cov, old))
+            self._task_tok_ema = torch.where(seen, e * self._task_tok_ema + (1 - e) * acc[:, 2], self._task_tok_ema)
+        valid = ~torch.isnan(self._task_cov_ema) & (self._task_tok_ema > 0)
+        if step >= int(ta["start"]) and int(valid.sum()) >= 2:
+            c = self._task_cov_ema
+            tgt = float(ta["target"]) if ta["target"] > 0 else float(
+                (c[valid] * self._task_tok_ema[valid]).sum() / self._task_tok_ema[valid].sum())
+            lm = self._task_mult.log()
+            upd = float(ta["gain"]) * (tgt - c) / max(tgt, 0.05)
+            lm = torch.where(valid, lm + upd, lm).clamp(math.log(ta["lo"]), math.log(ta["hi"]))
+            self._task_mult = lm.exp()
+            if ta["budget"] > 0:
+                # fixed average cost: one scale s on every multiplier so sum_t N_t sum_i span_i min(1, base_ti m_t s)
+                # equals sum_t N_t sum_i span_i base_ti (bisection on log s; caps make it monotone, not linear)
+                N = torch.where(valid, self._task_tok_ema, torch.zeros_like(self._task_tok_ema))
+                base = self._task_abs
+                want = float((N[:, None] * base * self._task_span[None, :]).sum())
+
+                def cost(s: float) -> float:
+                    a = torch.cummin((base * (self._task_mult * s)[:, None]).clamp(max=1.0), dim=1).values
+                    return float((N[:, None] * a * self._task_span[None, :]).sum())
+
+                lo, hi = -6.0, 6.0
+                for _ in range(40):
+                    mid = 0.5 * (lo + hi)
+                    if cost(math.exp(mid)) > want:
+                        hi = mid
+                    else:
+                        lo = mid
+                s = math.exp(0.5 * (lo + hi))
+                self._task_mult = self._task_mult * s
+            self._stat("task_cov_target", tgt)
+        a = self.task_abs_shares()
+        for j, name in enumerate(self._task_names):
+            if bool(valid[j]):
+                self._stat(f"cov_{name}", float(self._task_cov_ema[j]))
+            self._stat(f"mult_{name}", float(self._task_mult[j]))
+            self._stat(f"abs0_{name}", float(a[j, 0]))
+
     # ------------------------------------------------------------------ selection
     def select(
         self,
@@ -1048,6 +1299,7 @@ class OnlineTokenRouter:
         self._calls += 1
         self._ignore_index = ignore_index
         self._row_task = self.task_keys(input_ids) if self.cfg.per_task_key_tokens > 0 else None
+        self._row_tidx = self._task_index(input_ids) if self._task_on else None
         # positional-block rows (CPT): documents are blocks with no markers (see structural_features)
         self._marker_free = int((getattr(model, "_pooled_soft_tokens", None) or {}).get("positional_block_size", 0)) > 0
         # trim the right pad: features / prefix pass only over the longest real row
@@ -1110,6 +1362,10 @@ class OnlineTokenRouter:
             # warmup without a full-length pass: the normal budget at uniform scores
             dense, warm_rand = False, True
             self._stat("warmup_random", 1.0)
+        # task_stages: every row's own keep share of the tokens entering this cut (its task's budget)
+        kf_t = self._task_row_keep(dev) if not dense else None
+        if kf_t is not None and keep_cap > 0:
+            raise RuntimeError("online router task_stages is exclusive with --st-otr-keep-cap")
         explore = torch.zeros_like(body)
         score = None
         if self.w is not None:
@@ -1142,7 +1398,7 @@ class OnlineTokenRouter:
                 score, c_explore = fp["_dh"] + 1e-6 * u, 0.0
             else:
                 c_explore = c.explore_frac
-            k = torch.ceil(n_body.to(torch.float32) * kf).to(torch.long)
+            k = torch.ceil(n_body.to(torch.float32) * (kf_t if kf_t is not None else kf)).to(torch.long)
             k_e = torch.round(k.to(torch.float32) * c_explore).to(torch.long)
             # exploration: the k_e body tokens with the smallest uniform draw
             ru = torch.where(body, u, torch.full_like(u, 2.0))
@@ -1156,7 +1412,22 @@ class OnlineTokenRouter:
             kd = 0.0 if (c.mass_target > 0 or c.keep_mode == "threshold") else kf * c.doc_share
             if c.mass_target > 0:
                 keep = keep | self._mass_keep(score, body, cid, c.mass_target)
-            if kd > 0:
+            if kd > 0 and kf_t is not None:
+                # task_stages: the same per-document share rule with each row's own share (k_doc_frac, one column
+                # broadcast over the row's documents; a share of 1 keeps the row's whole body)
+                from .attention.chunked_mask import FREE_CHUNK_ID, mark_doc_topk_tokens_free
+
+                kd_t = (kf_t * c.doc_share).clamp(max=1.0)
+                if bool((kd_t >= 1.0).all()):
+                    keep = body.clone()
+                else:
+                    sc_d = torch.where(explore | forced, torch.full_like(score, 1e30), score)
+                    ds, de = self._doc_ids()
+                    out = mark_doc_topk_tokens_free(cid, ids, sc_d, doc_start_id=ds, doc_end_id=de, k=1.0,
+                                                    k_doc_frac=kd_t[:, None])
+                    keep = keep | (body & (out == FREE_CHUNK_ID))
+                    keep = keep | (body & (kd_t >= 1.0)[:, None])
+            elif kd > 0:
                 # per-document share: each document's own top ceil(kd * |body_d|) by score
                 # (exploration tokens rank first, so they count against their document's share)
                 from .attention.chunked_mask import FREE_CHUNK_ID, mark_doc_topk_tokens_free
@@ -1246,6 +1517,8 @@ class OnlineTokenRouter:
         # diagnostics: realised keep, gold leak (does per-document kept density name gold?)
         self._stat("keep_frac", float(keep.sum()) / max(1.0, float(body.sum())))
         self._stat("dense", float(dense))
+        if kf_t is not None:
+            self._task_stats(keep, body, score)
         if self.gold is not None and not dense:
             gflag = fp["_gold"][..., 0] if "_gold" in fp else self._row_gold(ids, cid)
             self._stat("leak_auc", self._leak_auc(keep, body, cid, gflag))
@@ -1956,6 +2229,11 @@ class OnlineTokenRouter:
                 model._flop_step_ratio = None
             self._wts_routed = False
             self._stat("wts_tau", math.exp(self._logtau))
+        if self.stage_idx == 0 and self._task_on and self._task_ta is not None:
+            if self.step == 0:
+                self._task_acc = None  # the dry-run batch
+            else:
+                self._task_adapt_step(step, model)
         if self.step == 0:
             self._pending = []  # forwards before the first step = the trainer's dry-run batch
         X, y, rows_all, expl, preds, dense_e, gns, tks, iws = [], [], [], [], [], [], [], [], []
