@@ -34,9 +34,9 @@ CHUNK_BY = {"oolong": "line"}
 POOL = {"contradiction": "auto", "nq": f"{SEEDS}/nq.seed.jsonl.gz", "outlier": f"{SEEDS}/outlier.seed.jsonl.gz",
         "oolong": f"{SEEDS}/oolong.seed.jsonl.gz"}
 RUNG_TOKENS = {"2k": 2048, "4k": 4096, "8k": 8192, "16k": 16384, "32k": 32768, "64k": 65536, "128k": 131072,
-               "256k": 262144, "448k": 458752, "512k": 524288, "1m": 1048576}
+               "256k": 262144, "320k": 327680, "384k": 393216, "448k": 458752, "512k": 524288, "1m": 1048576}
 #: rows generated per (task, rung): >= the probe's rows per task plus slack for rows the converter drops
-ROWS = {"2k": 160, "4k": 160, "8k": 160, "16k": 160, "32k": 160, "64k": 160, "128k": 48, "256k": 20, "448k": 8, "512k": 8,
+ROWS = {"2k": 160, "4k": 160, "8k": 160, "16k": 160, "32k": 160, "64k": 160, "128k": 48, "256k": 20, "320k": 4, "384k": 4, "448k": 8, "512k": 8,
         "1m": 4}
 SEED = 20261117
 
