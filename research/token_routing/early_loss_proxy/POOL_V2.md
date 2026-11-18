@@ -209,3 +209,45 @@ The npz format is the same as v2.
 - **Overlap:** prompt-hash hits are 0 in every set, and no held-out gold document is a gold document in any training pool.
   - contradiction: 23 of 24 rows have a gold claim that appears among training filler claims, and 99% of their documents occur in training.
   - qdmatch_nq: every row's gold queries appear as training distractors.
+
+## `mtb16kx4` (2026-11-18): mtb16k with 4x the rows
+- **What it is:** mtb16k's recipe, tasks, rungs, documents per row, tokenizer, converter flags, 16,384 cap and layout, with 7,808 rows per task (2,603 / 2,603 / 2,602 at 4k / 8k / 16k). That is 31,232 rows, **1,952 steps per epoch at 16 rows/step**. t0..t3 = contradiction, outlier, reorder, qdmatch_nq.
+- **Relation to mtb16k:** it contains all 7,808 mtb16k rows plus 23,424 new generated rows. `overlap --contains` found 7,808 / 7,808 mtb16k fingerprints in the pool.
+  - The new rows come from the same ctc stream (seed 42, `--split train`), regenerated larger: 3,200 / 3,200 / 3,300 / 8,000 rows per cell (contradiction / outlier / reorder / qdmatch_nq).
+  - The stream is prefix-stable: in all 12 cells the first 1,000 rows (2,000 for qdmatch_nq) are byte-identical to the mtb16k cells.
+  - Rows are shuffled within each task (seed 20261116, as for mtb16k), so the order differs from mtb16k's.
+- **No duplicate prompts:** 31,232 distinct prompt hashes. The dedupe in assemble dropped 0 rows.
+- **Size:** 285.9M tokens and 2.31M loss tokens. Mean row length is 9,154 tokens and the maximum is 16,378. On disk: 12 files, 1,492,490,266 bytes.
+- **Built by:** `build_pool_v2.py` with `--cell-root /data/prasann/early_loss_proxy/x4build --gen-rows ...`, then `assemble --rows-per-task 7808 --exclude-heldout`, `order`, and `overlap --contains .../mtb16k`. Slurm jobs 5202903 and 5202936 on mooney, CPU only, about 25 minutes in total. The build cells are in `mooney:/data/prasann/early_loss_proxy/x4build/{gen,tok}`.
+- **Locations:** the pool, `mtb16kx4_stats.json`, `mtb16kx4_order_seed0.json` and `mtb16kx4_overlap.json` are in:
+  - `/data/prasann/early_loss_proxy/shards/mtb16kx4` on mooney and on sneetches (the sneetches copy was piped node to node through srun; same 12 files and bytes, matching sha1)
+  - weka `/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16kx4` (Beaker job 01M7Q2DFPVENQMNXQWAQ68YNNQ; S3 copy at `s3://ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16kx4`)
+
+| task | mean tokens (min-max) at 4k / 8k / 16k | answer tokens | rows dropped (generated -> kept per rung) |
+|---|---|---|---|
+| contradiction | 4,144 (3,357-5,354) / 8,372 (7,197-9,942) / 14,496 (12,827-16,069) | 25-30 | 16k: 1 over 16,384 |
+| outlier | 4,311 / 8,636 / 14,476 (13,560-15,745) | 16-17 | 16k: 1 gold-in-eval |
+| reorder | 4,402 / 9,211 / 14,425 (12,570-16,378) | 101 / 221 / 353 | over 16,384: 0 / 0 / 53. Gold-in-eval: 1 / 4 / 3. Same book as an eval row: 49 / 35 / 43. Gold or book in a held-out gen row: 51 / 49 / 63 |
+| qdmatch_nq | 3,820 / 7,738 / 15,826 | 25-28 | gold pair in eval: 4,853 / 4,806 / 4,835 of 8,000. Gold in a held-out gen row: 45 / 53 / 47. That leaves 3,102 / 3,141 / 3,118 eligible, so the 2,603 needed per rung was not the limit |
+
+**Exclusions:** as mtb16k (all three 4k-16k eval rung files), plus a new rule (`--exclude-heldout`): a training row is dropped if a gold document of the row, or its reorder book, is gold in heldout_v3 gen16k or heldout_v4 gen32k / gen64k. That set is 426 / 216 / 3,822 / 531 gold hashes (contradiction / outlier / reorder / qdmatch_nq) and 37 reorder books. Rows dropped by the new rule are all new rows; the mtb16k rows were already clean against it.
+
+**Gold sidecars and check:** `gold_fingerprints.json`, `gold_pairs_fingerprints.json` and `row_info.jsonl` are in the same format as mtb16k. 40 rows per task were decoded, and every task passed 40/40 on all three checks (the span text matches the source, printed IDs are index + 1, and the answer IDs match gold).
+
+**First 800 rows of a seed-0 run:**
+- By task: contradiction 188, outlier 207, reorder 211, qdmatch_nq 194.
+- By rung: every task × rung cell gets 59-78 rows.
+
+**Overlap (held-out vs all 31,232 training rows; `mtb16kx4_overlap.json`).** Prompt-hash hits are 0 in every set of heldout_v2 / v3 / v4, and held-out gold documents among training GOLD documents are 0 in every set. The table counts held-out rows that have a gold document anywhere in a training row, followed by the mean share of a held-out row's documents found in training:
+
+| set | contradiction | outlier | reorder | qdmatch_nq |
+|---|---|---|---|---|
+| suite4k / suite8k / suite16k (v2 = v3) | 6 / 6 / 9 (share 0.08-0.10) | 4 / 4 / 4 (0.03-0.04) | 0, 0 shared books | 26 / 29 / 32 (0.46) |
+| v3 rung16k | 6 (0.10) | 4 (0.04) | 0 | 32 (0.47) |
+| v3 gen16k (= v4 gen16k) | **12 / 48** (0.98) | 2 / 48 (0.06) | 0, 0 books | 48 / 48 (1.0) |
+| v4 gen32k / gen64k | 23 / 23 of 24 (0.99) | 0 / 0 | - | 24 / 24 (1.0) |
+
+**Caveats:**
+- **Gold claims as filler:** with 4x the contradiction rows, 12 of the 48 gen16k contradiction rows now have a gold claim that appears among training *filler* claims (0 for mtb16k). It is never a training gold claim. The filler pool is shared, so nearly all of gen16k's filler occurs in training.
+- **Distractors:** outlier gen16k has 2 such rows, and qdmatch_nq gold queries still recur as training distractors, as in mtb16k.
+- **Eval rungs covered:** like mtb16k, the exclusion covers the 4k-16k eval rungs, not r2k or r32k+.
