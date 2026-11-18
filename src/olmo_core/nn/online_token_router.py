@@ -734,7 +734,9 @@ class OnlineTokenRouter:
             prev_k, prev = k0, self
             for i, (l, k) in enumerate(rest, start=1):
                 # later stages: keep ``k`` of the ORIGINAL body = k / prev_k of the tokens entering; their own fit
-                c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False,
+                # freeze_early is a property of the FIRST cut only ([0, first cut) forward-only); later stages must not carry it
+                # (their validate() would demand early_lora_start == their own drop layer)
+                c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False, freeze_early=False,
                                         seed=cfg.seed + 1009 * i, keep_first=0)
                 if lmt > 0:
                     c = dataclasses.replace(c, mass_target=lmt, max_keep_frac=lmk)
