@@ -2,8 +2,8 @@
 # NEW SCOPE RULE (11-18): LoRA and fixed data re-mixes are part of the DENSE BASELINE. Main methods = dynamic FLOP dropping
 # during training only. Direction: start from drop settings that track dense per step at higher step cost, then cut step
 # cost gradually. Primary held-out = heldout_v3 (sets gen16k:48,rung16k:32,suite8k:8,suite4k:8; eval_size 384), score with v3.py.
-# Hub tab: never publish from this session with hub_tab/build_autoresearch_tab.py (stale). Hand hub_tab/loop_state.json to the
-# hub-reorg session (local_9a6d1692-d798-4df3-b6c6-023470949c95) or use hub_live/ in the main checkout after reading the live page.
+# Hub tab: never use hub_tab/build_autoresearch_tab.py (stale). Use hub_tab/refresh_hub.sh (hub_live builder from the main checkout) after an
+# Artifact read of the live page; the hub-reorg session (local_9a6d1692-d798-4df3-b6c6-023470949c95) was unreachable on 11-18.
 
 ## IN FLIGHT (wave 1, launched 2026-11-18 00:30-00:45 PT; tag w1; heldout_v3; full epoch; probes 50,100,150,200,300,400,488)
 - Beaker (2 GPUs each; `bash fetch_beaker_results.sh w1` then `python3 ladder.py --live --json hub_tab/ladder.json`):
@@ -36,7 +36,7 @@
 - NEXT: read which rungs track dense at steps 300-488; take the cheapest that does and lower its cost in small moves
   (more arms between it and the first rung that lags); FLOP-matched 203 PF screens (--max-pf 203 --pf-points 50,100,150
   --steps 2000, smoke passed) for new mechanisms; second seed for any arm within 0.01 CE of dense at step 488.
-- Hub: message to hub-reorg NOT delivered at 00:55 (desktop host unreachable). Retry: ask it to rebuild the tab from hub_tab/loop_state.json (6 new running ideas, status, 3 log entries), mark the 3.0x best-so-far chart superseded, and add a ladder table from hub_tab/ladder.json once arms finish.
+- Hub: PUBLISHED from this session as version 121 at 02:15 (hub-reorg session unreachable). Procedure: Artifact read of the hub URL, `bash hub_tab/refresh_hub.sh <saved page>`, Artifact publish of the printed new.html to the same URL (no force). The ladder table comes from hub_tab/ladder.json via hub_tab/add_ladder_table.py (interim; should move into the hub builder; new idea ids have no implementation notes in make_idea_impl.py yet).
 
 # Auto-research loop: state file (updated 2026-11-17 12:05 PT)
 
