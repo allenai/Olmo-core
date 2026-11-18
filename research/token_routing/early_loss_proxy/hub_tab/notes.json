@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 05:30",
+   "text": "Equal FLOPs (about 1,982 PF) on the 4x pool, finished: LoRA 50%/20% 0.078, full fine-tune 50%/20% 0.082, ramp 0.088, LoRA 50% after block 16 0.088; dense LoRA with more rows (642 steps) 0.101; dense full fine-tune one epoch 0.114 / 0.119. The baseline at this budget is therefore dense LoRA on more rows (0.101), and dropping improves on it by 0.013-0.023."
+  },
+  {
    "t": "11-18 05:10",
    "text": "Equal-FLOP runs: three finished at 1,982 PF on the 4x pool with 16k CE 0.082-0.088 against dense full fine-tune 0.114 / 0.119 at the same FLOPs. Launched 11 budget-matched runs with complete schedules at 495 and 991 PF (dense, dense LoRA, recipe 20%/7%, 10%/3%, 50%/20%/7%, 50%/20%, full fine-tune 50%/20%) so FLOPs-to-match can be read against dense's own budget curve. One-epoch closures: gradient compensation dropped (worse at 20%/7%, neutral at 50%/20%); deeper and four-stage pyramids worse than 50%/20%/7%; a same-seed rerun of the ramp gave 0.120 against 0.113, so one-epoch differences under about 0.007 are noise."
   },

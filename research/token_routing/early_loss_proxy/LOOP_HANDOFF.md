@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 05:30 x4: denselora-x4 (642 steps, 1,963 PF) = 0.101 -> THE BASELINE AT 1,982 PF IS DENSE LoRA ON MORE ROWS (0.101), not dense FT one epoch (0.114/0.119).
+  lo-r50to20-x4 final 0.078 @2,006 PF. Gain of dropping over the baseline family at equal FLOPs: 0.101 -> 0.078-0.088. Ratio needs dense curves > 1,982 PF + bud runs.
 - 05:10 x4 finished at ~1,975 PF: ft-r50to20-x4 0.082, ft-c7ramp-x4 0.088, lo-c16k50-x4 0.088 (dense FT 0.114/0.119 at 1,982 PF). Running: lo-r50to20-x4,
   recipe-x4, lo-p50-20-7-x4, dense-x4 (976), dense-x4full, denselora-x4, denselora-x4full.
   BUDGET-MATCHED (tag bud, pool mtb16kx4, --max-tokens so each run has a complete schedule): B=991 PF: dense-b991 (244 steps), denselora-b991 (323),
