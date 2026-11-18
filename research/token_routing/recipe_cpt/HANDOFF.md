@@ -1,6 +1,6 @@
 # recipe_cpt handoff (current state; keep this file current)
 
-Updated 2026-11-17 16:25 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
+Updated 2026-11-17 17:10 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
 from `origin/claude/early-loss-proxy-d6e886` @ d52756c12. Design and smoke numbers: `README.md`.
 
 ## Running (Beaker, ai2/flex2, budget ai2/oe-other, urgent, jupiter, 1 node x 8 H100)
@@ -9,6 +9,13 @@ from `origin/claude/early-loss-proxy-d6e886` @ d52756c12. Design and smoke numbe
 |---|---|---|---|---|
 | `rcpt-q35-4b-recipe-u1B` | 01M7P0EPDSS7CSXED8MCCJNGEX | ~114 min (3.30 s/step x 1,938 + startup/saves) | 2h30m | `/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/rcpt-q35-4b-recipe-u1B` |
 | `rcpt-q35-4b-dense-u1B` (control) | 01M7P00RGZSA3GF23WDY5EVD8K | ~279 min (8.38 s/step) | 6h05m (Beaker accepted >4h: a 7h test job scheduled in 2 min) | `.../ctc_suite/ckpts/rcpt-q35-4b-dense-u1B` |
+
+Both queued ~35-45 min on jupiter (no whole 8-GPU node free, 30 urgent node-sized jobs ahead) and started
+2026-11-18 01:01 UTC (17:01 PT). Measured in the run: recipe 20.4k tok/s/GPU, ETA ~19:00 PT; dense 8.0k tok/s/GPU,
+ETA ~21:30 PT.
+
+Step-242 export + dev-CE jobs are already queued (WAITMAX 1 h): recipe 01M7P31BY9F7YMYMBQE1ARXANK, dense
+01M7P31FCKSZ5GA4YXSX4FYJ38 (ops ids `rcpt-post-{recipe,dense}-u1B-step242`).
 
 wandb group: https://wandb.ai/prasanns-allen-institute-for-ai/memory-networks/groups/rcpt-q35-4b
 
