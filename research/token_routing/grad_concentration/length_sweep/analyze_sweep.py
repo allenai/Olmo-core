@@ -28,6 +28,7 @@ NAMES = {"down7_body": "global oracle", "rowq7_body": "per-row quota", "docq7_bo
          "rand7_body": "random"}
 G0 = 14  # groups 2*7 .. 63 = blocks 7-31
 B = 2000
+MIN_FIT_SHARE = 1e-3  # lengths whose mean share is below 0.1% are left out of the log-log fits (listed in "lengths")
 
 
 def k_at(ks, ys, t):
@@ -83,7 +84,8 @@ def summarize_run(label, d, rng):
            "rung": R[0].get("rung"), "rows_from": R[0].get("rows_from"), "body_tokens_per_step": float(nb_step.mean()),
            "body_share": float(np.mean([x["n_body"] / x["T"] for x in rows])),
            "ce_mean": float(np.mean([x["ce"] for x in rows])),
-           "peak_gib": R[-1].get("peak_gib"), "rules": {}, "tasks": {}}
+           "peak_gib": R[-1].get("peak_gib"), "rules": {}, "tasks": {},
+           "body_energy_share_mean": float(np.mean([x["body_energy_share"] for x in rows]))}
     for r in RANKS:
         if r.startswith("rand"):
             kx = [0.0] + list(ks)
@@ -149,7 +151,7 @@ def fit(points, rng, key="rowq7_body", t=0.95, kind="step"):
     for p in points:
         v = np.array(p["rules"][key][f"_steps_cos{t}"] if kind == "step" else p[f"_rows_rowself_cos{t}"], float)
         v = v[np.isfinite(v)]
-        if len(v) == 0:
+        if len(v) == 0 or v.mean() < MIN_FIT_SHARE:  # a length where the share is ~0 cannot enter a log fit
             continue
         xs.append(np.log(p["T_mean"]))
         ys.append(v)
@@ -159,7 +161,7 @@ def fit(points, rng, key="rowq7_body", t=0.95, kind="step"):
     b0 = np.polyfit(xs, np.log([y.mean() for y in ys]), 1)[0]
     bs = []
     for _ in range(B):
-        m = [y[rng.integers(0, len(y), len(y))].mean() for y in ys]
+        m = [max(y[rng.integers(0, len(y), len(y))].mean(), MIN_FIT_SHARE / 10) for y in ys]
         bs.append(np.polyfit(xs, np.log(m), 1)[0])
     return {"slope": float(b0), "ci95": [float(np.percentile(bs, 2.5)), float(np.percentile(bs, 97.5))],
             "lengths": [float(np.exp(x)) for x in xs]}

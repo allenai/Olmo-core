@@ -36,6 +36,10 @@ def table(S, t):
     out.append("| Row vs its own gradient: tokens per row | " + " | ".join(
         f"{s[f'rowself_tokens_cos{t}']:,.0f}" for s in runs) + " |")
     out.append("| body tokens per row | " + " | ".join(f"{s['body_tokens_per_step'] / 16:,.0f}" for s in runs) + " |")
+    out.append("| body tokens' share of the down7 energy score | " + " | ".join(
+        f"{100 * s.get('body_energy_share_mean', float('nan')):.0f}%" for s in runs) + " |")
+    out.append("| rows needing 0 body tokens (row vs own, this cos) | " + " | ".join(
+        f"{100 * sum(1 for k in s[f'_rows_rowself_cos{t}'] if k == 0) / len(s[f'_rows_rowself_cos{t}']):.0f}%" for s in runs) + " |")
     out.append("| answer CE (mean) | " + " | ".join(f"{s['ce_mean']:.3f}" for s in runs) + " |")
     return "\n".join(out)
 
@@ -59,7 +63,8 @@ def fits(S):
     out = ["| quantity | slope of log(share) vs log(T) [95% CI] | implied tokens ∝ T^ |", "|---|---|---|"]
     for k, v in S["fits"].items():
         if v:
-            out.append(f"| {k} | {v['slope']:.3f} [{v['ci95'][0]:.3f}, {v['ci95'][1]:.3f}] | {1 + v['slope']:.2f} |")
+            rng_ = f"{v['lengths'][0] / 1000:.0f}k-{v['lengths'][-1] / 1000:.0f}k"
+            out.append(f"| {k} ({rng_}) | {v['slope']:.3f} [{v['ci95'][0]:.3f}, {v['ci95'][1]:.3f}] | {1 + v['slope']:.2f} |")
     for k, v in S.get("row_level_regression", {}).items():
         if v:
             out.append(f"| row-level log k ~ log T + log CE, {k} | {v['slope_logT']:.3f} [{v['slope_logT_ci'][0]:.3f}, "
