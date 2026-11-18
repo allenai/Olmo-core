@@ -25,9 +25,9 @@ rows/task, step cost ~0.22x dense, 8k-only FLOPs-to-match (FTM) 4.6x / 3.6x / >=
 - ⚠ = an eval or probe with fewer than 500 examples.
 
 **Pointers.**
-- `log: "..."` is a title prefix of an entry in `research/token_routing/ds64_fast8k/experiment_log.json` (main
-  checkout, branch `prasann/flopdrop_clean`).
-- A `records/` path with no branch exists in this worktree. Otherwise the branch named holds it.
+- `log: "..."` is a title prefix of an entry in `research/token_routing/ds64_fast8k/experiment_log.json` (this
+  branch has it; the newest copy is on `prasann/flopdrop_clean`).
+- A `records/` path with no branch exists on this branch. Otherwise the branch named holds it.
 - `[proxy]` rows point to `research/token_routing/early_loss_proxy/hub_tab/ideas.json` (by `id`) and
   `LOOP_HANDOFF.md`, both on branch `claude/early-loss-proxy-d6e886`, plus the per-idea branch `loop/<id>`
   where one exists.
@@ -138,7 +138,7 @@ means.
 | Shared-context multi-query training; train only on the hardest 10-20% of rows | Not run (no drastic data changes, decided 10-29). | dropped | log: "Shared-context multi-query"; log: "Row selection" |
 | Model scale, Qwen3.5 0.8B / 2B / 4B / 9B | The gain grows with size. FTM at 1,952: 1.73 / 2.42 / 4.08 / >4.42x (log; STATUS says 9B 4.8x). At 3,904: 1.88 / 3.22 / 3.68x. Routing, not LoRA, carries the 0.8B crossing. | works | log: "Model-scale ablation"; records/tokdrop-model-scale-ablation.md (branch claude/recipe-scale-ablation-71d007) |
 | Qwen3 (all full attention) 0.6B / 1.7B / 4B / 8B | Generalizes with a smaller, flat gain: 2.9 / 2.9 / 2.1-3.3 / 2.3-2.6x (best split 12/24 on 4B). The accuracy loss at matched data is larger, mostly on outlier and contradiction. | works (smaller) | log: "Recipe on Qwen3-4B"; tokdrop_lr STATUS; branch claude/qwen3-recipe-c876d1 |
-| Generation-eval validation of the proxy (16k pool, 3-task mean, reorder excluded) | The recipe needs 3.3x fewer FLOPs than dense LoRA (8k 3.5x), where the proxy said 1.9-2.2x. **Dense full fine-tune f1 0.928 beats the recipe f1 0.897 and dense LoRA 0.882.** Against full FT the recipe does not reach the reference. Use full FT as the stronger baseline. | caveat | tokdrop_lr STATUS "2026-11-17"; branch loop/validate @ 787581912 |
+| Generation-eval validation of the proxy (16k pool, 3-task mean, reorder excluded) | The recipe needs 3.3x fewer FLOPs than dense LoRA (8k 3.5x), where the proxy said 1.9-2.2x. **Dense full fine-tune f1 0.928 beats the recipe f1 0.897 and dense LoRA 0.882.** Against full FT the recipe does not reach the reference. Use full FT as the stronger baseline. | caveat | research/token_routing/early_loss_proxy/validation/ (this branch; from loop/validate @ 787581912); README section 2b |
 
 ## 7. Memory
 

@@ -24,7 +24,14 @@ Updated 2026-11-17. Experiment `tokdrop_lr`. Branch cut from `claude/merge-side-
 | `repro.py reference` for all three mixes (numbers in README section 2) | PASS; cells passed `ops result check` (only warnings: reorder 0.000, 2k cells at 1.000) |
 | GPU smoke of recipe + dense on this branch (jsteinhardt slurm) | (not yet run) |
 | tiny Beaker launch of the README recipe command | (not yet run) |
-| `check_access_beaker.sh` | (not yet run) |
+| `check_access_beaker.sh` | PASS: Beaker 01M7NZ6PJ6W5PFRXXTGT0SGB98, every path OK (jobs run as root; base files mode 600, data world-readable) |
 
 ## Jobs
-(none yet)
+| what | id | state |
+|---|---|---|
+| GPU smoke, recipe + dense, 8 steps each, new4 geometry (smoke_slurm.sbatch, mooney, code /data/prasann/recipe_repro/code_3745da2af) | slurm 5202048 | pending (mooney full); log /data/prasann/joblogs/rr-smoke-5202048.out |
+| README recipe command, fast8k f488 (122 steps) | Beaker 01M7NZ7K87C25SQ91TRYFFFFCW (rr-fast8k-recipe-f488-bksmoke) | pending |
+| dense fast8k f488 (comparable to reference dense f488 0.667 8k) | Beaker 01M7NZBWV3PFC2HH52W7GWKGFD (rr-fast8k-dense-f488-bksmoke) | pending |
+
+Next when they finish: `repro.py eval --mix fast8k --run <run>`, then `repro.py collect --mix fast8k`; compare dense
+f488 with the reference row (0.667 at 379 PF).

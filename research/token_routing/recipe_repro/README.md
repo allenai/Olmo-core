@@ -178,9 +178,16 @@ embeddings are identical, so the model cannot tell "open document" from "close d
 a way that looks like a modeling result. Always start from the repaired base. For a new base, run
 `recipes/data/fix_marker_embeddings.py` first.
 
-**Access:** Beaker jobs that mount weka `oe-training-default` can read these paths. To confirm access from your own
-account, run `bash research/token_routing/recipe_repro/check_access_beaker.sh`. This launches a CPU-only job of a few
-minutes that prints `OK` or `MISSING` for every path above **(not yet run as another user)**.
+**Access:** all of these paths exist, and Beaker jobs that mount weka `oe-training-default` can read them, because
+those jobs run as `root`. This was checked on 2026-11-17 by `check_access_beaker.sh` (Beaker job
+01M7NZ6PJ6W5PFRXXTGT0SGB98, launched from Prasann's account; every path printed `OK`).
+
+- Data and eval files are world-readable.
+- The base checkpoint's files are mode `600` (owner `root`). Read them only from inside a Beaker job, not from a
+  non-root shell on a weka-mounted machine.
+
+To repeat the check from your own account, run `bash research/token_routing/recipe_repro/check_access_beaker.sh`. It
+launches a CPU-only job of a few minutes.
 
 ## 4. Launch
 
