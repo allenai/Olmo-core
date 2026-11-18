@@ -894,3 +894,88 @@ def test_collator_protects_the_configured_image_patch_id():
     ).build()
     assert built.image_patch_token_id == custom_id
     assert MultimodalCollatorConfig(pad_token_id=0).build().image_patch_token_id == IM_PATCH_ID
+
+
+def _cap_with_rows(mode, row, message_format):
+    """A PixMo-Cap dataset whose rows come from ``row``, recording the branches ``get`` picks."""
+    from PIL import Image
+
+    ds = _pixmo_cap(mode, message_format=message_format)
+    ds._kind = "jsonl"
+    ds._rows = [row]
+    ds._load_image = lambda r: Image.new("RGB", (40, 30), "white")  # type: ignore[method-assign]
+    picked: list = []
+    original = ds._select_branches
+
+    def record(r, rng):
+        branches = original(r, rng)
+        picked.append(branches[-1][1])
+        return branches
+
+    ds._select_branches = record  # type: ignore[method-assign]
+    return ds, picked
+
+
+@pytest.mark.parametrize("message_format", ["qwen3", "document"])
+def test_pixmo_cap_get_rotates_transcripts_across_epochs(message_format):
+    """Through ``get``, the layer the loader calls: an image with several transcripts must not pick
+    the same one every epoch (the Qwen path used to ignore the epoch), yet each epoch is
+    deterministic."""
+    row = {"caption": "a cat", "transcripts": [f"spoken {i}" for i in range(8)]}
+    ds, picked = _cap_with_rows("transcript", row, message_format)
+
+    ds.get(0, 5)
+    ds.get(0, 5)
+    assert picked[0] == picked[1], "the same epoch must repeat its draw"
+
+    picked.clear()
+    for epoch in range(32):
+        ds.get(0, epoch)
+    assert len(set(picked)) == 8, "every transcript should be used across 32 epochs"
+
+
+def test_qwen_example_stream_epoch_zero_is_unchanged_and_later_epochs_differ():
+    from olmo_core.data.multimodal.sequence_builder import example_rng
+    from olmo_core.data.multimodal.sft_common import sft_example_rng
+
+    # Epoch 0 is the single-epoch stream, so a run's first pass over the data is unchanged.
+    first = sft_example_rng(7, 3, 0, "qwen3", dataset_len=100).randint(1 << 30)
+    assert first == example_rng(7, 3).randint(1 << 30)
+    assert first == sft_example_rng(7, 3, 0, "qwen3").randint(1 << 30)
+    draws = {sft_example_rng(7, 3, e, "qwen3", dataset_len=100).randint(1 << 30) for e in range(4)}
+    assert len(draws) == 4
+    # Same epoch, same draw.
+    assert sft_example_rng(7, 3, 2, "qwen3", dataset_len=100).randint(1 << 30) == sft_example_rng(
+        7, 3, 2, "qwen3", dataset_len=100
+    ).randint(1 << 30)
+
+
+def test_truncation_applies_without_strict_validation():
+    """``max_sequence_length`` alone must truncate: left to the collator, an over-long example
+    that cuts an image block stops the run."""
+    from olmo_core.data.multimodal.pixmo_points import _finalize_example
+    from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID, Molmo2TokenIds
+
+    n = 100
+    input_ids = np.full(n, 7, dtype=np.int64)
+    input_ids[1:5] = IM_PATCH_ID
+    loss_masks = np.zeros(n, dtype=np.float32)
+    loss_masks[20:] = 1.0
+    example = {"input_ids": input_ids, "loss_masks": loss_masks, "labels": input_ids.copy()}
+    kwargs: dict[str, Any] = dict(
+        max_crops=1,
+        high_res_max_crops=1,
+        p_high_res=0.0,
+        loss_token_weighting="none",
+        token_ids=Molmo2TokenIds(),
+    )
+    out = _finalize_example(
+        dict(example), strict_validation=False, max_sequence_length=30, **kwargs
+    )
+    assert len(out["input_ids"]) == len(out["loss_masks"]) == 30
+    untouched = _finalize_example(
+        dict(example), strict_validation=False, max_sequence_length=None, **kwargs
+    )
+    assert len(untouched["input_ids"]) == n
+    with pytest.raises(ValueError, match="image"):
+        _finalize_example(dict(example), strict_validation=False, max_sequence_length=3, **kwargs)

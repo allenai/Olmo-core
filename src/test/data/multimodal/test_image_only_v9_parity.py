@@ -88,3 +88,23 @@ def test_full_mixture_still_opens_every_source_and_unknown_names_are_rejected(mo
     assert sum(weights) == pytest.approx(1.0)
     with pytest.raises(ValueError, match="No mixture sources matched"):
         mod.build_image_only_v9_mixture(None, dataset_names=["not_a_source"])
+
+
+def test_stage2_full_mixture_names_match_the_mixture_without_opening_sources(monkeypatch):
+    """The script derives the full mixture's names from the registry. They must equal the order
+    the builder returns its datasets in, and must not open any source a second time."""
+    import importlib.util
+    from pathlib import Path
+
+    mod, sizes, opened = _fake_sources(monkeypatch)
+    path = Path(__file__).resolve().parents[3] / "scripts" / "train" / "Molmo2-Stage2.py"
+    spec = importlib.util.spec_from_file_location("molmo2_stage2_under_test", path)
+    assert spec is not None and spec.loader is not None
+    stage2 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(stage2)
+
+    datasets, weights = mod.build_image_only_v9_mixture(None)
+    opened.clear()
+    names = stage2._full_image_only_v9_names()
+    assert names == [d.name for d in datasets]
+    assert opened == []

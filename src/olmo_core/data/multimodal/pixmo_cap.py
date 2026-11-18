@@ -412,7 +412,7 @@ class PixMoCapDataset(EpochSeededExamples):
         from olmo_core.nn.vision.molmo2_image_processor import preprocess_image_molmo2
 
         cfg = self.config
-        rng = sft_example_rng(cfg.seed, index, epoch, cfg.message_format)
+        rng = sft_example_rng(cfg.seed, index, epoch, cfg.message_format, dataset_len=len(self))
 
         import torch
 
@@ -547,6 +547,7 @@ class PixMoCapDataset(EpochSeededExamples):
             index,
             epoch,
             self.config.message_format,
+            dataset_len=len(self),
         )
         turns = self._sft_formatter.format_turns(formatted, index=index, rng=rng)
         seq = encode_sft_example(

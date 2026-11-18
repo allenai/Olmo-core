@@ -747,7 +747,9 @@ def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
     monkeypatch.setattr(pixmo_points, "_open_image", lambda image: image)
 
     def capture(tokenizer, image, branches, **kwargs):
-        captured.append(branches)
+        # The dataset hands over a closure that draws the branches from its RNG: evaluate it with
+        # that RNG, otherwise two calls compare as two different function objects.
+        captured.append(branches(kwargs["rng"]) if callable(branches) else branches)
         return {}
 
     monkeypatch.setattr(pixmo_points, "_build_example", capture)
@@ -761,6 +763,8 @@ def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
     ds = _bare_dataset(PixMoPointsDataset, config, row)
 
     ds.get(0, 0)
+    ds.get(0, 0)
     ds.get(0, 1)
-    epoch0, epoch1 = captured
-    assert epoch0 != epoch1  # the same annotations get a different style mix in epoch 1
+    epoch0, epoch0_again, epoch1 = captured
+    assert epoch0 == epoch0_again  # a given epoch is deterministic ...
+    assert epoch0 != epoch1  # ... and the same annotations get a different style mix in epoch 1

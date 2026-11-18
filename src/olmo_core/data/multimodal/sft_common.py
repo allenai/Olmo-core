@@ -182,16 +182,23 @@ def sft_example_rng(
     index: int,
     epoch: int,
     message_format: SftMessageFormat,
+    *,
+    dataset_len: int = 0,
 ) -> np.random.RandomState:
     """Return the augmentation stream for a Stage 1 document or Stage 2 SFT example.
 
-    Qwen examples retain the seeded per-example stream used by the Molmo2 adapters.
-    Native document examples additionally vary their stream with the source epoch.
+    Both layouts vary their stream with the source epoch, so a source that samples (a transcript,
+    a pointing style, a render size) rotates through its choices instead of drawing the same one
+    every epoch. Qwen examples keep the Molmo2 adapters' per-example stream (mm_olmo's
+    ``seed * 195172 + index + len(dataset) * epoch``), which at epoch 0 is the unchanged
+    single-epoch stream. Native document examples use their own derivation.
 
     :param seed: Dataset seed.
     :param index: Example index.
     :param epoch: Source epoch.
     :param message_format: Selected document or chat serializer.
+    :param dataset_len: Number of rows, the stride mm_olmo advances a Qwen stream by per epoch.
+        Without it a Qwen stream ignores ``epoch``. Unused by the document layout.
 
     :returns: A deterministic NumPy random-state stream.
     """
@@ -201,7 +208,7 @@ def sft_example_rng(
 
     if message_format == "document":
         return make_random_state(seed + index, epoch)
-    return example_rng(seed, index)
+    return example_rng(seed, index, epoch=epoch, dataset_len=dataset_len)
 
 
 def load_hf_dataset(path: str, split: str = "train", *, keep_columns: Optional[List[str]] = None):
