@@ -844,6 +844,28 @@
    "x_dense_ft_lower_bound": false
   },
   {
+   "run": "ds-ds-p-k10-b495-sd0",
+   "arm": "ds-p-k10-b495",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 640,
+   "pf": 494.0839233486044,
+   "ce": 0.12136090325439,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1214
+   ],
+   "base_pf": 1447.6977046799543,
+   "x_base": 2.9300643802946023,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1799.2308039693671,
+   "x_dense_ft": 3.641548973654638,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
    "run": "w2-lo-p50-20-7-sd0+1",
    "arm": "lo-p50-20-7",
    "kind": "drop",
@@ -1814,6 +1836,28 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 655.4205472824838,
    "x_dense_ft": 1.1697837138412497,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "ds-ds-dl-k25-b495-sd0",
+   "arm": "ds-dl-k25-b495",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 231,
+   "pf": 495.5570774287032,
+   "ce": 0.17479011213217746,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1748
+   ],
+   "base_pf": 621.3748373428185,
+   "x_base": 1.2538915609215913,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 652.0163555456681,
+   "x_dense_ft": 1.3157240310819192,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },

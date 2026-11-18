@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 13:30",
+   "text": "Document-drop follow-up, first finals at 495 PF (one seed): keep 10% of distractor documents + token drop 0.121 (2.93x), better than keep 25% (0.128); the control dense LoRA + keep 25% and no token drop 0.175 (1.25x). So the document drop helps the token-drop arm far more than it helps dense LoRA. Seed-1, 1,980 PF and shorter-row runs still in flight; two jobs have been waiting over an hour for Beaker capacity and one failed at startup (the agent is handling them)."
+  },
+  {
    "t": "11-18 12:00",
    "text": "Dense LoRA seed 1 at 1,965 PF finished: two-seed mean 0.103 (0.101 / 0.105). With every point at 495, 991 and 1,980 PF on two seeds, LoRA 50%/20%/7% is 2.38x at 1,980 PF. Asked the document-subsampling agent to add the control dense LoRA + document keep 25% at 495 and 991 PF, since document dropping is also available to dense training."
   },

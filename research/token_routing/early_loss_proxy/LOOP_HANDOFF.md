@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 13:30 ds follow-up: ds-p-k10-b495 0.121 (x2.93) > k25 (0.128); control ds-dl-k25-b495 (dense LoRA + docsub) 0.175 (x1.25). Agent still running
+  (2 jobs pending > 1 h on Beaker, 1 failed at start). Next after its report: k10 / k05 at 991 + 1,980 PF with seeds; then lower the token-drop cost again on top of docsub.
 - 12:00 denselora-x4 two-seed mean 0.103; lo-p50-20-7 @1,980 = x2.38 (all three budgets now two seeds on both sides). Asked docsub agent for the control
   ds-dl-k25 (dense LoRA + document keep 0.25) at 495 and 991 PF: the honest docsub gain is (token drop + docsub) vs (dense LoRA + docsub).
 - 11:45 DOCSUB POSITIVE (agent adf5d3eb50381a0be, branch loop/docsub @ 041affd9f, flags --longpos-docsub-keep 0.25 [+ --longpos-docsub-sched a:b]): ds-p-k25 0.128 @465 PF
