@@ -41,7 +41,7 @@ CE per kept target on training rows (⚠ 320 training rows, not held out).
 | step | tokens | recipe dev CE | recipe own CE / kept target | dense dev CE |
 |---|---|---|---|---|
 | 0 (base) | 0 | 1.3199 | | 1.3199 |
-| 242 | 124.9M | 1.4206 | 3.18 | pending (job 01M7P31FCKSZ5GA4YXSX4FYJ38) |
+| 242 | 124.9M | 1.4206 | 3.18 | 1.2584 |
 | 484 | 249.8M | 1.4139 | 3.17 | |
 | 968 | 499.6M | | | |
 | 1936 | 999.2M | | | |
