@@ -272,11 +272,12 @@ class Tap(P.Tap):
 
 
 # ---------------------------------------------------------------------------------------------------------- data
-def load_tok_rows(root, tasks, rung, n, max_len):
-    """``n`` rows per task from converter shard dirs ``<root>/<task>_<rung>``, in file order."""
+def load_tok_rows(root, tasks, rung, n, max_len, task_rungs=None):
+    """``n`` rows per task from converter shard dirs ``<root>/<task>_<rung>`` (``task_rungs`` overrides the rung per
+    task), in file order."""
     rows = {}
     for t in tasks:
-        d = f"{root}/{t}_{rung}"
+        d = f"{root}/{t}_{(task_rungs or {}).get(t, rung)}"
         tok, msk, st, en = P.read_parts(d, "token_ids_part_*.npy", "labels_mask_*.npy")
         out = []
         for k in range(len(st)):
@@ -305,6 +306,7 @@ def main():
     ap.add_argument("--row-offset", type=int, default=7808)
     ap.add_argument("--tok-root", default="/data/prasann/gradlen/tok/both")
     ap.add_argument("--rung", default="8k")
+    ap.add_argument("--task-rungs", default="", help="per-task rung override, e.g. contradiction=448k,outlier=448k")
     ap.add_argument("--rows", type=int, default=128, help="rows per task")
     ap.add_argument("--max-len", type=int, default=2_000_000)
     ap.add_argument("--steps", default="", help="a:b = only steps a..b-1 (sharding); default all")
@@ -328,7 +330,8 @@ def main():
         seen = [os.path.join(a.shards, s) for s in a.seen_shards.split(",") if s]
         rows_by_task, _ = P.load_rows(a.shards, tasks, a.rows, a.row_offset, a.max_len, seen)
     else:
-        rows_by_task = load_tok_rows(a.tok_root, tasks, a.rung, a.rows, a.max_len)
+        tr = dict(kv.split("=") for kv in a.task_rungs.split(",") if kv)
+        rows_by_task = load_tok_rows(a.tok_root, tasks, a.rung, a.rows, a.max_len, tr)
     n_per = min(len(v) for v in rows_by_task.values())
     per = STEP_ROWS // len(tasks)
     nsteps = n_per // per
