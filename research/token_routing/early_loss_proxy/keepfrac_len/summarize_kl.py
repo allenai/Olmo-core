@@ -131,12 +131,12 @@ def main():
             if pts:
                 ax[0].plot([p[0] * 100 for p in pts], [p[1] for p in pts], "o-", color=col, label=L)
             if miss:
-                ax[0].plot([m * 100 for m in miss], [0.3] * len(miss), "x", color=col)
+                ax[0].plot([m * 100 for m in miss], [0.2 + 0.08 * i] * len(miss), "x", color=col, ms=8, mew=2)
         ax[0].set_xscale("log")
         ax[0].set_xlabel("keep at cut 1 (%; cut 2 = 0.35x)")
         ax[0].set_ylabel("FLOP speedup vs dense full FT at matched held-out CE")
         ax[0].axhline(1, color="gray", lw=0.6)
-        ax[0].set_title("Speedup at dft's mid-epoch CE (x at 0.3 = never reached)")
+        ax[0].set_title("Speedup at dft's mid-epoch CE (x near 0.2-0.6 = never reached)", fontsize=10)
         ax[0].legend(title="length")
         xs = [LENS[L] for L in Ls]
         SAT = ("2k", "4k")  # held-out CE saturates near 0.01-0.04: the proxy cannot rank keeps there
@@ -159,7 +159,7 @@ def main():
         ax[1].set_yticks([2.5, 5, 10, 20, 40, 70], ["2.5", "5", "10", "20", "40", "70"])
         ax[1].set_xlabel("context length (rung label)")
         ax[1].set_ylabel("best keep at cut 1 (%)")
-        ax[1].set_title("Best keep vs length (band: within 10% of best; hollow = saturated)")
+        ax[1].set_title("Best keep vs length\n(band: arms within 10% of best; hollow = saturated, unresolvable)", fontsize=10)
         ax[1].legend(fontsize=8)
         fig.tight_layout()
         fig.savefig(a.png, dpi=130)
