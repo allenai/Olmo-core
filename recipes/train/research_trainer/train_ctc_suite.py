@@ -1947,6 +1947,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-early-nograd", action="store_true",
                     help="online router, mid-stack: on routed steps run blocks [0, drop_layer) forward-only (they learn "
                     "only on the dense steps; charged forward-only)")
+    ap.add_argument("--st-otr-sparse-bwd", action="store_true",
+                    help="online router: sparse backward -- no token leaves the forward; at each cut (--st-otr-stages / "
+                    "--st-otr-drop-layer, or the input with drop layer 0) the tokens it would drop are detached there and "
+                    "after every later block, so only kept tokens carry gradient (charged: full forward, backward on kept)")
     ap.add_argument("--st-otr-dense-tail-frac", type=float, default=0.0,
                     help="online router: train the last FRAC of the steps uncompressed (e.g. 0.1, with "
                     "--st-otr-dense-every 0 for routed-then-dense-tail)")

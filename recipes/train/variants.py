@@ -310,6 +310,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_doc_share: float = 1.0
     st_otr_keep_first: int = 0
     st_otr_early_nograd: bool = False
+    st_otr_sparse_bwd: bool = False
     st_otr_dense_tail_frac: float = 0.0
     st_otr_stages: str = ""
     st_otr_merge_dropped: bool = False
@@ -1199,6 +1200,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         doc_share=o.st_otr_doc_share,
         keep_first=o.st_otr_keep_first,
         early_nograd=o.st_otr_early_nograd,
+        sparse_bwd=o.st_otr_sparse_bwd,
         dense_tail_frac=o.st_otr_dense_tail_frac,
         stages=o.st_otr_stages,
         merge_dropped=o.st_otr_merge_dropped,

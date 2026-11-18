@@ -1840,6 +1840,11 @@ class Transformer(nn.Module):
                 scale = ld.run_scale(block_idx)
                 if scale != 1.0:
                     h = h_in + (h - h_in) * scale
+            if otr is not None and h.requires_grad:
+                sbw = getattr(self, "_otr_sbw", None)
+                if sbw is not None:
+                    # online router sparse_bwd: rows a cut dropped stay in the forward but carry no gradient
+                    h = torch.where(sbw[..., None], h, h.detach())
             if self.budget_attach and h.requires_grad:
                 h = self._attach_block_budget(h, block_idx)
             if capture_layers is not None and block_idx in capture_layers:

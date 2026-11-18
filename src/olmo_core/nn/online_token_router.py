@@ -217,6 +217,12 @@ class OnlineRouterConfig:
     """Mid-stack only: on ROUTED steps run blocks [0, drop_layer) forward-only (no_grad; the hidden state is a fresh leaf
     at the split, so the router's target hook still reads dL/dh there). Those blocks then learn only on the dense
     (full-context) steps, and the FLOP meter charges them forward-only (1/3) on routed steps."""
+    sparse_bwd: bool = False
+    """Sparse backward: NO token leaves the forward pass (the forward is the exact dense forward). At each stage's cut
+    (a mid-stack drop_layer / stages, or the input with drop_layer 0) the tokens that stage would drop have their
+    hidden state detached, at the cut and after every later block, so gradients flow only through the kept tokens'
+    rows (kept tokens still attend to the dropped ones, as constants). Charged: every block's forward on the full row,
+    the backward of blocks at or above a cut on its kept tokens only (attention: kept queries x all keys)."""
     freeze_early: bool = False
     """Mid-stack only: FREEZE the embeddings and blocks [0, L) (L = the first drop layer): ``requires_grad=False`` before
     the train module is built (:func:`freeze_early_blocks`), so they never get gradients or optimizer state, and every
@@ -475,6 +481,10 @@ class OnlineRouterConfig:
                 raise ValueError(f"online router keep_sched must be 'a:b' with a, b > 0, got {self.keep_sched!r}")
         if self.per_task_key_tokens < 0:
             raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
+        if self.sparse_bwd and (self.merge_dropped or self.exit_loss_weight > 0 or self.mod_layers or self.target_layer
+                                or self.wts or self.score == "dh" or self.target in ("dh", "mix")):
+            raise ValueError("online router sparse_bwd is exclusive with merge_dropped / exit_loss_weight / mod_layers / "
+                             "target_layer / wts / score or target dh")
         if self.wts:
             parse_wts(self.wts)
             if (self.drop_layer <= 0 and not self.stages) or self.mod_layers or self.merge_dropped or self.mass_target > 0 \
@@ -1045,6 +1055,9 @@ class OnlineTokenRouter:
         choice is made at that layer by :meth:`mid_compact`."""
         self._calls += 1
         self._ignore_index = ignore_index
+        if self.cfg.sparse_bwd:
+            model._otr_sbw = None  # this forward's (B, T) mask of the rows that carry gradient (set at the cut)
+            self._sbw0_keep = None
         self._row_task = self.task_keys(input_ids) if self.cfg.per_task_key_tokens > 0 else None
         # positional-block rows (CPT): documents are blocks with no markers (see structural_features)
         self._marker_free = int((getattr(model, "_pooled_soft_tokens", None) or {}).get("positional_block_size", 0)) > 0
@@ -1070,6 +1083,18 @@ class OnlineTokenRouter:
             return full
         keep, entry = self._choose(model, fp, ids, cid)
         self._current = entry
+        if self.cfg.sparse_bwd:
+            # input cut, sparse backward: nothing is compacted; attach_target_hook detaches the dropped rows
+            real, body = cid != -2, fp["body"]
+            keep_c = real & (~body | keep)
+            ka = torch.zeros_like(input_ids, dtype=torch.bool)
+            ka[:, :Tr] = keep_c
+            self._sbw0_keep = ka
+            n_in = real.sum(dim=1)
+            self._sbw_flop(model, n_in.tolist(), n_in.tolist(), keep_c.sum(dim=1).tolist())
+            self._stat("mid_row_frac", float(keep_c.sum()) / max(1.0, float(real.sum())))
+            full[:, :Tr] = body
+            return full
         full[:, :Tr] = keep
         return full
 
@@ -1408,6 +1433,8 @@ class OnlineTokenRouter:
         self._tap = None
         if st is None:
             return h, block_kwargs
+        if self.cfg.sparse_bwd:
+            return self._mid_sparse(model, h, block_kwargs, st)
         fp, ids, cid, Tr = st["fp"], st["ids"], st["cid"], st["Tr"]
         if block_kwargs.get("cu_doc_lens") is not None:
             return self._mid_compact_packed(model, h, block_kwargs, fp, ids, cid, Tr)
@@ -1570,6 +1597,80 @@ class OnlineTokenRouter:
             self._next._nograd_until = 0
             self._next._ignore_index = getattr(self, "_ignore_index", -100)
         return h_new, kw
+
+    def _mid_sparse(self, model, h: torch.Tensor, block_kwargs: Dict[str, Any], st: Dict[str, Any]):
+        """sparse_bwd at this stage's cut: choose as :meth:`mid_compact` does, but keep the row whole and detach the
+        dropped tokens' hidden state (here and, via ``model._otr_sbw``, after every later block). ``st["cmap"]`` maps
+        a later stage's (compacted) feature columns to the full row's columns."""
+        if block_kwargs.get("cu_doc_lens") is not None:
+            raise NotImplementedError("online router sparse_bwd on packed rows is not supported")
+        fp, ids, cid, Tr = st["fp"], st["ids"], st["cid"], st["Tr"]
+        B, Tw, D = h.shape
+        cmap = st.get("cmap")
+        if cmap is None and Tw < Tr:
+            raise RuntimeError(f"mid_sparse: hidden width {Tw} < real width {Tr}")
+        if self.cfg.use_hidden:
+            hc = h[:, :Tr] if cmap is None else torch.gather(h.detach(), 1, cmap[..., None].expand(B, Tr, D))
+            self.add_hidden(fp, hc)
+        keep_body, entry = self._choose(model, fp, ids, cid)
+        body, real = fp["body"], cid != -2
+        keep_c = real & (~body | keep_body)  # this stage's columns
+        if cmap is None:
+            cm = torch.arange(Tr, device=h.device)[None, :].expand(B, Tr)
+            l_full = real.sum(dim=1).tolist()
+        else:
+            cm, l_full = cmap, st["Lfull"]
+        kf = torch.zeros(B, Tw + 1, dtype=torch.bool, device=h.device)
+        kf.scatter_(1, torch.where(real, cm, torch.full_like(cm, Tw)), keep_c)
+        keep_full = kf[:, :Tw]
+        model._otr_sbw = keep_full
+        h_new = torch.where(keep_full[..., None], h, h.detach()) if h.requires_grad else h
+        self._mid_gather = None
+        self._exit = None
+        rows, pos = entry["rows"], entry["pos"]
+        entry["ok"] = keep_c[rows, pos]
+        entry["cols"] = cm[rows, pos]
+        self._register_target(model, entry, h_new)
+        n_in, n_out = real.sum(dim=1), keep_c.sum(dim=1)
+        self._sbw_flop(model, l_full, n_in.tolist(), n_out.tolist())
+        self._stat("mid_row_frac", float(n_out.sum()) / max(1.0, float(n_in.sum())))
+        if self._next is not None:
+            W = int(n_out.max().item())
+            keys = torch.where(keep_c, torch.zeros(B, Tr, device=h.device), torch.ones(B, Tr, device=h.device))
+            order = torch.argsort(keys, dim=1, stable=True)[:, :W]
+            valid = torch.arange(W, device=h.device)[None, :] < n_out[:, None]
+            nxt = self._stash_for_next(fp, ids, cid, Tr, Tr, order, valid)
+            nxt["cmap"] = torch.where(valid, torch.gather(cm, 1, order), torch.zeros_like(order))
+            nxt["Lfull"] = l_full
+            self._next._mid = nxt
+            self._next._nograd_fwd = False
+            self._next._nograd_until = 0
+            self._next._ignore_index = getattr(self, "_ignore_index", -100)
+        return h_new, block_kwargs
+
+    def _sbw_flop(self, model, l_full: List[int], n_in: List[int], n_out: List[int]) -> None:
+        """sparse_bwd FLOP adjustment per row (the meter charges the full row through every block + head). The first
+        stage also applies the per-block factors (early_nograd / frozen) and adapters like :meth:`mid_compact`. Then
+        the ``n_in - n_out`` tokens this cut detaches lose the backward of blocks >= drop_layer and of the head: a
+        block of factor f costs L x fb(L) / 3 (forward of all L tokens) + k x fb(L) x (f - 1/3) (backward of the k kept
+        queries over all L keys), fb = num_flops_per_token at the row's full length L."""
+        ld = getattr(model, "_layer_drop", None)
+        skip = ld.skipped() if (ld is not None and model.training) else frozenset()
+        blocks = [b if i not in skip else None for i, b in enumerate(model.blocks.values())]
+        L0 = self.cfg.drop_layer
+        head = int(model.lm_head.num_flops_per_token(0)) if model.lm_head is not None else 0
+        hfac = 2.0 / 3.0 if getattr(model, "_head_frozen", False) else 1.0
+        fac = self._block_factors(len(blocks))
+        self._stat("early_nograd", float(self._nograd_fwd))
+        ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
+        adj = 0.0
+        for L, ki, ko in zip(l_full, n_in, n_out):
+            fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
+            if self.stage_idx == 0:
+                adj += L * (sum((f - 1.0) * x for f, x in zip(fac, fb)) + head * (hfac - 1.0) + sum(ab))
+            adj -= (ki - ko) * (sum(max(0.0, f - 1.0 / 3.0) * x for f, x in zip(fac[L0:], fb[L0:]))
+                                + head * (hfac - 1.0 / 3.0))
+        self._flop(model, adj)
 
     def _mid_compact_packed(self, model, h, block_kwargs, fp, ids, cid, Tr):
         """Mid-stack drop on a PACKED row (segment mode, ``cu_doc_lens``): the router chose on the unpacked documents
@@ -1887,6 +1988,16 @@ class OnlineTokenRouter:
         """Register the target hook on the compacted embedding output ``h`` (B, T', D); its original
         positions are ``position_ids`` (B, T'). No-op if this forward did not route."""
         entry, self._current = self._current, None
+        sb, self._sbw0_keep = getattr(self, "_sbw0_keep", None), None
+        if sb is not None:
+            # sparse_bwd at the input: the dropped rows are detached from here on (after every block in _run_blocks)
+            sb = sb.to(h.device)
+            if position_ids is not None or sb.shape[1] != h.shape[1]:
+                pidx = position_ids if position_ids is not None else torch.arange(h.shape[1], device=h.device)[None, :]
+                sb = torch.gather(sb, 1, pidx.to(h.device).expand(h.shape[0], -1).clamp(max=sb.shape[1] - 1))
+            model._otr_sbw = sb
+            if h.requires_grad:
+                h = torch.where(sb[..., None], h, h.detach())
         if entry is None or not h.requires_grad:
             return h
         rows, pos = entry["rows"], entry["pos"]
@@ -1898,6 +2009,8 @@ class OnlineTokenRouter:
             cols = torch.searchsorted(pid[rows].contiguous(), pos[:, None].contiguous()).squeeze(-1)
             cols = cols.clamp(max=pid.shape[1] - 1)
             ok = pid[rows, cols] == pos
+        if sb is not None:
+            ok = ok & sb[rows, cols.clamp(max=sb.shape[1] - 1)]
         entry["ok"] = ok
         entry["cols"] = cols
         self._register_target(model, entry, h)

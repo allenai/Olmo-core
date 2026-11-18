@@ -1685,3 +1685,90 @@ def test_nonfinite_targets_are_dropped_from_the_fit():
     r._current = None
     r.begin_step(2, model=m)
     assert r.w is not None and bool(torch.isfinite(r.w).all())
+
+
+@pytest.mark.parametrize("cut", ["stages", "input"])
+def test_sparse_bwd_dense_forward_kept_grads_cpu(cut):
+    """sparse_bwd: the training forward is the exact dense forward (same loss as eval), every block sees the full row,
+    a dropped token's hidden state gets no gradient at or above its cut (kept ones do), the router still fits from the
+    kept tokens' targets, and the FLOP adjustment charges the full forward + the backward of the kept tokens only."""
+    if cut == "stages":
+        model, router = _mid_model(4, stages="1:0.5,2:0.25", dense_every=0, sparse_bwd=True)
+    else:
+        model, router = _mid_model(4, drop_layer=0, dense_every=0, sparse_bwd=True)
+    chain = router.chain()
+    blocks = list(model.blocks.values())
+    flops = []
+    for r in chain:
+        orig = r._flop
+        r._flop = (lambda o: (lambda m, v: (flops.append(float(v)), o(m, v))))(orig)
+    outs, widths, masks = {}, [], {}
+
+    def keep_out(i):
+        def hook(m, a, o):
+            widths.append(o.shape[1])
+            masks[i] = model._otr_sbw.clone() if getattr(model, "_otr_sbw", None) is not None else None
+            if o.requires_grad:
+                o.retain_grad()
+            outs[i] = o
+        return hook
+
+    hs = [b.register_forward_hook(keep_out(i)) for i, b in enumerate(blocks)]
+    ids, cid, labels = _row(B=2)
+    for n in (1, 2, 3):
+        model.zero_grad(set_to_none=True)
+        for r in chain:
+            r.begin_step(n, model=model)
+            r.metrics()
+        flops.clear()
+        widths.clear()
+        out = model(ids, labels=labels)
+        out.loss.backward()
+    for h_ in hs:
+        h_.remove()
+    assert all(w == ids.shape[1] for w in widths), widths  # nothing compacted
+    assert all(r.w is not None for r in chain)
+    for r in chain:
+        e = r._pending[-1]
+        assert e["target"] is not None and torch.isfinite(e["target"]).all() and e["ok"].all()
+    keep = model._otr_sbw  # the deepest stage's grad-carrying rows
+    real = ids != PH
+    assert keep.sum() < real.sum()
+    last = len(blocks) - 1
+    g = outs[last].grad
+    assert torch.all(g[~keep] == 0) and bool((g[keep].abs().sum(-1) > 0).any())
+    if cut == "stages":
+        # stage 1 (cut at block 1) kept more than stage 2: block 1's output has gradient on its own kept set only
+        keep1 = masks[1]
+        assert torch.all(keep1[keep]) and int(keep1.sum()) > int(keep.sum())
+        for i in (0, 1):  # the cut input (block 0 output) and block 1 output: gradient on stage 1's kept rows only
+            assert torch.all(outs[i].grad[~keep1] == 0) and bool((outs[i].grad[keep1].abs().sum(-1) > 0).any())
+    # FLOPs: per row, -(n_in - n_out) x 2/3 x (blocks >= cut at the full length + head)
+    head = int(model.lm_head.num_flops_per_token(0))
+    f = lambda b, n: int(b.num_flops_per_token(int(n)))
+    m = [r.metrics() for r in chain]
+    L = int(real[0].sum())
+    if cut == "stages":
+        k1 = int(round(m[0]["online_router/mid_row_frac"] * L))
+        k2 = int(round(m[1]["online_router/s1_mid_row_frac"] * k1))
+        exp = [-(L - k1) * (2 / 3) * (sum(f(b, L) for b in blocks[1:]) + head) * 2,
+               -(k1 - k2) * (2 / 3) * (sum(f(b, L) for b in blocks[2:]) + head) * 2]
+    else:
+        k1 = int(round(m[0]["online_router/mid_row_frac"] * L))
+        exp = [-(L - k1) * (2 / 3) * (sum(f(b, L) for b in blocks) + head) * 2]
+    for e in exp:
+        assert e < 0 and any(abs(v - e) < 1e-6 * abs(e) for v in flops), (e, flops)
+    # the training forward is the dense forward
+    model.eval()
+    with torch.no_grad():
+        ref = model(ids, labels=labels).loss
+    model.train()
+    for r in chain:
+        r.begin_step(4, model=model)
+    assert torch.allclose(model(ids, labels=labels).loss, ref, atol=1e-5)
+
+
+def test_sparse_bwd_validate():
+    with pytest.raises(ValueError):
+        OnlineRouterConfig(sparse_bwd=True, drop_layer=2, merge_dropped=True).validate()
+    OnlineRouterConfig(sparse_bwd=True, stages="7:0.2,16:0.07").validate()
