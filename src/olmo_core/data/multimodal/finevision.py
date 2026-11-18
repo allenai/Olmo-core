@@ -521,7 +521,9 @@ class FineVisionDataset:
             loss_token_weighting=cfg.loss_token_weighting,
             token_ids=cfg.token_ids,
             message_format=cfg.message_format,
-            shuffle_rng=sft_example_rng(cfg.seed, i, epoch, cfg.message_format),
+            shuffle_rng=sft_example_rng(
+                cfg.seed, i, epoch, cfg.message_format, dataset_len=len(self)
+            ),
         )
         original_length = len(seq["input_ids"]) if cfg.strict_annotations else None
         example = truncate_example(

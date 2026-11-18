@@ -164,6 +164,7 @@ def _build_count_example(
     )
     dataset.tokenizer = object()
     dataset._data = [row]
+    dataset._n = 1
 
     monkeypatch.setattr(
         pixmo_points,
@@ -664,11 +665,14 @@ def test_serialized_examples_are_safely_bounded_before_packing():
 
 
 def test_serialized_examples_preserve_legacy_non_strict_behavior():
+    """Non-strict mode skips the geometry validation and the metadata. It no longer ignores
+    ``max_sequence_length``: truncation is independent of validation (see
+    ``test_truncation_applies_without_strict_validation``)."""
     example = _serialized_example()
     finalized = pixmo_points._finalize_example(
         example,
         strict_validation=False,
-        max_sequence_length=4,
+        max_sequence_length=None,
         max_crops=8,
         high_res_max_crops=24,
         p_high_res=0.0,

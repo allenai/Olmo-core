@@ -211,19 +211,20 @@ def _mixture_dataset_names(mixture: str) -> Optional[Sequence[str]]:
     return VALIDATION_MIXTURES[mixture]
 
 
-def _full_image_only_v9_names(tokenizer, seed: int) -> List[str]:
+def _full_image_only_v9_names() -> List[str]:
+    """The full mixture's source names in the order :func:`build_image_only_v9_mixture` returns
+    its datasets: the submixture order, skipping groups that carry no weight. Derived from the
+    registry, not from built datasets, so no source is opened a second time."""
     from olmo_core.data.multimodal.mixtures.image_only_v9 import (
         IMAGE_ONLY_V9_SUBMIXTURES,
-        build_image_only_v9_datasets,
-        compute_flat_mixture_weights,
     )
 
-    datasets_map = build_image_only_v9_datasets(
-        tokenizer, seed, max_sequence_length=SEQUENCE_LENGTH
-    )
-    lengths = {name: len(datasets_map[name]) for name in datasets_map.keys()}
-    flat = compute_flat_mixture_weights(IMAGE_ONLY_V9_SUBMIXTURES, lengths)
-    return [name for name, _ in flat]
+    return [
+        src.name
+        for group in IMAGE_ONLY_V9_SUBMIXTURES
+        if group.rate > 0 and group.datasets
+        for src in group.datasets
+    ]
 
 
 def build_config(script: str, run_name: str, overrides: List[str]) -> ExperimentConfig:
@@ -383,11 +384,7 @@ def _build_mixture(tokenizer, config: ExperimentConfig):
         dataset_names=names_filter,
         max_sequence_length=SEQUENCE_LENGTH,
     )
-    names = (
-        _full_image_only_v9_names(tokenizer, config.data_seed)
-        if names_filter is None
-        else list(names_filter)
-    )
+    names = _full_image_only_v9_names() if names_filter is None else list(names_filter)
     datasets, weights, names = _append_extra_sft_sources(
         config, tokenizer, datasets, weights, names
     )

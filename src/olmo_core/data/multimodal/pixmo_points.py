@@ -398,9 +398,9 @@ def _finalize_example(
     loss_token_weighting: str,
     token_ids: Molmo2TokenIds,
 ) -> dict[str, np.ndarray]:
-    if not strict_validation:
-        return example
     original_length = len(example["input_ids"])
+    # The configured limit applies to every source: left to the collator, an over-long example
+    # that would cut an image block stops the run instead of being skipped by the loader.
     if max_sequence_length is not None:
         example = truncate_example(
             example,
@@ -410,6 +410,8 @@ def _finalize_example(
             recompute_root_subsegments=loss_token_weighting
             in ("root_subsegments", "root_subsegments_root_tokens"),
         )
+    if not strict_validation:
+        return example
     effective_high_res = max_crops if p_high_res <= 0 else max(max_crops, high_res_max_crops)
     # The processor returns one global crop in addition to at most ``max_crops`` tiles.
     _validate_serialized_example(
@@ -849,7 +851,9 @@ class PixMoPointsDataset:
         else:
             example_idx = i
         row_idx, label_idxs = self._index[example_idx]
-        rng = sft_example_rng(self.config.seed, i, epoch, self.config.message_format)
+        rng = sft_example_rng(
+            self.config.seed, i, epoch, self.config.message_format, dataset_len=len(self)
+        )
         row = self._data[row_idx]
         fmt = SftFormatter(
             seed=self.config.seed,
@@ -1069,7 +1073,9 @@ class PixMoCountDataset:
         count = int(row["count"])
         pil = _open_image(row["image"])
         pts = row.get("points") or {"x": [], "y": []}
-        rng = sft_example_rng(self.config.seed, i, epoch, self.config.message_format)
+        rng = sft_example_rng(
+            self.config.seed, i, epoch, self.config.message_format, dataset_len=len(self)
+        )
         fmt = SftFormatter(
             seed=self.config.seed,
             prompt_templates=self.config.prompt_templates,
@@ -1346,5 +1352,7 @@ class CoSynPointDataset:
             message_weight=self.config.message_weight,
             p_high_res=self.config.p_high_res,
             message_format=self.config.message_format,
-            rng=sft_example_rng(self.config.seed, i, epoch, self.config.message_format),
+            rng=sft_example_rng(
+                self.config.seed, i, epoch, self.config.message_format, dataset_len=len(self)
+            ),
         )
