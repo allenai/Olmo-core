@@ -42,7 +42,9 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
-- Agent sparsebwd (ad0d4e2aae6f7333a, branch loop/sparsebwd, Beaker tag sbw): dense forward, gradients only through kept tokens.
+- sparsebwd DONE 03:10 (branch loop/sparsebwd @ d5457c575, flag --st-otr-sparse-bwd, not merged): dense forward + gradient only through kept tokens
+  = 0.136 @488 at 0.54x (fwd-drop same budgets 0.138 at 0.30x; dense 0.114). DIAGNOSIS: the gap is the missing GRADIENT of dropped tokens, not the
+  truncated context. So: number of gradient-carrying tokens (and when) is the lever -> keep ramps / schedules; fwd dropping is the efficient form.
 - ft-* arms = softtoken, LR 5e-6, RECIPE without the three --st-otr-early-lora* flags (full fine-tune + drop, 0.30x dense/step).
 - Scoring: ladder.py (same-adapter dense baseline: ft-* -> w1/dense, LoRA arms -> v3/denselora, *-mix80x3 -> w1/dense-mix80x3).
   Known from v3: recipe (LoRA) is +0.025-0.03 CE behind dense LoRA at 16k at every probe 150-488.

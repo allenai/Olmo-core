@@ -180,8 +180,8 @@
   "family": "dynamic drop (11-18 rules)",
   "title": "Dense forward, sparse backward",
   "what": "Every token stays in the forward pass (identical to the dense forward used for scoring); gradients flow only through the tokens the router keeps (20% above block 7, 7% above block 16). Separates the two things the recipe changes at once: no gradient for dropped tokens, and a truncated context for kept tokens. Ideal cost about 0.4-0.5x dense per step.",
-  "status": "running",
-  "result": ""
+  "status": "done",
+  "result": "Diagnostic result (seed 0, 16k CE on 320 rows, full fine-tune). With the exact dense forward and gradients only through the kept tokens (20% above block 7, 7% above block 16) the loss is 0.136 at step 488, against 0.138 when the dropped tokens also leave the forward pass and 0.114 for dense: the gap to dense at steps 300-488 is +0.019 to +0.023 either way. So the recipe's gap comes from dropped tokens getting no gradient, not from kept tokens seeing a truncated context; removing tokens from the forward pass costs almost nothing extra once their gradient is gone. Sparse backward costs 0.54x dense per step (0.59x with one cut at block 7: 0.128; 0.50x with the cut at the input: 0.137) against 0.30x for forward dropping, so it is not a method to pursue; it reaches only dense's step-250 to step-350 level at 1.2-1.4x. Consequence for the search: what matters is how many tokens carry gradient and when (which is why raising the keep share late in training works). Branch loop/sparsebwd, flag --st-otr-sparse-bwd."
  },
  {
   "id": "mod",

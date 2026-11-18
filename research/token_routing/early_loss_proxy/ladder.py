@@ -13,6 +13,7 @@ import glob, json, os, re, sys
 import numpy as np
 
 SRC = [p for pat in ("/tmp/claude-3018/elp_beaker_results/v3", "/tmp/claude-3018/elp_beaker_results/w[0-9]*",
+                     "/tmp/claude-3018/elp_beaker_results/x4", "/tmp/claude-3018/elp_beaker_results/sbw", "/tmp/claude-3018/elp_beaker_results/ks",
                      "/net/sneetches/data/prasann/early_loss_proxy/results/w[0-9]*",
                      "/net/mooney/data/prasann/early_loss_proxy/results/w[0-9]*") for p in sorted(glob.glob(pat))]
 W16 = {"gen16k": 48, "rung16k": 32}
@@ -57,6 +58,8 @@ for src in SRC:
 def base_of(name):
     arm = name.split("-", 1)[1].rsplit("-sd", 1)[0]
     if "mix80x3" in arm: return "w1-dense-mix80x3-sd0"
+    if arm.endswith("-x4"):  # equal-FLOP runs on the 4x pool: dense run on the same pool with the same adapter (compared in PF)
+        return "x4-dense-x4-sd0" if arm.startswith(("ft-", "dense-")) else "x4-denselora-x4-sd0"
     if arm.startswith(("ft-", "dense")) and "lora" not in arm: return "w1-dense-sd0"
     if "mix" in arm: return None  # other re-mix pools: no dense baseline run yet
     return "v3-denselora-sd0"

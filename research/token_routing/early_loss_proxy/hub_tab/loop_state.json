@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-18 02:57 PT",
+ "updated": "2026-11-18 03:12 PT",
  "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference (seed 0): 16k CE 0.114 after one epoch (1,982 PF). First qualifying result: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) ends at 0.113 at 0.64x the step cost, 1.59x fewer FLOPs at the dense final loss (one seed, 320 rows). Constant keep budgets fall short of the final loss in one epoch (1.4-2.5x at shallower levels). Running: seed repeats, cheaper ramp shapes, and equal-FLOP runs on a pool with 4x the rows.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 03:10",
+   "text": "Sparse-backward agent finished (branch loop/sparsebwd): exact dense forward with gradients only through the kept 20% / 7% ends at 16k CE 0.136 (step 488), forward dropping at the same budgets 0.138, dense 0.114. The gap to dense is the same with or without the truncated forward, so it comes from the missing gradient of dropped tokens. Sparse backward costs 0.54x per step against 0.30x for forward dropping; closed as a method, kept as the diagnosis."
+  },
   {
    "t": "11-18 02:55",
    "text": "Dense full fine-tune reference finished (seed 0): 16k CE 0.114 at step 488, 1,982 PF. Scored against it: the keep ramp (20% to 90% after block 7, full fine-tune) reaches the final level at 1.59x fewer FLOPs, the only arm to do so; constant budgets reach the step-400 level at 1.4-2.0x and the step-350 level at up to 2.5x; dense LoRA reaches the step-400 level at 1.20x. Launched: the ramp at equal FLOPs on the 4x pool (762 steps), dense full fine-tune on 2x the rows (976 steps, to extend the reference curve), ramp variants (first cut at block 3, 10% to 60%, ramp + dense last 10%), and an agent implementing a schedule for both cuts (hold-then-ramp shapes) on branch loop/keepsched. The LR schedule of the equal-FLOP runs is confirmed stretched (9.63e-6 at step 100 of 1,525)."
@@ -352,8 +356,8 @@
    "family": "dynamic drop (11-18 rules)",
    "title": "Dense forward, sparse backward",
    "what": "Every token stays in the forward pass (identical to the dense forward used for scoring); gradients flow only through the tokens the router keeps (20% above block 7, 7% above block 16). Separates the two things the recipe changes at once: no gradient for dropped tokens, and a truncated context for kept tokens. Ideal cost about 0.4-0.5x dense per step.",
-   "status": "running",
-   "result": ""
+   "status": "done",
+   "result": "Diagnostic result (seed 0, 16k CE on 320 rows, full fine-tune). With the exact dense forward and gradients only through the kept tokens (20% above block 7, 7% above block 16) the loss is 0.136 at step 488, against 0.138 when the dropped tokens also leave the forward pass and 0.114 for dense: the gap to dense at steps 300-488 is +0.019 to +0.023 either way. So the recipe's gap comes from dropped tokens getting no gradient, not from kept tokens seeing a truncated context; removing tokens from the forward pass costs almost nothing extra once their gradient is gone. Sparse backward costs 0.54x dense per step (0.59x with one cut at block 7: 0.128; 0.50x with the cut at the input: 0.137) against 0.30x for forward dropping, so it is not a method to pursue; it reaches only dense's step-250 to step-350 level at 1.2-1.4x. Consequence for the search: what matters is how many tokens carry gradient and when (which is why raising the keep share late in training works). Branch loop/sparsebwd, flag --st-otr-sparse-bwd."
   },
   {
    "id": "mod",

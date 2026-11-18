@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 03:10",
+   "text": "Sparse-backward agent finished (branch loop/sparsebwd): exact dense forward with gradients only through the kept 20% / 7% ends at 16k CE 0.136 (step 488), forward dropping at the same budgets 0.138, dense 0.114. The gap to dense is the same with or without the truncated forward, so it comes from the missing gradient of dropped tokens. Sparse backward costs 0.54x per step against 0.30x for forward dropping; closed as a method, kept as the diagnosis."
+  },
+  {
    "t": "11-18 02:55",
    "text": "Dense full fine-tune reference finished (seed 0): 16k CE 0.114 at step 488, 1,982 PF. Scored against it: the keep ramp (20% to 90% after block 7, full fine-tune) reaches the final level at 1.59x fewer FLOPs, the only arm to do so; constant budgets reach the step-400 level at 1.4-2.0x and the step-350 level at up to 2.5x; dense LoRA reaches the step-400 level at 1.20x. Launched: the ramp at equal FLOPs on the 4x pool (762 steps), dense full fine-tune on 2x the rows (976 steps, to extend the reference curve), ramp variants (first cut at block 3, 10% to 60%, ramp + dense last 10%), and an agent implementing a schedule for both cuts (hold-then-ramp shapes) on branch loop/keepsched. The LR schedule of the equal-FLOP runs is confirmed stretched (9.63e-6 at step 100 of 1,525)."
   },
