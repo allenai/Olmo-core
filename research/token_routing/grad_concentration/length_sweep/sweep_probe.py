@@ -318,6 +318,7 @@ def main():
     ap.add_argument("--memprobe", type=int, default=0,
                     help="memory probe: one synthetic row of this many tokens (a real row tiled), pass 1 + pass 2, "
                          "report peak memory per device, exit")
+    ap.add_argument("--ce-only", type=int, default=0, help="diagnostic: forward-only answer CE of the first N rows, exit")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     torch.manual_seed(0)
@@ -366,6 +367,18 @@ def main():
 
     def peaks():
         return {str(d): round(torch.cuda.max_memory_allocated(d) / 2**30, 1) for d in devices}
+
+    if a.ce_only:
+        res = []
+        for t, rs in rows_by_task.items():
+            for row in rs[:a.ce_only]:
+                with torch.no_grad():
+                    loss, nans = row_loss(model, row)
+                res.append(dict(task=t, T=int(len(row["ids"])), ce=float(loss) / max(nans, 1), n_answer=nans))
+                log(f"CE {res[-1]}; peak {peaks()}")
+        json.dump(dict(yarn=a.yarn, devices=devices, rung=a.rung, rows=res),
+                  open(os.path.join(a.out, f"ce_{a.rung}_y{a.yarn}_d{len(devices)}.json"), "w"), indent=1)
+        return
 
     if a.memprobe:
         base = next(iter(rows_by_task.values()))[0]
