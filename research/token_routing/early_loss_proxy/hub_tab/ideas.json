@@ -214,5 +214,21 @@
   "what": "At keep 50% then 20% with full fine-tuning: half of the kept budget drawn at random, and a fully random keep, against the router's top-scored tokens. If a random choice does as well, coverage across steps matters more than selection.",
   "status": "done",
   "result": "Selection matters (seed 0, 16k CE at step 488, 320 rows; full fine-tune, keep 50% then 20%, 0.44x): random tokens 0.132, half of the budget random 0.123, router 0.126 / 0.119 on two seeds; dense 0.114 / 0.119. A random keep is about 0.01 worse and stays 0.02-0.03 behind for most of the run; mixing in random tokens neither helps nor hurts."
+ },
+ {
+  "id": "budget",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Budget-matched FLOPs-to-match (complete schedules)",
+  "what": "Every arm, dense included, gets a fixed FLOP budget (495 or 991 PF) on the 4x pool with its own complete LR schedule; the ratio is the FLOPs the dense frontier (dense full fine-tune and dense LoRA at every budget) needs for the arm's final loss, divided by the arm's FLOPs. This is the headline measure: it gives cheaper arms proportionally more steps and compares finished runs only.",
+  "status": "running",
+  "result": "First points (16k CE on 320 rows, one seed). Dense full fine-tune: 0.189 at 495 PF, 0.151 at 991 PF, 0.114 / 0.119 at 1,982 PF. At 495 PF: LoRA 50%/20%/7% 0.136 (2.5x), LoRA 50%/20% 0.140 (2.3x), recipe 20%/7% 0.146 (2.1x). At 991 PF: full fine-tune 50%/20% 0.113 (1.6x against the frontier, which includes dense LoRA on more rows; over 2x against dense full fine-tune alone). The remaining 991 PF arms and dense LoRA at 991 PF are running."
+ },
+ {
+  "id": "earlyfreeze",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Early blocks forward-only under the drop",
+  "what": "Blocks 0-6 run on every token and are now more than half of a drop arm's step cost. Freeze them (no adapters, no backward below the first cut), so the drop arms cost about 0.13-0.24x dense per step instead of 0.22-0.32x; the dense counterpart (dense LoRA with adapters from block 7) is run as the baseline, since freezing is available to dense training too. Budget-matched at 495 and 991 PF.",
+  "status": "running",
+  "result": ""
  }
 ]

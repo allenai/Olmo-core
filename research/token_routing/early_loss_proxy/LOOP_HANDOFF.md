@@ -42,6 +42,11 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 06:30 BUDGET-MATCHED (ftm.py): dense FT 0.189 @495 PF, 0.151 @991 PF. b495: lo-p50-20-7 0.136 (x2.5 vs dense frontier), lo-r50to20 0.140 (x2.3), recipe 0.146 (x2.1).
+  b991: ft-r50to20 0.113 (x1.6 vs frontier incl. dense LoRA; >x2 vs dense FT). lo-r10to3 behind recipe mid-run -> best step cost ~0.3x.
+  Launched (tag bud): EARLY BLOCKS FORWARD-ONLY (--st-otr-early-lora-start 7 --st-otr-freeze-early): recipe-fz7-b495 (907 steps; step counts assume guessed
+  PF/step, check the meter), lo-p50-20-7-fz7-b495 (604), lo-r50to20-fz7-b495 (517), recipe-fz7-b991 (1,815), lo-p50-20-7-fz7-b991 (1,209), baseline denselora-s7-b495
+  (--lora-start 7, 183 steps). If fz7 arms hold their loss, FTM should rise towards ~3.5-4x; then try freezing more (cut and freeze at 7 is tied by the flag).
 - 06:05 POOL mtb16kx16 DONE (commit 73c57f4f6; mooney/sneetches/weka; 7,808 steps). Launched tag x16 (4 GPUs, --max-tokens): recipe-b1982 (2,188 steps),
   lo-r10to3-b1982 (2,608), denselora-b3964 (1,293), recipe-b3964 (4,377), lo-p50-20-7-b3964 (3,364), lo-r50to20-b3964 (3,008). 3-5.5 h.
   recipe-x4 final 0.083 @1,762 PF. NEW SCORER ftm.py (--json hub_tab/ftm.json): final loss vs total PF of FINISHED runs against the dense frontier

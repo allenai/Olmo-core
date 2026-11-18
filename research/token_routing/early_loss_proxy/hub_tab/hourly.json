@@ -58,5 +58,15 @@
   "xw": null,
   "mem": null,
   "note": "Qualifies under the 11-18 rules on two seeds: full fine-tune with one cut after block 7 and the keep share ramped from 20% to 90% ends at 16k CE 0.113 / 0.119 (dense full fine-tune 0.114 / 0.119, same seeds) at 0.64x the step cost: 1.57-1.59x fewer FLOPs at the dense final loss."
+ },
+ {
+  "t": "11-18 06:30",
+  "arm": "lo-p50-20-7-b495",
+  "idea": "budget",
+  "x": 2.5,
+  "level": "budget-matched at 495 PF: 16k CE 0.136 against dense full fine-tune 0.189 at the same budget (320 rows, one seed)",
+  "xw": null,
+  "mem": null,
+  "note": "FLOPs-to-match against the dense frontier (dense full fine-tune and dense LoRA at every budget): LoRA with keep 50% / 20% / 7% over three cuts, 420 steps on the 4x pool, complete schedule. LoRA 50%/20% 2.3x, recipe 20%/7% 2.1x at the same budget."
  }
 ]
