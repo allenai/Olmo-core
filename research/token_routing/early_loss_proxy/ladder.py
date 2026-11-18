@@ -90,7 +90,9 @@ def versus(r, ref):
 REF = runs.get("w1-dense-sd0")
 out = []
 for name, r in sorted(runs.items()):
-    b = base_of(name); B = runs.get(b) if b and b != name else None
+    b = base_of(name)
+    if b and b.replace("-sd0", "-sd" + name.rsplit("-sd", 1)[1]) in runs: b = b.replace("-sd0", "-sd" + name.rsplit("-sd", 1)[1])  # same seed if it exists
+    B = runs.get(b) if b and b != name else None
     bs = {s: ce for s, _, ce, _ in B["curve"]} if B else {}
     track = [(s, ce, bs.get(s)) for s, _, ce, _ in r["curve"][1:]]
     last = r["curve"][-1]

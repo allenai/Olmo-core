@@ -13,6 +13,10 @@
   (--st-otr-mass-target, cut 7).
 - sneetches slurm 5202808-5202811 (8 GPUs = the whole jsteinhardt preemptive_high cap until they end, ~1-1.5 h):
   ft-r20to7, ft-r50to20, ft-c7k50, ft-c16k50 -> /net/sneetches/data/prasann/early_loss_proxy/results/w1/ (code_16af1bb05).
+- 01:25: ft-r20to7 sd0 DONE (0.30x/step, 16k CE 0.138 at step 488), ft-r50to20 sd0 DONE (0.44x, 0.126); dense LoRA is 0.121 at 0.76x.
+  ft-c7k50 (0.60x) 0.128 at step 400, ft-c16k50 (0.73x) 0.143 at step 300, still running. Dense FT reference not in yet.
+  Freed 4 sneetches GPUs -> slurm 5202886 (dense FT seed 1, ~90 min) and 5202887 (ft-r50to20 sd1 then ft-r20to7 sd1).
+  Beaker jobs launched before 01:25 do not stream probe lines (results only when a run ends); later launches do (peek_beaker.sh <tag>).
 - Agent sparsebwd (ad0d4e2aae6f7333a, branch loop/sparsebwd, Beaker tag sbw): dense forward, gradients only through kept tokens.
 - ft-* arms = softtoken, LR 5e-6, RECIPE without the three --st-otr-early-lora* flags (full fine-tune + drop, 0.30x dense/step).
 - Scoring: ladder.py (same-adapter dense baseline: ft-* -> w1/dense, LoRA arms -> v3/denselora, *-mix80x3 -> w1/dense-mix80x3).
