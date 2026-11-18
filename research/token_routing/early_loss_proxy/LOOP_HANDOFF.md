@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 04:50 hub v124 (ladder + equal-FLOP tables). Data agent a12e472e83534956c RESUMED to build mtb16kx16 (124,928 rows, 7,808 steps; x8 if qdmatch_nq runs out)
+  on mooney -> sneetches + weka, in this worktree/branch. When staged: run recipe (0.22x) and lo-r50to20 / lo-p50-20-7 at 1,982 PF and at ~4,000-7,900 PF on it.
 - 04:40 x4 mid-run (python3 eqflop.py --json hub_tab/eqflop.json = equal-PF table; live PF = steps x COST table in eqflop.py): cheap arms far below dense at
   equal PF (lo-r50to20-x4 0.091 @1,250 PF vs dense 0.135-0.142; recipe-x4 passes dense final ~800 PF). Launched x4/dense-x4full + x4/denselora-x4full
   (4 GPUs, 1,952 steps, ~5 h) for the dense curve to 7,930 PF; x4/dense-x4 (976 steps) ends ~08:00. KEY NEXT: when x4 arms finish (05:30-07:30) and dense
