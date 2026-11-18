@@ -246,8 +246,10 @@ class Tap(P.Tap):
         self.fired += 1
         x = x.reshape(-1, x.shape[-1])
         g = g.detach().reshape(-1, g.shape[-1])
-        if self.mode == "energy":
-            self.E[i] = (g.float().square().sum(-1) * x.float().square().sum(-1)).cpu()
+        if self.mode == "energy":  # chunked over tokens: no full-length fp32 copies of g / x at long rows
+            self.E[i] = torch.cat([(g[c0:c0 + self.chunk].float().square().sum(-1) *
+                                    x[c0:c0 + self.chunk].float().square().sum(-1)).cpu()
+                                   for c0 in range(0, x.shape[0], self.chunk)])
             return
         T = x.shape[0]
         h1, s1, h2, s2 = self.hash[i]
