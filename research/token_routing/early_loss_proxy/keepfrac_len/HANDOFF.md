@@ -1,5 +1,17 @@
 # keepfrac_len handoff
 
+## 2026-11-17 18:25 PT (takeover session, latest)
+- Record written: `records/keep-fraction-vs-length.md` (verdict: best keep 20-40% at every resolvable length, does
+  not fall; low keeps break harder with length; constant fraction fits). Chart `keepfrac_vs_length.png`, hub block
+  `hub_keeplen_block.html`, `experiment_log_entry.json` (2 entries: tracks 64k [running] and mechanism [done]),
+  391 rows in ops results (`record_results.py`).
+- STILL RUNNING: 64k seed 1 of k40/k20/k10 (elp-kl64k-bkWA90AAKH, -bkB456AQ25, -bkP1WMGF1Y, ~19:00), 32k k70 sd1
+  (elp-kl32k-bkR20896XN, ~19:30), 64k k70 sd0 (elp-kl64k-bkBX8XWK0M, ~21:30).
+- When they land: `bash finalize.sh` (rescore, refresh tables/chart/block), update the verdict lines in the record,
+  `experiment_log_entry.json` (status done) and the hub head; add only the NEW rows to ops (filter
+  `record_results.py` output to the new run ids: elp-kl64k-{k40,k20,k10}-sd1-probe, elp-kl32k-k70-sd1-probe,
+  elp-kl64k-k70-sd0-probe).
+
 ## 2026-11-17 15:25 PT (takeover session)
 - q32k scored: `INTERIM_q32k.md`, `q32k_scored.json` (k40 ~ k20 best; k10 and below plateau higher).
 - launch_kl.py: `--local CODE_DIR` (jsteinhardt via launch_proxy.py, node /data paths, MICRO env, `--group` arms/job),

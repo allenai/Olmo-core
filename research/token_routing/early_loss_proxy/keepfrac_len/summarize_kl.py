@@ -40,6 +40,22 @@ def xat(run, ref, lvl, task=None):
     return (r / a) if a and r else None
 
 
+def ce_at_pf(run, pf, task=None):
+    c = run["ce"] if task is None else run["by_task"][task]
+    cm = np.minimum.accumulate(np.array(c))
+    return float(np.interp(pf, run["pf"], cm)) if pf <= run["pf"][-1] + 1e-6 else None
+
+
+def dce_vs(run, other, task=None):
+    """CE(run) - CE(other) at the smaller of the two runs' total training FLOPs (negative = run is better at
+    matched FLOPs); running-min curves, linear interpolation between probes."""
+    if other is None:
+        return None
+    pf = min(run["pf"][-1], other["pf"][-1])
+    a, b = ce_at_pf(run, pf, task), ce_at_pf(other, pf, task)
+    return None if a is None or b is None else a - b
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scored", required=True)
@@ -75,6 +91,9 @@ def main():
                     e[f"worst_x_{k}"] = None if any(v is None for v in tx.values()) else min(tx.values())
                     e[f"worst_task_{k}"] = min(tasks, key=lambda t: tx[t] if tx[t] is not None else -1)
                 e["task_final_ce"] = {t: run["by_task"][t][-1] for t in tasks}
+                rec = (arms.get("k20") or {}).get(sd)
+                e["dce_vs_k20"] = dce_vs(run, rec) if arm != "k20" else 0.0
+                e["task_dce_vs_k20"] = {t: (dce_vs(run, rec, t) if arm != "k20" else 0.0) for t in tasks}
                 per_seed.append(e)
             xs = [e["x_mid"] for e in per_seed]
             rows[arm] = {"seeds": per_seed, "n_seeds": len(per_seed),
@@ -90,7 +109,7 @@ def main():
         for arm, r in rows.items():
             for e in r["seeds"]:
                 print(f"{arm:6s} sd{e['seed']} step {e['final_step']:3d} CE {e['final_ce']:.4f} x/dense {e['x_dense_step']:.3f} "
-                      f"x_mid {f(e['x_mid'])} x_deep {f(e['x_deep'])} worst_mid {f(e['worst_x_mid'])} ({e['worst_task_mid']}) | "
+                      f"dCE@PF {e['dce_vs_k20'] if e['dce_vs_k20'] is None else round(e['dce_vs_k20'], 4)} x_mid {f(e['x_mid'])} x_deep {f(e['x_deep'])} worst_mid {f(e['worst_x_mid'])} ({e['worst_task_mid']}) | "
                       + " ".join(f"{t[:6]}={f(e['task_x_mid'][t])}" for t in tasks)
                       + " | CE " + " ".join(f"{t[:6]}={e['task_final_ce'][t]:.3f}" for t in tasks))
     if a.out_json:
@@ -120,18 +139,28 @@ def main():
         ax[0].set_title("Speedup at dft's mid-epoch CE (x at 0.3 = never reached)")
         ax[0].legend(title="length")
         xs = [LENS[L] for L in Ls]
-        bk = [out[L]["rows"][out[L]["best_router_arm"]]["seeds"][0]["keep"][0] for L in Ls]
-        ax[1].plot(xs, [b * 100 for b in bk], "o-", label="best keep fraction (%)")
+        SAT = ("2k", "4k")  # held-out CE saturates near 0.01-0.04: the proxy cannot rank keeps there
+        for j, L in enumerate(Ls):
+            R = out[L]["rows"]
+            b = R[out[L]["best_router_arm"]]
+            bx = b["x_mid_mean"]
+            near = [r["seeds"][0]["keep"][0] for k, r in R.items() if k.startswith("k") and r["seeds"][0]["keep"]
+                    and r["x_mid_mean"] is not None and bx and r["x_mid_mean"] >= 0.9 * bx]
+            kb = b["seeds"][0]["keep"][0] * 100
+            hollow = L in SAT
+            ax[1].plot([xs[j]] * 2, [min(near) * 100, max(near) * 100], "-", color="C0", lw=6, alpha=0.25)
+            ax[1].plot(xs[j], kb, "o", color="C0", mfc="white" if hollow else "C0", ms=8)
+        b8 = out["8k"]["rows"][out["8k"]["best_router_arm"]]["seeds"][0]["keep"][0] * 100 if "8k" in out else 40
+        ax[1].plot(xs, [b8] * len(xs), ":", color="C2", label=f"constant fraction ({b8:.0f}%)")
+        ax[1].plot(xs, [b8 * LENS["8k"] / x for x in xs], "--", color="C1", label="constant kept-token count (from 8k)")
         ax[1].set_xscale("log", base=2)
         ax[1].set_yscale("log")
         ax[1].set_xticks(xs, Ls)
-        ax[1].set_xlabel("context length")
+        ax[1].set_yticks([2.5, 5, 10, 20, 40, 70], ["2.5", "5", "10", "20", "40", "70"])
+        ax[1].set_xlabel("context length (rung label)")
         ax[1].set_ylabel("best keep at cut 1 (%)")
-        ax2 = ax[1].twinx()
-        ax2.plot(xs, [b * x for b, x in zip(bk, xs)], "s--", color="C1", label="kept tokens at cut 1")
-        ax2.set_yscale("log")
-        ax2.set_ylabel("kept tokens at cut 1", color="C1")
-        ax[1].set_title("Best keep vs length")
+        ax[1].set_title("Best keep vs length (band: within 10% of best; hollow = saturated)")
+        ax[1].legend(fontsize=8)
         fig.tight_layout()
         fig.savefig(a.png, dpi=130)
 

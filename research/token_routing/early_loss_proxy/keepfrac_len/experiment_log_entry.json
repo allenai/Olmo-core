@@ -1,0 +1,191 @@
+[
+ {
+  "date": "2026-11-17",
+  "status": "running",
+  "track": "64k",
+  "who": "side session (keepfrac-len)",
+  "title": "Does the recipe's best keep fraction fall as context grows? Keep 70%..1.25% at 2k-64k, single-length pools, dense held-out-loss proxy",
+  "result": "No. Best keep is 20-40% at every length the proxy resolves and does not fall with length: 8k 40% (tied with 20%), 16k 20-40% tie, 32k 40-70% beat the recipe at matched FLOPs (40%: -0.019 / -0.010 CE on 2 seeds; 70%: -0.022, 1 seed), 64k 20% (40% +0.015, 1 seed). Low keeps break harder the longer the rows: 10% is +0.003 CE vs the recipe at matched FLOPs at 8k, +0.002/+0.014 at 16k, +0.011/+0.031 at 32k, +0.080 at 64k; 2.5% collapses at 32k/64k and 1.25% at 64k (+0.60). Constant fraction fits; constant kept-token count (would predict 20/10/5% at 16/32/64k) is rejected. 2k/4k saturate (held-out CE ~0.01): unresolvable. Below 20% the per-step FLOP saving flattens (64k: 0.185 -> 0.140x dense) because blocks 0-6 stay dense. Seed 1 of 64k 40/20/10% and a 70% arm at 32k (seed 1) / 64k still running. Proxy: eval_size 144 per length (below 500), ranks only, cannot resolve < ~0.03-0.05 CE.",
+  "match": "same base (q35-4b-base-markerfix), per-length pool (3 tasks x 1,200 rows) and held-out rows (48/task), one epoch = 225 steps with the real LR schedule; FLOPs from the trainer meter; reference = dense full fine-tune",
+  "record": "records/keep-fraction-vs-length.md",
+  "branch": "claude/keepfrac-vs-length-4bf10c",
+  "tables": [
+   {
+    "title": "Held-out CE minus the 20%/7% recipe's at matched training FLOPs, per seed (negative = better; nr = not comparable)",
+    "cols": [
+     "keep cut1",
+     "8k",
+     "16k",
+     "32k",
+     "64k"
+    ],
+    "rows": [
+     [
+      "k70",
+      "+0.006 / +0.018",
+      "+0.007",
+      "-0.022",
+      "-"
+     ],
+     [
+      "k40",
+      "-0.004 / -0.004",
+      "-0.001 / +0.014",
+      "-0.019 / -0.010",
+      "+0.015"
+     ],
+     [
+      "k20",
+      "+0.000 / +0.000",
+      "+0.000 / +0.000",
+      "+0.000 / +0.000",
+      "+0.000"
+     ],
+     [
+      "k10",
+      "+0.003",
+      "+0.002 / +0.014",
+      "+0.011 / +0.031",
+      "+0.080"
+     ],
+     [
+      "k5",
+      "+0.012",
+      "+0.010",
+      "+0.040",
+      "+0.103"
+     ],
+     [
+      "k2p5",
+      "+0.069",
+      "+0.036",
+      "+0.296",
+      "+0.278"
+     ],
+     [
+      "k1p25",
+      "-",
+      "-",
+      "-",
+      "+0.602"
+     ]
+    ]
+   },
+   {
+    "title": "FLOP speedup vs dense full fine-tune at dft's mid-epoch held-out CE, per seed (eval_size 144 per length)",
+    "cols": [
+     "arm",
+     "2k",
+     "4k",
+     "8k",
+     "16k",
+     "32k",
+     "64k"
+    ],
+    "rows": [
+     [
+      "ref",
+      "1.85",
+      "1.49",
+      "1.15",
+      "1.30",
+      "1.84",
+      "1.34"
+     ],
+     [
+      "k70",
+      "2.64",
+      "2.63",
+      "2.99 / 2.53",
+      "2.94",
+      "3.57",
+      "-"
+     ],
+     [
+      "k40",
+      "4.05",
+      "3.25",
+      "3.57 / 3.11",
+      "3.27 / 2.76",
+      "3.50 / 2.98",
+      "2.87"
+     ],
+     [
+      "k20",
+      "2.78",
+      "3.63",
+      "3.37 / 3.23",
+      "2.89 / 3.49",
+      "2.70 / 3.01",
+      "3.61"
+     ],
+     [
+      "k10",
+      "3.22",
+      "3.82",
+      "3.21",
+      "3.13 / 2.80",
+      "not reached / not reached",
+      "not reached"
+     ],
+     [
+      "k5",
+      "3.06",
+      "3.09",
+      "3.30",
+      "2.59",
+      "not reached",
+      "not reached"
+     ],
+     [
+      "k2p5",
+      "2.88",
+      "2.99",
+      "not reached",
+      "not reached",
+      "not reached",
+      "not reached"
+     ],
+     [
+      "k1p25",
+      "-",
+      "-",
+      "-",
+      "-",
+      "-",
+      "not reached"
+     ],
+     [
+      "grJ",
+      "-",
+      "-",
+      "-",
+      "-",
+      "6.17",
+      "8.41"
+     ],
+     [
+      "grJc",
+      "-",
+      "-",
+      "-",
+      "-",
+      "4.16 / 4.15",
+      "4.10"
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "date": "2026-11-17",
+  "status": "done",
+  "track": "mechanism",
+  "who": "side session (keepfrac-len)",
+  "title": "Gold-aware stochastic keep (grJ) and its outlier-safe variant (grJc, document drop on contradiction only) at 32k and 64k",
+  "result": "grJ: largest mean speedups (6.2x at 32k, 8.4x at 64k vs dense full FT at its mid-epoch CE; 0.08 / 0.067 of dense FLOPs per step) but outlier never reaches that level (final outlier CE 0.249 vs 0.187 at 32k, 0.284 vs 0.220 at 64k): the mean hides an outlier stall. grJc: 32k 4.16x / 4.15x mean (2 seeds), worst task 2.82x on seed 0 but contradiction not reached on seed 1; ends 0.015-0.019 CE above 40%/14% at equal steps (contradiction +0.04). 64k (1 seed): 4.10x mean, contradiction (0.191 vs 0.086) and outlier do not reach dense's mid-epoch level. Outlier-safe at 32k, not at 64k; contradiction is its weak task. Proxy, eval_size 144.",
+  "match": "recipe 20%/7% router + gold-aware whole-document keep (--st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 0.15); same pools/held-out as the keep-vs-length study",
+  "record": "records/keep-fraction-vs-length.md",
+  "branch": "claude/keepfrac-vs-length-4bf10c"
+ }
+]

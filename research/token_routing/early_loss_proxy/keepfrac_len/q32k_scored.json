@@ -1,6 +1,12 @@
 {
  "lens": {
   "32k": {
+   "eval_size": 72,
+   "rows_per_task": {
+    "contradiction": 24,
+    "outlier": 24,
+    "qdmatch_nq": 24
+   },
    "reference": "dft",
    "levels": [
     0.4626,

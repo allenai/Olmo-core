@@ -102,10 +102,10 @@ def main():
             m = re.match(rf"elp-{P_}\w*?-(\w+)-sd(\d+)\.json", os.path.basename(p))
             if m:
                 runs.setdefault(m.group(1), {})[int(m.group(2))] = load(p)
-        if a.ref not in runs or "k20" not in runs:
-            print(f"[kl {L}] missing {a.ref} or k20: have {sorted(runs)}")
+        if a.ref not in runs or 0 not in runs[a.ref] or len(runs[a.ref][0]["steps"]) < 3:
+            print(f"[kl {L}] reference {a.ref} missing or unfinished: have {sorted(runs)}")
             continue
-        ref, rec = runs[a.ref][0], runs["k20"][0]
+        ref, rec = runs[a.ref][0], runs.get("k20", {}).get(0)  # rec None until the recipe arm lands
         lora = runs.get("ref", {}).get(0) if a.ref != "ref" else None
         last = ref["steps"][-1]
         idx = [i for i, s in enumerate(ref["steps"]) if s >= a.level_from * last and s > 0]
