@@ -78,6 +78,55 @@ State: `ops exp show recipe_cpt` (draft page: `STATUS_draft.md` here). Live jobs
   - The recipe's own-construction CE cannot be rebuilt offline (the router's ridge fit lives in the trainer state).
     The run's own-construction number is the training CE on its kept tokens (wandb `train/CE loss`).
 
+## Smoke and probes (2026-11-17, Beaker jupiter, 8 x H100, production geometry)
+
+Throughput, memory and FLOPs (steady state, steps 10-20):
+
+| arm | s/step | tokens/s/GPU | peak active / reserved GiB | metered FLOPs/step vs dense | 1B tokens (1,938 steps) |
+|---|---|---|---|---|---|
+| recipe | 3.30 | ~20,000 | 19.1 / 26.7 (23.0 on the dense warmup step 1) | 0.179x (cumulative 0.207x over 20 steps, incl. the dense step 1) | ~114 min, ~15 GPU-h |
+| dense | 8.38 | ~7,820 | 31.2 / 32.4 | 1x (15.6 PF/step) | ~279 min, ~37 GPU-h |
+
+Wall-clock speedup 2.5x against a 5.6x per-step FLOP cut: at 32k, attention and the frozen-weight forward are not cut
+by the drop.
+
+Checks that passed:
+- **Router.** Stage 1 keeps 20% of each pseudo-doc (`mid_row_frac` 0.203); stage 2 keeps 35% of the survivors
+  (`s1_mid_row_frac` 0.366), so 7.4% of the row reaches block 16+. Router rank correlation 0.37-0.42.
+- **Resume** (smoke B, `--resume` into the step-20 folder): loads step 20; data loader resumes at batch 20; router
+  fit resumed (2 stages); FLOP meter accumulators restored; steps 21-30 continue at the same CE level. A Beaker
+  preemption restart uses the same path without `--resume`.
+- **Checkpoints.** The async ones cost ~5 s (recipe) and ~7 s (dense); the synchronous one ~11 s / ~23 s.
+- **Merge.** Merged export vs unmerged checkpoint: dev CE 1.3685 vs 1.3686 (8 rows). Embeddings unchanged;
+  `||32 B A|| / ||W||` = 2.6% mean after 20 steps at 2e-5.
+- **Base.** Dev CE 1.3199 ⚠ eval_size=32 rows (softdetach measured 1.320).
+
+**Trap found.** `beaker_ctc_suite.py` always passes `--no-final-checkpoint`, and the trainer then disables the
+checkpointer unless `--ephemeral-save-interval` is set. `--save-interval` alone writes nothing: the first smoke ran
+20 steps with `--save-interval 10` and saved no checkpoint. The launcher always passes both.
+
+**Finding: recipe CPT raises full-context dev CE immediately, and LoRA is not the cause.** Setup: 20 steps (1-step
+warmup) of each arm, then full-attention dev CE on the first rows of `cpt_dev` (no-cot, teacher-forced).
+⚠ eval_size=8 rows, so these are a direction check, not a measurement.
+
+| arm (20 steps) | CE, mean of rows 1-5 (paired) | Δ vs base | CE, 8 rows |
+|---|---|---|---|
+| base | 1.1208 | | (1.3199 on 32 rows) |
+| dense full FT, LR 2e-5 | 1.0953 | -0.026 | 1.1802 |
+| whole-model LoRA r64, no routing ("loradense"), LR 2e-5 | 1.0802 | -0.041 | 1.1661 |
+| recipe, LR 5e-6 | 1.2367 | **+0.116** | 1.3228 |
+| recipe, LR 1e-5 | 1.2918 | **+0.171** | 1.3734 |
+| recipe, LR 2e-5 | 1.2877 | **+0.167** | 1.3685 |
+
+- LoRA at 2e-5 without routing beats dense, so the regression is the routing: training only ~7% of targets, on
+  contexts compacted after blocks 7 and 16.
+- The regression grows with LR and plateaus between 1e-5 and 2e-5.
+- This is the olmo3_cptdrop failure (every router arm lost on full-context dev CE), stronger here.
+- The kept-token training CE is flat over 30 steps. The logged `train/CE` is the kept-token CE sum divided by ALL
+  label tokens: about 0.24 = ~3.2 nats on the 7.4% kept targets.
+- The run was launched anyway, as designed. It is cheap (~15 GPU-h), and the question is downstream SFT, not CPT
+  dev CE. Read each checkpoint's dev CE before scheduling SFT from it.
+
 ## Prior drop-CPT bases (why this is not a repeat)
 
 The paused auto-research loop tested SFT from drop-CPT bases on its proxy (`loop/cptbase`, `loop/cptnative`) and saw
