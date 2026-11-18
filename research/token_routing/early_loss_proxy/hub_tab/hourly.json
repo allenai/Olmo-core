@@ -53,11 +53,11 @@
   "t": "11-18 02:55",
   "arm": "ft-c7ramp",
   "idea": "keepramp",
-  "x": 1.58,
+  "x": null,
   "level": "dense full fine-tune final loss (16k CE 0.114 at step 488; 320 rows, seed 0)",
   "xw": null,
   "mem": null,
-  "note": "Qualifies under the 11-18 rules on two seeds: full fine-tune with one cut after block 7 and the keep share ramped from 20% to 90% ends at 16k CE 0.113 / 0.119 (dense full fine-tune 0.114 / 0.119, same seeds) at 0.64x the step cost: 1.57-1.59x fewer FLOPs at the dense final loss."
+  "note": "WITHDRAWN: three runs of this arm gave 0.113 / 0.119 / 0.120 against dense 0.114 / 0.119, so 'reaches the dense final loss at 1.6x' was within one-epoch noise. Budget-matched at 1,980 PF the ramp is 1.6x against the dense frontier, behind constant budgets (about 2x)."
  },
  {
   "t": "11-18 06:30",
@@ -78,5 +78,35 @@
   "xw": null,
   "mem": null,
   "note": "LoRA with keep 50% / 20% / 7% over three cuts, 1,683 steps. The ratio against the dense frontier is at least 2.0x at this budget; the same arm is 2.1-2.2x at 495 and 991 PF. The gain does not shrink between 495 and 1,980 PF."
+ },
+ {
+  "t": "11-18 09:00",
+  "arm": "lo-p50-20-7-x4",
+  "idea": "budget",
+  "x": 2.64,
+  "level": "1,980 PF: 16k CE 0.072; the dense frontier needs about 5,200 PF for that loss (between dense LoRA 0.078 at 3,986 PF and 0.068 at 5,990 PF); 320 rows, one seed",
+  "xw": null,
+  "mem": null,
+  "note": "Exact ratio now that the dense frontier reaches 7,934 PF. Same arm: 2.2x at 495 PF, 2.1x at 991 PF. Seed-1 repeats of this arm and of the dense points are running."
+ },
+ {
+  "t": "11-18 09:30",
+  "arm": "lo-r50to20-b3964 (16x pool)",
+  "idea": "budget",
+  "x": 1.97,
+  "level": "3,975 PF: 16k CE 0.064; dense full fine-tune needs 7,934 PF for 0.064 (320 rows, one seed)",
+  "xw": null,
+  "mem": null,
+  "note": "Largest budget so far. LoRA 50% / 20% / 7% at the same budget: 0.065 (1.88x). The gain is about 2x from 495 PF to 3,975 PF."
+ },
+ {
+  "t": "11-18 11:00",
+  "arm": "lo-p50-20-7 (two seeds)",
+  "idea": "budget",
+  "x": 2.38,
+  "level": "1,980 PF: 16k CE 0.074 (mean of two seeds: 0.072 / 0.076); 320 rows",
+  "xw": null,
+  "mem": null,
+  "note": "Seed-averaged FLOPs-to-match against the seed-averaged dense frontier: 2.34x at 495 PF, 2.08x at 991 PF, 2.38x at 1,980 PF."
  }
 ]

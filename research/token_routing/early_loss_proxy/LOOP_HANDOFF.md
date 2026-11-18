@@ -42,6 +42,26 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 11:00 SEED MEANS (2 seeds): lo-p50-20-7 x2.34 @495 (0.136 / 0.133), x2.08 @991 (0.100 / 0.100), x2.38 @1,980 (0.072 / 0.076); dense b495 0.189 / 0.193,
+  denselora b991 0.139 / 0.147; denselora-x4 sd1 still running. HEADLINE CONFIRMED on two seeds: ~2.1-2.4x. ds agent follow-up (991 PF) not seen yet.
+- 10:00 recipe-b3964 (x16) 0.074 @3,957 PF = x1.22: the 20/7 recipe DECAYS with data (1.8-2.2x at <= 1,980 PF), 50/20 and 50/20/7 hold ~2x. fz7 closed
+  (recipe-fz7-b991 0.128). ds (docsub agent, runs are on mtb16kx4 although ftm.py labels them mtb16k): ds-p-k25 0.128 @465 PF (x2.66) vs plain 0.136 (x2.14);
+  k50 0.141, r25 0.137, r50 0.139, dense LoRA + k50 0.170. Agent still running (991 PF follow-up + per-task table). If k25 holds at 991 PF with a second seed,
+  try keep 0.1-0.15 and combine with the gentler token cut; watch the outlier task.
+- 09:30 x16 @3,975 PF: lo-r50to20 0.064 (x1.97), lo-p50-20-7 0.065 (x1.88); recipe-b3964 finishing. ~2x from 495 to 3,975 PF.
+  ftm.py now averages seeds per (arm, pool, steps). In flight: seed-1 repeats (bud/x4), ds agent (5 runs, tag ds), recipe-b3964, recipe-fz7-b991.
+- 09:00 DENSE FRONTIER COMPLETE to 7,934 PF: denselora-b3964 (x16) 0.078 @3,986; denselora-x4full 0.068 @5,990; dense-x4full 0.064 @7,934.
+  EXACT FTM (ftm.py): lo-p50-20-7 x2.16 @495, x2.07 @991, x2.64 @1,980; lo-r50to20 x1.96 / x2.25 / x1.99; recipe x1.80 / x2.01 / x2.15 (x4) / x1.91 (x16);
+  lo-r10to3 x1.51 @991, x1.00 @2,015. fz7 CLOSED negative (b991 recipe-fz7 still finishing). Seed-1 repeats launched 09:00 (tags bud / x4, --seeds 1):
+  lo-p50-20-7-b495, -b991, lo-p50-20-7-x4 (4 GPUs), dense-b495, denselora-b991, denselora-x4. ftm.py: seed-1 dense points join the frontier automatically (lower envelope);
+  TODO make ftm.py average seeds per (arm, budget) before building the frontier, otherwise the frontier takes the luckier seed.
+- 08:30 keepsched agent DONE (loop/keepsched @ 13b8f980b, flag --st-otr-stage-sched): ramp rerun 0.120 (w1 0.113 was a lucky draw); hold50 0.120/0.46x best value;
+  lo10h50 0.138. RAMP CLAIM WITHDRAWN in tracker (hourly row nulled). Schedules closed: budget-matched ramp 1.6x < constant LoRA budgets ~2x.
+- 08:05 fz7 NEGATIVE at b495: denselora-s7 0.205 (dense 0.189); lo-r50to20-fz7 0.164 @534 PF (unfrozen 0.140); lo-p50-20-7-fz7 0.153 (unfrozen 0.136). b991 fz7 arms
+  still running (let them finish, then close). x16-recipe-b1982 0.082 (x1.9). lo-r10to3-b991 0.117 (x1.5). Agent docsub (adf5d3eb50381a0be, branch loop/docsub, tag ds):
+  input document subsampling (from loop/longpos) + lo-p50-20-7, constant and ramped, b495. ks agent's last arm ks-ft-lo10h50 running.
+  REMAINING IDEAS if docsub fails: per-row adaptive budgets by loss (hard rows keep more), early blocks trained on a subset of rows only, the user's
+  10-20x target looks out of reach with token dropping alone on this task mix: say so plainly with the frontier table.
 - 07:00 dense-x4 (976 steps, 3,960 PF) = 0.081. x4 finals ~1,980 PF: lo-p50-20-7 0.072, lo-r50to20 0.078 (both > x2.0 lower bound), recipe 0.083 @1,762 (x2.15),
   ft-r50to20 0.082 (x1.95), ramp / lo-c16k50 0.088 (x1.6). b991: lo-r50to20 0.097 (x2.25), lo-p50-20-7 0.100 (x2.07), recipe 0.101 (x2.0), denselora 0.139, dense 0.151.
   => ~2x at 495 / 991 / 1,980 PF vs the dense frontier; no decay with data. fz7 arms: first launch FAILED (later stages inherited freeze_early); fixed in

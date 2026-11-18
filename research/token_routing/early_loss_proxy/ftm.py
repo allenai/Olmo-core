@@ -24,6 +24,12 @@ for k, r in ladder.runs.items():
     pool = "mtb16kx16" if k.startswith("x16-") else ("mtb16kx4" if k.startswith(("x4-", "bud-", "ds-")) else "mtb16k")
     P.append(dict(run=k, arm=arm, kind=kind, pool=pool, steps=s, pf=pf, ce=ce))
 
+# average seeds of the same (arm, pool, steps) before anything else, so the frontier is not built from the luckier seed
+G = {}
+for q in P: G.setdefault((q["arm"], q["pool"], q["steps"]), []).append(q)
+P = [dict(run=g[0]["run"].rsplit("-sd", 1)[0] + ("-sd" + "+".join(sorted(x["run"].rsplit("-sd", 1)[1] for x in g))), arm=g[0]["arm"], kind=g[0]["kind"], pool=g[0]["pool"],
+          steps=g[0]["steps"], pf=sum(x["pf"] for x in g) / len(g), ce=sum(x["ce"] for x in g) / len(g), seeds=len(g), ce_seeds=[round(x["ce"], 4) for x in g]) for g in G.values()]
+
 
 def frontier(pts):  # Pareto: increasing PF, strictly decreasing CE
     out = []
@@ -53,9 +59,9 @@ for p in sorted(P, key=lambda p: (p["kind"] != "drop", p["ce"])):
     shallow_b = bool(FB) and p["ce"] >= FB[0]["ce"]
     rows.append(dict(**p, base_pf=b, x_base=(b / p["pf"]) if b else None, x_base_exact=be, x_base_lower_bound=deep_b, x_base_upper_bound=shallow_b,
                      dense_ft_pf=d, x_dense_ft=(d / p["pf"]) if d else None, x_dense_ft_exact=de, x_dense_ft_lower_bound=deep_d))
-print(f"\n{'run':30s} {'pool':9s} steps    PF    CE | vs dense baseline family | vs dense full FT only")
+print(f"\n{'run':30s} {'pool':9s} steps    PF    CE (* = mean of 2+ seeds) | vs dense baseline family | vs dense full FT only")
 for r in rows:
     f = lambda x, exact, lb: "      -" if x is None else (f"x{x:5.2f} " if exact else (f">x{x:4.2f} " if lb else f"<x{x:4.2f} "))
-    print(f"{r['run'][:30]:30s} {r['pool']:9s} {r['steps']:5d} {r['pf']:5.0f} {r['ce']:.3f} | {f(r['x_base'], r['x_base_exact'], r['x_base_lower_bound']):>10s}              | {f(r['x_dense_ft'], r['x_dense_ft_exact'], r['x_dense_ft_lower_bound'])}")
+    print(f"{r['run'][:30]:30s} {r['pool']:9s} {r['steps']:5d} {r['pf']:5.0f} {r['ce']:.3f}{'*' if r['seeds'] > 1 else ' '}| {f(r['x_base'], r['x_base_exact'], r['x_base_lower_bound']):>10s}              | {f(r['x_dense_ft'], r['x_dense_ft_exact'], r['x_dense_ft_lower_bound'])}")
 if "--json" in argv:
     json.dump(dict(frontier=FB, frontier_dense_ft=FD, runs=rows, eval_size=320), open(argv[argv.index("--json") + 1], "w"), indent=1)
