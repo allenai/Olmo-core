@@ -42,6 +42,13 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 03:35 W2 DONE. dense FT sd1 0.119 (sd0 0.114). ft-c7ramp sd1 0.119 (= dense sd1): ramp x1.57-1.59 at dense final on BOTH seeds. ft-c7ramp10to90 0.119/0.60x.
+  LoRA: lo-c7ramp 0.120/0.48x, lo-c7ramp10to60 0.124/0.36x, lo-p50-20-7 0.123/0.29x, lo-r50to10 0.123/0.28x, lo-r50to20 sd1 0.123/0.32x, lo-r35to12 0.131/0.27x,
+  lo-e50-30-15 0.152/0.23x (cut at block 3 hurts; w3/ft-c3ramp also far behind). ft-r20to7 sd1 0.135. All recorded with ops result add.
+  Launched 03:30: w3/lo-p50-20-7 sd1, w3/lo-p50-10-5, w3/lo-q50-30-15-7 (7,12,16,24), x4/lo-p50-20-7-x4 (1,683 steps).
+  Cost floor note: blocks 0-6 run on all tokens = 0.22x (FT) / 0.16x (LoRA) of dense; going below ~0.25x needs a cheap way through the early blocks
+  (router cut at block 3 fails). Candidate next ideas: early blocks at reduced keep chosen by a block-7 router from the previous step / cached scores;
+  early-block gradient only for tokens kept at the first cut.
 - 03:20 launched w3/ft-r50to20-ex50 (explore 0.5), w3/ft-r50to20-rnd (--st-otr-score random). Agent gradcomp (ae04a33f56958de1a, branch loop/gradcomp,
   Beaker tag gc): backward-only gradient rescale of kept document tokens at each cut (inv_keep / inv_mass / sqrt). Agent keepsched still running (tag ks).
   IN FLIGHT SUMMARY: w1 dense sd1 + dense-mix80x3 + ft-r20to7 sd1; w2 (10 arms, ends ~03:40-04:30); w3 (5 arms); x4 (7 arms incl. dense-x4, ends ~06:00-07:30);
