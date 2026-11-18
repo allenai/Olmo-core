@@ -132,12 +132,16 @@ past the training length, to 128k and 256k (`records/mt11-64k-length-generalizat
 
 ```bash
 git clone https://github.com/allenai/OLMo-core.git && cd OLMo-core
-git checkout prasann/recipe-pareto-repro
-pip install -e '.[all]' beaker-py   # for the launchers only; training runs in the Beaker image
+git checkout prasann/flopdrop_clean
+git checkout -b <you>/recipe-spinoff          # your own branch; never commit to prasann/flopdrop_clean
+git push -u origin <you>/recipe-spinoff
+pip install -e '.[beaker]'     # launchers only (beaker-py + gantry); training runs in the Beaker image
 ```
 
+Start from `prasann/flopdrop_clean` and do all your work on your own branch cut from it.
+
 The launchers submit from your laptop or any machine that has the `beaker` CLI configured. Gantry builds the job from
-the pushed commit, so push your own branch before launching (`git push origin HEAD`).
+the pushed commit, so push your branch before every launch (`git push`).
 
 The job image is `OLMoCoreBeakerImage.stable`. The training code installs itself from the repo inside the job.
 

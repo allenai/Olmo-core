@@ -1,4 +1,7 @@
-# Hand-off state: recipe reproduction branch (`prasann/recipe-pareto-repro`)
+# Hand-off state: recipe reproduction docs
+
+Users start from `prasann/flopdrop_clean` (fast-forwarded to this work) and cut their own branch. The work branch for
+these docs is `prasann/recipe-pareto-repro`; the coordinator fast-forwards `prasann/flopdrop_clean` after each push.
 
 Updated 2026-11-17. Experiment `tokdrop_lr`. Branch cut from `claude/merge-side-branches-1117` @ 8553e80b9.
 
