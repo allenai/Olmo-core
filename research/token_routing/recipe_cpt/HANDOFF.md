@@ -1,6 +1,6 @@
 # recipe_cpt handoff (current state; keep this file current)
 
-Updated 2026-11-17 17:10 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
+Updated 2026-11-17 17:42 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
 from `origin/claude/early-loss-proxy-d6e886` @ d52756c12. Design and smoke numbers: `README.md`.
 
 ## Running (Beaker, ai2/flex2, budget ai2/oe-other, urgent, jupiter, 1 node x 8 H100)
@@ -31,6 +31,21 @@ Checkpoints (`<save folder>/step<N>/model_and_optim`; tokens = N x 16 x 32,257):
 
 Ephemeral resume checkpoints every 121 steps (newest only). A preemption restart resumes on its own; a manual
 relaunch: `python research/token_routing/recipe_cpt/launch_recipe_cpt.py --arms <arm> --resume --min-runtime <..> launch`.
+
+## Checkpoint results (kept current as checkpoints land)
+
+Full-context dev CE on cpt_dev (64k rows, no-cot teacher-forced, merged export), ⚠ eval_size=32 rows. Base 1.3199.
+Recipe own-construction CE = logged train/CE over the 20 steps up to the checkpoint / router kept share (0.0742), i.e.
+CE per kept target on training rows (⚠ 320 training rows, not held out).
+
+| step | tokens | recipe dev CE | recipe own CE / kept target | dense dev CE |
+|---|---|---|---|---|
+| 0 (base) | 0 | 1.3199 | | 1.3199 |
+| 242 | 124.9M | 1.4206 | 3.18 | pending (job 01M7P31FCKSZ5GA4YXSX4FYJ38) |
+| 484 | 249.8M | 1.4139 | 3.17 | |
+| 968 | 499.6M | | | |
+| 1936 | 999.2M | | | |
+| final (1938) | 1.000B | | | |
 
 ## Next (in order)
 
