@@ -1,5 +1,9 @@
-# PAUSED by Prasann at 13:15 on 2026-11-17 ("pause for now"). Heartbeat cron deleted. Do not launch runs or republish the hub tab until he says to resume.
-# Tab conflict to fix on resume: the 13:13 republish used a stale copy of the tab builder and reverted layout changes the hub-reorg session had made (it restored them as v113). Use hub_live/build_autoresearch_tab.py from the main checkout directly, never the copy in hub_tab/.
+# RESUMED by Prasann 2026-11-18 00:20 PT with new rules (was paused 11-17 13:15). Heartbeat cron 13,43 * * * * recreated.
+# NEW SCOPE RULE (11-18): LoRA and fixed data re-mixes are part of the DENSE BASELINE. Main methods = dynamic FLOP dropping
+# during training only. Direction: start from drop settings that track dense per step at higher step cost, then cut step
+# cost gradually. Primary held-out = heldout_v3 (sets gen16k:48,rung16k:32,suite8k:8,suite4k:8; eval_size 384), score with v3.py.
+# Hub tab: never publish from this session with hub_tab/build_autoresearch_tab.py (stale). Hand hub_tab/loop_state.json to the
+# hub-reorg session (local_9a6d1692-d798-4df3-b6c6-023470949c95) or use hub_live/ in the main checkout after reading the live page.
 
 # Auto-research loop: state file (updated 2026-11-17 12:05 PT)
 

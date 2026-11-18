@@ -149,3 +149,18 @@ to `launch_proxy.py`. Real runs use the defaults (new pool, 16,384).
 - Missing: a full-epoch dense full-FT run with held-out probes (heldout_v2 and heldout_v3). Until it exists the
   deepest dense full-FT level is only known from generation evals (0.928 at 1,982 PF; recipe 0.897 at 442 PF and
   dense LoRA 0.882 at 1,496 PF do not reach it).
+
+## Scope rule (Prasann, 2026-11-18): only dynamic FLOP dropping is a method; LoRA and fixed re-mixes are baseline
+
+- "any idea that can be done with lora / a fixed data re-mix should be considered a part of dense baseline, so only
+  things related to dynamically dropping FLOPs during training should be considered for the main methods".
+- Dense baseline = the cheapest of dense full fine-tuning, dense LoRA, and either one on a fixed re-mixed pool
+  (`mtbmix80`, `mtbmix80x3`, ...). Compare a method with the baseline on the SAME adapter and pool; the reported
+  speedup is the gain from dropping alone.
+- Methods = token dropping / routing, keep schedules, per-row or per-step adaptive budgets, layer / gradient
+  skipping decided at train time. LoRA, row mix, LR and batch size are not methods (apply them to both sides).
+- Search direction: "taking methods that seem to work similarly to dense at higher step cost, and gradually figuring
+  out ways to reduce per-step cost". Start from gentle settings that track dense per step to the deepest loss
+  (late cut, high keep, dense steps mixed in), then lower the step cost in small moves; check the deep end each time.
+- Primary held-out set from 2026-11-18: `heldout_v3.npz`, `--sets gen16k:48,rung16k:32,suite8k:8,suite4k:8`
+  (eval_size 384, 320 rows at 16k; below 500, flag it). Score with `v3.py`.
