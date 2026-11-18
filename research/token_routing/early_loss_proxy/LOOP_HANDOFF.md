@@ -42,6 +42,10 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 15:20 ds follow-up complete (k25 b495 two-seed 0.130 x2.67; l6k 0.134 no gain; dl-k25-b991 failed at start, not rerun; agent's written report still pending).
+  NEW: ftm_task.py (per-task FTM, 80 rows/task): lo-p50-20-7 ~x2 on contradiction / reorder, x2.3-2.9 outlier; recipe x3-3.8 outlier but x1.2-1.7 reorder (fades);
+  qdmatch_nq on a plateau. Agent taskbudget (a56ca3352be39cfea, branch loop/taskbudget, tag tb): per-task keep shares (hand-set at 991 PF, then online by covered
+  gradient mass). Only idea in flight; think of 2-3 more for the next heartbeat (candidates: reorder-specific handling since it is 60-70% of the loss; qdmatch plateau).
 - 14:30 ds: k25 seed mean @986 PF 0.093 (x2.77); k25 @1,971 PF on x16 0.073 (x2.46) = SAME as plain token drop (0.074, x2.38) -> docsub gain FADES with data.
   l3k (all rows subsampled) 0.167 (bad). k10 @494 0.121 (x2.93). Agent still has 2 runs + its report. Verdict so far: docsub is a small-budget gain only.
 - 13:30 ds follow-up: ds-p-k10-b495 0.121 (x2.93) > k25 (0.128); control ds-dl-k25-b495 (dense LoRA + docsub) 0.175 (x1.25). Agent still running

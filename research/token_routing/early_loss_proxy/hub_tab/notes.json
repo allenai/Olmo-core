@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 15:20",
+   "text": "Per-task FLOPs-to-match computed (ftm_task.py; 80 rows per task, rough): LoRA 50%/20%/7% is about 2x on contradiction, 2.3-2.9x on outlier, about 2x on reorder at every budget; the 20%/7% recipe is 3-3.8x on outlier but 1.2-1.7x on reorder and below 1x at 3,957 PF; qdmatch_nq is on a plateau (0.05-0.06) where ratios are not meaningful. Started an agent on per-task keep budgets (branch loop/taskbudget, tag tb)."
+  },
+  {
    "t": "11-18 15:00",
    "text": "Document-drop follow-up complete except one failed control: keep 25% at 463 PF is 0.130 on two seeds (2.7x); subsampling the 8k rows too gives 0.134 (no gain). Verdict: a small-budget gain (2.7-2.9x at 465-990 PF) that is gone by 1,971 PF."
   },
