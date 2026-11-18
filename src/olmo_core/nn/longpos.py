@@ -118,6 +118,10 @@ def apply_longpos(
             changed = True
             st["stretched"] += 1
             st["span_sum"] += pos[-1] + 1
+        rung = st.setdefault("rung", {}).setdefault("4k" if L < 6000 else ("8k" if L < 12000 else "16k"), [0, 0, 0])
+        rung[0] += 1
+        rung[1] += L
+        rung[2] += len(keep_cols)
         out_ids.append([row[j] for j in keep_cols])
         if lab_cpu is not None:
             lr = lab_cpu[b].tolist()
@@ -131,6 +135,8 @@ def apply_longpos(
             msg += (f" keep_now={docsub_keep_now(cfg):.3f} progress={float(cfg.get('progress', 0.0)):.3f}"
                     f" docsub={st['docsub']} miss={st['docsub_miss']} tok_kept={st['tok_out'] / max(1, st['tok_in']):.3f}"
                     f" docs_kept={st['docs_out'] / max(1, st['docs_in']):.3f}")
+            msg += " per_rung(rows,tok_in,tok_kept)=" + " ".join(
+                f"{k}:{v[0]},{v[1] / max(1, v[0]):.0f},{v[2] / max(1, v[1]):.3f}" for k, v in sorted(st.get("rung", {}).items()))
         print(msg, flush=True)
     if not changed:
         return input_ids, labels, None
