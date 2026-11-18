@@ -1,0 +1,65 @@
+{
+ "yarn": 2.0,
+ "devices": [
+  0
+ ],
+ "rung": "320k",
+ "rows": [
+  {
+   "task": "contradiction",
+   "T": 347629,
+   "ce": 1.8730910451788652,
+   "n_answer": 38,
+   "first_nonfinite": []
+  },
+  {
+   "task": "contradiction",
+   "T": 349305,
+   "ce": 2.3246616787380643,
+   "n_answer": 36,
+   "first_nonfinite": []
+  },
+  {
+   "task": "nq",
+   "T": 324153,
+   "ce": 2.5459322248186385,
+   "n_answer": 7,
+   "first_nonfinite": []
+  },
+  {
+   "task": "nq",
+   "T": 321729,
+   "ce": 2.545579637799944,
+   "n_answer": 7,
+   "first_nonfinite": []
+  },
+  {
+   "task": "outlier",
+   "T": 333641,
+   "ce": 2.415787783536044,
+   "n_answer": 22,
+   "first_nonfinite": []
+  },
+  {
+   "task": "outlier",
+   "T": 333073,
+   "ce": 2.8809781755719865,
+   "n_answer": 21,
+   "first_nonfinite": []
+  },
+  {
+   "task": "oolong",
+   "T": 331214,
+   "ce": 4.136048126220703,
+   "n_answer": 5,
+   "first_nonfinite": []
+  },
+  {
+   "task": "oolong",
+   "T": 306425,
+   "ce": 4.41736634572347,
+   "n_answer": 3,
+   "first_nonfinite": []
+  }
+ ]
+}

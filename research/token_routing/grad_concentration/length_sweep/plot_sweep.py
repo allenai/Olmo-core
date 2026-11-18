@@ -58,6 +58,9 @@ def main():
             if O:
                 x2, y2, _, _ = series(O, r, a.t, what)
                 ax.plot(x2, y2, color=col, marker=mk, lw=1.5, ms=6, ls="--", mfc="white")
+        if what == "frac":  # guide: what a constant kept-token count (the per-row quota's 2k count) would look like
+            x, y, _, _ = series(S, "rowq7_body", a.t, "frac")
+            ax.plot(x, y[0] * x[0] / x, color="#999999", ls=":", lw=1.5, label="constant token count (slope -1)")
         if what == "tok":
             xr = [s["T_mean"] for s in S["runs"] if f"rowself_tokens_cos{a.t}" in s]
             yr = [s[f"rowself_tokens_cos{a.t}"] for s in S["runs"] if f"rowself_tokens_cos{a.t}" in s]
@@ -74,6 +77,8 @@ def main():
     axes[0].set_title("Share of context tokens needed")
     axes[1].set_title("Absolute tokens needed (step total / 16)")
     h, l = axes[1].get_legend_handles_labels()
+    h0, l0 = axes[0].get_legend_handles_labels()
+    h, l = h + h0[-1:], l + l0[-1:]
     if O:
         h.append(plt.Line2D([], [], color="#666666", ls="--", mfc="white", marker="o"))
         l.append(f"dashed: {a.overlay_label}")

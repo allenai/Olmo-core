@@ -1,0 +1,457 @@
+{
+ "yarn": 0.0,
+ "devices": [
+  0
+ ],
+ "rung": "384k",
+ "rows": [
+  {
+   "task": "contradiction",
+   "T": 419690,
+   "ce": NaN,
+   "n_answer": 36,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      206382080,
+      419690
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      206382080,
+      419690
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      39722306,
+      419690
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      206382080,
+      419690
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      206382080,
+      419690
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      206382080,
+      419690
+     ]
+    ]
+   ]
+  },
+  {
+   "task": "contradiction",
+   "T": 422184,
+   "ce": NaN,
+   "n_answer": 36,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      201297920,
+      422184
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      201297920,
+      422184
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      36913900,
+      422184
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      201297920,
+      422184
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      201297920,
+      422184
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      201297920,
+      422184
+     ]
+    ]
+   ]
+  },
+  {
+   "task": "nq",
+   "T": 388956,
+   "ce": NaN,
+   "n_answer": 8,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      296949760,
+      388956
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      296949760,
+      388956
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      472622846,
+      388956
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      296949760,
+      388956
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      296949760,
+      388956
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      296949760,
+      388956
+     ]
+    ]
+   ]
+  },
+  {
+   "task": "nq",
+   "T": 388097,
+   "ce": NaN,
+   "n_answer": 7,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      312117760,
+      388097
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      312117760,
+      388097
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      496250201,
+      388097
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      312117760,
+      388097
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      312117760,
+      388097
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      312117760,
+      388097
+     ]
+    ]
+   ]
+  },
+  {
+   "task": "outlier",
+   "T": 398484,
+   "ce": NaN,
+   "n_answer": 22,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      264980480,
+      398484
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      264980480,
+      398484
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      401760129,
+      398484
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      264980480,
+      398484
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      264980480,
+      398484
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      264980480,
+      398484
+     ]
+    ]
+   ]
+  },
+  {
+   "task": "outlier",
+   "T": 401847,
+   "ce": NaN,
+   "n_answer": 22,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      252454400,
+      401847
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      252454400,
+      401847
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      327617378,
+      401847
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      252454400,
+      401847
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      252454400,
+      401847
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      252454400,
+      401847
+     ]
+    ]
+   ]
+  },
+  {
+   "task": "oolong",
+   "T": 368201,
+   "ce": NaN,
+   "n_answer": 3,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      271505920,
+      368201
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      271505920,
+      368201
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      434409472,
+      368201
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      271505920,
+      368201
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      271505920,
+      368201
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      271505920,
+      368201
+     ]
+    ]
+   ]
+  },
+  {
+   "task": "oolong",
+   "T": 379706,
+   "ce": NaN,
+   "n_answer": 6,
+   "first_nonfinite": [
+    [
+     "block0",
+     [
+      "TransformerBlock",
+      214778880,
+      379706
+     ]
+    ],
+    [
+     "block0.attention",
+     [
+      "GatedDeltaNet",
+      214778880,
+      379706
+     ]
+    ],
+    [
+     "block0.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      339272459,
+      379706
+     ]
+    ],
+    [
+     "block0.attention.w_out",
+     [
+      "Linear",
+      214778880,
+      379706
+     ]
+    ],
+    [
+     "block0.attention_residual_stream",
+     [
+      "ResidualStream",
+      214778880,
+      379706
+     ]
+    ],
+    [
+     "block0.attention_residual_stream.dropout",
+     [
+      "Identity",
+      214778880,
+      379706
+     ]
+    ]
+   ]
+  }
+ ]
+}
