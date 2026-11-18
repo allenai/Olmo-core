@@ -56,6 +56,36 @@
  "final_pf": 408.50361755873587,
  "runs": [
   {
+   "tag": "alloc2",
+   "arm": "x80e11",
+   "seed": 1,
+   "steps": 400,
+   "pf": 113.93971592410139,
+   "ce_last": 0.11521101636358451,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 4.424547399269297,
+   "deep_pf": 92.32664512221052
+  },
+  {
+   "tag": "m80",
+   "arm": "m80-k30",
+   "seed": 0,
+   "steps": 400,
+   "pf": 144.028883830325,
+   "ce_last": 0.11288660154842427,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 4.1927602114344555,
+   "deep_pf": 97.43071317187868
+  },
+  {
    "tag": "alloc",
    "arm": "m50ema11",
    "seed": 0,
@@ -86,6 +116,36 @@
    "deep_pf": 99.39330040330972
   },
   {
+   "tag": "deep2",
+   "arm": "rc-mix80",
+   "seed": 1,
+   "steps": 488,
+   "pf": 160.228496365696,
+   "ce_last": 0.1114917597822015,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 4.093400626643344,
+   "deep_pf": 99.79566009245363
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x80e11",
+   "seed": 0,
+   "steps": 400,
+   "pf": 114.65121132769939,
+   "ce_last": 0.12583464270028344,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 4.040174826139356,
+   "deep_pf": 101.11038139136346
+  },
+  {
    "tag": "rowsbk",
    "arm": "r_cut5k",
    "seed": 0,
@@ -99,6 +159,21 @@
    "deep_ce": 0.13496221680416848,
    "deep_x": 4.027450557262154,
    "deep_pf": 101.42982806384472
+  },
+  {
+   "tag": "deep2",
+   "arm": "rc-mix80",
+   "seed": 0,
+   "steps": 488,
+   "pf": 159.52308943513668,
+   "ce_last": 0.11333706027653534,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 3.8443327963189473,
+   "deep_pf": 106.26125239466498
   },
   {
    "tag": "alloc",
@@ -116,6 +191,21 @@
    "deep_pf": 107.91860409170866
   },
   {
+   "tag": "alloc2",
+   "arm": "x50l16",
+   "seed": 0,
+   "steps": 400,
+   "pf": 260.85279398754244,
+   "ce_last": 0.10108682268658056,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 3.6782535578449913,
+   "deep_pf": 111.05912388434398
+  },
+  {
    "tag": "deep",
    "arm": "rc-mix50",
    "seed": 1,
@@ -129,6 +219,21 @@
    "deep_ce": 0.13496221680416848,
    "deep_x": 3.5939069231600103,
    "deep_pf": 113.66560856827961
+  },
+  {
+   "tag": "m80",
+   "arm": "m80-lr2e5",
+   "seed": 0,
+   "steps": 400,
+   "pf": 129.62634483047566,
+   "ce_last": 0.12306495385406457,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 3.458885159706003,
+   "deep_pf": 118.10268300247867
   },
   {
    "tag": "alloc",
@@ -176,6 +281,21 @@
    "deep_pf": 124.54611995659874
   },
   {
+   "tag": "m80",
+   "arm": "m80-gb32",
+   "seed": 0,
+   "steps": 215,
+   "pf": 139.9583319361918,
+   "ce_last": 0.1290842438668377,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 3.27430826753039,
+   "deep_pf": 124.76028039560403
+  },
+  {
    "tag": "alloc",
    "arm": "m50rp1",
    "seed": 0,
@@ -189,6 +309,21 @@
    "deep_ce": 0.13496221680416848,
    "deep_x": 3.1139367823605375,
    "deep_pf": 131.1855847147505
+  },
+  {
+   "tag": "deep2",
+   "arm": "rc-mix50",
+   "seed": 0,
+   "steps": 488,
+   "pf": 265.32060212179124,
+   "ce_last": 0.0991050413190944,
+   "eval_size": 184,
+   "reaches_final": true,
+   "still_falling": true,
+   "deep_ref_step": 100,
+   "deep_ce": 0.13496221680416848,
+   "deep_x": 2.914880343862747,
+   "deep_pf": 140.14421498255885
   },
   {
    "tag": "mq",
@@ -414,6 +549,51 @@
    "deep_ce": 0.13496221680416848,
    "deep_x": 1.207906239304158,
    "deep_pf": 338.1914955535487
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x80e12",
+   "seed": 0,
+   "steps": 400,
+   "pf": 88.17438474485061,
+   "ce_last": 0.14608575750120825,
+   "eval_size": 184,
+   "reaches_final": false,
+   "still_falling": true,
+   "deep_ref_step": 90,
+   "deep_ce": 0.1497309461347354,
+   "deep_x": 4.333334229429843,
+   "deep_pf": 85.09698541766141
+  },
+  {
+   "tag": "m80",
+   "arm": "m80-k10",
+   "seed": 0,
+   "steps": 400,
+   "pf": 113.81119411579229,
+   "ce_last": 0.13996530684855077,
+   "eval_size": 184,
+   "reaches_final": false,
+   "still_falling": true,
+   "deep_ref_step": 90,
+   "deep_ce": 0.1497309461347354,
+   "deep_x": 3.5686496348261896,
+   "deep_pf": 103.33143274503732
+  },
+  {
+   "tag": "lenscale",
+   "arm": "dlA",
+   "seed": 0,
+   "steps": 200,
+   "pf": 177.1858921728314,
+   "ce_last": 0.1434608945678717,
+   "eval_size": 184,
+   "reaches_final": false,
+   "still_falling": true,
+   "deep_ref_step": 90,
+   "deep_ce": 0.1497309461347354,
+   "deep_x": 2.255846428890272,
+   "deep_pf": 163.4657727623094
   },
   {
    "tag": "rowsbk",
@@ -1451,6 +1631,21 @@
    "deep_pf": 93.91363457847717
   },
   {
+   "tag": "lenscale",
+   "arm": "dlB",
+   "seed": 0,
+   "steps": 200,
+   "pf": 176.347815085284,
+   "ce_last": 0.38961378080041514,
+   "eval_size": 184,
+   "reaches_final": false,
+   "still_falling": true,
+   "deep_ref_step": 10,
+   "deep_ce": 0.42747209087500104,
+   "deep_x": 0.234809109738224,
+   "deep_pf": 167.19858231152384
+  },
+  {
    "tag": "cptnative",
    "arm": "cL0r05",
    "seed": 0,
@@ -1605,68 +1800,13 @@
    "still_falling": true
   },
   {
-   "tag": "memscale",
-   "arm": "dl16kac",
+   "tag": "lenscale",
+   "arm": "dlC",
    "seed": 0,
-   "steps": 3,
-   "pf": 1.056842135790592,
-   "ce_last": 0.6395207792520523,
-   "eval_size": 4,
-   "reaches_final": false,
-   "still_falling": true
-  },
-  {
-   "tag": "memscale",
-   "arm": "dl16knoac",
-   "seed": 0,
-   "steps": 3,
-   "pf": 1.056842135790592,
-   "ce_last": 0.6352056562900543,
-   "eval_size": 4,
-   "reaches_final": false,
-   "still_falling": true
-  },
-  {
-   "tag": "memscale",
-   "arm": "dl32kac",
-   "seed": 0,
-   "steps": 3,
-   "pf": 2.329580772486144,
-   "ce_last": 0.5878031849861145,
-   "eval_size": 4,
-   "reaches_final": false,
-   "still_falling": true
-  },
-  {
-   "tag": "memscale",
-   "arm": "rc16kac",
-   "seed": 0,
-   "steps": 3,
-   "pf": 0.5640929531685,
-   "ce_last": 0.6360888704657555,
-   "eval_size": 4,
-   "reaches_final": false,
-   "still_falling": true
-  },
-  {
-   "tag": "memscale",
-   "arm": "rc16knoac",
-   "seed": 0,
-   "steps": 3,
-   "pf": 0.5640929531685,
-   "ce_last": 0.6288778856396675,
-   "eval_size": 4,
-   "reaches_final": false,
-   "still_falling": true
-  },
-  {
-   "tag": "memscale",
-   "arm": "rc32kac",
-   "seed": 0,
-   "steps": 3,
-   "pf": 1.218807314151332,
-   "ce_last": 0.6237716376781464,
-   "eval_size": 4,
+   "steps": 200,
+   "pf": 176.04704697130052,
+   "ce_last": 0.7703742064211679,
+   "eval_size": 184,
    "reaches_final": false,
    "still_falling": true
   },

@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-17 13:13 PT",
- "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k): 3.1-3.7x fewer training FLOPs than dense LoRA at every held-out loss level its epoch reaches (two seeds, full epoch), and 3.2-3.5x on the 16k rows alone (56 rows) against 2.1-2.7x for the plain recipe. Priority since 11:45 is the 16k held-out loss and methods that gain with length; a 320-row 16k held-out set is in place and the references and all mixed pools are being rerun on it. Memory: chunked early blocks with a kept-token cap and host offload bring the slope from 0.37 (dense LoRA, out of memory at 256k) and 0.24 (recipe) to 0.040 GiB per 1k tokens, so a 1M-token row trains on one 141 GB GPU and 2M fits; at 16k the chunked method matches the recipe's loss per step and FLOPs. Closed since the last update: loss-per-cost sampling (no gain at 16k), document-local attention beyond block 3 (training stalls). Nothing is near 10x; about 115 arms scored.",
+ "updated": "2026-11-17 16:26 PT",
+ "status": "PAUSED since 13:15 on 11-17 (Prasann); nothing is running. Scoring rules changed on 11-17 afternoon: the reference is dense full fine-tuning (not dense LoRA); a method counts only if it reaches the deepest loss the dense reference reaches, with as many extra steps as it needs; screens give every arm the FLOPs of 50 dense steps (203 PF). Under these rules nothing qualifies yet. On generation evals (3 tasks x 4k / 8k / 16k, eval_size 500 per cell) dense full fine-tuning scores 0.928 at 1,982 PF, the recipe 0.897 at 442 PF and dense LoRA 0.882 at 1,496 PF. The dense full fine-tune held-out loss curve exists only to step 100 (0.135 at 409 PF); the recipe reaches that level with 2.4-2.8x fewer FLOPs. First runs on resume: a full-epoch dense full fine-tune with held-out probes, and the recipe on 2-3x the rows. Memory: chunked early blocks with a kept-token cap and host offload bring the slope from 0.37 (dense LoRA) to 0.040 GiB per 1k tokens (a 1M-token row trains on one H200); learning at 64k and beyond is untested.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -13,6 +13,38 @@
   "Memory: values logged by the proxy before 11-17 13:10 were wrong (the peak was reset before being read) and are not shown; the fix is merged. Valid measurements are in the memory idea and the log."
  ],
  "log": [
+  {
+   "t": "11-17 16:25",
+   "text": "State refreshed while paused (no runs launched). Results that landed during the pause are below."
+  },
+  {
+   "t": "11-17 15:40",
+   "text": "Rule (Prasann): the reference is dense full fine-tuning, not dense LoRA. Its held-out loss curve exists only to step 100 (0.176 at 205 PF, 0.135 at 409 PF); the plain recipe reaches the step-100 level at 2.4-2.8x fewer FLOPs, the recipe on the 50/50 pool at 3.3-3.6x. A full-epoch dense full fine-tune with probes has not been run."
+  },
+  {
+   "t": "11-17 15:20",
+   "text": "Rule (Prasann): screens are FLOP-matched. Every arm gets the FLOPs of 50 dense steps (203 PF on the 4k-16k pool) and as many steps as that buys. Existing runs at 203 PF, all lengths (eval_size 184): dense full fine-tune 0.177, dense LoRA 0.151-0.166, plain recipe 0.114-0.127, recipe on the 50/50 pool 0.105-0.110. On the 16k sets (320 rows): dense LoRA 0.24, plain recipe 0.195-0.197, 50/50 pool 0.181, 80/20 pool with 3x rows 0.192-0.200. Most screening arms stopped far below 203 PF and are unjudged under this rule. Flags --max-pf / --pf-points added to the probe and launchers; not yet run."
+  },
+  {
+   "t": "11-17 15:00",
+   "text": "Rule (Prasann): only methods that reach the deepest dense loss count; extra training steps are fine. Against full-epoch dense LoRA (0.071 at 1,496 PF) none of 112 scored runs reaches the final loss; the deepest is the plain recipe's full epoch (0.086 / 0.093 at 442 PF), which matches dense LoRA's step-250 loss at 2.2-2.6x. Every ratio above 3x on this page was at a shallow level."
+  },
+  {
+   "t": "11-17 14:45",
+   "text": "16k held-out set (320 rows), full runs: dense LoRA full epoch 0.121 at 1,496 PF; plain recipe full epoch 0.150 / 0.145 at 442 PF (two seeds); recipe on the 80/20 pool with 3x rows (1,464 steps) 0.136 / 0.134 at 479 PF. Both reach only dense LoRA's step-300 loss (0.146), at 2.1-2.4x. At equal FLOPs the 80/20 pool with 3x rows is about level with the plain recipe, so the short-row advantage on 16k does not hold at depth. Pools with 90% or 95% short rows, or with the long part all at 16k, are behind the 80/20 pool."
+  },
+  {
+   "t": "11-17 13:58",
+   "text": "Calibration against generation evals done (reorder excluded: it scores 0.00-0.15 with parse rate 0.00-0.72 in every arm). Mean over contradiction, outlier and qdmatch_nq at 4k / 8k / 16k, eval_size 500 per cell: dense LoRA 0.743 / 0.825 / 0.882 at 375 / 754 / 1,496 PF; recipe 0.822 at 223 PF and 0.899 / 0.895 at 442 PF (two seeds); dense full fine-tune 0.928 at 1,982 PF. The recipe needs 3.3x fewer FLOPs than dense LoRA at matched score (the loss proxy said 1.9-2.2x) but does not reach dense full fine-tuning."
+  },
+  {
+   "t": "11-17 13:40",
+   "text": "Document subsampling with preserved positions: keeping 25% of the non-gold documents on long rows needs 1.23-1.35x fewer FLOPs than the plain recipe for the same 16k loss at the levels it reached (one seed); position stretching of short rows does not help. Long-row data built: pool at 32k / 64k (3 tasks) and held-out sets at 16k / 32k / 64k."
+  },
+  {
+   "t": "11-17 13:15",
+   "text": "Loop paused by Prasann. Runs already submitted were left to finish."
+  },
   {
    "t": "11-17 13:00",
    "text": "Hub reorganized by a separate session (overview page, six groups, two-level navigation, long tables folded); the auto-research tab is rendered by a new builder with ideas grouped by family."
@@ -141,7 +173,7 @@
    "title": "Gold-aware stochastic keep",
    "what": "Per-document keep probability raised for gold documents but never 1 and never 0 for distractors, so the kept set does not reveal the answer; drop before block 0 as well as mid-stack.",
    "status": "done",
-   "result": "Mixed. Best arm grJ (0.133x dense per step): 1.26x the recipe at matched loss on the main pool at step 108, but on the 50/50 pool gold-aware arms are level with or behind the plain recipe on that pool, so the two gains do not stack. The cheapest arms (0.07-0.08x) stay shallow (0.27-0.34 held-out CE)."
+   "result": "Mixed. Best arm grJ (0.133x dense per step): 1.26x the recipe at matched loss on the main pool at step 108, but on the 50/50 pool gold-aware arms are level with or behind the plain recipe on that pool, so the two gains do not stack. The cheapest arms (0.07-0.08x) stay shallow (0.27-0.34 held-out CE). Per task (46 rows each): grJ is worse than the plain recipe on outlier (0.169, flat from step 25, against 0.10-0.13) and ahead on contradiction; the gain on the mean comes from the other three tasks."
   },
   {
    "id": "earlyloss",
@@ -164,7 +196,7 @@
    "family": "cross-row",
    "title": "FLOP-aware row sampling and row skipping",
    "what": "Sample rows by expected loss decrease per FLOP (short rows more often, a tail of 16k rows), skip rows a cheap early-exit loss marks as solved.",
-   "status": "running",
+   "status": "done",
    "result": "Recipe on rows <= 5k: 3.2-3.4x vs dense LoRA down to held-out CE 0.125, then it plateaus at 0.119 (no 8k / 16k rows). Length curriculum on the 50/50 pool: 2.7-3.4x, no better than the static mix. Token-budget batches help dense LoRA (1.4-1.5x) more than the recipe."
   },
   {
@@ -172,8 +204,8 @@
    "family": "gold + randomness",
    "title": "Label-consistent sub-problems",
    "what": "Train on a random subset of a row's documents with the answer rewritten for the subset (reorder, qdmatch), mixed with a few full rows.",
-   "status": "running",
-   "result": "Works. Recipe on the 80/20 short/long pool: 3.1-3.4x fewer FLOPs than dense LoRA at held-out CE 0.125 (two seeds); 50/50 pool: 2.9-3.0x; plain recipe 1.9-2.2x. Short rows alone fall behind. Dense LoRA on the same pools gains less (1.4-1.5x with token-budget batches). Next: 90% and 95% short, long tail only at 16k, short part only at 1k, full-epoch runs. On the 16k rows alone the mixed pools are only about 1.1-1.2x ahead of the plain recipe (56 rows, noisy)."
+   "status": "done",
+   "result": "Works. Recipe on the 80/20 short/long pool: 3.1-3.4x fewer FLOPs than dense LoRA at held-out CE 0.125 (two seeds); 50/50 pool: 2.9-3.0x; plain recipe 1.9-2.2x. Short rows alone fall behind. Dense LoRA on the same pools gains less (1.4-1.5x with token-budget batches). Next: 90% and 95% short, long tail only at 16k, short part only at 1k, full-epoch runs. On the 16k rows alone the mixed pools are only about 1.1-1.2x ahead of the plain recipe (56 rows, noisy). Update 11-17 afternoon, 16k held-out set (320 rows): with 3x the rows (1,464 steps, two seeds) the 80/20 pool reaches 0.134-0.136 at 479 PF against 0.145-0.150 for the plain recipe at 442 PF; at equal FLOPs the two are about level, so the advantage at shallow levels does not hold at depth on 16k. Pools with 90% / 95% short rows, the long part all at 16k, or the short part all at 1k are behind the 80/20 pool."
   },
   {
    "id": "ffnskip",
@@ -197,7 +229,7 @@
    "title": "LR, batch size and schedule per FLOP",
    "what": "Cheap arms can afford more, smaller steps: rows per step, LR and warmup tuned per FLOP rather than per step.",
    "status": "done",
-   "result": "Recipe at LR 2e-5: 0.85x; LR 4e-5: 0.61x; 8 rows/step: 0.74x; 8 rows/step at LR 2e-5: 0.62x of the recipe's efficiency at matched loss. Dense LoRA: LR 2e-5 slightly better than 1e-5 (0.126 vs 0.131 at step 100), LR 4e-5 worse (0.170)."
+   "result": "Recipe at LR 2e-5: 0.85x; LR 4e-5: 0.61x; 8 rows/step: 0.74x; 8 rows/step at LR 2e-5: 0.62x of the recipe's efficiency at matched loss. Dense LoRA: LR 2e-5 slightly better than 1e-5 (0.126 vs 0.131 at step 100), LR 4e-5 worse (0.170). The 8 rows/step arms are fastest only to the shallowest loss level and never reach the deeper ones. Schedule shape (warmup, decay) was not varied."
   },
   {
    "id": "cptnative",
@@ -244,8 +276,8 @@
    "family": "scales with length",
    "title": "Long-range positions on short rows",
    "what": "Short rows only show the attention blocks distances below 2k. Give them positions that span 16k (stretching), and thin long rows by dropping whole documents at the input while keeping the survivors' original positions, so cheap rows carry long-range structure and fewer full long rows are needed for the 16k loss.",
-   "status": "running",
-   "result": "agent started 12:50"
+   "status": "done",
+   "result": "Mixed (one seed, 16k reading from 320 rows). Position-preserving document subsampling of long rows works: keeping 25% of the non-gold documents (45% of the tokens) on the all-long pool needs 1.23-1.35x fewer FLOPs than the plain recipe for the same 16k loss (about 3.1x vs dense LoRA at LR 2e-5) and ties the 80/20 pool where their FLOPs overlap; keeping 50% gives 1.10-1.16x. Position stretching of short rows does not help: a tie or slightly worse on the 80/20 pool (0.92x), and short rows alone stay far behind at 16k even when stretched (16k loss 0.46-0.57). Not yet tried: subsampling the long rows inside the 80/20 pool. Branch loop/longpos."
   }
  ],
  "best_by_hour": [
@@ -288,6 +320,16 @@
    "xw": null,
    "mem": null,
    "note": "Full-epoch runs, two seeds. Plain recipe on the 16k rows: 2.1-2.7x. The 16k reading is from 56 rows; reruns on the 320-row 16k set are in progress. The pool's epoch ends at 160 PF and held-out CE 0.112; a 3x larger 80/20 pool is being built to test the lead down to dense LoRA's final loss (0.071)."
+  },
+  {
+   "t": "11-17 16:25",
+   "arm": "none qualifies under the new rules",
+   "idea": "scoring rule",
+   "x": null,
+   "level": "",
+   "xw": null,
+   "mem": null,
+   "note": "New rules (dense full fine-tune as reference, deepest dense loss, FLOP-matched screens). Nothing reaches dense full fine-tuning's full-epoch result: 0.928 on generation evals at 1,982 PF against 0.897 for the recipe at 442 PF. Closest: plain recipe, 2.4-2.8x fewer FLOPs at dense full fine-tune's step-100 loss (a shallow level). Earlier rows in this table are against dense LoRA at shallow levels and are not headline numbers."
   }
  ],
  "validation": [
@@ -295,10 +337,10 @@
    "run": "calibration: full epoch on mtb16k with generation-graded evals",
    "arm": "dense LoRA at f1 / f2 / f4, recipe at f1 (2 seeds) and f2, dense full FT at f1",
    "rows": "1,952 per task; evals 4 tasks x 4k / 8k / 16k, eval_size 500 per cell",
-   "status": "evals running",
+   "status": "done",
    "predicted": "proxy: recipe 1.9x fewer FLOPs than dense LoRA to the 100-step loss level",
-   "actual": "Training done (flop-meter PF): dense LoRA f1 / f2 / f4 = 1,496 / 754 / 375; recipe f1 = 442 (two seeds), f2 = 223; dense full FT f1 = 1,982. Generation evals submitted from 11:45 (28 jobs, at most 8 at a time); table expected in 3-5 hours.",
-   "note": "The seven training jobs ended overnight; the validation agent was cut off by the usage limit before launching evals and was resumed at 11:30. The 16k-rung eval prompts are mostly longer than the 16,384-token training cap (418 of 500 for contradiction, up to 18.7k; 479 of 500 for reorder, up to 35.4k), so the 16k cells also test length extrapolation."
+   "actual": "Generation evals done (reorder excluded: grader broken in every arm, parse rate 0.00-0.72). Mean over the other 3 tasks x 4k/8k/16k (eval_size 500 per cell, SE 0.004-0.006): dense LoRA f4 / f2 / f1 = 0.743 / 0.825 / 0.882 at 375 / 754 / 1,496 PF; recipe f2 = 0.822 at 223 PF; recipe f1 = 0.899 / 0.895 (two seeds) at 442 PF; dense full FT f1 = 0.928 at 1,982 PF. 16k cells: dense LoRA 0.615 / 0.702 / 0.772, recipe f2 0.696, recipe f1 0.792 / 0.794, dense full FT 0.850. FLOPs to match the dense-LoRA curve: recipe f2 3.3x overall (8k 3.5x, 16k 3.2x; contradiction 2.0x, outlier 4.4x, qdmatch_nq at most 1.7x); recipe f1 at least 3.4x (it beats the most expensive dense-LoRA point). Dense full FT beats the recipe's full epoch by 0.031, so against that reference the recipe never reaches the target.",
+   "note": "The proxy ranked recipe ahead of dense LoRA per FLOP correctly but was about 1.5x conservative (1.9-2.2x predicted, 3.3x real); it also had dense full FT tied with dense LoRA at step 100, which the real evals do not show. One seed per dense point. Most 16k eval prompts exceed the 16,384-token training cap (418 of 500 contradiction, 182 outlier, 479 reorder). Code and table: branch loop/validate @ 787581912, validation/table.json; checkpoints weka ctc_suite/ckpts/elpv-*."
   },
   {
    "run": "full-epoch loss curves (488 steps, dense-forward held-out CE every 50 steps)",
@@ -329,6 +371,107 @@
   }
  ],
  "board": [
+  {
+   "tag": "m80",
+   "arm": "m80-k30",
+   "seeds": [
+    0
+   ],
+   "steps": 400,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.11288660154842427,
+   "frac": 1.017408393890459,
+   "pf": 144.028883830325,
+   "pf_per_step_vs_dense": 0.26507639652511245,
+   "x": {
+    "10": 1.0710618816080704,
+    "20": 1.9371203154699779,
+    "30": 2.5447302931561575,
+    "40": 2.5040452089550955,
+    "50": 2.9122822221347384,
+    "60": 2.738188825408787,
+    "70": 2.738188825408787,
+    "80": 2.611878837165782,
+    "90": 2.6257414194789472,
+    "100": 2.773829422227895
+   },
+   "xw": {
+    "10": 0.9353905031420842,
+    "20": 0.9353905031420842,
+    "30": 0.9353905031420842,
+    "40": 1.5108211314032651,
+    "50": 1.5238654844981754,
+    "60": 1.606387032877077,
+    "70": 1.541058753215511,
+    "80": 1.8215439018833377,
+    "90": null,
+    "100": null
+   },
+   "iso": 2.8362617739923515,
+   "iso_lb": true,
+   "iso_rec": null,
+   "peak_gib": 13.32886266708374,
+   "peak_vs_ref": 0.48813859739805066,
+   "transient_gib": 3.397123336791992,
+   "transient_vs_ref": 1.1753462959425114,
+   "train_s": 1488.4237961769104,
+   "d_vs_ref": -0.012893088648485465,
+   "d_vs_ref_se": 0.004703832144608004,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "deep2",
+   "arm": "rc-mix80",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 488,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.11241441002936842,
+   "frac": 1.018028275298064,
+   "pf": 159.87579290041634,
+   "pf_per_step_vs_dense": 0.23879224063290938,
+   "x": {
+    "10": 1.098229447272559,
+    "20": 1.9866327236202224,
+    "30": 2.568501491912552,
+    "40": 2.2908251177951624,
+    "50": 2.68733984226979,
+    "60": 2.7664541721742153,
+    "70": 2.7664541721742153,
+    "80": 2.525763668462308,
+    "90": 2.5071359987748085,
+    "100": 2.6203557890710574
+   },
+   "xw": {
+    "10": 0.9685234179437312,
+    "20": 0.9685234179437312,
+    "30": 0.9685234179437312,
+    "40": 1.4160069134621043,
+    "50": 1.4513442931613447,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 2.5551435793439854,
+   "iso_lb": true,
+   "iso_rec": null,
+   "peak_gib": 18.223921060562134,
+   "peak_vs_ref": 0.6674087270449709,
+   "transient_gib": 3.4274585247039795,
+   "transient_vs_ref": 1.1858417496585791,
+   "train_s": 1966.4416036605835,
+   "d_vs_ref": -0.013365280167541325,
+   "d_vs_ref_se": 0.004576677640845678,
+   "idea": "short rows",
+   "desc": "recipe on the 80/20 short/long pool"
+  },
   {
    "tag": "rowsbk",
    "arm": "r_cut5k",
@@ -428,6 +571,106 @@
    "d_vs_ref_se": 0.004161922281028968,
    "idea": "cross-row",
    "desc": "recipe on the 50/50 pool, cells sampled by loss / tokens"
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x50l16",
+   "seeds": [
+    0
+   ],
+   "steps": 400,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.10108682268658056,
+   "frac": 1.0333079297848144,
+   "pf": 260.85279398754244,
+   "pf_per_step_vs_dense": 0.22259406542464208,
+   "x": {
+    "10": 1.0525532160558022,
+    "20": 1.904007097570758,
+    "30": 2.3820590596496927,
+    "40": 2.0698013200069494,
+    "50": 2.4324913345032497,
+    "60": 2.3956500003230596,
+    "70": 2.3956500003230596,
+    "80": 2.264540001007553,
+    "90": 2.291179623018715,
+    "100": 2.493947968230016
+   },
+   "xw": {
+    "10": 0.9183835095684306,
+    "20": 0.9183835095684306,
+    "30": 0.9183835095684306,
+    "40": 1.8581316847266738,
+    "50": 1.862953218731992,
+    "60": 1.5784784223398736,
+    "70": 1.5621634367169104,
+    "80": 1.8714366047958098,
+    "90": 1.5582825345736158,
+    "100": 1.268067814495532
+   },
+   "iso": 1.566031213674655,
+   "iso_lb": true,
+   "iso_rec": null,
+   "peak_gib": 18.202847003936768,
+   "peak_vs_ref": 0.666636938731179,
+   "transient_gib": 3.5786948204040527,
+   "transient_vs_ref": 1.238166909018559,
+   "train_s": 1243.1077935695648,
+   "d_vs_ref": -0.02469286751032917,
+   "d_vs_ref_se": 0.004424970971756737,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "m80",
+   "arm": "m80-lr2e5",
+   "seeds": [
+    0
+   ],
+   "steps": 400,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.12306495385406457,
+   "frac": 1.0036654676667056,
+   "pf": 129.62634483047566,
+   "pf_per_step_vs_dense": 0.23856939989108983,
+   "x": {
+    "10": 1.143955006468689,
+    "20": 2.068954671122328,
+    "30": 2.717916685259978,
+    "40": 1.5048051570144896,
+    "50": 1.7690156583921857,
+    "60": 1.9132927416626773,
+    "70": 1.9132927416626773,
+    "80": 2.048385262654805,
+    "90": 2.1161723545089606,
+    "100": 2.428412983864959
+   },
+   "xw": {
+    "10": 1.0257837722700944,
+    "20": 1.0257837722700944,
+    "30": 1.010494480365902,
+    "40": 1.120760696540522,
+    "50": 1.1237119669976243,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 3.1513934770973737,
+   "iso_lb": true,
+   "iso_rec": null,
+   "peak_gib": 13.32886266708374,
+   "peak_vs_ref": 0.48813859739805066,
+   "transient_gib": 3.397123336791992,
+   "transient_vs_ref": 1.1753462959425114,
+   "train_s": 1431.6514868736267,
+   "d_vs_ref": -0.002714736342845161,
+   "d_vs_ref_se": 0.005805565585020636,
+   "idea": "",
+   "desc": ""
   },
   {
    "tag": "deep",
@@ -729,6 +972,56 @@
    "d_vs_ref_se": 0.004448299210853651,
    "idea": "baseline",
    "desc": "router, keep 20% after block 7, 7% after block 16, LoRA r64"
+  },
+  {
+   "tag": "deep2",
+   "arm": "rc-mix50",
+   "seeds": [
+    0
+   ],
+   "steps": 488,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.0991050413190944,
+   "frac": 1.0359811322636059,
+   "pf": 265.32060212179124,
+   "pf_per_step_vs_dense": 0.22536480976955403,
+   "x": {
+    "10": 0.6639841365789858,
+    "20": 1.201108399495647,
+    "30": 1.5779021975572871,
+    "40": 1.530096867195437,
+    "50": 1.7961268061151365,
+    "60": 1.9035454148575714,
+    "70": 1.9035454148575714,
+    "80": 2.03267934860927,
+    "90": 1.9185847322979324,
+    "100": 1.8263787927267745
+   },
+   "xw": {
+    "10": 0.5736092904645113,
+    "20": 0.5736092904645113,
+    "30": 0.5736092904645113,
+    "40": 1.2628688904599539,
+    "50": 1.443020160028956,
+    "60": 1.239918326373837,
+    "70": 1.219399070851095,
+    "80": 1.4928495903250456,
+    "90": 1.293742005555118,
+    "100": 1.293742005555118
+   },
+   "iso": 1.5396603742487314,
+   "iso_lb": true,
+   "iso_rec": null,
+   "peak_gib": 18.231650829315186,
+   "peak_vs_ref": 0.6676918118490964,
+   "transient_gib": 3.4752063751220703,
+   "transient_vs_ref": 1.2023616853701615,
+   "train_s": 2400.2771644592285,
+   "d_vs_ref": -0.026674648877815343,
+   "d_vs_ref_se": 0.004308841432637451,
+   "idea": "short rows",
+   "desc": "recipe on the 50/50 short/long pool"
   },
   {
    "tag": "alloc",
@@ -1332,6 +1625,57 @@
    "desc": "dense LoRA, LR 2e-5"
   },
   {
+   "tag": "alloc2",
+   "arm": "x80e11",
+   "seeds": [
+    0,
+    1
+   ],
+   "steps": 400,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.12052282953193397,
+   "frac": 1.0070909199121698,
+   "pf": 114.2954636259004,
+   "pf_per_step_vs_dense": 0.23884975919296741,
+   "x": {
+    "10": 2.15504251087977,
+    "20": 2.903421409882389,
+    "30": 3.3198586069556137,
+    "40": 2.5582696428722125,
+    "50": 2.9646032297336813,
+    "60": 2.7011648815940967,
+    "70": 2.7011648815940967,
+    "80": 2.8212583099558275,
+    "90": 2.859075311906375,
+    "100": null
+   },
+   "xw": {
+    "10": 1.9932089102015695,
+    "20": 1.9525492714860457,
+    "30": 1.8944745696928185,
+    "40": 1.766360434165485,
+    "50": 1.7106605422581533,
+    "60": 1.6405222990651094,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 3.1370427560513674,
+   "iso_lb": true,
+   "iso_rec": 1.5713013679889247,
+   "peak_gib": 17.960440158843994,
+   "peak_vs_ref": 0.6577593517743046,
+   "transient_gib": 3.463078498840332,
+   "transient_vs_ref": 1.198165648590746,
+   "train_s": 1014.9550713300705,
+   "d_vs_ref": -0.005256860664975767,
+   "d_vs_ref_se": 0.00459184894161838,
+   "idea": "",
+   "desc": ""
+  },
+  {
    "tag": "alloc",
    "arm": "m50e11rp",
    "seeds": [
@@ -1380,6 +1724,56 @@
    "d_vs_ref_se": 0.004856451115593029,
    "idea": "cross-row",
    "desc": "m50ema11 with per-row loss averaging"
+  },
+  {
+   "tag": "m80",
+   "arm": "m80-gb32",
+   "seeds": [
+    0
+   ],
+   "steps": 215,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.1290842438668377,
+   "frac": 0.9955381543176602,
+   "pf": 139.9583319361918,
+   "pf_per_step_vs_dense": 0.24004139455114243,
+   "x": {
+    "10": 1.1047832046292543,
+    "20": 1.9981086309077256,
+    "30": 2.568310974999053,
+    "40": 2.067016831930822,
+    "50": 2.427103257041762,
+    "60": 2.3846766148894205,
+    "70": 2.3846766148894205,
+    "80": 2.25904483965006,
+    "90": 2.1453122136948615,
+    "100": null
+   },
+   "xw": {
+    "10": 0.9904345903463853,
+    "20": 0.9904345903463853,
+    "30": 0.9904345903463853,
+    "40": 1.4973003106727056,
+    "50": 1.5164035572772654,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 2.1503147954712363,
+   "iso_lb": false,
+   "iso_rec": 1.2058608579150905,
+   "peak_gib": 13.831957817077637,
+   "peak_vs_ref": 0.5065632872616693,
+   "transient_gib": 3.9002184867858887,
+   "transient_vs_ref": 1.3494085722949387,
+   "train_s": 1502.2575161457062,
+   "d_vs_ref": 0.0033045536699279655,
+   "d_vs_ref_se": 0.005111270699190825,
+   "idea": "",
+   "desc": ""
   },
   {
    "tag": "v2",
@@ -1532,6 +1926,106 @@
    "desc": "dense full fine-tune, LR 5e-6"
   },
   {
+   "tag": "m80",
+   "arm": "m80-k10",
+   "seeds": [
+    0
+   ],
+   "steps": 400,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.13996530684855077,
+   "frac": 0.9808464202036004,
+   "pf": 113.81119411579229,
+   "pf_per_step_vs_dense": 0.20946257735340687,
+   "x": {
+    "10": 1.2835808564819902,
+    "20": 2.3214816961896836,
+    "30": 2.6832317706615565,
+    "40": 1.6574434347075795,
+    "50": 1.9366767224498045,
+    "60": 1.9539996229800543,
+    "70": 1.9539996229800543,
+    "80": 2.0449176307719537,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": 1.1342097099201927,
+    "20": 1.1342097099201927,
+    "30": 0.9093118925955794,
+    "40": null,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 2.0929908560612547,
+   "iso_lb": false,
+   "iso_rec": 1.1736592870906237,
+   "peak_gib": 13.32886266708374,
+   "peak_vs_ref": 0.48813859739805066,
+   "transient_gib": 3.397123336791992,
+   "transient_vs_ref": 1.1753462959425114,
+   "train_s": 1422.941567659378,
+   "d_vs_ref": 0.014185616651641043,
+   "d_vs_ref_se": 0.00554761760355077,
+   "idea": "",
+   "desc": ""
+  },
+  {
+   "tag": "lenscale",
+   "arm": "dlA",
+   "seeds": [
+    0
+   ],
+   "steps": 200,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.1434608945678717,
+   "frac": 0.97615002334368,
+   "pf": 177.1858921728314,
+   "pf_per_step_vs_dense": 0.21364970410358536,
+   "x": {
+    "10": 0.735826498391474,
+    "20": 1.1562831524134087,
+    "30": 1.2926363943533663,
+    "40": 1.1831350702013232,
+    "50": 1.3735372998289346,
+    "60": 1.2759229485792762,
+    "70": 1.2759229485792762,
+    "80": 1.2703014703415416,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": 0.6622782214541372,
+    "20": 0.6622782214541372,
+    "30": 0.6622782214541372,
+    "40": 0.8786633919901091,
+    "50": 0.8668036812654834,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 1.2704497884322006,
+   "iso_lb": false,
+   "iso_rec": 0.7154629167073352,
+   "peak_gib": 15.473645210266113,
+   "peak_vs_ref": 0.5666862701067179,
+   "transient_gib": 3.577226161956787,
+   "transient_vs_ref": 1.237658778434278,
+   "train_s": 1087.5168271064758,
+   "d_vs_ref": 0.01768120437096197,
+   "d_vs_ref_se": 0.005072437417623144,
+   "idea": "",
+   "desc": ""
+  },
+  {
    "tag": "short",
    "arm": "rc-mix50",
    "seeds": [
@@ -1580,6 +2074,56 @@
    "d_vs_ref_se": 0.0057042485571483,
    "idea": "short rows",
    "desc": "recipe on the 50/50 short/long pool"
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x80e12",
+   "seeds": [
+    0
+   ],
+   "steps": 400,
+   "eval_size": 184,
+   "is_ref": false,
+   "ce_last": 0.14608575750120825,
+   "frac": 0.972609375411974,
+   "pf": 88.17438474485061,
+   "pf_per_step_vs_dense": 0.24826828981899207,
+   "x": {
+    "10": 2.451548894042875,
+    "20": 2.339271378073501,
+    "30": 2.7291103952068267,
+    "40": 2.3714613736062025,
+    "50": 2.797167500326002,
+    "60": 2.3610321908605165,
+    "70": 2.3610321908605165,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "xw": {
+    "10": 1.8640066420467962,
+    "20": 1.454901405909545,
+    "30": 1.5067710176338798,
+    "40": 1.4563363136172005,
+    "50": null,
+    "60": null,
+    "70": null,
+    "80": null,
+    "90": null,
+    "100": null
+   },
+   "iso": 2.447529617452842,
+   "iso_lb": false,
+   "iso_rec": 1.3797605433074311,
+   "peak_gib": 18.032724857330322,
+   "peak_vs_ref": 0.6604066107500907,
+   "transient_gib": 3.471574306488037,
+   "transient_vs_ref": 1.2011050520388409,
+   "train_s": 938.8622975349426,
+   "d_vs_ref": 0.020306067304298504,
+   "d_vs_ref_se": 0.004789101562313022,
+   "idea": "",
+   "desc": ""
   },
   {
    "tag": "hp",
@@ -5532,18 +6076,18 @@
    "desc": "variant G (Lambda, 50 steps)"
   },
   {
-   "tag": "memscale",
-   "arm": "dl16kac",
+   "tag": "lenscale",
+   "arm": "dlB",
    "seeds": [
     0
    ],
-   "steps": 3,
-   "eval_size": 4,
+   "steps": 200,
+   "eval_size": 184,
    "is_ref": false,
-   "ce_last": 0.6395207792520523,
-   "frac": 0.2601924980351046,
-   "pf": 1.056842135790592,
-   "pf_per_step_vs_dense": 0.7386335339018749,
+   "ce_last": 0.38961378080041514,
+   "frac": 0.644117178331519,
+   "pf": 176.347815085284,
+   "pf_per_step_vs_dense": 0.21263915569267777,
    "x": {
     "10": null,
     "20": null,
@@ -5568,32 +6112,32 @@
     "90": null,
     "100": null
    },
-   "iso": 11.75217391606202,
+   "iso": 0.14775963823468932,
    "iso_lb": false,
-   "iso_rec": 9.224653135337773,
-   "peak_gib": 24.463263511657715,
-   "peak_vs_ref": 0.8959101340168745,
-   "transient_gib": 5.774725914001465,
-   "transient_vs_ref": 1.9979559292405065,
-   "train_s": 6.9873716831207275,
-   "d_vs_ref": null,
-   "d_vs_ref_se": null,
+   "iso_rec": 0.11617549341541959,
+   "peak_gib": 16.46281385421753,
+   "peak_vs_ref": 0.6029122712674172,
+   "transient_gib": 3.5813331604003906,
+   "transient_vs_ref": 1.239079729318178,
+   "train_s": 1126.983883857727,
+   "d_vs_ref": 0.2638340906035054,
+   "d_vs_ref_se": 0.011020215626419048,
    "idea": "",
    "desc": ""
   },
   {
-   "tag": "memscale",
-   "arm": "dl16knoac",
+   "tag": "lenscale",
+   "arm": "dlC",
    "seeds": [
     0
    ],
-   "steps": 3,
-   "eval_size": 4,
+   "steps": 200,
+   "eval_size": 184,
    "is_ref": false,
-   "ce_last": 0.6352056562900543,
-   "frac": 0.26640644589171536,
-   "pf": 1.056842135790592,
-   "pf_per_step_vs_dense": 0.7386335339018749,
+   "ce_last": 0.7703742064211679,
+   "frac": 0.13051374543305316,
+   "pf": 176.04704697130052,
+   "pf_per_step_vs_dense": 0.212276491274149,
    "x": {
     "10": null,
     "20": null,
@@ -5618,216 +6162,16 @@
     "90": null,
     "100": null
    },
-   "iso": 11.974976483203998,
+   "iso": 0.029990833038401995,
    "iso_lb": false,
-   "iso_rec": 9.400097676124346,
-   "peak_gib": 24.463019371032715,
-   "peak_vs_ref": 0.8959011929342605,
-   "transient_gib": 5.774481773376465,
-   "transient_vs_ref": 1.997871460779743,
-   "train_s": 5.757625579833984,
-   "d_vs_ref": null,
-   "d_vs_ref_se": null,
-   "idea": "",
-   "desc": ""
-  },
-  {
-   "tag": "memscale",
-   "arm": "dl32kac",
-   "seeds": [
-    0
-   ],
-   "steps": 3,
-   "eval_size": 4,
-   "is_ref": false,
-   "ce_last": 0.5878031849861145,
-   "frac": 0.33466788074565645,
-   "pf": 2.329580772486144,
-   "pf_per_step_vs_dense": 0.7314962797326755,
-   "x": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "xw": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "iso": 6.542942226484612,
-   "iso_lb": false,
-   "iso_rec": 5.138805890211182,
-   "peak_gib": 24.526740074157715,
-   "peak_vs_ref": 0.8982348154964818,
-   "transient_gib": 5.775702476501465,
-   "transient_vs_ref": 1.9982938030835609,
-   "train_s": 13.051910638809204,
-   "d_vs_ref": null,
-   "d_vs_ref_se": null,
-   "idea": "",
-   "desc": ""
-  },
-  {
-   "tag": "memscale",
-   "arm": "rc16kac",
-   "seeds": [
-    0
-   ],
-   "steps": 3,
-   "eval_size": 4,
-   "is_ref": false,
-   "ce_last": 0.6360888704657555,
-   "frac": 0.26513458252134103,
-   "pf": 0.5640929531685,
-   "pf_per_step_vs_dense": 0.3942480691653202,
-   "x": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "xw": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "iso": 22.349977110434843,
-   "iso_lb": false,
-   "iso_rec": 17.544038235423784,
-   "peak_gib": 25.09172773361206,
-   "peak_vs_ref": 0.9189261745810295,
-   "transient_gib": 5.952324867248535,
-   "transient_vs_ref": 2.0594021150770594,
-   "train_s": 5.57125449180603,
-   "d_vs_ref": null,
-   "d_vs_ref_se": null,
-   "idea": "",
-   "desc": ""
-  },
-  {
-   "tag": "memscale",
-   "arm": "rc16knoac",
-   "seeds": [
-    0
-   ],
-   "steps": 3,
-   "eval_size": 4,
-   "is_ref": false,
-   "ce_last": 0.6288778856396675,
-   "frac": 0.27551868607962643,
-   "pf": 0.5640929531685,
-   "pf_per_step_vs_dense": 0.3942480691653202,
-   "x": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "xw": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "iso": 23.04753626416493,
-   "iso_lb": false,
-   "iso_rec": 18.09332699348221,
-   "peak_gib": 25.092261791229248,
-   "peak_vs_ref": 0.9189457331992473,
-   "transient_gib": 5.952858924865723,
-   "transient_vs_ref": 2.05958688983498,
-   "train_s": 4.860522031784058,
-   "d_vs_ref": null,
-   "d_vs_ref_se": null,
-   "idea": "",
-   "desc": ""
-  },
-  {
-   "tag": "memscale",
-   "arm": "rc32kac",
-   "seeds": [
-    0
-   ],
-   "steps": 3,
-   "eval_size": 4,
-   "is_ref": false,
-   "ce_last": 0.6237716376781464,
-   "frac": 0.28287188524805196,
-   "pf": 1.218807314151332,
-   "pf_per_step_vs_dense": 0.3827096388081888,
-   "x": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "xw": {
-    "10": null,
-    "20": null,
-    "30": null,
-    "40": null,
-    "50": null,
-    "60": null,
-    "70": null,
-    "80": null,
-    "90": null,
-    "100": null
-   },
-   "iso": 10.895561423522288,
-   "iso_lb": false,
-   "iso_rec": 8.554042374460744,
-   "peak_gib": 25.154428482055664,
-   "peak_vs_ref": 0.9212224436750651,
-   "transient_gib": 5.952324867248535,
-   "transient_vs_ref": 2.0594021150770594,
-   "train_s": 8.4047691822052,
-   "d_vs_ref": null,
-   "d_vs_ref_se": null,
+   "iso_rec": 0.023438854133214133,
+   "peak_gib": 16.46343183517456,
+   "peak_vs_ref": 0.6029349033827835,
+   "transient_gib": 3.581951141357422,
+   "transient_vs_ref": 1.2392935401094856,
+   "train_s": 1131.9323780536652,
+   "d_vs_ref": 0.6445945162242582,
+   "d_vs_ref_se": 0.014133217995895111,
    "idea": "",
    "desc": ""
   },
@@ -6992,6 +7336,534 @@
      0.19243151425117894,
      0.17845736391609535,
      0.16073359073405818
+    ]
+   }
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x50l16",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8671307039001713
+    ],
+    [
+     50,
+     33.51399149849247,
+     0.22068346792999047
+    ],
+    [
+     100,
+     65.21826663187123,
+     0.16646055117535466
+    ],
+    [
+     150,
+     97.41187099214407,
+     0.1449075099314897
+    ],
+    [
+     200,
+     127.45981455801439,
+     0.12301038462749642
+    ],
+    [
+     250,
+     160.7488480260017,
+     0.1182805472009299
+    ],
+    [
+     300,
+     194.1069828765441,
+     0.11157604592501782
+    ],
+    [
+     350,
+     227.0070905980947,
+     0.10609705066967169
+    ],
+    [
+     400,
+     260.85279398754244,
+     0.10108682268658056
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8816881390909354,
+     0.1978047707428535,
+     0.11490806432751317,
+     0.1051991978699031,
+     0.08351631913440845,
+     0.06777526045091993,
+     0.06298863982616847,
+     0.06268816389880764,
+     0.049303978022787
+    ],
+    "set/suite4k": [
+     0.7099619256332517,
+     0.1526862495848036,
+     0.11548956383376208,
+     0.10210108506908,
+     0.0876499486839748,
+     0.07870461799939221,
+     0.07831668363269273,
+     0.068052645854209,
+     0.06701639589357455
+    ],
+    "task/outlier": [
+     0.996647239352266,
+     0.12458742153830826,
+     0.11773676456262668,
+     0.07914703638137628,
+     0.05270720282715047,
+     0.06634786091550875,
+     0.0584199268790447,
+     0.04627303182693746,
+     0.04586617204025364
+    ],
+    "task/reorder": [
+     0.7959709078073501,
+     0.4602456744760275,
+     0.3920479778200388,
+     0.37588857635855677,
+     0.34672599993646147,
+     0.3272556018084288,
+     0.3177487714216113,
+     0.30250097457319497,
+     0.31172642707824705
+    ],
+    "task/qdmatch_nq": [
+     0.7823565633346637,
+     0.14002303938711216,
+     0.07874730243202066,
+     0.05789207352063386,
+     0.04637795249679281,
+     0.046572641396778636,
+     0.04150896648934577,
+     0.045660019697000585,
+     0.03255731433697898
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.23461805438273586,
+     0.16673647580319084,
+     0.14023146434192313,
+     0.1247743782150792,
+     0.11674490580480779,
+     0.10612955206670449,
+     0.09991310151963262,
+     0.09701903030145331
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.2824693329499236,
+     0.22439776570536196,
+     0.19917319044803403,
+     0.1614063187485694,
+     0.1652651993125411,
+     0.15581131009717605,
+     0.15664374091595942,
+     0.14467335889016145
+    ]
+   }
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x80e11",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8671307039001713
+    ],
+    [
+     50,
+     15.415791019299322,
+     0.2598401791841278
+    ],
+    [
+     100,
+     29.3962000745608,
+     0.1968862951338372
+    ],
+    [
+     150,
+     43.106445078770854,
+     0.1820963853426055
+    ],
+    [
+     200,
+     56.633505246567815,
+     0.16297574918059146
+    ],
+    [
+     250,
+     69.62032020836546,
+     0.1648554669508999
+    ],
+    [
+     300,
+     83.99589795574883,
+     0.13650875478371113
+    ],
+    [
+     350,
+     98.81607980227439,
+     0.13955813768916414
+    ],
+    [
+     400,
+     114.65121132769939,
+     0.12583464270028344
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8816881390909354,
+     0.20864882157184184,
+     0.15869924418317774,
+     0.14874755986966193,
+     0.10413799168115172,
+     0.12187853793147951,
+     0.06322156290601318,
+     0.08056638313670798,
+     0.05961828684424594
+    ],
+    "set/suite4k": [
+     0.7099619256332517,
+     0.18283711551339366,
+     0.1416768013004912,
+     0.13168502292319317,
+     0.1072316865902394,
+     0.11178556687900709,
+     0.09041927174666853,
+     0.09311000317347862,
+     0.08049793899840552
+    ],
+    "task/outlier": [
+     0.996647239352266,
+     0.12061504290128748,
+     0.10004658648783031,
+     0.10740375854463007,
+     0.09535944113546672,
+     0.0864676918524007,
+     0.07328513772578542,
+     0.0677195892585587,
+     0.06626024350983546
+    ],
+    "task/reorder": [
+     0.7959709078073501,
+     0.5565896280109882,
+     0.4769227758049965,
+     0.4421689447015524,
+     0.40609221532940865,
+     0.4163311630487442,
+     0.386997601762414,
+     0.38607349172234534,
+     0.3604264879599214
+    ],
+    "task/qdmatch_nq": [
+     0.7823565633346637,
+     0.2029654657235369,
+     0.09854932083787087,
+     0.07341070481440208,
+     0.08683275960114163,
+     0.07665709098728257,
+     0.06427885790374906,
+     0.06495897897790807,
+     0.056132193363737315
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.2679944899282418,
+     0.20914729210198857,
+     0.1922217230021488,
+     0.17697706218314124,
+     0.1754503823176492,
+     0.14615835671065724,
+     0.147161827848322,
+     0.1301162614599889
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.3385244682431221,
+     0.24597029155120254,
+     0.22813755649674153,
+     0.21068174870950834,
+     0.21339830661392106,
+     0.17815433319524995,
+     0.18395178838233864,
+     0.17275473977705197
+    ]
+   }
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x80e11",
+   "seed": 1,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8671307039001713
+    ],
+    [
+     50,
+     15.304089896909527,
+     0.2612159720460034
+    ],
+    [
+     100,
+     28.787086194893632,
+     0.20592822437680772
+    ],
+    [
+     150,
+     42.3793876791508,
+     0.17817626967418776
+    ],
+    [
+     200,
+     55.839386619137215,
+     0.1709323790931629
+    ],
+    [
+     250,
+     70.43995257619817,
+     0.1487824905780144
+    ],
+    [
+     300,
+     84.85559288917028,
+     0.14017417933088006
+    ],
+    [
+     350,
+     99.42531982695728,
+     0.13001003264102823
+    ],
+    [
+     400,
+     113.93971592410139,
+     0.11521101636358451
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8816881390909354,
+     0.20969226156982282,
+     0.17269606387708336,
+     0.15475826624121206,
+     0.1389232482664132,
+     0.10971977133885957,
+     0.09322015047655441,
+     0.0732516740099527,
+     0.06240587800130015
+    ],
+    "set/suite4k": [
+     0.7099619256332517,
+     0.19130877719726413,
+     0.13556482498825062,
+     0.10614499310031533,
+     0.10491213684872491,
+     0.08656002470524982,
+     0.08465068891541705,
+     0.07900117744247837,
+     0.06746609739047926
+    ],
+    "task/outlier": [
+     0.996647239352266,
+     0.1364611891331151,
+     0.10524334834190086,
+     0.09183252080886935,
+     0.07455200754338875,
+     0.06866907978837844,
+     0.06287801664651245,
+     0.06056595597328851,
+     0.04341810508473524
+    ],
+    "task/reorder": [
+     0.7959709078073501,
+     0.5429890282452107,
+     0.4551520004868507,
+     0.4103051297366619,
+     0.41706973798573016,
+     0.382032860070467,
+     0.37510426081717013,
+     0.3605988807976246,
+     0.34514089673757553
+    ],
+    "task/qdmatch_nq": [
+     0.7823565633346637,
+     0.20268358526906619,
+     0.13215878081973642,
+     0.09449730525375344,
+     0.09420741572588061,
+     0.07358331269642804,
+     0.06864930296433158,
+     0.06405509447601314,
+     0.04820083235972561
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.26889126846799627,
+     0.20594366642762907,
+     0.18010789962136187,
+     0.17478731894516386,
+     0.15708447706856532,
+     0.14632027402694803,
+     0.13039501832827227,
+     0.11445503532377188
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.33233814167657066,
+     0.28632588990564856,
+     0.25829015153327156,
+     0.24197843897023372,
+     0.2104058955862586,
+     0.1966054887244744,
+     0.18786588351109199,
+     0.1706406163783478
+    ]
+   }
+  },
+  {
+   "tag": "alloc2",
+   "arm": "x80e12",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8671307039001713
+    ],
+    [
+     50,
+     13.1020401204334,
+     0.2785007622771208
+    ],
+    [
+     100,
+     23.310557166016032,
+     0.247640090447891
+    ],
+    [
+     150,
+     33.65076416179673,
+     0.2064223113247072
+    ],
+    [
+     200,
+     43.57481173062932,
+     0.21060857357477528
+    ],
+    [
+     250,
+     53.95972967899336,
+     0.17068981744412906
+    ],
+    [
+     300,
+     65.49527280474491,
+     0.1649495511536889
+    ],
+    [
+     350,
+     76.55612382558446,
+     0.1598476220308088
+    ],
+    [
+     400,
+     88.17438474485061,
+     0.14608575750120825
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8816881390909354,
+     0.25425781623926014,
+     0.21168883455296358,
+     0.1425721698712247,
+     0.1958731059373046,
+     0.11814316543071375,
+     0.11352068424457684,
+     0.0906905443019544,
+     0.0859430787919943
+    ],
+    "set/suite4k": [
+     0.7099619256332517,
+     0.1906549427076243,
+     0.17217900103423744,
+     0.12704468733863905,
+     0.13512594722851645,
+     0.1043616346419185,
+     0.10878134678887363,
+     0.0980107039347331,
+     0.09236334474826435
+    ],
+    "task/outlier": [
+     0.996647239352266,
+     0.1378793595552755,
+     0.12837386647394547,
+     0.0948016209489045,
+     0.09088021672020356,
+     0.07508803177976613,
+     0.07146991979910429,
+     0.09832005702234407,
+     0.08172355213779763
+    ],
+    "task/reorder": [
+     0.7959709078073501,
+     0.5927660688757896,
+     0.5129921026527882,
+     0.4805658355355263,
+     0.46991619691252706,
+     0.43584912493824957,
+     0.41811538822948935,
+     0.38744247071444987,
+     0.38334580659866335
+    ],
+    "task/qdmatch_nq": [
+     0.7823565633346637,
+     0.1814773555379361,
+     0.1817308934793497,
+     0.15344020631164312,
+     0.12898271195202446,
+     0.09787216554347349,
+     0.09888651852088515,
+     0.10086989086509372,
+     0.07287393399262025
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.28409426838334184,
+     0.25906489562476054,
+     0.2131307497911621,
+     0.21709423515130766,
+     0.17620660957618384,
+     0.16740562190534547,
+     0.1637141914034146,
+     0.1531699787847174
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.37250340623514994,
+     0.32082441528992994,
+     0.28947280906140804,
+     0.28946224759731976,
+     0.24018854963859276,
+     0.2263348467115845,
+     0.22609944914334587,
+     0.1993865477519908
     ]
    }
   },
@@ -8528,6 +9400,294 @@
      0.1499799548847867,
      0.1503113784627723,
      0.13181616989563086
+    ]
+   }
+  },
+  {
+   "tag": "deep2",
+   "arm": "rc-mix50",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8671307039001713
+    ],
+    [
+     100,
+     54.417268349494734,
+     0.2049792972697026
+    ],
+    [
+     200,
+     109.42687951258628,
+     0.14385467174756544
+    ],
+    [
+     300,
+     163.2534881627763,
+     0.12827224297064316
+    ],
+    [
+     400,
+     216.6544152379431,
+     0.10452767480392536
+    ],
+    [
+     488,
+     265.32060212179124,
+     0.0991050413190944
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8816881390909354,
+     0.17889171233400702,
+     0.08598306631514181,
+     0.07545044784395334,
+     0.03917797979374882,
+     0.039798887674502716
+    ],
+    "set/suite4k": [
+     0.7099619256332517,
+     0.14447903333348222,
+     0.10097065466834465,
+     0.09036271905642934,
+     0.07012676598969847,
+     0.06597724474522693
+    ],
+    "task/outlier": [
+     0.996647239352266,
+     0.11224678372188161,
+     0.08326310756577489,
+     0.07297526454203762,
+     0.05333001354786878,
+     0.04624848623886161
+    ],
+    "task/reorder": [
+     0.7959709078073501,
+     0.41993710622191427,
+     0.384104336053133,
+     0.34787377826869487,
+     0.3209768868982792,
+     0.31083938386291265
+    ],
+    "task/qdmatch_nq": [
+     0.7823565633346637,
+     0.14466788829304278,
+     0.0621097877738066,
+     0.05338973711089542,
+     0.040700687658196934,
+     0.03482246459073698
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.20904021704336628,
+     0.1483883540786337,
+     0.13311094422533643,
+     0.10649260090940516,
+     0.10160672439087648
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.26948140488405314,
+     0.187683625745454,
+     0.16606746886723808,
+     0.14159736932820774,
+     0.13410631389290625
+    ]
+   }
+  },
+  {
+   "tag": "deep2",
+   "arm": "rc-mix80",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8671307039001713
+    ],
+    [
+     100,
+     31.175069835151152,
+     0.21935936124013414
+    ],
+    [
+     200,
+     64.68272143321369,
+     0.1621962193495837
+    ],
+    [
+     300,
+     97.09050135712081,
+     0.14171488652304423
+    ],
+    [
+     400,
+     129.62634483047566,
+     0.11775787317690076
+    ],
+    [
+     488,
+     159.52308943513668,
+     0.11333706027653534
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8816881390909354,
+     0.1953938830217036,
+     0.09449461272258002,
+     0.06962731788128924,
+     0.04631247014913242,
+     0.04326437933195848
+    ],
+    "set/suite4k": [
+     0.7099619256332517,
+     0.15197086662374204,
+     0.1072237608677824,
+     0.09134199893378536,
+     0.0780619466167991,
+     0.07592358682632039
+    ],
+    "task/outlier": [
+     0.996647239352266,
+     0.09440348219747345,
+     0.08023026989152034,
+     0.07198266587026107,
+     0.04209029931613865,
+     0.03975248107114263
+    ],
+    "task/reorder": [
+     0.7959709078073501,
+     0.473990173637867,
+     0.43059467151761055,
+     0.39124466441571715,
+     0.3784811723977327,
+     0.36564164869487287
+    ],
+    "task/qdmatch_nq": [
+     0.7823565633346637,
+     0.15608837483644797,
+     0.08819839862796168,
+     0.07559319424035493,
+     0.04760143404807119,
+     0.04674049674455697
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.2192817832401488,
+     0.16801952994137537,
+     0.14551480690715834,
+     0.12219515248580137,
+     0.11551923425940913
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.29646344423027976,
+     0.21836667408102325,
+     0.19494113475749536,
+     0.1580534700354162,
+     0.15360140252492524
+    ]
+   }
+  },
+  {
+   "tag": "deep2",
+   "arm": "rc-mix80",
+   "seed": 1,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8671307039001713
+    ],
+    [
+     100,
+     34.230333306010074,
+     0.200551295855447
+    ],
+    [
+     200,
+     66.61072214852366,
+     0.15338355504512868
+    ],
+    [
+     300,
+     98.82466327004856,
+     0.13549046380997068
+    ],
+    [
+     400,
+     131.68686443960263,
+     0.1176125892677152
+    ],
+    [
+     488,
+     160.228496365696,
+     0.1114917597822015
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8816881390909354,
+     0.16563530078080171,
+     0.09108124888977424,
+     0.06393566622864455,
+     0.0424056243597685,
+     0.0433284923977529
+    ],
+    "set/suite4k": [
+     0.7099619256332517,
+     0.14179847249761224,
+     0.09771305083995685,
+     0.08402576175649301,
+     0.08056454203506291,
+     0.07312434573759674
+    ],
+    "task/outlier": [
+     0.996647239352266,
+     0.10865784329750265,
+     0.07164524020966685,
+     0.07561026271529651,
+     0.060943721090249404,
+     0.055417682235808265
+    ],
+    "task/reorder": [
+     0.7959709078073501,
+     0.4724842295050621,
+     0.40652429275214674,
+     0.37166735269129275,
+     0.3611490916460752,
+     0.3453499387949705
+    ],
+    "task/qdmatch_nq": [
+     0.7823565633346637,
+     0.10074996544669072,
+     0.08647356128009658,
+     0.0701113884182026,
+     0.04654133703782767,
+     0.04084728886906911
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.20784196315798908,
+     0.16158937032014364,
+     0.1425498808530392,
+     0.11707404827757273,
+     0.11245264801254962
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.25936518849006723,
+     0.2076289138224508,
+     0.186239360964724,
+     0.16056869009376637,
+     0.15424207499849477
     ]
    }
   },
@@ -12624,242 +13784,602 @@
    }
   },
   {
-   "tag": "memscale",
-   "arm": "dl16kac",
+   "tag": "lenscale",
+   "arm": "dlA",
    "seed": 0,
    "is_ref": false,
    "pts": [
     [
      0,
      0.0,
-     0.8202050477266312
+     0.8671307039001713
     ],
     [
-     3,
-     1.056842135790592,
-     0.6395207792520523
+     50,
+     46.06593445690192,
+     0.24594968898505296
+    ],
+    [
+     100,
+     89.85812038996934,
+     0.1807737491933791
+    ],
+    [
+     150,
+     133.37564816554882,
+     0.16348203876227868
+    ],
+    [
+     200,
+     177.1858921728314,
+     0.1434608945678717
     ]
    ],
    "by": {
     "task/contradiction": [
-     0.9901206493377686,
-     0.5357882976531982
+     0.8816881390909354,
+     0.22380178608000278,
+     0.15669816423906013,
+     0.10973547538742423,
+     0.0893622791627422
     ],
     "set/suite4k": [
-     0.8202050477266312,
-     0.6395207792520523
+     0.7099619256332517,
+     0.1847427320026327,
+     0.1359673523111269,
+     0.12592709126329282,
+     0.10323444188543363
     ],
     "task/outlier": [
-     0.8619528412818909,
-     0.8115299344062805
+     0.996647239352266,
+     0.13224396590764323,
+     0.11637892744814356,
+     0.10281264215397339,
+     0.07586727394179131
     ],
     "task/reorder": [
-     0.7327790260314941,
-     0.7756831049919128
+     0.7959709078073501,
+     0.4646553970873356,
+     0.40468549616634847,
+     0.4033782757818699,
+     0.38572530299425123
     ],
     "task/qdmatch_nq": [
-     0.6959676742553711,
-     0.4350817799568176
+     0.7823565633346637,
+     0.19954855821561068,
+     0.0826510334154591,
+     0.07798446789577913,
+     0.06326612357709867
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.24700652377214283,
+     0.18565642605244648,
+     0.1627934619318694,
+     0.14849176548887044
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.31469268577971626,
+     0.2264008577913046,
+     0.2071889237101589,
+     0.18368441658094525
     ]
    }
   },
   {
-   "tag": "memscale",
-   "arm": "dl16knoac",
+   "tag": "lenscale",
+   "arm": "dlB",
    "seed": 0,
    "is_ref": false,
    "pts": [
     [
      0,
      0.0,
-     0.8202050477266312
+     0.8671307039001713
     ],
     [
-     3,
-     1.056842135790592,
-     0.6352056562900543
+     50,
+     45.8043876449201,
+     0.7728993382466876
+    ],
+    [
+     100,
+     89.40527548378464,
+     0.7619959763858629
+    ],
+    [
+     150,
+     132.73201177443204,
+     0.5700901821255684
+    ],
+    [
+     200,
+     176.347815085284,
+     0.38961378080041514
     ]
    ],
    "by": {
     "task/contradiction": [
-     0.9901206493377686,
-     0.5379745960235596
+     0.8816881390909354,
+     0.9657366846998533,
+     0.9551250437895457,
+     0.5615616360058387,
+     0.48132909399767715
     ],
     "set/suite4k": [
-     0.8202050477266312,
-     0.6352056562900543
+     0.7099619256332517,
+     0.66276367707178,
+     0.6466101901605725,
+     0.4870045864954591,
+     0.321131999604404
     ],
     "task/outlier": [
-     0.8619528412818909,
-     0.8165433406829834
+     0.996647239352266,
+     0.6287844069302082,
+     0.6227218036850294,
+     0.5391643357773622,
+     0.1960334094862143
     ],
     "task/reorder": [
-     0.7327790260314941,
-     0.7684628367424011
+     0.7959709078073501,
+     0.791502770781517,
+     0.7878022074699402,
+     0.7952502742409706,
+     0.5104567110538483
     ],
     "task/qdmatch_nq": [
-     0.6959676742553711,
-     0.4178418517112732
+     0.7823565633346637,
+     0.7086740626643101,
+     0.6866358891129494,
+     0.42191116449733573,
+     0.3907763970394929
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.7854725690558553,
+     0.7710685273632407,
+     0.572774707339704,
+     0.3956723609007895
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.8843992586646762,
+     0.8834968166691917,
+     0.661977119743824,
+     0.46095458205257145
     ]
    }
   },
   {
-   "tag": "memscale",
-   "arm": "dl32kac",
+   "tag": "lenscale",
+   "arm": "dlC",
    "seed": 0,
    "is_ref": false,
    "pts": [
     [
      0,
      0.0,
-     0.8202050477266312
+     0.8671307039001713
     ],
     [
-     3,
-     2.329580772486144,
-     0.5878031849861145
+     50,
+     45.65926485326672,
+     0.7726073718589285
+    ],
+    [
+     100,
+     89.20911403770003,
+     0.7923668279595997
+    ],
+    [
+     150,
+     132.48371278055504,
+     0.8038501878795417
+    ],
+    [
+     200,
+     176.04704697130052,
+     0.7703742064211679
     ]
    ],
    "by": {
     "task/contradiction": [
-     0.9901206493377686,
-     0.5282962918281555
+     0.8816881390909354,
+     0.9329967834055424,
+     0.9774111931522688,
+     1.0074109248816967,
+     0.9450121795137724
     ],
     "set/suite4k": [
-     0.8202050477266312,
-     0.5878031849861145
+     0.7099619256332517,
+     0.6590442042797804,
+     0.6831056131049991,
+     0.6874547908082604,
+     0.6544805327430367
     ],
     "task/outlier": [
-     0.8619528412818909,
-     0.6974107027053833
+     0.996647239352266,
+     0.620231457054615,
+     0.6253174692392349,
+     0.6227712420125803,
+     0.6232912366588911
     ],
     "task/reorder": [
-     0.7327790260314941,
-     0.7308213710784912
+     0.7959709078073501,
+     0.8024918183684349,
+     0.7893915072083473,
+     0.8023548021912574,
+     0.7895638406276703
     ],
     "task/qdmatch_nq": [
-     0.6959676742553711,
-     0.394684374332428
+     0.7823565633346637,
+     0.7396901696920395,
+     0.7768512554466724,
+     0.7826145514845848,
+     0.7268278412520885
+    ],
+    "set/suite8k": [
+     0.8821520879864693,
+     0.7813129536807537,
+     0.8023182637989521,
+     0.8105291686952114,
+     0.7776247495785356
+    ],
+    "set/suite16k": [
+     1.029584868678025,
+     0.8924446127244404,
+     0.9058637182627406,
+     0.9292403778859547,
+     0.8945377841591835
     ]
    }
   },
   {
-   "tag": "memscale",
-   "arm": "rc16kac",
+   "tag": "m80",
+   "arm": "m80-gb32",
    "seed": 0,
    "is_ref": false,
    "pts": [
     [
      0,
      0.0,
-     0.8202050477266312
+     0.8664045134640258
     ],
     [
-     3,
-     0.5640929531685,
-     0.6360888704657555
+     50,
+     32.03430772491975,
+     0.2187038709146335
+    ],
+    [
+     100,
+     65.5322744772131,
+     0.16684949909002803
+    ],
+    [
+     150,
+     97.93091412482777,
+     0.14405413900765227
+    ],
+    [
+     200,
+     130.45732895022294,
+     0.13303160384353047
+    ],
+    [
+     215,
+     139.9583319361918,
+     0.1290842438668377
     ]
    ],
    "by": {
     "task/contradiction": [
-     0.9901206493377686,
-     0.5194308757781982
+     0.8790239952504635,
+     0.1918849924210614,
+     0.1068953119198947,
+     0.10313348385777014,
+     0.0888055186951533,
+     0.08025945270977293
     ],
     "set/suite4k": [
-     0.8202050477266312,
-     0.6360888704657555
+     0.7099217972718179,
+     0.16202509577851743,
+     0.11265511027158936,
+     0.0961947744799545,
+     0.08664686133852229,
+     0.08651405912678456
     ],
     "task/outlier": [
-     0.8619528412818909,
-     0.7910141348838806
+     0.9964285399764776,
+     0.09770920347849217,
+     0.08222000878110218,
+     0.07687851500425798,
+     0.052992541439986475,
+     0.05448418627202045
     ],
     "task/reorder": [
-     0.7327790260314941,
-     0.7499726414680481
+     0.7963572770357132,
+     0.48901415839791296,
+     0.4327929303050041,
+     0.37384466379880904,
+     0.3720373775810003,
+     0.3694904837757349
     ],
     "task/qdmatch_nq": [
-     0.6959676742553711,
-     0.4839378297328949
+     0.7821337021887302,
+     0.14125884394161403,
+     0.08981365055660717,
+     0.060658314168298,
+     0.05812527328089345,
+     0.0521705593613054
+    ],
+    "set/suite8k": [
+     0.8802329078316689,
+     0.22297295428870711,
+     0.16182579650194384,
+     0.13831345294602215,
+     0.1339668507243914,
+     0.12731212613289244
+    ],
+    "set/suite16k": [
+     1.0294380241206713,
+     0.27860066149982493,
+     0.2345273178403399,
+     0.20531133968116982,
+     0.18497388455684163,
+     0.17976116097997874
     ]
    }
   },
   {
-   "tag": "memscale",
-   "arm": "rc16knoac",
+   "tag": "m80",
+   "arm": "m80-k10",
    "seed": 0,
    "is_ref": false,
    "pts": [
     [
      0,
      0.0,
-     0.8202050477266312
+     0.8664045134640258
     ],
     [
-     3,
-     0.5640929531685,
-     0.6288778856396675
+     100,
+     27.438047985812183,
+     0.22185191422518666
+    ],
+    [
+     200,
+     56.831017991957246,
+     0.18966719674062915
+    ],
+    [
+     300,
+     85.27347288980678,
+     0.16655838293904116
+    ],
+    [
+     400,
+     113.81119411579229,
+     0.13996530684855077
     ]
    ],
    "by": {
     "task/contradiction": [
-     0.9901206493377686,
-     0.520915150642395
+     0.8790239952504635,
+     0.19160742797733596,
+     0.1576795633106182,
+     0.0993546506409378,
+     0.07404630040400662
     ],
     "set/suite4k": [
-     0.8202050477266312,
-     0.6288778856396675
+     0.7099217972718179,
+     0.15865068102721125,
+     0.12880077088993858,
+     0.11244876482669497,
+     0.09384471410157857
     ],
     "task/outlier": [
-     0.8619528412818909,
-     0.7900302410125732
+     0.9964285399764776,
+     0.11491392795384552,
+     0.09707831834869769,
+     0.08603547778329812,
+     0.05972937139449641
     ],
     "task/reorder": [
-     0.7327790260314941,
-     0.7480923533439636
+     0.7963572770357132,
+     0.503532549738884,
+     0.4654233895242214,
+     0.4415949873626232,
+     0.4153671611100435
     ],
     "task/qdmatch_nq": [
-     0.6959676742553711,
-     0.45647379755973816
+     0.7821337021887302,
+     0.12430052381629746,
+     0.08444688124291133,
+     0.08508785003990245,
+     0.0566187035292387
+    ],
+    "set/suite8k": [
+     0.8802329078316689,
+     0.22925606118224096,
+     0.19353994344419334,
+     0.1714369028195506,
+     0.1466580701962812
+    ],
+    "set/suite16k": [
+     1.0294380241206713,
+     0.2856200127862394,
+     0.25480283005163074,
+     0.2228224952039974,
+     0.18502568330482713
     ]
    }
   },
   {
-   "tag": "memscale",
-   "arm": "rc32kac",
+   "tag": "m80",
+   "arm": "m80-k30",
    "seed": 0,
    "is_ref": false,
    "pts": [
     [
      0,
      0.0,
-     0.8202050477266312
+     0.8664045134640258
     ],
     [
-     3,
-     1.218807314151332,
-     0.6237716376781464
+     100,
+     34.57542349842476,
+     0.18866314836043824
+    ],
+    [
+     200,
+     71.83495745100457,
+     0.15430105838585523
+    ],
+    [
+     300,
+     107.85612939715796,
+     0.12708530646784272
+    ],
+    [
+     400,
+     144.028883830325,
+     0.11288660154842427
     ]
    ],
    "by": {
     "task/contradiction": [
-     0.9901206493377686,
-     0.531078577041626
+     0.8790239952504635,
+     0.14961861764701703,
+     0.08795911451549425,
+     0.06210928286600392,
+     0.054939433747980125
     ],
     "set/suite4k": [
-     0.8202050477266312,
-     0.6237716376781464
+     0.7099217972718179,
+     0.1257105711811164,
+     0.10525542546020006,
+     0.08406296089015086,
+     0.07152137436241901
     ],
     "task/outlier": [
-     0.8619528412818909,
-     0.701854944229126
+     0.9964285399764776,
+     0.08032743303435079,
+     0.08950481494927469,
+     0.0650620438803647,
+     0.05008070625141651
     ],
     "task/reorder": [
-     0.7327790260314941,
-     0.734249472618103
+     0.7963572770357132,
+     0.4502338103950024,
+     0.41598961763083936,
+     0.3632316026836634,
+     0.3417577736079693
     ],
     "task/qdmatch_nq": [
-     0.6959676742553711,
-     0.5279035568237305
+     0.7821337021887302,
+     0.11806784270447679,
+     0.06736544632197668,
+     0.05729601247730898,
+     0.04291368792958868
+    ],
+    "set/suite8k": [
+     0.8802329078316689,
+     0.18928631395101547,
+     0.15954162876005284,
+     0.12868694006465375,
+     0.11294962216925342
+    ],
+    "set/suite16k": [
+     1.0294380241206713,
+     0.2598967616047178,
+     0.20436398701609246,
+     0.17442326301742078,
+     0.160089123337197
+    ]
+   }
+  },
+  {
+   "tag": "m80",
+   "arm": "m80-lr2e5",
+   "seed": 0,
+   "is_ref": false,
+   "pts": [
+    [
+     0,
+     0.0,
+     0.8664045134640258
+    ],
+    [
+     100,
+     31.175069835151152,
+     0.2137275267893489
+    ],
+    [
+     200,
+     64.68272143321369,
+     0.19841991877689472
+    ],
+    [
+     300,
+     97.09050135712081,
+     0.1566556206823367
+    ],
+    [
+     400,
+     129.62634483047566,
+     0.12306495385406457
+    ]
+   ],
+   "by": {
+    "task/contradiction": [
+     0.8790239952504635,
+     0.16652726971854767,
+     0.14673981460509822,
+     0.08551786341316377,
+     0.05382334200839978
+    ],
+    "set/suite4k": [
+     0.7099217972718179,
+     0.1525017989843036,
+     0.1315545020479476,
+     0.10014712270640302,
+     0.08109888270337251
+    ],
+    "task/outlier": [
+     0.9964285399764776,
+     0.09059957705903798,
+     0.13126351738659045,
+     0.10216418773052283,
+     0.05379024387851435
+    ],
+    "task/reorder": [
+     0.7963572770357132,
+     0.5190078839659691,
+     0.46069650277495383,
+     0.41202050931751727,
+     0.3847688868641853
+    ],
+    "task/qdmatch_nq": [
+     0.7821337021887302,
+     0.12965543594327755,
+     0.09869260434061289,
+     0.06948073704067308,
+     0.04349466483351231
+    ],
+    "set/suite8k": [
+     0.8802329078316689,
+     0.2160469865775667,
+     0.20282048094668426,
+     0.16392993873159867,
+     0.12473811999007012
+    ],
+    "set/suite16k": [
+     1.0294380241206713,
+     0.28104897595143746,
+     0.2698083239873605,
+     0.21292325488424726,
+     0.16911398815656348
     ]
    }
   },

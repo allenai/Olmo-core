@@ -38,5 +38,15 @@
   "xw": null,
   "mem": null,
   "note": "Full-epoch runs, two seeds. Plain recipe on the 16k rows: 2.1-2.7x. The 16k reading is from 56 rows; reruns on the 320-row 16k set are in progress. The pool's epoch ends at 160 PF and held-out CE 0.112; a 3x larger 80/20 pool is being built to test the lead down to dense LoRA's final loss (0.071)."
+ },
+ {
+  "t": "11-17 16:25",
+  "arm": "none qualifies under the new rules",
+  "idea": "scoring rule",
+  "x": null,
+  "level": "",
+  "xw": null,
+  "mem": null,
+  "note": "New rules (dense full fine-tune as reference, deepest dense loss, FLOP-matched screens). Nothing reaches dense full fine-tuning's full-epoch result: 0.928 on generation evals at 1,982 PF against 0.897 for the recipe at 442 PF. Closest: plain recipe, 2.4-2.8x fewer FLOPs at dense full fine-tune's step-100 loss (a shallow level). Earlier rows in this table are against dense LoRA at shallow levels and are not headline numbers."
  }
 ]

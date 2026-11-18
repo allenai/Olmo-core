@@ -1,5 +1,5 @@
 {
- "status": "Best so far: the recipe trained on a pool that is 80% short rows (1k-2k tokens) and 20% long rows (4k-16k): 3.1-3.7x fewer training FLOPs than dense LoRA at every held-out loss level its epoch reaches (two seeds, full epoch), and 3.2-3.5x on the 16k rows alone (56 rows) against 2.1-2.7x for the plain recipe. Priority since 11:45 is the 16k held-out loss and methods that gain with length; a 320-row 16k held-out set is in place and the references and all mixed pools are being rerun on it. Memory: chunked early blocks with a kept-token cap and host offload bring the slope from 0.37 (dense LoRA, out of memory at 256k) and 0.24 (recipe) to 0.040 GiB per 1k tokens, so a 1M-token row trains on one 141 GB GPU and 2M fits; at 16k the chunked method matches the recipe's loss per step and FLOPs. Closed since the last update: loss-per-cost sampling (no gain at 16k), document-local attention beyond block 3 (training stalls). Nothing is near 10x; about 115 arms scored.",
+ "status": "PAUSED since 13:15 on 11-17 (Prasann); nothing is running. Scoring rules changed on 11-17 afternoon: the reference is dense full fine-tuning (not dense LoRA); a method counts only if it reaches the deepest loss the dense reference reaches, with as many extra steps as it needs; screens give every arm the FLOPs of 50 dense steps (203 PF). Under these rules nothing qualifies yet. On generation evals (3 tasks x 4k / 8k / 16k, eval_size 500 per cell) dense full fine-tuning scores 0.928 at 1,982 PF, the recipe 0.897 at 442 PF and dense LoRA 0.882 at 1,496 PF. The dense full fine-tune held-out loss curve exists only to step 100 (0.135 at 409 PF); the recipe reaches that level with 2.4-2.8x fewer FLOPs. First runs on resume: a full-epoch dense full fine-tune with held-out probes, and the recipe on 2-3x the rows. Memory: chunked early blocks with a kept-token cap and host offload bring the slope from 0.37 (dense LoRA) to 0.040 GiB per 1k tokens (a 1M-token row trains on one H200); learning at 64k and beyond is untested.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -12,6 +12,38 @@
   "Memory: values logged by the proxy before 11-17 13:10 were wrong (the peak was reset before being read) and are not shown; the fix is merged. Valid measurements are in the memory idea and the log."
  ],
  "log": [
+  {
+   "t": "11-17 16:25",
+   "text": "State refreshed while paused (no runs launched). Results that landed during the pause are below."
+  },
+  {
+   "t": "11-17 15:40",
+   "text": "Rule (Prasann): the reference is dense full fine-tuning, not dense LoRA. Its held-out loss curve exists only to step 100 (0.176 at 205 PF, 0.135 at 409 PF); the plain recipe reaches the step-100 level at 2.4-2.8x fewer FLOPs, the recipe on the 50/50 pool at 3.3-3.6x. A full-epoch dense full fine-tune with probes has not been run."
+  },
+  {
+   "t": "11-17 15:20",
+   "text": "Rule (Prasann): screens are FLOP-matched. Every arm gets the FLOPs of 50 dense steps (203 PF on the 4k-16k pool) and as many steps as that buys. Existing runs at 203 PF, all lengths (eval_size 184): dense full fine-tune 0.177, dense LoRA 0.151-0.166, plain recipe 0.114-0.127, recipe on the 50/50 pool 0.105-0.110. On the 16k sets (320 rows): dense LoRA 0.24, plain recipe 0.195-0.197, 50/50 pool 0.181, 80/20 pool with 3x rows 0.192-0.200. Most screening arms stopped far below 203 PF and are unjudged under this rule. Flags --max-pf / --pf-points added to the probe and launchers; not yet run."
+  },
+  {
+   "t": "11-17 15:00",
+   "text": "Rule (Prasann): only methods that reach the deepest dense loss count; extra training steps are fine. Against full-epoch dense LoRA (0.071 at 1,496 PF) none of 112 scored runs reaches the final loss; the deepest is the plain recipe's full epoch (0.086 / 0.093 at 442 PF), which matches dense LoRA's step-250 loss at 2.2-2.6x. Every ratio above 3x on this page was at a shallow level."
+  },
+  {
+   "t": "11-17 14:45",
+   "text": "16k held-out set (320 rows), full runs: dense LoRA full epoch 0.121 at 1,496 PF; plain recipe full epoch 0.150 / 0.145 at 442 PF (two seeds); recipe on the 80/20 pool with 3x rows (1,464 steps) 0.136 / 0.134 at 479 PF. Both reach only dense LoRA's step-300 loss (0.146), at 2.1-2.4x. At equal FLOPs the 80/20 pool with 3x rows is about level with the plain recipe, so the short-row advantage on 16k does not hold at depth. Pools with 90% or 95% short rows, or with the long part all at 16k, are behind the 80/20 pool."
+  },
+  {
+   "t": "11-17 13:58",
+   "text": "Calibration against generation evals done (reorder excluded: it scores 0.00-0.15 with parse rate 0.00-0.72 in every arm). Mean over contradiction, outlier and qdmatch_nq at 4k / 8k / 16k, eval_size 500 per cell: dense LoRA 0.743 / 0.825 / 0.882 at 375 / 754 / 1,496 PF; recipe 0.822 at 223 PF and 0.899 / 0.895 at 442 PF (two seeds); dense full fine-tune 0.928 at 1,982 PF. The recipe needs 3.3x fewer FLOPs than dense LoRA at matched score (the loss proxy said 1.9-2.2x) but does not reach dense full fine-tuning."
+  },
+  {
+   "t": "11-17 13:40",
+   "text": "Document subsampling with preserved positions: keeping 25% of the non-gold documents on long rows needs 1.23-1.35x fewer FLOPs than the plain recipe for the same 16k loss at the levels it reached (one seed); position stretching of short rows does not help. Long-row data built: pool at 32k / 64k (3 tasks) and held-out sets at 16k / 32k / 64k."
+  },
+  {
+   "t": "11-17 13:15",
+   "text": "Loop paused by Prasann. Runs already submitted were left to finish."
+  },
   {
    "t": "11-17 13:00",
    "text": "Hub reorganized by a separate session (overview page, six groups, two-level navigation, long tables folded); the auto-research tab is rendered by a new builder with ideas grouped by family."
