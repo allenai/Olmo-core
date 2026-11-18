@@ -1,11 +1,15 @@
 import os
 import time
+import weakref
+from concurrent.futures import Future
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 import torch
 import torch.distributed as dist
 
+import olmo_core.train.checkpoint as checkpoint_module
 from olmo_core.distributed.utils import barrier, get_rank
 from olmo_core.io import dir_is_empty, file_exists, is_url, normalize_path
 from olmo_core.testing import run_distributed_test
@@ -113,6 +117,44 @@ def test_async_checkpointer_with_local_dir(tmp_path, tiny_model_factory):
         func_args=(tmp_path / "checkpoint", tmp_path / "work_dir", tiny_model_factory),
         start_method="spawn",
     )
+
+
+def test_async_checkpointer_releases_staged_state_before_callbacks(tmp_path, monkeypatch):
+    checkpointer = Checkpointer(work_dir=tmp_path)
+    train_module = Mock(spec=TrainModule)
+    staged_tensor = torch.empty(1)
+    staged_tensor_ref = weakref.ref(staged_tensor)
+    staged_state_dict = {"model": staged_tensor}
+    train_module.state_dict_to_save.return_value = staged_state_dict
+    del staged_tensor
+
+    save_future: Future[None] = Future()
+    observed_by_later_callback = []
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    def fake_async_save_state_dict(_dir, state_dict, **_kwargs):
+        assert state_dict is staged_state_dict
+        return save_future
+
+    monkeypatch.setattr(checkpoint_module, "async_save_state_dict", fake_async_save_state_dict)
+
+    future = checkpointer.save_async(tmp_path / "checkpoint", train_module, {})
+    future.add_done_callback(
+        lambda _future: observed_by_later_callback.append(
+            (dict(staged_state_dict), staged_tensor_ref() is None)
+        )
+    )
+
+    assert staged_state_dict
+    assert staged_tensor_ref() is not None
+    assert observed_by_later_callback == []
+
+    save_future.set_result(None)
+
+    assert staged_state_dict == {}
+    assert staged_tensor_ref() is None
+    assert observed_by_later_callback == [({}, True)]
 
 
 def test_async_checkpointer_with_remote_s3_dir(s3_checkpoint_dir, tmp_path, tiny_model_factory):
