@@ -165,7 +165,7 @@
   "title": "Keep ramp over training",
   "what": "One cut after block 7 whose keep share rises linearly from 20% to 90% over the epoch (full fine-tuning): cheap steps early, near-dense steps at the end where the loss is deepest.",
   "status": "running",
-  "result": "Reaches the dense full fine-tune final loss on both seeds (320 rows): one cut after block 7 with the keep share rising from 20% to 90% over the epoch, full fine-tuning, ends at 16k CE 0.113 / 0.119 against dense 0.114 / 0.119 (same seeds), at 0.64x the step cost: 1.57-1.59x fewer FLOPs at the deepest dense level. It is behind early (+0.04 to +0.06 at step 50) and catches up as the keep rises. Cheaper ramps: 10% to 90% 0.119 at 0.60x (+0.005 vs dense seed 0); with LoRA, 20% to 90% ends at 0.120 at 0.48x (dense LoRA 0.121, so 1.6x against dense LoRA) and 10% to 60% at 0.124 at 0.36x. A first cut at block 3 is far behind early (+0.09 at step 150). Running: ramp + dense last 10%, 10% to 60% with full fine-tune, the ramp at equal FLOPs on 4x the rows, and schedules for both cuts (hold-then-ramp)."
+  "result": "Reaches the dense full fine-tune final loss on both seeds (320 rows): one cut after block 7, keep share 20% to 90% over the epoch, full fine-tuning: 16k CE 0.113 / 0.119 against dense 0.114 / 0.119 at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the deepest dense level. With the last 10% of steps dense: 0.115 at 0.65x (same). Cheaper shapes lose a little at one epoch: 10% to 90% 0.119 at 0.60x; both cuts ramped 20%/7% to 90%/90% 0.120 at 0.61x; 20%/7% held for half the run then ramped 0.120 at 0.46x; ramp ending at 60%/40% 0.122 at 0.44x; held for 70% of the run 0.124 at 0.41x; 10% to 60% 0.125 at 0.48x; first cut at block 3 0.132 at 0.59x. With LoRA: 20% to 90% 0.120 at 0.48x, 10% to 60% 0.124 at 0.36x. So the hold-then-ramp at 0.46x is within about one seed spread of dense (1.95x at dense's step-400 level). Running: the ramp at equal FLOPs on 4x the rows, one more schedule."
  },
  {
   "id": "massdial",
@@ -197,7 +197,7 @@
   "title": "Equal FLOPs, more rows: do cheap arms reach the dense final loss?",
   "what": "Give each arm the FLOPs of one dense full fine-tune epoch (1,982 PF) on a pool with 4x the rows, with its LR schedule stretched over its own step count: LoRA keep 50% then 20% (1,525 steps), LoRA keep 50% after block 16 (905), the old recipe 20% then 7% (1,952, the whole pool), full fine-tune keep 50% then 20% (1,108), and dense LoRA as the equal-FLOP baseline (642). The test of the deepest-loss rule: at equal FLOPs, which arm ends lowest, and how many FLOPs does each need to reach the dense full fine-tune final loss.",
   "status": "running",
-  "result": ""
+  "result": "Interim, runs still mid-schedule (16k CE on 320 rows, one seed; PF for running runs = steps x measured PF per step). At equal cumulative FLOPs the drop arms on the 4x pool are far below dense: at 1,000 PF LoRA 50%/20% 0.103, full fine-tune 50%/20% 0.120, ramp 0.121, against dense full fine-tune 0.151 / 0.160; at 1,250 PF LoRA 50%/20% 0.091 against dense 0.135 / 0.142; at 750 PF the old 20%/7% recipe 0.117 against dense 0.167 / 0.174. Dense's one-epoch final loss (0.114 / 0.119 at 1,982 PF) is passed by the 20%/7% recipe at about 800 PF and by LoRA 50%/20% at about 900 PF, i.e. more than 2x fewer FLOPs, with over half of their steps still to run; latest probes 0.085-0.088 at 1,300-1,800 PF. How large the ratio is at these deeper losses needs the dense curve beyond one epoch: dense full fine-tune for 976 steps and over the whole 4x pool (1,952 steps, 7,930 PF), and dense LoRA over the whole pool, are running."
  },
  {
   "id": "gradcomp",
@@ -205,14 +205,14 @@
   "title": "Gradient compensation at the cut",
   "what": "The diagnosis says the loss gap is the gradient that dropped tokens no longer carry. Rescale, in the backward pass only, the gradient flowing through the kept document tokens at each cut by 1 / kept share (or 1 / the predicted gradient mass they cover, or its square root), so the blocks below the cut see a less biased update. Forward pass and FLOPs unchanged.",
   "status": "running",
-  "result": ""
+  "result": "Interim (seed 0, 320 rows): at 20% / 7% every mode is worse than no compensation: 1/covered-mass 0.153 at step 488 against 0.138 without; 1/keep and sqrt(1/keep) are 0.03-0.04 behind dense at step 400 where the uncompensated arm is 0.025 behind. At 50% / 20%, 1/keep is level with dense at step 300 (0.147); final probes pending."
  },
  {
   "id": "whichtokens",
   "family": "dynamic drop (11-18 rules)",
   "title": "Does it matter which tokens carry the gradient?",
   "what": "At keep 50% then 20% with full fine-tuning: half of the kept budget drawn at random, and a fully random keep, against the router's top-scored tokens. If a random choice does as well, coverage across steps matters more than selection.",
-  "status": "running",
-  "result": ""
+  "status": "done",
+  "result": "Selection matters (seed 0, 16k CE at step 488, 320 rows; full fine-tune, keep 50% then 20%, 0.44x): random tokens 0.132, half of the budget random 0.123, router 0.126 / 0.119 on two seeds; dense 0.114 / 0.119. A random keep is about 0.01 worse and stays 0.02-0.03 behind for most of the run; mixing in random tokens neither helps nor hurts."
  }
 ]

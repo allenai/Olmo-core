@@ -32,7 +32,11 @@ DESC = {  # arm -> plain description
     "ft-sbw-c0k20": "full FT, dense forward, gradient only through kept 20% (input)", "ft-c3ramp": "full FT, keep ramp 20% to 90% (block 3)",
     "ft-c7ramp10to60": "full FT, keep ramp 10% to 60% (block 7)", "ft-c7ramp-tail10": "full FT, keep ramp 20% to 90% + last 10% dense",
     "ft-r50to20-ex50": "full FT, keep 50% then 20%, half of the budget random", "ft-r50to20-rnd": "full FT, keep 50% then 20%, random tokens",
-    "lo-p50-10-5": "LoRA, keep 50% / 10% / 5% at blocks 7 / 16 / 24", "lo-q50-30-15-7": "LoRA, keep 50% / 30% / 15% / 7% at blocks 7 / 12 / 16 / 24",
+    "lo-p50-10-5": "LoRA, keep 50% / 10% / 5% at blocks 7 / 16 / 24",
+    "ft-hold50": "full FT, 20% / 7% held for half the run, then ramp to 90% / 90%", "ft-hold70": "full FT, 20% / 7% held for 70% of the run, then ramp to dense",
+    "ft-r2ramp": "full FT, both cuts ramp 20% / 7% to 90% / 90%", "ft-rlow": "full FT, both cuts ramp 20% / 7% to 60% / 40%",
+    "r20to7-invkeep": "full FT 20% / 7%, gradient x 1/keep at the cuts", "r20to7-invmass": "full FT 20% / 7%, gradient x 1/covered mass", "r20to7-sqrt": "full FT 20% / 7%, gradient x sqrt(1/keep)",
+    "r50to20-invkeep": "full FT 50% / 20%, gradient x 1/keep at the cuts", "r50to20-invmass": "full FT 50% / 20%, gradient x 1/covered mass", "lo-q50-30-15-7": "LoRA, keep 50% / 30% / 15% / 7% at blocks 7 / 12 / 16 / 24",
 }
 
 
@@ -83,6 +87,33 @@ block = f'''<!-- AR:LADDER:START -->
 </div></details>
 <!-- AR:LADDER:END -->
 '''
+# ---- equal-FLOP table (hub_tab/eqflop.json, written by eqflop.py): runs on the 4x-row pool against dense full fine-tune ----
+ep = os.path.join(os.path.dirname(lp), "eqflop.json")
+if os.path.exists(ep):
+    E = json.load(open(ep)); G = [g for g in E["grid"] if any(r["at_pf"].get(str(g)) is not None for r in E["runs"])]
+    XD = {"w1-dense-sd0": "dense full fine-tune, standard pool, one epoch (seed 0)", "w1-dense-sd1": "dense full fine-tune, standard pool, one epoch (seed 1)",
+          "x4-dense-x4-sd0": "dense full fine-tune, 976 steps on the 4x pool", "x4-dense-x4full-sd0": "dense full fine-tune, whole 4x pool (1,952 steps)",
+          "x4-denselora-x4-sd0": "dense LoRA, 642 steps (baseline at 1,982 PF)", "x4-denselora-x4full-sd0": "dense LoRA, whole 4x pool (1,952 steps)",
+          "v3-denselora-sd0": "dense LoRA, standard pool, one epoch (seed 0)", "w2-denselora-sd1": "dense LoRA, standard pool, one epoch (seed 1)",
+          "x4-recipe-x4-sd0": "LoRA, keep 20% then 7%, whole 4x pool (1,952 steps)", "x4-lo-r50to20-x4-sd0": "LoRA, keep 50% then 20%, 1,525 steps",
+          "x4-lo-p50-20-7-x4-sd0": "LoRA, keep 50% / 20% / 7%, 1,683 steps", "x4-lo-c16k50-x4-sd0": "LoRA, keep 50% after block 16, 905 steps",
+          "x4-ft-r50to20-x4-sd0": "full FT, keep 50% then 20%, 1,108 steps", "x4-ft-c7ramp-x4-sd0": "full FT, keep ramp 20% to 90%, 762 steps"}
+    er = ['<tr><th>run</th>' + "".join(f'<th class="n">{g:,} PF</th>' for g in G) + '<th class="n">last probe: step, PF, CE</th><th class="n">dense full FT PF for that loss</th><th class="n">FLOP ratio</th></tr>']
+    for r in E["runs"]:
+        cells = "".join('<td class="n">' + (f'{r["at_pf"][str(g)]:.3f}' if r["at_pf"].get(str(g)) is not None else "") + "</td>" for g in G)
+        isd = "dense" in r["run"] and "lora" not in r["run"]
+        need = "" if isd else (f'{r["dense_pf_same_loss"]:,.0f}' if r["dense_pf_same_loss"] else "dense has not reached it yet")
+        x = "" if isd else (f'<b>{r["x"]:.2f}×</b>' if r["x"] else (f'&gt; {r["x_lower_bound"]:.2f}× (lower bound)' if r["x_lower_bound"] else ""))
+        er.append(f'<tr><td>{e(XD.get(r["run"], r["run"]))}<br><code>{e(r["run"])}</code>{"" if r["done"] else " · running"}</td>{cells}'
+                  f'<td class="n">{r["last_step"]:,}, {r["last_pf"]:,.0f}, {r["last_ce"]:.3f}</td><td class="n">{need}</td><td class="n">{x}</td></tr>')
+    block = block.replace("<!-- AR:LADDER:END -->", f'''<details class="sec" open id="ar-eqflop-sec"><summary><h2 id="ar-eqflop">Equal FLOPs, more rows: loss against cumulative FLOPs on the 4x-row pool</h2><span class="n">1 table · {len(E["runs"])} runs</span></summary><div class="secbody">
+<p class="note sv">The test of the deepest-loss rule: each drop arm gets the FLOPs of one dense full fine-tune epoch (1,982 PF) on a pool with 4x the rows (its learning-rate schedule stretched over its own step count), so cheap steps are traded for more rows. Dense references with more rows (976 and 1,952 steps) are running to extend the dense curve past 1,982 PF.</p>
+<p class="note">16k held-out CE at equal cumulative PF (linear interpolation between probes). ⚠ eval_size 320, below 500; one seed. Rows marked running come from live probes and are mid-schedule (their learning rate is still high); for those, PF is the step count times the arm's PF per step measured on its finished one-epoch run. The last columns give the PF dense full fine-tuning needs to reach the run's latest loss and the ratio; where dense has not reached that loss in any run yet, the ratio is a lower bound from the deepest dense point. 12 of the 48 generated contradiction held-out rows have a gold claim that appears as filler (not as gold) in some row of the 4x pool, 2 for outlier; 0 on the standard pool.</p>
+<div class="tbl"><table>
+{chr(10).join(er)}
+</table></div>
+</div></details>
+<!-- AR:LADDER:END -->''')
 h = re.sub(r"<!-- AR:LADDER:START -->.*?<!-- AR:LADDER:END -->\n?", "", h, flags=re.S)
 anchor = '<details class="sec" open id="ar-progress-sec">'
 if anchor not in h:

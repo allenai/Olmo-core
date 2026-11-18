@@ -42,6 +42,13 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 04:40 x4 mid-run (python3 eqflop.py --json hub_tab/eqflop.json = equal-PF table; live PF = steps x COST table in eqflop.py): cheap arms far below dense at
+  equal PF (lo-r50to20-x4 0.091 @1,250 PF vs dense 0.135-0.142; recipe-x4 passes dense final ~800 PF). Launched x4/dense-x4full + x4/denselora-x4full
+  (4 GPUs, 1,952 steps, ~5 h) for the dense curve to 7,930 PF; x4/dense-x4 (976 steps) ends ~08:00. KEY NEXT: when x4 arms finish (05:30-07:30) and dense
+  curves extend, state FLOP ratio at the deepest dense loss; then push cheaper arms on even more rows (need a bigger pool: x8/x16 via build_pool_v2.py
+  --gen-rows; qdmatch_nq clean rows are the limit: ~3,100 of 8,000 generated per rung).
+  One-epoch: w3 ft-c7ramp-tail10 0.115/0.65x, ft-c7ramp10to60 0.125/0.48x, ft-c3ramp 0.132/0.59x, ft-r50to20-ex50 0.123, ft-r50to20-rnd 0.132 (router matters);
+  ks: hold50 0.120/0.46x, hold70 0.124/0.41x, r2ramp 0.120/0.61x, rlow 0.122/0.44x; gc at 20/7: worse than none (invmass 0.153). dense LoRA sd1 0.118.
 - 03:35 W2 DONE. dense FT sd1 0.119 (sd0 0.114). ft-c7ramp sd1 0.119 (= dense sd1): ramp x1.57-1.59 at dense final on BOTH seeds. ft-c7ramp10to90 0.119/0.60x.
   LoRA: lo-c7ramp 0.120/0.48x, lo-c7ramp10to60 0.124/0.36x, lo-p50-20-7 0.123/0.29x, lo-r50to10 0.123/0.28x, lo-r50to20 sd1 0.123/0.32x, lo-r35to12 0.131/0.27x,
   lo-e50-30-15 0.152/0.23x (cut at block 3 hurts; w3/ft-c3ramp also far behind). ft-r20to7 sd1 0.135. All recorded with ops result add.
