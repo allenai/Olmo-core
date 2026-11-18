@@ -53,11 +53,11 @@
   "t": "11-18 02:55",
   "arm": "ft-c7ramp",
   "idea": "keepramp",
-  "x": 1.58,
+  "x": null,
   "level": "dense full fine-tune final loss (16k CE 0.114 at step 488; 320 rows, seed 0)",
   "xw": null,
   "mem": null,
-  "note": "Qualifies under the 11-18 rules on two seeds: full fine-tune with one cut after block 7 and the keep share ramped from 20% to 90% ends at 16k CE 0.113 / 0.119 (dense full fine-tune 0.114 / 0.119, same seeds) at 0.64x the step cost: 1.57-1.59x fewer FLOPs at the dense final loss."
+  "note": "WITHDRAWN: three runs of this arm gave 0.113 / 0.119 / 0.120 against dense 0.114 / 0.119, so 'reaches the dense final loss at 1.6x' was within one-epoch noise. Budget-matched at 1,980 PF the ramp is 1.6x against the dense frontier, behind constant budgets (about 2x)."
  },
  {
   "t": "11-18 06:30",

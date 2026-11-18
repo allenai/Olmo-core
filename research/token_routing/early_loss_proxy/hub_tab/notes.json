@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 08:30",
+   "text": "Keep-schedule agent finished (branch loop/keepsched). Its same-seed rerun of the 20% to 90% ramp ended at 0.120, not 0.113, so the earlier claim that the ramp reaches the dense final loss at 1.6x is withdrawn: at one epoch every schedule between 0.44x and 0.64x per step lands at 0.120-0.124, within noise of dense (0.114 / 0.119) and of each other. Best value: hold 20%/7% for half the run, then ramp (0.120 at 0.46x). Starting at 10%/3% is clearly worse (0.138). Budget-matched, the ramp (1.6x) is behind constant LoRA budgets (about 2x). Schedules closed."
+  },
+  {
    "t": "11-18 08:05",
    "text": "Early-blocks-forward-only is negative at 495 PF: dense LoRA from block 7 0.205 (dense full fine-tune 0.189), frozen LoRA 50%/20% 0.164 against 0.140 unfrozen. The recipe on the 16x pool with a complete schedule at 1,980 PF ends at 0.082 (1.9x); LoRA 10%/3% at 991 PF 0.117 (1.5x): cheaper token budgets lose. Started an agent on input document subsampling combined with the token drop (branch loop/docsub, tag ds)."
   },

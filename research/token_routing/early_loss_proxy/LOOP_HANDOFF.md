@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 08:30 keepsched agent DONE (loop/keepsched @ 13b8f980b, flag --st-otr-stage-sched): ramp rerun 0.120 (w1 0.113 was a lucky draw); hold50 0.120/0.46x best value;
+  lo10h50 0.138. RAMP CLAIM WITHDRAWN in tracker (hourly row nulled). Schedules closed: budget-matched ramp 1.6x < constant LoRA budgets ~2x.
 - 08:05 fz7 NEGATIVE at b495: denselora-s7 0.205 (dense 0.189); lo-r50to20-fz7 0.164 @534 PF (unfrozen 0.140); lo-p50-20-7-fz7 0.153 (unfrozen 0.136). b991 fz7 arms
   still running (let them finish, then close). x16-recipe-b1982 0.082 (x1.9). lo-r10to3-b991 0.117 (x1.5). Agent docsub (adf5d3eb50381a0be, branch loop/docsub, tag ds):
   input document subsampling (from loop/longpos) + lo-p50-20-7, constant and ramped, b495. ks agent's last arm ks-ft-lo10h50 running.

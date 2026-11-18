@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-18 07:59 PT",
+ "updated": "2026-11-18 08:25 PT",
  "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline (finished runs with complete schedules, 16k CE on 320 rows, one seed each): token dropping needs about 2x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget) at 495, 991 and 1,980 PF, and the gain does not shrink with data; best arm LoRA with keep 50% / 20% / 7% over three cuts (0.072 at 1,980 PF against 0.081 for dense full fine-tune at 3,960 PF and 0.101 for dense LoRA at 1,963 PF). That is far from the 10-20x target. The binding cost is blocks 0-6, which run on every token: forward-only early blocks are being tested, and runs at 3,964 PF on a 16x pool are in flight.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 08:30",
+   "text": "Keep-schedule agent finished (branch loop/keepsched). Its same-seed rerun of the 20% to 90% ramp ended at 0.120, not 0.113, so the earlier claim that the ramp reaches the dense final loss at 1.6x is withdrawn: at one epoch every schedule between 0.44x and 0.64x per step lands at 0.120-0.124, within noise of dense (0.114 / 0.119) and of each other. Best value: hold 20%/7% for half the run, then ramp (0.120 at 0.46x). Starting at 10%/3% is clearly worse (0.138). Budget-matched, the ramp (1.6x) is behind constant LoRA budgets (about 2x). Schedules closed."
+  },
   {
    "t": "11-18 08:05",
    "text": "Early-blocks-forward-only is negative at 495 PF: dense LoRA from block 7 0.205 (dense full fine-tune 0.189), frozen LoRA 50%/20% 0.164 against 0.140 unfrozen. The recipe on the 16x pool with a complete schedule at 1,980 PF ends at 0.082 (1.9x); LoRA 10%/3% at 991 PF 0.117 (1.5x): cheaper token budgets lose. Started an agent on input document subsampling combined with the token drop (branch loop/docsub, tag ds)."
@@ -376,8 +380,8 @@
    "family": "dynamic drop (11-18 rules)",
    "title": "Keep ramp over training",
    "what": "One cut after block 7 whose keep share rises linearly from 20% to 90% over the epoch (full fine-tuning): cheap steps early, near-dense steps at the end where the loss is deepest.",
-   "status": "running",
-   "result": "Reaches the dense full fine-tune final loss on both seeds (320 rows): one cut after block 7, keep share 20% to 90% over the epoch, full fine-tuning: 16k CE 0.113 / 0.119 against dense 0.114 / 0.119 at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the deepest dense level. With the last 10% of steps dense: 0.115 at 0.65x (same). Cheaper shapes lose a little at one epoch: 10% to 90% 0.119 at 0.60x; both cuts ramped 20%/7% to 90%/90% 0.120 at 0.61x; 20%/7% held for half the run then ramped 0.120 at 0.46x; ramp ending at 60%/40% 0.122 at 0.44x; held for 70% of the run 0.124 at 0.41x; 10% to 60% 0.125 at 0.48x; first cut at block 3 0.132 at 0.59x. With LoRA: 20% to 90% 0.120 at 0.48x, 10% to 60% 0.124 at 0.36x. So the hold-then-ramp at 0.46x is within about one seed spread of dense (1.95x at dense's step-400 level). A rerun of the 20% to 90% ramp through the new schedule flag (same seed) ended at 0.120, so run-to-run spread at a fixed seed is as large as the seed spread (about 0.005-0.007): at one epoch every schedule between 0.44x and 0.64x is within noise of dense (0.114 / 0.119). At equal FLOPs on 4x the rows the ramp ends at 0.088 (762 steps, 1,978 PF)."
+   "status": "done",
+   "result": "Corrected verdict: raising the keep share over training is within noise of dense at one epoch but is not better per FLOP than a constant budget. One epoch on the standard pool (16k CE at step 488, 320 rows; dense full fine-tune 0.114 / 0.119): the single-cut ramp 20% to 90% (0.64x per step) gave 0.113, 0.119 and 0.120 on three runs (two seeds plus a same-seed rerun through the new schedule flag), so the first 0.113 was a lucky draw and the earlier '1.6x at the dense final loss' was within noise. Other shapes, full fine-tune: both cuts ramped 20%/7% to 90%/90% 0.120 at 0.61x; 20%/7% held for half the run then ramped 0.120 at 0.46x (best value); ramp ending at 60%/40% 0.122 at 0.44x; held for 70% 0.124 at 0.41x; 10% to 90% 0.119 at 0.60x; ramp + dense last 10% 0.115 at 0.65x; starting at 10%/3% 0.138 at 0.44x; first cut at block 3 0.132 at 0.59x. With LoRA: 20% to 90% 0.120 at 0.48x. Budget-matched on the 4x pool at 1,980 PF the single-cut ramp ends at 0.088 (1.6x fewer FLOPs than the dense frontier), behind constant LoRA 50% / 20% / 7% (0.072) and 50% / 20% (0.078). Schedules are not pursued further. Code: branch loop/keepsched, flag --st-otr-stage-sched (piecewise keep per stage over training progress)."
   },
   {
    "id": "massdial",
@@ -507,11 +511,11 @@
    "t": "11-18 02:55",
    "arm": "ft-c7ramp",
    "idea": "keepramp",
-   "x": 1.58,
+   "x": null,
    "level": "dense full fine-tune final loss (16k CE 0.114 at step 488; 320 rows, seed 0)",
    "xw": null,
    "mem": null,
-   "note": "Qualifies under the 11-18 rules on two seeds: full fine-tune with one cut after block 7 and the keep share ramped from 20% to 90% ends at 16k CE 0.113 / 0.119 (dense full fine-tune 0.114 / 0.119, same seeds) at 0.64x the step cost: 1.57-1.59x fewer FLOPs at the dense final loss."
+   "note": "WITHDRAWN: three runs of this arm gave 0.113 / 0.119 / 0.120 against dense 0.114 / 0.119, so 'reaches the dense final loss at 1.6x' was within one-epoch noise. Budget-matched at 1,980 PF the ramp is 1.6x against the dense frontier, behind constant budgets (about 2x)."
   },
   {
    "t": "11-18 06:30",
