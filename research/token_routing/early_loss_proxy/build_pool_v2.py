@@ -25,6 +25,17 @@ Stages (run in order; each is idempotent on its own outputs):
     $PY research/token_routing/early_loss_proxy/build_pool_v2.py tokenize
     $PY research/token_routing/early_loss_proxy/build_pool_v2.py assemble   # needs build_heldout_v2.py fetch first
     $PY research/token_routing/early_loss_proxy/build_pool_v2.py order
+
+Bigger pools from the same recipe (``mtb16kx4``, POOL_V2.md): ``--cell-root`` puts the gen / tok cells in a separate
+build dir, ``--gen-rows`` regenerates them larger with the SAME seed (ctc's stream is prefix-stable, so the first rows
+are byte-identical to the mtb16k cells and the first ``--rows-per-task`` / 3 survivors include every mtb16k row),
+``--exclude-heldout`` also drops rows whose gold occurs in heldout_v3 / heldout_v4's generated rows (gen16k / gen32k /
+gen64k), and ``overlap`` writes the held-out overlap table:
+
+    $PY build_pool_v2.py gen --cell-root $W --gen-rows contradiction=3200,outlier=3200,reorder=3300,qdmatch_nq=8000
+    $PY build_pool_v2.py tokenize --cell-root $W
+    $PY build_pool_v2.py assemble --cell-root $W --out $SH/mtb16kx4 --rows-per-task 7808 --exclude-heldout
+    $PY build_pool_v2.py order --out $SH/mtb16kx4 ; $PY build_pool_v2.py overlap --out $SH/mtb16kx4 --contains $SH/mtb16k
 """
 from __future__ import annotations
 
@@ -75,8 +86,16 @@ def env():
     return e
 
 
-def cell_dir(task, rung):
-    return f"{WORK}/gen/{task}_{rung}"
+#: where gen / tok cells live (``--cell-root``; default: the mtb16k build dir)
+CELL_ROOT = WORK
+
+
+def cell_dir(task, rung, root=None):
+    return f"{root or CELL_ROOT}/gen/{task}_{rung}"
+
+
+def tok_dir(task, rung, root=None):
+    return f"{root or CELL_ROOT}/tok/{task}_{rung}"
 
 
 def eval_rung_path(task, rung):
@@ -85,8 +104,8 @@ def eval_rung_path(task, rung):
 
 # ------------------------------------------------------------------------------------------------ gen
 def _gen_cell(job):
-    task, rung, n_docs, rows = job
-    out = cell_dir(task, rung)
+    task, rung, n_docs, rows = job[:4]
+    out = cell_dir(task, rung, job[4] if len(job) > 4 else None)
     target = f"{out}/{task}/train.jsonl"
     if os.path.exists(target) and os.path.getsize(target):
         return task, rung, "cached", sum(1 for _ in open(target)), 0.0
@@ -121,6 +140,15 @@ def refit_n_docs(task, cal, target_mean):
     return int((target_mean - icpt) // slope), {"tok_per_doc": slope, "overhead": icpt, "mean_4k": m4, "mean_8k": m8}
 
 
+def gen_rows_for(a, task, rung):
+    """Rows generated for a cell: ``--gen-rows`` (``task=N`` or ``task:rung=N``, comma-separated) else GEN_ROWS."""
+    spec = {}
+    for kv in filter(None, (a.gen_rows or "").split(",")):
+        k, v = kv.split("=")
+        spec[k.strip()] = int(v)
+    return spec.get(f"{task}:{rung}", spec.get(task, GEN_ROWS.get((task, rung), GEN_DEFAULT)))
+
+
 def gen(a):
     cal = json.load(open(f"{REPO}/recipes/data/ctc_sft/eval_calibration.json"))["tasks"]
     used = json.load(open(N_DOCS_FILE)) if os.path.exists(N_DOCS_FILE) else {}
@@ -134,9 +162,11 @@ def gen(a):
             k = f"{t}:{r}"
             if k not in used:
                 used[k] = {"n_docs": int(cal[t][r]["n_docs"]), "eval_n_docs": int(cal[t][r]["n_docs"]), "why": "eval calibration"}
-            jobs.append((t, r, used[k]["n_docs"], GEN_ROWS.get((t, r), GEN_DEFAULT)))
+            jobs.append((t, r, used[k]["n_docs"], gen_rows_for(a, t, r), CELL_ROOT))
     os.makedirs(WORK, exist_ok=True)
-    json.dump(used, open(N_DOCS_FILE, "w"), indent=1)
+    if CELL_ROOT == WORK or a.refit_16k:  # a separate --cell-root reuses mtb16k's document counts read-only
+        json.dump(used, open(N_DOCS_FILE, "w"), indent=1)
+    os.makedirs(f"{CELL_ROOT}/gen", exist_ok=True)
     for j in jobs:
         print(f"[gen] {j[0]}@{j[1]}: n_docs {j[2]} ({used[j[0] + ':' + j[1]]['why']}), rows {j[3]}, pool {POOL[j[0]]}", flush=True)
     # one serial cell per task first: warms the Hub seed-pool cache before the parallel pass
@@ -163,9 +193,10 @@ def convert(jsonl, task_spec, out_dir, num_proc=4):
 
 
 def _tok_cell(job):
-    task, rung = job
-    src = f"{cell_dir(task, rung)}/{task}/train.jsonl"
-    out = f"{WORK}/tok/{task}_{rung}"
+    task, rung = job[:2]
+    root = job[2] if len(job) > 2 else None
+    src = f"{cell_dir(task, rung, root)}/{task}/train.jsonl"
+    out = tok_dir(task, rung, root)
     if os.path.exists(f"{out}/metadata.json"):
         return task, rung, "cached"
     os.makedirs(out, exist_ok=True)
@@ -174,7 +205,7 @@ def _tok_cell(job):
 
 
 def tokenize(a):
-    jobs = [(t, r) for t in TASKS for r in RUNGS]
+    jobs = [(t, r, CELL_ROOT) for t in TASKS for r in RUNGS]
     with cf.ProcessPoolExecutor(max_workers=a.jobs) as ex:
         for r in ex.map(_tok_cell, jobs):
             print(f"[tok] {r[0]}@{r[1]} {r[2]}", flush=True)
@@ -275,6 +306,57 @@ def printed_id(text):
     return int(m.group()) if m else None
 
 
+HELDOUT = {"heldout_v2": "/data/prasann/early_loss_proxy/heldout_v2.npz",
+           "heldout_v3": "/data/prasann/early_loss_proxy/heldout_v3.npz",
+           "heldout_v4": "/data/prasann/early_loss_proxy/heldout_v4.npz"}
+HO_SUITE_RUNG = {"suite4k": "4k", "suite8k": "8k", "suite16k": "16k", "rung16k": "16k"}
+
+
+def heldout_rows(name):
+    """(set, task, source JSONL row) of every row of a held-out npz. suite* / rung16k rows index the eval rung files;
+    generated sets (gen16k / gen32k / gen64k) index the ``source_file`` their stats name; heldout_v4's gen16k is
+    heldout_v3's."""
+    path = HELDOUT[name]
+    h = np.load(path)
+    st = json.load(open(path.replace(".npz", "_stats.json")))
+    st = st.get("sets", st)
+    cache, out = {}, []
+    for s_, t_, i in zip(h["sets"], h["tasks"], h["src_idx"]):
+        s_, t_, i = str(s_), str(t_), int(i)
+        if s_ in HO_SUITE_RUNG:
+            src = eval_rung_path(t_, HO_SUITE_RUNG[s_])
+        else:
+            x = st.get(f"{s_}/{t_}") or {}
+            src = x.get("source_file")
+            if src is None and name == "heldout_v4" and s_ == "gen16k":
+                src = json.load(open(HELDOUT["heldout_v3"].replace(".npz", "_stats.json")))["sets"][f"gen16k/{t_}"]["source_file"]
+            assert src, (name, s_, t_)
+        if src not in cache:
+            cache[src] = read_jsonl(src)
+        out.append((s_, t_, cache[src][i]))
+    return out
+
+
+def heldout_gen_keys():
+    """{task: (gold hashes, reorder books)} of the GENERATED held-out rows (heldout_v3 gen16k, heldout_v4 gen32k /
+    gen64k). The suite / rung16k held-out rows are eval rung rows, already excluded through the eval files."""
+    out = {t: (set(), set()) for t in TASKS}
+    for name in ("heldout_v3", "heldout_v4"):
+        for s_, t_, ex in heldout_rows(name):
+            if s_ in HO_SUITE_RUNG:
+                continue
+            g, _ = gold_info(t_, ex)
+            out[t_][0].update(thash(ex["documents"][j].get("text")) for j in g)
+            if t_ == "reorder" and book_of(ex):
+                out[t_][1].add(book_of(ex))
+    return out
+
+
+def prompt_hash(ids, m):
+    a0 = int(np.flatnonzero(m)[0])
+    return hashlib.sha1(np.ascontiguousarray(ids[:a0], dtype=np.int64).tobytes()).hexdigest()
+
+
 # ------------------------------------------------------------------------------------------------ assemble
 def assemble(a):
     from tokenizers import Tokenizer
@@ -291,6 +373,10 @@ def assemble(a):
     per_rung = [a.rows_per_task // 3 + (1 if i < a.rows_per_task % 3 else 0) for i in range(3)]
     stats = {"out": a.out, "max_len": MAX_LEN, "rows_per_rung_target": dict(zip(RUNGS, per_rung)),
              "shuffle_seed": a.shuffle_seed, "n_docs_used": n_docs_used, "tasks": {}}
+    ho_keys = heldout_gen_keys() if a.exclude_heldout else None
+    if ho_keys:
+        stats["heldout_gen_excluded"] = {t: {"gold_hashes": len(v[0]), "books": len(v[1])} for t, v in ho_keys.items()}
+    seen_prompts = set()
     gold_side, pair_side, merged_from = {}, {}, []
     info_f = open(f"{a.out}/row_info.jsonl", "w")
     tot_tok = tot_loss = 0
@@ -301,7 +387,7 @@ def assemble(a):
         stats["tasks"][task] = {}
         for ri, rung in enumerate(RUNGS):
             src = f"{cell_dir(task, rung)}/{task}/train.jsonl"
-            meta, rows = load_shard_rows(f"{WORK}/tok/{task}_{rung}")
+            meta, rows = load_shard_rows(tok_dir(task, rung))
             exs = read_jsonl(src)
             assert len(rows) == len(exs), f"{task}@{rung}: {len(rows)} shard rows vs {len(exs)} source rows"
             assert meta["num_dropped"] == 0
@@ -312,7 +398,7 @@ def assemble(a):
                 eg |= g2
                 ea |= a2
                 eb |= b2
-            n_long = n_gold_hit = n_book_hit = 0
+            n_long = n_gold_hit = n_book_hit = n_ho_hit = n_dup = 0
             doc_hit_frac = []
             kept = []
             for i, ((ids, m), ex) in enumerate(zip(rows, exs)):
@@ -331,6 +417,16 @@ def assemble(a):
                 if task == "reorder" and book_of(ex) in eb:
                     n_book_hit += 1
                     continue
+                if ho_keys is not None and (any(hs[j] in ho_keys[task][0] for j in gset)
+                                            or (task == "reorder" and book_of(ex) in ho_keys[task][1])):
+                    n_ho_hit += 1
+                    continue
+                if len(kept) < per_rung[ri]:  # duplicate prompts (within the pool) are dropped, first copy kept
+                    ph = prompt_hash(ids, m)
+                    if ph in seen_prompts:
+                        n_dup += 1
+                        continue
+                    seen_prompts.add(ph)
                 kept.append((i, ids, m, ex, g, pairs))
             if len(kept) < per_rung[ri]:
                 raise SystemExit(f"[assemble] {task}@{rung}: only {len(kept)} eligible rows < {per_rung[ri]}")
@@ -339,10 +435,11 @@ def assemble(a):
             L = np.array([len(x[1]) for x in sel])
             A = np.array([int(x[2].sum()) for x in sel])
             stats["tasks"][task][rung] = {
-                "rows": len(sel), "source_file": src, "source_rows": len(exs), "tokenized_dir": f"{WORK}/tok/{task}_{rung}",
+                "rows": len(sel), "source_file": src, "source_rows": len(exs), "tokenized_dir": tok_dir(task, rung),
                 "eval_file": eval_rung_path(task, rung), "n_docs": sorted({len(x[3]["documents"]) for x in sel}),
                 "n_docs_used": n_docs_used.get(f"{task}:{rung}"),
                 "dropped_over_16384": n_long, "dropped_gold_in_eval": n_gold_hit, "dropped_book_in_eval": n_book_hit,
+                "dropped_gold_or_book_in_heldout_gen": n_ho_hit, "dropped_duplicate_prompt": n_dup,
                 "eligible_rows": len(kept),
                 "len_mean": float(L.mean()), "len_min": int(L.min()), "len_max": int(L.max()),
                 "len_all_generated_max": int(max(len(r[0]) for r in rows)),
@@ -350,7 +447,7 @@ def assemble(a):
                 "doc_share_in_eval_mean_all_generated": float(np.mean(doc_hit_frac)),
             }
             print(f"[assemble] {task}@{rung}: {len(exs)} generated, {n_long} > {MAX_LEN} tok, {n_gold_hit} gold-in-eval, "
-                  f"{n_book_hit} book-in-eval -> {len(sel)} kept; len {L.mean():.0f} [{L.min()}, {L.max()}], "
+                  f"{n_book_hit} book-in-eval, {n_ho_hit} heldout-gen, {n_dup} dup -> {len(sel)} kept; len {L.mean():.0f} [{L.min()}, {L.max()}], "
                   f"answer {A.mean():.1f} tok; eval-doc share {np.mean(doc_hit_frac):.4f}", flush=True)
             for (i, ids, m, ex, g, pairs) in sel:
                 rows_t.append((ids, m, {"rung": rung, "src": src, "src_idx": i, "gold": g, "pairs": pairs, "ex": ex}))
@@ -425,9 +522,9 @@ def assemble(a):
         print(f"[assemble] t{t} {task}: {len(rows_t)} rows written; verify {json.dumps({k: v for k, v in vstat.items() if k != 'examples'})}",
               flush=True)
     info_f.close()
-    meta0 = json.load(open(f"{WORK}/tok/{TASKS[0]}_{RUNGS[0]}/metadata.json"))
+    meta0 = json.load(open(f"{tok_dir(TASKS[0], RUNGS[0])}/metadata.json"))
     meta = dict(meta0)
-    meta.update({"task": "mtb16k", "tokenizer": TOKENIZER, "num_instances": sum(m["num_instances"] for m in merged_from),
+    meta.update({"task": os.path.basename(a.out.rstrip("/")), "tokenizer": TOKENIZER, "num_instances": sum(m["num_instances"] for m in merged_from),
                  "num_dropped": 0, "num_tokens": int(tot_tok), "num_loss_tokens": int(tot_loss),
                  "max_example_len": int(max(lens_all)), "min_example_len": int(min(lens_all)),
                  "subset_eos_id": EOS, "rows_over_max_len_dropped": sum(stats["tasks"][t][r]["dropped_over_16384"]
@@ -486,9 +583,73 @@ def order(a):
     json.dump(res, open(f"{a.out}_order_seed{a.seed}.json", "w"), indent=1)
 
 
+# ------------------------------------------------------------------------------------------------ overlap
+def overlap(a):
+    """Held-out (heldout_v2 / v3 / v4) vs every training row of ``--out``: prompt-hash hits, held-out gold documents
+    among training GOLD documents / anywhere in a training row, shared reorder books, mean share of a held-out row's
+    documents found in training. With ``--contains``: is every row of that pool (by content fingerprint) in ``--out``?"""
+    meta = json.load(open(f"{a.out}/metadata.json"))
+    info = [json.loads(x) for x in open(f"{a.out}/row_info.jsonl")]
+    prompts, n = set(), 0
+    for t in range(len(TASKS)):
+        ids = np.fromfile(f"{a.out}/token_ids_part_t{t}_000.npy", dtype=meta["dtype"])
+        mk = np.fromfile(f"{a.out}/labels_mask_t{t}_000.npy", dtype=meta["mask_dtype"])
+        s = 0
+        for e in np.flatnonzero(ids == EOS):
+            prompts.add(prompt_hash(ids[s:e + 1], mk[s:e + 1]))
+            s = e + 1
+            n += 1
+    by_src = {}
+    for x in info:
+        by_src.setdefault(x["src"], {})[x["src_idx"]] = x["gold"]
+    tr_docs = {t: set() for t in TASKS}
+    tr_gold = {t: set() for t in TASKS}
+    tr_books = set()
+    for src, idx in by_src.items():
+        task = next(t for t in TASKS if f"/{t}_" in src)
+        with open(src) as f:
+            for i, line in enumerate(f):
+                if i in idx:
+                    ex = json.loads(line)
+                    hs = [thash(d.get("text")) for d in ex["documents"]]
+                    tr_docs[task].update(hs)
+                    tr_gold[task].update(hs[j] for j in idx[i])
+                    if task == "reorder" and book_of(ex):
+                        tr_books.add(book_of(ex))
+    res = {"pool": a.out, "train_rows": n, "distinct_train_prompts": len(prompts), "heldout": {}}
+    print(f"[overlap] {a.out}: {n} rows, {len(prompts)} distinct prompts", flush=True)
+    for name, path in HELDOUT.items():
+        h = np.load(path)
+        o = h["offsets"]
+        rows = heldout_rows(name)
+        cells = {}
+        for j, (s_, t_, ex) in enumerate(rows):
+            c = cells.setdefault(f"{s_}/{t_}", {"rows": 0, "prompt_in_train": 0, "gold_in_train_gold": 0,
+                                                "gold_in_train_docs": 0, "book_in_train": 0, "doc_share": []})
+            c["rows"] += 1
+            c["prompt_in_train"] += prompt_hash(h["ids"][o[j]:o[j + 1]], h["mask"][o[j]:o[j + 1]]) in prompts
+            g, _ = gold_info(t_, ex)
+            hs = [thash(d.get("text")) for d in ex["documents"]]
+            gh = {hs[k] for k in g}
+            c["gold_in_train_gold"] += bool(gh & tr_gold[t_])
+            c["gold_in_train_docs"] += bool(gh & tr_docs[t_])
+            c["book_in_train"] += t_ == "reorder" and book_of(ex) in tr_books
+            c["doc_share"].append(float(np.mean([x in tr_docs[t_] for x in hs])))
+        for k, c in cells.items():
+            c["doc_share"] = round(float(np.mean(c["doc_share"])), 4)
+            print(f"[overlap] {name} {k}: {json.dumps(c)}", flush=True)
+        res["heldout"][name] = cells
+    if a.contains:
+        fps = {x["fingerprint"] for x in info}
+        other = [json.loads(x)["fingerprint"] for x in open(f"{a.contains}/row_info.jsonl")]
+        res["contains"] = {"pool": a.contains, "rows": len(other), "found": sum(f in fps for f in other)}
+        print(f"[overlap] contains {a.contains}: {res['contains']}", flush=True)
+    json.dump(res, open(f"{a.out}_overlap.json", "w"), indent=1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["gen", "tokenize", "assemble", "order"])
+    ap.add_argument("stage", choices=["gen", "tokenize", "assemble", "order", "overlap"])
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--rows-per-task", type=int, default=1952)
@@ -497,8 +658,15 @@ def main():
     ap.add_argument("--seed", type=int, default=0, help="order: the trainer --seed")
     ap.add_argument("--refit-16k", default="", help="gen: tasks whose 16k cell is re-sized from the 4k/8k token fit")
     ap.add_argument("--target-mean", type=float, default=14500.0, help="gen --refit-16k: target mean row tokens")
+    ap.add_argument("--cell-root", default=WORK, help="gen / tokenize / assemble: dir holding the gen/ and tok/ cells")
+    ap.add_argument("--gen-rows", default="", help="gen: rows per cell, 'task=N' or 'task:rung=N', comma-separated")
+    ap.add_argument("--exclude-heldout", action="store_true",
+                    help="assemble: also drop rows whose gold (reorder: or book) is in heldout_v3/v4's generated rows")
+    ap.add_argument("--contains", default="", help="overlap: also check every row of this pool is in --out")
     a = ap.parse_args()
-    {"gen": gen, "tokenize": tokenize, "assemble": assemble, "order": order}[a.stage](a)
+    global CELL_ROOT
+    CELL_ROOT = a.cell_root
+    {"gen": gen, "tokenize": tokenize, "assemble": assemble, "order": order, "overlap": overlap}[a.stage](a)
 
 
 if __name__ == "__main__":

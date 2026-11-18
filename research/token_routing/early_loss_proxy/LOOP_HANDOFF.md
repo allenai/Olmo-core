@@ -21,6 +21,14 @@
   ft-r50to20 0.126 / 0.44x, ft-r20to7 0.138 / 0.30x (dense LoRA 0.121 / 0.76x). hub_tab/ladder.json written.
 - Agent pool4x (a12e472e83534956c, works in THIS worktree/branch: pull --rebase before pushing): builds mtb16kx4 (31,232 rows,
   1,952 steps) on mooney -> sneetches + weka, for equal-FLOP "more rows" tests of cheap arms against dense FT one epoch.
+- 02:00 wave-1 readings (16k CE @488, cost vs dense FT; seed 0): LoRA: lo-c16k50 0.119/0.54x, lo-r50to20 0.125/0.32x, rc-de4 0.129/0.36x,
+  rc-tail20 0.131/0.33x, recipe 0.145-0.150/0.22x, dense LoRA 0.121/0.76x. FT: ft-c7ramp 0.113/0.64x (best), ft-c16k50 0.118/0.72x,
+  ft-c7k50 0.121/0.60x, ft-r50to20 0.126/0.44x, ft-r20to7-tail20 0.128/0.44x, ft-r20to7-de4 0.130/0.48x, ft-mod8d3 0.137/0.66x, ft-r20to7 0.138/0.30x.
+  Still running from w1: dense sd0 (Beaker), dense-mix80x3, ft-m99/m95/m90, ft-mod8s2, sneetches dense sd1 + ft-r50to20 sd1 + ft-r20to7 sd1.
+- WAVE 2 (tag w2, Beaker, launched 01:55, streams probes: `bash peek_beaker.sh w2`): lo-r35to12, lo-r50to10, lo-p50-20-7 (7:0.5,16:0.2,24:0.07),
+  lo-e50-30-15 (3:0.5,7:0.3,16:0.15), lo-c7ramp (0.2->0.9), lo-c7ramp10to60, ft-c7ramp10to90, seed 1: lo-r50to20, ft-c7ramp, denselora.
+- NEXT after dense FT lands: state FLOP ratios vs dense FT at its deepest level; when mtb16kx4 is staged run the tracking rungs
+  (lo-r50to20, best ramp) on it at the FLOPs of one dense FT epoch; keep lowering cost from the cheapest rung that tracks.
 - Agent sparsebwd (ad0d4e2aae6f7333a, branch loop/sparsebwd, Beaker tag sbw): dense forward, gradients only through kept tokens.
 - ft-* arms = softtoken, LR 5e-6, RECIPE without the three --st-otr-early-lora* flags (full fine-tune + drop, 0.30x dense/step).
 - Scoring: ladder.py (same-adapter dense baseline: ft-* -> w1/dense, LoRA arms -> v3/denselora, *-mix80x3 -> w1/dense-mix80x3).

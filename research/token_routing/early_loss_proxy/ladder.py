@@ -91,7 +91,9 @@ REF = runs.get("w1-dense-sd0")
 out = []
 for name, r in sorted(runs.items()):
     b = base_of(name)
-    if b and b.replace("-sd0", "-sd" + name.rsplit("-sd", 1)[1]) in runs: b = b.replace("-sd0", "-sd" + name.rsplit("-sd", 1)[1])  # same seed if it exists
+    if b:  # same-seed baseline if one exists under any tag (e.g. w2-denselora-sd1, w1-dense-sd1)
+        want = b.split("-", 1)[1].replace("-sd0", "-sd" + name.rsplit("-sd", 1)[1])
+        b = next((k for k in sorted(runs) if k.split("-", 1)[1] == want and len(runs[k]["curve"]) > 2), b)
     B = runs.get(b) if b and b != name else None
     bs = {s: ce for s, _, ce, _ in B["curve"]} if B else {}
     track = [(s, ce, bs.get(s)) for s, _, ce, _ in r["curve"][1:]]

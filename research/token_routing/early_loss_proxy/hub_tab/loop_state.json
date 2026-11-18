@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-18 01:40 PT",
- "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Wave 1 (launched 00:30-00:45, full epoch on the standard pool, 16k held-out loss on 320 rows): 2 dense full fine-tune references (standard pool; 80/20 re-mix with 3x rows), 14 drop arms (ladder of keep shares and cut depths with full fine-tuning and with LoRA, dense steps mixed in, keep ramp, adaptive keep by gradient mass), one agent implementing dense-forward / sparse-backward. No result yet. Earlier ideas on this page were scored against dense LoRA at shallow loss levels; those using LoRA or a row re-mix as the lever are now baseline, not methods.",
+ "updated": "2026-11-18 01:58 PT",
+ "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Wave 1 (18 full-epoch arms) is two-thirds done and wave 2 (10 arms) is running; the dense full fine-tune reference is not in yet, so no speedup is stated. Reading so far at 16k (320 rows, one seed): with LoRA, dropping to 50% then 20% of the tokens stays within 0.01 CE of dense LoRA at 0.42x its step cost; the recipe's 20% then 7% does not.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 02:00",
+   "text": "Wave 1: 12 of 18 arms finished (16k CE at step 488, 320 rows, seed 0). LoRA + drop tracks dense LoRA (0.121 at 0.76x dense per step) at keep 50% after block 16 (0.119, 0.54x) and nearly at keep 50% then 20% (0.125, 0.32x); the recipe's 20% then 7% does not (0.145-0.150, 0.22x). Keep ramp 20% to 90% with full fine-tuning is the best drop arm (0.113, 0.64x). Dense steps mixed into the recipe (0.129-0.131 at 0.33-0.36x) do not beat a gentler constant drop; mixture-of-depths is worse than plain dropping (0.137 at 0.66x). Dense full fine-tune reference still running. Wave 2 launched on Beaker (10 jobs): rungs between 50%/20% and 20%/7% (35%/12%, 50%/10%, three stages 50/20/7, earlier first cut 50/30/15), keep ramps with LoRA and cheaper ramps, seed-1 repeats of dense LoRA, LoRA 50%/20% and the full fine-tune ramp."
+  },
   {
    "t": "11-18 01:40",
    "text": "First ladder results (full fine-tune + drop, seed 0, 16k held-out CE at step 488, 320 rows): keep 50% after block 16 0.118 at 0.72x dense per step; keep 50% after block 7 0.121 at 0.60x; keep 50% then 20% 0.126 at 0.44x; keep 20% then 7% 0.138 at 0.30x. Dense LoRA is 0.121 at 0.76x; the dense full fine-tune reference is still running. Launched a seed-1 dense full fine-tune and seed-1 repeats of the two cheapest arms on sneetches, and a data agent building a 4x-row pool (mtb16kx4) for equal-FLOP tests with more rows."
@@ -309,7 +313,7 @@
    "title": "Drop ladder: from near-dense to the recipe",
    "what": "Find where token dropping stops tracking dense per step. Same router, full fine-tuning, full epoch: keep 50% after block 16 (gentlest), keep 50% after block 7, keep 50% then 20%, keep 20% then 7% (the recipe's budgets); and with LoRA: 50% then 20%, 50% after block 16. Read: 16k held-out loss at the same step as the dense run with the same adapter, out to step 488.",
    "status": "running",
-   "result": ""
+   "result": "Interim (seed 0, 16k held-out CE at step 488, 320 rows; step cost vs dense full fine-tune). With LoRA: keep 50% after block 16 reaches 0.119 at 0.54x and keep 50% then 20% reaches 0.125 at 0.32x, against dense LoRA 0.121 at 0.76x: both stay within 0.01 of dense LoRA at every probe from step 200 on, while the recipe's 20% then 7% (0.22x) is 0.025-0.03 behind throughout. With full fine-tuning: 0.118 at 0.72x (50% after block 16), 0.121 at 0.60x (50% after block 7), 0.126 at 0.44x (50% then 20%), 0.138 at 0.30x (20% then 7%); the dense full fine-tune reference is still running. Seed repeats and rungs between 50%/20% and 20%/7% are running (wave 2)."
   },
   {
    "id": "densemix",
@@ -317,7 +321,7 @@
    "title": "Dense steps mixed into dropped training",
    "what": "The recipe trains on a truncated forward but is scored on the dense forward. Every 4th step dense, or the last 20% of the steps dense, with LoRA and with full fine-tuning; cost rises from 0.22-0.30x to about 0.4x dense per step.",
    "status": "running",
-   "result": ""
+   "result": "Interim (seed 0, 16k CE at step 488, 320 rows). Dense steps help the recipe but cost more than a gentler constant drop: recipe + every 4th step dense 0.129 at 0.36x, recipe + last 20% dense 0.131 at 0.33x, against LoRA keep 50% then 20% with no dense steps 0.125 at 0.32x. Full fine-tune versions: 0.130 at 0.48x and 0.128 at 0.44x, no better than full fine-tune keep 50% then 20% (0.126 at 0.44x)."
   },
   {
    "id": "keepramp",
@@ -325,7 +329,7 @@
    "title": "Keep ramp over training",
    "what": "One cut after block 7 whose keep share rises linearly from 20% to 90% over the epoch (full fine-tuning): cheap steps early, near-dense steps at the end where the loss is deepest.",
    "status": "running",
-   "result": ""
+   "result": "Interim (seed 0, 320 rows). One cut after block 7 with the keep share rising from 20% to 90% over the epoch, full fine-tuning: 16k CE 0.113 at step 488 at 0.64x dense per step, the lowest loss of any drop arm so far and below constant keep 50% at the same cut (0.121 at 0.60x). Seed 1, a LoRA version and cheaper ramps (10% to 60%, 10% to 90%) are running."
   },
   {
    "id": "massdial",
@@ -342,6 +346,14 @@
    "what": "Every token stays in the forward pass (identical to the dense forward used for scoring); gradients flow only through the tokens the router keeps (20% above block 7, 7% above block 16). Separates the two things the recipe changes at once: no gradient for dropped tokens, and a truncated context for kept tokens. Ideal cost about 0.4-0.5x dense per step.",
    "status": "running",
    "result": ""
+  },
+  {
+   "id": "mod",
+   "family": "dynamic drop (11-18 rules)",
+   "title": "Mixture-of-depths: dropped tokens skip blocks but stay in the pass",
+   "what": "From block 8 on, 80% of the document tokens skip 3 of every 4 blocks (or every other block) and rejoin at the others, so no token leaves the forward pass and kept tokens see the full context at the refresh blocks. Full fine-tuning.",
+   "status": "running",
+   "result": "Interim (seed 0, 320 rows): skipping 3 of every 4 blocks gives 16k CE 0.137 at step 488 at 0.66x dense per step, worse than simply dropping 50% of the tokens after block 7 (0.121 at 0.60x). The every-other-block arm is still running."
   }
  ],
  "best_by_hour": [
