@@ -1685,3 +1685,55 @@ def test_nonfinite_targets_are_dropped_from_the_fit():
     r._current = None
     r.begin_step(2, model=m)
     assert r.w is not None and bool(torch.isfinite(r.w).all())
+
+
+def test_stage_sched_parse_and_interp():
+    from olmo_core.nn.online_token_router import parse_stage_sched, stage_sched_keeps
+
+    pts = parse_stage_sched("0:0.2/0.07,0.6:0.2/0.07,1:0.9/0.9")
+    assert stage_sched_keeps(pts, 0.0) == pytest.approx([0.2, 0.07])
+    assert stage_sched_keeps(pts, 0.3) == pytest.approx([0.2, 0.07])
+    assert stage_sched_keeps(pts, 0.8) == pytest.approx([0.55, 0.485])
+    assert stage_sched_keeps(pts, 1.0) == pytest.approx([0.9, 0.9])
+    assert stage_sched_keeps(parse_stage_sched("0.5:0.4"), 0.1) == pytest.approx([0.4])
+    for bad in ("0:0.2/0.3", "0:0.2/0.07,0:0.3/0.1", "0:1.2/0.1", "0:0.2/0.07,1:0.9", "1.5:0.2/0.1", "0:0/0"):
+        with pytest.raises(ValueError):
+            parse_stage_sched(bad)
+    # stage count must match --stages; exclusive with keep_sched
+    with pytest.raises(ValueError):
+        OnlineRouterConfig(stages="1:0.5,2:0.25", stage_sched="0:0.5,1:0.9").validate()
+    with pytest.raises(ValueError):
+        OnlineRouterConfig(drop_layer=1, stage_sched="0:0.5,1:0.9", keep_sched="1:2").validate()
+    OnlineRouterConfig(stages="1:0.5,2:0.25", stage_sched="0:0.5/0.25,1:1/1").validate()
+
+
+def test_stage_sched_drives_every_stage_cpu():
+    """stage_sched '0:0.5/0.25,0.5:0.5/0.25,1:1/1': each stage's relative keep follows the schedule (held, then a
+    ramp to no drop) and the realised kept rows (which the FLOP meter prices) follow it."""
+    model, router = _mid_model(4, stages="1:0.5,2:0.25", stage_sched="0:0.5/0.25,0.5:0.5/0.25,1:1/1", dense_every=0,
+                               warmup_steps=1)
+    chain = router.chain()
+    for r in chain:
+        r.total_steps = 10
+    ids, cid, labels = _row(B=1)
+    real = int((ids != PH).sum())
+    seen = {}
+    for n in range(1, 11):
+        model.zero_grad(set_to_none=True)
+        for r in chain:
+            r.begin_step(n, model=model)
+        out = model(ids, labels=labels)
+        out.loss.backward()
+        if n >= 3:
+            assert chain[0].sched_keep() == pytest.approx(0.5 if n <= 5 else 0.5 + 0.5 * (n / 10 - 0.5) / 0.5)
+            a0 = 0.5 if n <= 5 else 0.5 + 0.5 * (n / 10 - 0.5) / 0.5
+            a1 = 0.25 if n <= 5 else 0.25 + 0.75 * (n / 10 - 0.5) / 0.5
+            assert chain[1].sched_keep() == pytest.approx(min(1.0, a1 / a0))
+        m0, m1 = chain[0].metrics(), chain[1].metrics()
+        seen[n] = (m0.get("online_router/keep_frac"), m1.get("online_router/s1_keep_frac"),
+                   m0.get("online_router/mid_row_frac"))
+    # held phase: about half / a quarter of the body; the last step keeps every body token at both stages
+    assert seen[4][0] == pytest.approx(0.5, abs=0.05) and seen[4][1] == pytest.approx(0.5, abs=0.08)
+    assert seen[10][0] == pytest.approx(1.0) and seen[10][1] == pytest.approx(1.0)
+    assert seen[10][2] > seen[7][2] > seen[4][2]
+    assert int(round(seen[10][2] * real)) == real

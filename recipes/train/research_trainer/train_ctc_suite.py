@@ -2011,6 +2011,11 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-otr-keep-sched", default="",
                     help="online router: 'a:b' multiplies the first stage's keep linearly from a to b over training "
                     "(later stages keep their absolute budgets)")
+    ap.add_argument("--st-otr-stage-sched", default="",
+                    help="online router: every stage's ABSOLUTE keep share as a piecewise-linear function of training "
+                    "progress p = step / total steps, e.g. '0:0.2/0.07,0.6:0.2/0.07,1:0.9/0.9' (at each p: stage 1 / "
+                    "stage 2 / ... keeps; linear in between; 1.0 = that stage drops nothing; non-increasing across "
+                    "stages). Layers come from --st-otr-stages (or --st-otr-drop-layer). Empty = off")
     ap.add_argument("--st-otr-warmup-random", action="store_true",
                     help="online router: warmup steps route at the normal budget with uniform random scores instead "
                     "of training the full context (no full-length pass; bounds peak memory / max train length)")

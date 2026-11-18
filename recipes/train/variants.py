@@ -353,6 +353,7 @@ class SoftTokenOptions(VariantOptions):
     st_otr_task_onehot: int = 0
     st_otr_row_cap: float = 2.0
     st_otr_keep_sched: str = ""
+    st_otr_stage_sched: str = ""
     st_otr_mass_target: float = 0.0
     st_otr_max_keep_frac: float = 1.0
     st_otr_mod_layers: str = ""
@@ -1240,6 +1241,7 @@ def build_online_router(o: SoftTokenOptions, ctx: VariantContext, d_model: int) 
         task_onehot=o.st_otr_task_onehot,
         row_cap=o.st_otr_row_cap,
         keep_sched=o.st_otr_keep_sched,
+        stage_sched=o.st_otr_stage_sched,
         mass_target=o.st_otr_mass_target,
         max_keep_frac=o.st_otr_max_keep_frac,
         mod_layers=o.st_otr_mod_layers,

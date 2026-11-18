@@ -266,6 +266,13 @@ class OnlineRouterConfig:
     """Training-time budget schedule ``"a:b"``: the first stage's keep fraction is multiplied by a factor going
     linearly from ``a`` to ``b`` over training (e.g. ``1.33:0.67`` = more early, less late at about the same total);
     later stages divide their relative keep by it, so their ABSOLUTE budgets are unchanged. Empty = constant."""
+    stage_sched: str = ""
+    """Per-stage keep schedule over training, piecewise-linear in progress p = step / total_steps (the LR schedule's
+    progress), e.g. ``"0:0.2/0.07,0.6:0.2/0.07,1:0.9/0.9"``: at each listed p the ABSOLUTE keep share (of the row's
+    body tokens) of stage 1 / stage 2 / ..., linear in between, held flat outside the listed range. One value per stage
+    of ``stages`` (one value for a single ``drop_layer`` cut); keeps in (0, 1], non-increasing across stages at every
+    point; 1.0 = that stage drops nothing. Overrides the keeps in ``stages`` (their layers still apply). Exclusive with
+    ``keep_sched`` / ``wts`` / ``mass_target`` / ``later_mass_target`` / ``mod_layers``. Empty = off."""
     warmup_random: bool = False
     """Warmup steps (no fitted router yet) ROUTE at the normal budget with uniform random scores instead of training the
     full context: no full-length pass ever runs past the drop layer, so the warmup does not set the peak memory (max
@@ -473,6 +480,16 @@ class OnlineRouterConfig:
             a, _, b = self.keep_sched.partition(":")
             if not (float(a) > 0 and float(b) > 0):
                 raise ValueError(f"online router keep_sched must be 'a:b' with a, b > 0, got {self.keep_sched!r}")
+        if self.stage_sched:
+            pts = parse_stage_sched(self.stage_sched)
+            n_st = len(parse_stages(self.stages)) if self.stages else 1
+            if any(len(k) != n_st for _, k in pts):
+                raise ValueError(f"online router stage_sched needs {n_st} keep(s) per point, got {self.stage_sched!r}")
+            if self.drop_layer <= 0 and not self.stages:
+                raise ValueError("online router stage_sched needs the mid-stack drop (drop_layer > 0 or stages)")
+            if self.keep_sched or self.wts or self.mass_target > 0 or self.later_mass_target > 0 or self.mod_layers:
+                raise ValueError("online router stage_sched is exclusive with keep_sched / wts / mass_target / "
+                                 "later_mass_target / mod_layers")
         if self.per_task_key_tokens < 0:
             raise ValueError(f"online router per_task_key_tokens must be >= 0, got {self.per_task_key_tokens}")
         if self.wts:
@@ -654,6 +671,36 @@ def parse_stages(spec: str) -> List[Tuple[int, float]]:
     return out
 
 
+def parse_stage_sched(spec: str) -> List[Tuple[float, List[float]]]:
+    """``"0:0.2/0.07,1:0.9/0.9"`` -> ``[(0.0, [0.2, 0.07]), (1.0, [0.9, 0.9])]``; validated: p strictly increasing in
+    [0, 1], keeps in (0, 1] and non-increasing across stages at every point."""
+    out: List[Tuple[float, List[float]]] = []
+    for part in [x.strip() for x in spec.split(",") if x.strip()]:
+        p, _, ks = part.partition(":")
+        out.append((float(p), [float(k) for k in ks.split("/")]))
+    if not out:
+        raise ValueError(f"empty stage_sched {spec!r}")
+    ps = [p for p, _ in out]
+    if any(not 0.0 <= p <= 1.0 for p in ps) or any(b <= a for a, b in zip(ps, ps[1:])):
+        raise ValueError(f"stage_sched progress points must be strictly increasing in [0, 1], got {spec!r}")
+    for _, ks in out:
+        if len(ks) != len(out[0][1]) or any(not 0.0 < k <= 1.0 for k in ks) or any(b > a for a, b in zip(ks, ks[1:])):
+            raise ValueError(f"stage_sched keeps must be in (0, 1], non-increasing across stages, the same count at "
+                             f"every point, got {spec!r}")
+    return out
+
+
+def stage_sched_keeps(pts: List[Tuple[float, List[float]]], p: float) -> List[float]:
+    """Absolute per-stage keeps at progress ``p``: linear between the listed points, flat outside them."""
+    if p <= pts[0][0]:
+        return list(pts[0][1])
+    for (p0, k0), (p1, k1) in zip(pts, pts[1:]):
+        if p <= p1:
+            t = (p - p0) / (p1 - p0)
+            return [a + (b - a) * t for a, b in zip(k0, k1)]
+    return list(pts[-1][1])
+
+
 def parse_freeze_schedule(spec: str) -> List[Tuple[int, float]]:
     """``"4:0.25,7:0.5"`` -> ``[(4, 0.25), (7, 0.5)]`` (blocks frozen, share of the optimizer steps)."""
     out = []
@@ -734,8 +781,9 @@ class OnlineTokenRouter:
             prev_k, prev = k0, self
             for i, (l, k) in enumerate(rest, start=1):
                 # later stages: keep ``k`` of the ORIGINAL body = k / prev_k of the tokens entering; their own fit
+                # (stage_sched: they read the schedule from the root, so their own copy is cleared)
                 c = dataclasses.replace(cfg, drop_layer=l, keep_frac=min(1.0, k / prev_k), early_nograd=False,
-                                        seed=cfg.seed + 1009 * i, keep_first=0)
+                                        seed=cfg.seed + 1009 * i, keep_first=0, stage_sched="")
                 if lmt > 0:
                     c = dataclasses.replace(c, mass_target=lmt, max_keep_frac=lmk)
                 nxt = OnlineTokenRouter(c, doc_start_id=doc_start_id, doc_end_id=doc_end_id, eos_id=eos_id,
@@ -748,6 +796,7 @@ class OnlineTokenRouter:
             raise ValueError("online router use_gold needs the gold-fingerprint table")
         self.cfg = cfg
         self.wts = parse_wts(cfg.wts)
+        self._stage_sched = parse_stage_sched(cfg.stage_sched) if cfg.stage_sched else None
         self._root: "OnlineTokenRouter" = self
         for r in self.chain():
             r._root = self
@@ -835,6 +884,24 @@ class OnlineTokenRouter:
         T = max(1, int(self.total_steps or 1))
         t = min(1.0, max(0.0, (self.step - 1) / max(1, T - 1)))
         return float(a) + (float(b) - float(a)) * t
+
+    def sched_progress(self) -> float:
+        """stage_sched: training progress p = step / total_steps in [0, 1] (the root's counters)."""
+        r = self._root
+        if not r.total_steps:
+            raise RuntimeError("online router stage_sched needs total_steps (OnlineRouterCallback sets it)")
+        return min(1.0, max(0.0, float(r.step) / float(r.total_steps)))
+
+    def sched_keep(self) -> Optional[float]:
+        """stage_sched: this stage's keep share OF THE TOKENS ENTERING IT at this step (absolute keep of this stage
+        over the previous stage's absolute keep), or None without a schedule."""
+        pts = self._root._stage_sched
+        if pts is None:
+            return None
+        ks = stage_sched_keeps(pts, self.sched_progress())
+        i = self.stage_idx
+        self._stat("sched_abs_keep", ks[i])
+        return min(1.0, ks[0] if i == 0 else ks[i] / ks[i - 1])
 
     def dense_now(self) -> bool:
         """Whether this step trains uncompressed (warmup or a periodic dense step)."""
@@ -1093,6 +1160,9 @@ class OnlineTokenRouter:
             m_ = self.keep_mult()
             kf = min(1.0, kf * m_) if self.stage_idx == 0 else min(1.0, kf / m_)
             self._stat("keep_mult", m_)
+        sk = self.sched_keep()
+        if sk is not None:
+            kf = sk
         keep_cap = int(os.environ.get("OLMO_OTR_KEEP_CAP", "0") or 0) if self.stage_idx == 0 else 0
         if keep_cap > 0 and int(n_body.max()) > 0:
             # memscale: a kept-token BUDGET fixed in tokens (first cut only; the later stages keep a share of these),
