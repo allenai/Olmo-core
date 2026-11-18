@@ -1,5 +1,14 @@
 # keepfrac_len handoff
 
+## 2026-11-18 15:40 PT (8k gold-drop check, Prasann)
+- Asked: does gold dropping work at 8k like at 32k/64k? Scope (revised): `grJ` only (all rows), seeds 0 and 1, kl8k,
+  full epoch, seq-len 10,240. Beaker elp-kl8k-bkRPQTGH7X (sd0, 01M7RG89GT036G206PRPQTGH7X) and elp-kl8k-bk3M9X4FBD
+  (sd1, 01M7RG963FESHG1R6N3M9X4FBD). grJc was NOT submitted (launcher stopped before its first submit).
+- kl8k has gold_fingerprints.json and gdd_only_contradiction.json; gold share per task (row_info gold / n_docs):
+  8k 3.2% / 5.3% / 7.1% (contradiction / outlier / qdmatch_nq), 32k 0.9 / 1.6 / 1.9%, 64k 0.5 / 0.8 / 0.9%: all
+  < 0.5, so grJ drops documents on all three tasks (incl. qdmatch_nq).
+- Then: `[gold-doc-drop]` log counts per arm, score, fold 64k k70 (landed), record / log entry / ops rows.
+
 ## 2026-11-17 19:35 PT (takeover session, latest)
 - 64k seed 1 (k40/k20/k10) and 32k k70 seed 1 landed, scored (finalize.sh), record verdict + hub head + log entry
   updated, 20 new ops rows added (411 total for this study). Only 64k k70 sd0 is still running
