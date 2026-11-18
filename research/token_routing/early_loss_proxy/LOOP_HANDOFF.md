@@ -20,7 +20,7 @@
 - NEXT: read which rungs track dense at steps 300-488; take the cheapest that does and lower its cost in small moves
   (more arms between it and the first rung that lags); FLOP-matched 203 PF screens (--max-pf 203 --pf-points 50,100,150
   --steps 2000, smoke passed) for new mechanisms; second seed for any arm within 0.01 CE of dense at step 488.
-- Hub: sent loop_state.json to hub-reorg at 00:50; ask it again when hub_tab/ladder.json has finished arms.
+- Hub: message to hub-reorg NOT delivered at 00:55 (desktop host unreachable). Retry: ask it to rebuild the tab from hub_tab/loop_state.json (6 new running ideas, status, 3 log entries), mark the 3.0x best-so-far chart superseded, and add a ladder table from hub_tab/ladder.json once arms finish.
 
 # Auto-research loop: state file (updated 2026-11-17 12:05 PT)
 

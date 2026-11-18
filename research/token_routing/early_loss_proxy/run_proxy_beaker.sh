@@ -49,11 +49,12 @@ while IFS=$'\t' read -r NAME VARIANT LR SEED FLAGS; do
     --task mt4 --variant "$VARIANT" --model-family qwen3_5 --model-scale 4b \
     --run-name "$NAME" --base-checkpoint "$BASE" --data "$DATA" --work-dir "$LOC/work" \
     --save-folder "$SAVE" --seq-len $SEQLEN --epochs 1 --lr "$LR" --global-batch $GB --micro-batch-instances $MICRO \
-    --seed "$SEED" --no-compile --no-wandb --no-final-checkpoint $FLAGS > "$LOC/$NAME.log" 2>&1
-  RC=$?
+    --seed "$SEED" --no-compile --no-wandb --no-final-checkpoint $FLAGS 2>&1 \
+    | tee "$LOC/$NAME.log" | grep -a --line-buffered "^\[dense-probe\] step"   # live probe lines (peek_beaker.sh)
+  RC=${PIPESTATUS[0]}
   T1=$(date +%s)
   cp "$LOC/$NAME.log" "$OUT/$NAME.log"
-  grep -a "dense-probe\|flop_meter\|OutOfMemory\|CUDA out of memory" "$LOC/$NAME.log" | cut -c1-400 | head -n 40
+  grep -a "flop_meter\|OutOfMemory\|CUDA out of memory\|result /" "$LOC/$NAME.log" | cut -c1-400 | head -n 40
   [ $RC -ne 0 ] && tail -n 60 "$LOC/$NAME.log"
   DATA=$DATA SEQLEN=$SEQLEN NGPU=$NGPU GB=$GB MICRO=$MICRO RC=$RC "$PY" - "$OUT/$NAME.json" "$((T1 - T0))" <<'EOF'
 import json, os, socket, sys
