@@ -400,6 +400,28 @@
    "x_dense_ft_lower_bound": false
   },
   {
+   "run": "ds-ds-p-k25-b991-sd0",
+   "arm": "ds-p-k25-b991",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1183,
+   "pf": 986.2304302318308,
+   "ce": 0.09092199374827033,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0909
+   ],
+   "base_pf": 2806.118649978188,
+   "x_base": 2.845297167841962,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 3275.6725349902545,
+   "x_dense_ft": 3.3214068787354796,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
    "run": "bud-lo-r50to20-b991-sd0",
    "arm": "lo-r50to20-b991",
    "kind": "drop",

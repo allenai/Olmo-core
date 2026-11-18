@@ -42,6 +42,9 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 11:45 DOCSUB POSITIVE (agent adf5d3eb50381a0be, branch loop/docsub @ 041affd9f, flags --longpos-docsub-keep 0.25 [+ --longpos-docsub-sched a:b]): ds-p-k25 0.128 @465 PF
+  (x2.75) and 0.091 @986 PF (x2.85) vs plain x2.34 / x2.08. Only 16k rows subsampled (gold kept, 46% of tokens), 0.83 PF/step. k50 / ramps no gain, hurt outlier.
+  Agent RESUMED 11:45 for: seed 1 at 495 + 991, k25 at 1,980 PF on mtb16kx16 (4 GPUs), k10 at 495, length threshold 6k and 3k at 495 (+991 if better). Wait for its report.
 - 11:00 SEED MEANS (2 seeds): lo-p50-20-7 x2.34 @495 (0.136 / 0.133), x2.08 @991 (0.100 / 0.100), x2.38 @1,980 (0.072 / 0.076); dense b495 0.189 / 0.193,
   denselora b991 0.139 / 0.147; denselora-x4 sd1 still running. HEADLINE CONFIRMED on two seeds: ~2.1-2.4x. ds agent follow-up (991 PF) not seen yet.
 - 10:00 recipe-b3964 (x16) 0.074 @3,957 PF = x1.22: the 20/7 recipe DECAYS with data (1.8-2.2x at <= 1,980 PF), 50/20 and 50/20/7 hold ~2x. fz7 closed
