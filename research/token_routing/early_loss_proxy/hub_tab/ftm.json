@@ -43,16 +43,17 @@
    ]
   },
   {
-   "run": "x4-denselora-x4-sd0",
+   "run": "x4-denselora-x4-sd0+1",
    "arm": "denselora-x4",
    "kind": "dense_lora",
    "pool": "mtb16kx4",
    "steps": 642,
-   "pf": 1962.9764123291832,
-   "ce": 0.10097499140720174,
-   "seeds": 1,
+   "pf": 1964.9606559816652,
+   "ce": 0.10295958086935571,
+   "seeds": 2,
    "ce_seeds": [
-    0.101
+    0.101,
+    0.1049
    ]
   },
   {
@@ -301,8 +302,8 @@
    "ce_seeds": [
     0.0821
    ],
-   "base_pf": 3837.9872676000064,
-   "x_base": 1.9478794587196353,
+   "base_pf": 3849.0945704319347,
+   "x_base": 1.9535167069749224,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -323,8 +324,8 @@
    "ce_seeds": [
     0.0825
    ],
-   "base_pf": 3786.158861023628,
-   "x_base": 1.9121531475834483,
+   "base_pf": 3801.902848171744,
+   "x_base": 1.920104455409091,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -345,8 +346,8 @@
    "ce_seeds": [
     0.0825
    ],
-   "base_pf": 3781.8525002359493,
-   "x_base": 2.146794912522574,
+   "base_pf": 3797.9790610875034,
+   "x_base": 2.155949267112141,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -367,8 +368,8 @@
    "ce_seeds": [
     0.088
    ],
-   "base_pf": 3115.9610419737896,
-   "x_base": 1.5795797982244506,
+   "base_pf": 3185.912831749581,
+   "x_base": 1.615040586241714,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -389,8 +390,8 @@
    "ce_seeds": [
     0.0881
    ],
-   "base_pf": 3097.2532367241056,
-   "x_base": 1.5656141877999366,
+   "base_pf": 3168.5525925219176,
+   "x_base": 1.6016549227629309,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -411,8 +412,8 @@
    "ce_seeds": [
     0.0909
    ],
-   "base_pf": 2806.118649978188,
-   "x_base": 2.845297167841962,
+   "base_pf": 2897.0943729968762,
+   "x_base": 2.9375430773474136,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -433,8 +434,8 @@
    "ce_seeds": [
     0.0975
    ],
-   "base_pf": 2224.534773104545,
-   "x_base": 2.2505757451489266,
+   "base_pf": 2346.6166926928895,
+   "x_base": 2.3740867868591464,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -456,8 +457,8 @@
     0.0997,
     0.0995
    ],
-   "base_pf": 2059.6532499153614,
-   "x_base": 2.083700896417446,
+   "base_pf": 2188.2457719513827,
+   "x_base": 2.213794810745039,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -478,8 +479,8 @@
    "ce_seeds": [
     0.1003
    ],
-   "base_pf": 2007.3429474319269,
-   "x_base": 0.996055927737698,
+   "base_pf": 2137.7593409817696,
+   "x_base": 1.0607693450616695,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -500,8 +501,8 @@
    "ce_seeds": [
     0.1008
    ],
-   "base_pf": 1977.8508961563184,
-   "x_base": 2.0050508584219378,
+   "base_pf": 2109.2419840570115,
+   "x_base": 2.138248873548481,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -522,8 +523,8 @@
    "ce_seeds": [
     0.1049
    ],
-   "base_pf": 1853.9764902505265,
-   "x_base": 1.7175633953810439,
+   "base_pf": 1903.9423989665881,
+   "x_base": 1.7638528797833308,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -544,8 +545,8 @@
    "ce_seeds": [
     0.1125
    ],
-   "base_pf": 1656.9831269230538,
-   "x_base": 1.6685278176226415,
+   "base_pf": 1678.0910655710452,
+   "x_base": 1.689782821511695,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -566,8 +567,8 @@
    "ce_seeds": [
     0.1153
    ],
-   "base_pf": 1590.8082817478466,
-   "x_base": 1.2334962891465608,
+   "base_pf": 1602.948193077279,
+   "x_base": 1.2429094508375287,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -588,8 +589,8 @@
    "ce_seeds": [
     0.117
    ],
-   "base_pf": 1552.8796006579316,
-   "x_base": 1.5434742520796014,
+   "base_pf": 1560.0529128945354,
+   "x_base": 1.5506041176111174,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -612,8 +613,8 @@
     0.1192,
     0.12
    ],
-   "base_pf": 1542.5897225947967,
-   "x_base": 1.2154089406764765,
+   "base_pf": 1548.4378842227816,
+   "x_base": 1.2200167166943392,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -634,8 +635,8 @@
    "ce_seeds": [
     0.1175
    ],
-   "base_pf": 1541.132390998564,
-   "x_base": 0.9882844999895828,
+   "base_pf": 1546.793650026043,
+   "x_base": 0.9919149048658688,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -656,8 +657,8 @@
    "ce_seeds": [
     0.1177
    ],
-   "base_pf": 1537.5490053186863,
-   "x_base": 1.0753310160106428,
+   "base_pf": 1542.7515160769112,
+   "x_base": 1.078969547959931,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -678,8 +679,8 @@
    "ce_seeds": [
     0.1179
    ],
-   "base_pf": 1531.2862552194915,
-   "x_base": 0.7979912134788553,
+   "base_pf": 1535.6898101758795,
+   "x_base": 0.8002860150884767,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -700,8 +701,8 @@
    "ce_seeds": [
     0.1188
    ],
-   "base_pf": 1511.21382675403,
-   "x_base": 1.4180830003619949,
+   "base_pf": 1513.0808900338004,
+   "x_base": 1.4198350030572915,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -722,8 +723,8 @@
    "ce_seeds": [
     0.1189
    ],
-   "base_pf": 1508.9806520374516,
-   "x_base": 1.265997076528933,
+   "base_pf": 1510.5678089487003,
+   "x_base": 1.2673286615342945,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
@@ -1905,24 +1906,25 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "x4-denselora-x4-sd0",
+   "run": "x4-denselora-x4-sd0+1",
    "arm": "denselora-x4",
    "kind": "dense_lora",
    "pool": "mtb16kx4",
    "steps": 642,
-   "pf": 1962.9764123291832,
-   "ce": 0.10097499140720174,
-   "seeds": 1,
+   "pf": 1964.9606559816652,
+   "ce": 0.10295958086935571,
+   "seeds": 2,
    "ce_seeds": [
-    0.101
+    0.101,
+    0.1049
    ],
-   "base_pf": 1962.9764123291834,
+   "base_pf": 1964.9606559816657,
    "x_base": 1.0000000000000002,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,
-   "dense_ft_pf": 2690.5568470266403,
-   "x_dense_ft": 1.3706516441703656,
+   "dense_ft_pf": 2588.0437690459976,
+   "x_dense_ft": 1.3170969918240165,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1939,8 +1941,8 @@
     0.1137,
     0.1195
    ],
-   "base_pf": 1561.6157594103454,
-   "x_base": 0.7879572688925435,
+   "base_pf": 1569.921630739488,
+   "x_base": 0.7921482304967958,
    "x_base_exact": true,
    "x_base_lower_bound": false,
    "x_base_upper_bound": false,

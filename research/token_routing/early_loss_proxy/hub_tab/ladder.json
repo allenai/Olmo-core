@@ -6014,31 +6014,43 @@
   {
    "run": "x4-denselora-x4-sd1",
    "baseline": null,
-   "done": false,
+   "done": true,
    "eval_size": 320,
-   "steps": 480,
-   "pf": null,
-   "cost_vs_dense_ft": null,
-   "ce16k_last": 0.11659499999999998,
+   "steps": 642,
+   "pf": 1966.9448996341473,
+   "cost_vs_dense_ft": 0.7546249020280479,
+   "ce16k_last": 0.10494417033150967,
    "track": [
     [
      160,
-     0.17618499999999998,
+     0.17619458617409692,
      null
     ],
     [
      320,
-     0.14275500000000002,
+     0.14276412825129228,
      null
     ],
     [
      480,
-     0.11659499999999998,
+     0.11660437809769064,
+     null
+    ],
+    [
+     642,
+     0.10494417033150967,
      null
     ]
    ],
    "vs_same": null,
-   "vs_dense_ft": null
+   "vs_dense_ft": {
+    "ref_step": 488,
+    "level": 0.11371779909313773,
+    "x": 1.2466089723815241,
+    "final": true,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
   },
   {
    "run": "x4-denselora-x4full-sd0",
@@ -6451,7 +6463,14 @@
      null
     ]
    ],
-   "vs_same": null,
+   "vs_same": {
+    "ref_step": 642,
+    "level": 0.10494417033150967,
+    "x": 2.147744535825133,
+    "final": true,
+    "ref_final": 0.10494417033150967,
+    "ref_steps": 642
+   },
    "vs_dense_ft": {
     "ref_step": 488,
     "level": 0.11371779909313773,

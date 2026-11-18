@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 12:00",
+   "text": "Dense LoRA seed 1 at 1,965 PF finished: two-seed mean 0.103 (0.101 / 0.105). With every point at 495, 991 and 1,980 PF on two seeds, LoRA 50%/20%/7% is 2.38x at 1,980 PF. Asked the document-subsampling agent to add the control dense LoRA + document keep 25% at 495 and 991 PF, since document dropping is also available to dense training."
+  },
+  {
    "t": "11-18 11:45",
    "text": "Document-subsampling agent reported: keep 25% of distractor documents on 16k rows + the 50%/20%/7% token drop gives 0.128 at 465 PF (2.75x) and 0.091 at 986 PF (2.85x), against 2.34x and 2.08x for the token drop alone. Keep 50% and ramps give nothing and hurt outlier. Follow-up launched through the same agent: seed 1, 1,980 PF on the 16x pool, keep 10%, and subsampling 8k and 4k rows too."
   },
