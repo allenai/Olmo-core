@@ -1219,6 +1219,7 @@ def build_and_fit(opts: argparse.Namespace) -> None:
             "stretch_max": min(int(opts.longpos_stretch_max), int(opts.seq_len)),
             "stretch_short_max": int(opts.longpos_stretch_short_max), "stretch_prob": float(opts.longpos_stretch_prob),
             "docsub_keep": float(opts.longpos_docsub_keep), "docsub_min_len": int(opts.longpos_docsub_min_len),
+            "docsub_sched": str(opts.longpos_docsub_sched or ""), "progress": 0.0,
             "gold_table": lp_gold, "log_every": 50,
         }
         print(f"[longpos] enabled: { {k: v for k, v in model._longpos.items() if k != 'gold_table'} } "
@@ -1238,6 +1239,18 @@ def build_and_fit(opts: argparse.Namespace) -> None:
     for variant, vopts in active:
         for cb_name, cb in variant.extra_callbacks(vopts, vctx).items():
             trainer_config = trainer_config.with_callback(cb_name, cb)
+    if opts.longpos_docsub_sched:
+        # longpos doc-subsampling schedule: training progress on the LR schedule's step count (works with --max-tokens)
+        from olmo_core.train.callbacks.callback import Callback as _LPCB
+
+        class _LongposProgress(_LPCB):
+            def pre_step(self, batch):
+                lp = getattr(self.trainer.train_module.model, "_longpos", None)
+                T = int(self.trainer.max_steps or 0)
+                if lp is not None and T:
+                    lp["progress"] = min(1.0, max(0.0, (int(self.trainer.global_step) - 1) / max(1, T - 1)))
+
+        trainer_config = trainer_config.with_callback("longpos_progress", _LongposProgress())
     # Method-aware training FLOPs for every arm (records/flop-scaling-ffn-kv-plan.md §5).
     trainer_config = trainer_config.with_callback(
         "flop_meter",
@@ -2256,6 +2269,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--longpos-docsub-keep", type=float, default=-1.0,
                     help="longpos: position-preserving doc subsampling of long rows; mean share of NON-gold documents "
                     "kept (row share ~ U[k/2, min(1, 1.5k)]); gold documents always kept. < 0 = off")
+    ap.add_argument("--longpos-docsub-sched", default="",
+                    help="longpos doc subsampling: 'a:b' multiplies --longpos-docsub-keep linearly from a to b over "
+                    "training (progress on the LR schedule's steps; clamped to <= 1, which keeps rows whole). '' = constant")
     ap.add_argument("--longpos-docsub-min-len", type=int, default=12000,
                     help="longpos doc subsampling: only rows with real length >= this are subsampled")
     ap.add_argument("--longpos-sidecar", default=None, help="longpos gold sidecar (default <data>/gold_fingerprints.json)")

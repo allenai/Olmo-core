@@ -14,7 +14,9 @@ Two opt-in transforms of a padded one-example-per-row training batch, applied by
   fingerprint sidecar; every gold document kept; a share ``r ~ U[keep/2, min(1, 1.5 keep)]`` of the
   non-gold documents kept). Surviving tokens keep their ORIGINAL position ids, so the row still spans
   its full length. Rows whose fingerprint misses the sidecar stay whole; reorder rows (every
-  document gold) stay whole by construction.
+  document gold) stay whole by construction. ``docsub_sched = "a:b"`` multiplies the keep share
+  linearly from a to b over training (e.g. keep 0.25 with 1:4 = 25% -> 100%); at a keep share >= 1
+  rows stay whole. The per-row share is ``r ~ U[k - h, k + h]``, ``h = min(k/2, 1 - k)`` (mean k).
 
 Returns ``(input_ids, labels, position_ids)``; ``position_ids`` is ``None`` when no row changed.
 """
@@ -36,6 +38,18 @@ def _doc_spans(row: List[int], ds: int, de: int) -> List[Tuple[int, int]]:
             spans.append((open_at, i))
             open_at = None
     return spans
+
+
+def docsub_keep_now(cfg: Dict[str, Any]) -> float:
+    """The mean non-gold document keep share at this point of training: ``docsub_keep`` times the
+    ``docsub_sched`` multiplier ``a:b`` (linear in training progress ``(step - 1) / (max_steps - 1)``,
+    the LR schedule's step count; set per step by the trainer callback), clamped to [0, 1]."""
+    k = float(cfg["docsub_keep"])
+    sched = cfg.get("docsub_sched") or ""
+    if sched:
+        a, _, b = sched.partition(":")
+        k *= float(a) + (float(b) - float(a)) * float(cfg.get("progress", 0.0))
+    return min(1.0, max(0.0, k))
 
 
 def apply_longpos(
@@ -69,8 +83,9 @@ def apply_longpos(
             else:
                 gold_set = {int(g) for g in gold}
                 non = [i for i in range(len(spans)) if i not in gold_set]
-                k = float(cfg["docsub_keep"])
-                r = rng.uniform(k / 2.0, min(1.0, 1.5 * k))
+                k = docsub_keep_now(cfg)
+                h = min(k / 2.0, 1.0 - k)  # == U[k/2, 1.5k] for k <= 2/3; mean exactly k, k >= 1 keeps all
+                r = rng.uniform(k - h, k + h)
                 kept_non = set(rng.sample(non, int(round(r * len(non))))) if non else set()
                 drop = [spans[i] for i in range(len(spans)) if i not in gold_set and i not in kept_non]
                 if drop:
@@ -113,7 +128,8 @@ def apply_longpos(
         if st["stretched"]:
             msg += f" mean_span={st['span_sum'] / st['stretched']:.0f}"
         if st["docsub"] or st["docsub_miss"]:
-            msg += (f" docsub={st['docsub']} miss={st['docsub_miss']} tok_kept={st['tok_out'] / max(1, st['tok_in']):.3f}"
+            msg += (f" keep_now={docsub_keep_now(cfg):.3f} progress={float(cfg.get('progress', 0.0)):.3f}"
+                    f" docsub={st['docsub']} miss={st['docsub_miss']} tok_kept={st['tok_out'] / max(1, st['tok_in']):.3f}"
                     f" docs_kept={st['docs_out'] / max(1, st['docs_in']):.3f}")
         print(msg, flush=True)
     if not changed:
