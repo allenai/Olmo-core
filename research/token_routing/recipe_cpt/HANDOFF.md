@@ -50,7 +50,7 @@ CE per kept target on training rows (⚠ 320 training rows, not held out).
 | 242 | 124.9M | 1.4206 | 3.18 | 1.2584 |
 | 484 | 249.8M | 1.4139 | 3.17 | 1.2505 |
 | 968 | 499.6M | 1.4057 | 3.26 | |
-| 1936 | 999.2M | | | |
+| 1936 | 999.2M | 1.4051 | 3.14 | |
 | final (1938) | 1.000B | | | |
 
 ## Next (in order)
