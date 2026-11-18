@@ -25,8 +25,8 @@ rows/task, step cost ~0.22x dense, 8k-only FLOPs-to-match (FTM) 4.6x / 3.6x / >=
 - ⚠ = an eval or probe with fewer than 500 examples.
 
 **Pointers.**
-- `log: "..."` is a title prefix of an entry in `research/token_routing/ds64_fast8k/experiment_log.json` (this
-  branch has it; the newest copy is on `prasann/flopdrop_clean`).
+- `log: "..."` is a title prefix of an entry in `research/token_routing/ds64_fast8k/experiment_log.json` (in this
+  repo, kept current by the FLOP-drop main agent).
 - A `records/` path with no branch exists on this branch. Otherwise the branch named holds it.
 - `[proxy]` rows point to `research/token_routing/early_loss_proxy/hub_tab/ideas.json` (by `id`) and
   `LOOP_HANDOFF.md`, both on branch `claude/early-loss-proxy-d6e886`, plus the per-idea branch `loop/<id>`

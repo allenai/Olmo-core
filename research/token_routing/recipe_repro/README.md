@@ -238,8 +238,9 @@ count, so `--gpus 4` is safe when 2-GPU slots are scarce.
 
 **Verified so far:**
 
-- GPU smoke of the recipe and dense arms on this branch, and one tiny Beaker launch of the `fast8k` recipe command:
-  **(not yet run; see HANDOFF.md)**.
+- The `fast8k` recipe command ran end to end on Beaker at the smallest budget (f488, 2026-11-17): 15 min on 2 H100s,
+  86.5 PF, keep fractions 0.205 / 0.079, peak memory 27 GiB, and the export was written. Its evals, and the dense
+  f488 run, are **(not yet run to completion; see HANDOFF.md)**.
 - Every command above passes as a `--dry` config (all seven mix x arm combinations, and the eval commands).
 
 ### 4b. Eval
