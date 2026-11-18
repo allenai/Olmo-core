@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 05:10",
+   "text": "Equal-FLOP runs: three finished at 1,982 PF on the 4x pool with 16k CE 0.082-0.088 against dense full fine-tune 0.114 / 0.119 at the same FLOPs. Launched 11 budget-matched runs with complete schedules at 495 and 991 PF (dense, dense LoRA, recipe 20%/7%, 10%/3%, 50%/20%/7%, 50%/20%, full fine-tune 50%/20%) so FLOPs-to-match can be read against dense's own budget curve. One-epoch closures: gradient compensation dropped (worse at 20%/7%, neutral at 50%/20%); deeper and four-stage pyramids worse than 50%/20%/7%; a same-seed rerun of the ramp gave 0.120 against 0.113, so one-epoch differences under about 0.007 are noise."
+  },
+  {
    "t": "11-18 04:40",
    "text": "Equal-FLOP runs on the 4x pool, mid-run: every drop arm is far below dense at equal cumulative FLOPs (LoRA 50%/20% 0.091 at 1,250 PF against dense 0.135-0.142; the 20%/7% recipe passes dense's one-epoch final loss at about 800 PF, LoRA 50%/20% at about 900 PF, against 1,982 PF for dense). Launched dense full fine-tune and dense LoRA over the whole 4x pool (1,952 steps, 4 GPUs) to extend the dense curve to 7,930 PF. One-epoch results: random token choice 0.132 against the router's 0.119-0.126; hold-then-ramp schedule 0.120 at 0.46x; ramp + dense tail 0.115 at 0.65x; first cut at block 3 with a ramp 0.132; gradient compensation worse than none at 20%/7%. Dense LoRA seed 1: 0.118."
   },

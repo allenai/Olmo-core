@@ -42,6 +42,15 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 05:10 x4 finished at ~1,975 PF: ft-r50to20-x4 0.082, ft-c7ramp-x4 0.088, lo-c16k50-x4 0.088 (dense FT 0.114/0.119 at 1,982 PF). Running: lo-r50to20-x4,
+  recipe-x4, lo-p50-20-7-x4, dense-x4 (976), dense-x4full, denselora-x4, denselora-x4full.
+  BUDGET-MATCHED (tag bud, pool mtb16kx4, --max-tokens so each run has a complete schedule): B=991 PF: dense-b991 (244 steps), denselora-b991 (323),
+  recipe-b991 (1,094), lo-r10to3-b991 (1,304; PF/step 0.76 is a guess, check the meter), lo-p50-20-7-b991 (841), lo-r50to20-b991 (752), ft-r50to20-b991 (557);
+  B=495: dense-b495 (122), recipe-b495 (547), lo-p50-20-7-b495 (420), lo-r50to20-b495 (376). TODO: ftm.py = final loss vs budget per arm, FLOPs-to-match against
+  dense's budget curve (495, 991, 1,982 [w1 dense 0.114/0.119], 3,964 [dense-x4], 7,928 [dense-x4full]); add tag bud to ladder.py SRC.
+  One-epoch noise: ks-ft-c7ramp (same config + seed as w1-ft-c7ramp, new flag) 0.120 vs 0.113 -> differences < ~0.007 at one epoch are noise.
+  CLOSED: gradcomp (hurts at 20/7: 0.151-0.160 vs 0.138; neutral at 50/20: 0.121), lo-p50-10-5 0.132, lo-q50-30-15-7 0.129 (worse than 50/20/7: 0.123/0.121).
+  ks agent (adb93081e36fd6262) still has ks-ft-lo10h50 running; gc agent (ae04a33f56958de1a) has gc-r50to20-invmass running.
 - 04:50 hub v124 (ladder + equal-FLOP tables). Data agent a12e472e83534956c RESUMED to build mtb16kx16 (124,928 rows, 7,808 steps; x8 if qdmatch_nq runs out)
   on mooney -> sneetches + weka, in this worktree/branch. When staged: run recipe (0.22x) and lo-r50to20 / lo-p50-20-7 at 1,982 PF and at ~4,000-7,900 PF on it.
 - 04:40 x4 mid-run (python3 eqflop.py --json hub_tab/eqflop.json = equal-PF table; live PF = steps x COST table in eqflop.py): cheap arms far below dense at

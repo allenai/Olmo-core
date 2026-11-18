@@ -13,7 +13,7 @@ import glob, json, os, re, sys
 import numpy as np
 
 SRC = [p for pat in ("/tmp/claude-3018/elp_beaker_results/v3", "/tmp/claude-3018/elp_beaker_results/w[0-9]*",
-                     "/tmp/claude-3018/elp_beaker_results/x4", "/tmp/claude-3018/elp_beaker_results/sbw", "/tmp/claude-3018/elp_beaker_results/ks", "/tmp/claude-3018/elp_beaker_results/gc",
+                     "/tmp/claude-3018/elp_beaker_results/x4", "/tmp/claude-3018/elp_beaker_results/sbw", "/tmp/claude-3018/elp_beaker_results/ks", "/tmp/claude-3018/elp_beaker_results/gc", "/tmp/claude-3018/elp_beaker_results/bud",
                      "/net/sneetches/data/prasann/early_loss_proxy/results/w[0-9]*",
                      "/net/mooney/data/prasann/early_loss_proxy/results/w[0-9]*") for p in sorted(glob.glob(pat))]
 W16 = {"gen16k": 48, "rung16k": 32}
