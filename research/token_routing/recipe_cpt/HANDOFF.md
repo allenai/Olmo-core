@@ -1,6 +1,6 @@
 # recipe_cpt handoff (current state; keep this file current)
 
-Updated 2026-11-17 17:42 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
+Updated 2026-11-17 18:55 PT. Branch `claude/recipe-cpt-q35-4b` (worktree `.claude/worktrees/recipe-cpt-q35-4b`), cut
 from `origin/claude/early-loss-proxy-d6e886` @ d52756c12. Design and smoke numbers: `README.md`.
 
 ## Running (Beaker, ai2/flex2, budget ai2/oe-other, urgent, jupiter, 1 node x 8 H100)
@@ -13,6 +13,12 @@ from `origin/claude/early-loss-proxy-d6e886` @ d52756c12. Design and smoke numbe
 Both queued ~35-45 min on jupiter (no whole 8-GPU node free, 30 urgent node-sized jobs ahead) and started
 2026-11-18 01:01 UTC (17:01 PT). Measured in the run: recipe 20.4k tok/s/GPU, ETA ~19:00 PT; dense 8.0k tok/s/GPU,
 ETA ~21:30 PT.
+
+**Recipe run, 18:50 PT:** all 1,938 steps trained, then it crashed (gloo "Connection reset by peer", the known
+end-of-run crash) before the final export. The step-1936 async save started 13 s before the crash. Relaunched with
+`--resume` into the same folder: Beaker 01M7P93PVEW7CGMJJHM8FB62F4 (minRuntime 1h). The dense run may crash the same
+way at its end; relaunch it the same way:
+`launch_recipe_cpt.py --arms dense --resume --min-runtime 1h launch`.
 
 Step-242 export + dev-CE jobs are already queued (WAITMAX 1 h): recipe 01M7P31BY9F7YMYMBQE1ARXANK, dense
 01M7P31FCKSZ5GA4YXSX4FYJ38 (ops ids `rcpt-post-{recipe,dense}-u1B-step242`).
