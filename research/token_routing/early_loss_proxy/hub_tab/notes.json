@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 06:05",
+   "text": "16x pool finished (mtb16kx16: 124,928 rows, 7,808 steps; contains every 4x-pool row; 0 prompt overlap with held-out sets; 12 contradiction and 12 outlier gen16k held-out rows have a gold item appearing as training filler). Launched on it (4 GPUs each, complete schedules): recipe 20%/7% and 10%/3% at 1,982 PF; dense LoRA, recipe, 50%/20%/7% and 50%/20% at 3,964 PF. The old recipe finished the whole 4x pool: 0.083 at 1,762 PF. New scorer ftm.py: FLOPs-to-match of every finished run against the Pareto frontier of the dense runs (dense full fine-tune and dense LoRA at every budget)."
+  },
+  {
    "t": "11-18 05:30",
    "text": "Equal FLOPs (about 1,982 PF) on the 4x pool, finished: LoRA 50%/20% 0.078, full fine-tune 50%/20% 0.082, ramp 0.088, LoRA 50% after block 16 0.088; dense LoRA with more rows (642 steps) 0.101; dense full fine-tune one epoch 0.114 / 0.119. The baseline at this budget is therefore dense LoRA on more rows (0.101), and dropping improves on it by 0.013-0.023."
   },
