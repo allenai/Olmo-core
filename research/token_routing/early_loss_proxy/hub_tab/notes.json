@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 01:40",
+   "text": "First ladder results (full fine-tune + drop, seed 0, 16k held-out CE at step 488, 320 rows): keep 50% after block 16 0.118 at 0.72x dense per step; keep 50% after block 7 0.121 at 0.60x; keep 50% then 20% 0.126 at 0.44x; keep 20% then 7% 0.138 at 0.30x. Dense LoRA is 0.121 at 0.76x; the dense full fine-tune reference is still running. Launched a seed-1 dense full fine-tune and seed-1 repeats of the two cheapest arms on sneetches, and a data agent building a 4x-row pool (mtb16kx4) for equal-FLOP tests with more rows."
+  },
+  {
    "t": "11-18 00:45",
    "text": "Wave 1 launched: 13 Beaker jobs and 4 jobs on sneetches (2 GPUs each), all full epoch (488 steps; the re-mix reference 1,464) with probes at steps 50-488 on heldout_v3. Arms: dense full fine-tune (reference), dense full fine-tune on the 80/20 re-mix x3; full fine-tune + drop at 20%/7%, 50%/20%, 50% after block 7, 50% after block 16; LoRA + drop at 50%/20% and 50% after block 16; recipe and full-fine-tune drop with every 4th step dense or the last 20% dense; keep ramp 20% to 90%; adaptive keep covering 99 / 95 / 90% of predicted gradient mass. Agent started on dense-forward / sparse-backward (branch loop/sparsebwd)."
   },

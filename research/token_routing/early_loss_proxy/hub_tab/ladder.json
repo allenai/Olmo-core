@@ -659,14 +659,33 @@
    "vs_dense_ft": null
   },
   {
-   "run": "w1-ft-c16k50-sd0",
+   "run": "w1-dense-sd1",
    "baseline": null,
    "done": false,
    "eval_size": 320,
-   "steps": 300,
-   "pf": 884.0696261520504,
-   "cost_vs_dense_ft": 0.7258371314877262,
-   "ce16k_last": 0.14293818294463562,
+   "steps": 50,
+   "pf": 201.7397597425705,
+   "cost_vs_dense_ft": 0.9937919199141404,
+   "ce16k_last": 0.2569138891994953,
+   "track": [
+    [
+     50,
+     0.2569138891994953,
+     null
+    ]
+   ],
+   "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "w1-ft-c16k50-sd0",
+   "baseline": null,
+   "done": true,
+   "eval_size": 320,
+   "steps": 488,
+   "pf": 1429.83786613244,
+   "cost_vs_dense_ft": 0.7216737998326537,
+   "ce16k_last": 0.11765413923640153,
    "track": [
     [
      50,
@@ -692,6 +711,16 @@
      300,
      0.14293818294463562,
      null
+    ],
+    [
+     400,
+     0.12816330386922345,
+     null
+    ],
+    [
+     488,
+     0.11765413923640153,
+     null
     ]
    ],
    "vs_same": null,
@@ -700,12 +729,12 @@
   {
    "run": "w1-ft-c7k50-sd0",
    "baseline": null,
-   "done": false,
+   "done": true,
    "eval_size": 320,
-   "steps": 400,
-   "pf": 969.9535553325512,
-   "cost_vs_dense_ft": 0.5972620414609306,
-   "ce16k_last": 0.12769844577633194,
+   "steps": 488,
+   "pf": 1181.713323325719,
+   "cost_vs_dense_ft": 0.5964393338274848,
+   "ce16k_last": 0.1206658171453455,
    "track": [
     [
      50,
@@ -735,6 +764,11 @@
     [
      400,
      0.12769844577633194,
+     null
+    ],
+    [
+     488,
+     0.1206658171453455,
      null
     ]
    ],
@@ -837,6 +871,37 @@
     ]
    ],
    "vs_same": null,
+   "vs_dense_ft": null
+  },
+  {
+   "run": "w1-ft-r50to20-sd1",
+   "baseline": "w1-dense-sd1",
+   "done": false,
+   "eval_size": 320,
+   "steps": 100,
+   "pf": 180.445352545511,
+   "cost_vs_dense_ft": 0.4444466811465789,
+   "ce16k_last": 0.2133391993411351,
+   "track": [
+    [
+     50,
+     0.27289745751186273,
+     0.2569138891994953
+    ],
+    [
+     100,
+     0.2133391993411351,
+     null
+    ]
+   ],
+   "vs_same": {
+    "ref_step": 50,
+    "level": 0.2569138891994953,
+    "x": 1.760151062221372,
+    "final": true,
+    "ref_final": 0.2569138891994953,
+    "ref_steps": 50
+   },
    "vs_dense_ft": null
   }
  ],

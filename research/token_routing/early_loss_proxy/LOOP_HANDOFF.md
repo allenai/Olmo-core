@@ -17,6 +17,10 @@
   ft-c7k50 (0.60x) 0.128 at step 400, ft-c16k50 (0.73x) 0.143 at step 300, still running. Dense FT reference not in yet.
   Freed 4 sneetches GPUs -> slurm 5202886 (dense FT seed 1, ~90 min) and 5202887 (ft-r50to20 sd1 then ft-r20to7 sd1).
   Beaker jobs launched before 01:25 do not stream probe lines (results only when a run ends); later launches do (peek_beaker.sh <tag>).
+- 01:40: all four sd0 ladder arms DONE. 16k CE at step 488 / step cost: ft-c16k50 0.118 / 0.72x, ft-c7k50 0.121 / 0.60x,
+  ft-r50to20 0.126 / 0.44x, ft-r20to7 0.138 / 0.30x (dense LoRA 0.121 / 0.76x). hub_tab/ladder.json written.
+- Agent pool4x (a12e472e83534956c, works in THIS worktree/branch: pull --rebase before pushing): builds mtb16kx4 (31,232 rows,
+  1,952 steps) on mooney -> sneetches + weka, for equal-FLOP "more rows" tests of cheap arms against dense FT one epoch.
 - Agent sparsebwd (ad0d4e2aae6f7333a, branch loop/sparsebwd, Beaker tag sbw): dense forward, gradients only through kept tokens.
 - ft-* arms = softtoken, LR 5e-6, RECIPE without the three --st-otr-early-lora* flags (full fine-tune + drop, 0.30x dense/step).
 - Scoring: ladder.py (same-adapter dense baseline: ft-* -> w1/dense, LoRA arms -> v3/denselora, *-mix80x3 -> w1/dense-mix80x3).
