@@ -246,5 +246,13 @@
   "what": "The four tasks respond differently to dropping: the aggressive 20% / 7% budget is the best arm on outlier (3-4x per task) but loses on reorder, where every document is needed (1.2-1.7x, fading with data), and reorder is 60-70% of the mean loss; the gentler 50% / 20% / 7% budget holds about 2x on reorder. Give each task its own keep shares in the mixed batch: first hand-set as an existence test at 991 PF, then set online so that every task loses the same share of predicted gradient mass.",
   "status": "running",
   "result": ""
+ },
+ {
+  "id": "selbp",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Skip the backward pass on rows already fitted",
+  "what": "By 1,980 PF contradiction and outlier rows are at 0.01-0.03 loss while reorder carries most of what is left, so a growing share of the backward FLOPs goes to rows with almost no gradient. Every row still gets the cheap dropped forward; the backward runs only on rows whose training loss is above a running quantile (or sampled in proportion to loss), and the saved FLOPs buy more rows. Unlike the other step-cost cuts, the saving should grow with the budget. Budget-matched at 991 and 1,980 PF on top of the 50% / 20% / 7% token drop.",
+  "status": "running",
+  "result": ""
  }
 ]
