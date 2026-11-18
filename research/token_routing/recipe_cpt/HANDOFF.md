@@ -53,6 +53,8 @@ relaunch: `python research/token_routing/recipe_cpt/launch_recipe_cpt.py --arms 
 
 ## Done
 
+- **125M recipe checkpoint**: exported to `recipe_cpt/bases/rcpt-q35-4b-recipe-u1B-step242/model_and_optim`; full dev CE 1.4206 vs base 1.3199 (+0.10, ⚠ eval_size=32), worse at every position bin (README). It is less than the +0.167 seen after 20 smoke steps, but still a clear regression. `||32 B A|| / ||W||` = 6.7% mean.
+
 - Shard `recipe_cpt/shards/cpt32k_u1B` built and checked (31,008 rows, dev part 28 disjoint), job 01M7NXK410A5T1MVFKK4RKPZ2P.
 - Smokes: recipe/dense `-smoke` (no mid-run checkpoint: trap, see README), `-smoke2` A (20 steps, saves at 5/10/15/20)
   and B (`--resume`, 20 -> 30). Merge check, base dev CE, LR probes and loradense probe: README "Smoke and probes".

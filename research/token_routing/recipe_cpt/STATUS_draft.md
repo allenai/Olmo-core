@@ -43,6 +43,7 @@ Teacher-forced full-attention CE on cpt_dev (held-out source part 28, 64k rows),
 | arm | task / rung | metric | eval_size | ±SE | cot | source |
 |---|---|---|---|---|---|---|
 | base q35-4b-markerfix | cpt_dev / 64k | full CE 1.3199 | 32 ⚠ eval_size=32 | n/a | no-cot (TF CE) | ops result (job 01M7NYFYY2SCBYFF0P6NZFK703) |
+| recipe step 242 (124.9M tokens, constant LR) | cpt_dev / 64k | full CE 1.4206 vs base 1.3199 (+0.10); rows 1-5 1.202 vs 1.121; bins 0-2k/2-8k/8-16k/16-32k/32k+ 1.597/1.446/1.395/1.360/1.442 vs base 1.551/1.358/1.299/1.262/1.333 | 32 ⚠ eval_size=32 | n/a | no-cot (TF CE) | ops result (job 01M7P31BY9F7YMYMBQE1ARXANK) |
 | 20-step smokes: dense / loradense / recipe 5e-6 / 1e-5 / 2e-5 | cpt_dev / 64k | rows 1-5 CE 1.095 / 1.080 / 1.237 / 1.292 / 1.288 vs base 1.121 | 8 ⚠ eval_size=8 (direction only) | n/a | no-cot (TF CE) | ops result; README |
 
 Smoke throughput (8 x H100): recipe 3.30 s/step, ~20k tok/s/GPU, 19.1 GiB peak active, 0.179x dense FLOPs/step.
