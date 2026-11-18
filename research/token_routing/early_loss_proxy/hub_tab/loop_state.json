@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-18 06:32 PT",
- "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline so far (budget-matched, finished runs, 16k CE on 320 rows, one seed): token dropping needs 2.1-2.5x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget) at 495 PF, and at 1,982 PF the drop arms end at 0.078-0.088 against 0.101 for dense LoRA on more rows and 0.114 / 0.119 for dense full fine-tune; the ratio at that depth awaits the larger dense runs. Step costs below about 0.3x stop paying because blocks 0-6 run on every token; forward-only early blocks are being tested.",
+ "updated": "2026-11-18 07:02 PT",
+ "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline (finished runs with complete schedules, 16k CE on 320 rows, one seed each): token dropping needs about 2x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget) at 495, 991 and 1,980 PF, and the gain does not shrink with data; best arm LoRA with keep 50% / 20% / 7% over three cuts (0.072 at 1,980 PF against 0.081 for dense full fine-tune at 3,960 PF and 0.101 for dense LoRA at 1,963 PF). That is far from the 10-20x target. The binding cost is blocks 0-6, which run on every token: forward-only early blocks are being tested, and runs at 3,964 PF on a 16x pool are in flight.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 07:00",
+   "text": "Dense full fine-tune with 2x the rows (976 steps, 3,960 PF) ends at 0.081; LoRA 50%/20%/7% at 1,980 PF ends at 0.072 and LoRA 50%/20% at 0.078, so both need under half the FLOPs. Budget-matched at 991 PF: LoRA 50%/20% 0.097, 50%/20%/7% 0.100, recipe 0.101, dense LoRA 0.139, dense full fine-tune 0.151: 2.0-2.3x. The ratio is about 2x at 495, 991 and 1,980 PF. The first launch of the early-blocks-forward-only arms failed at startup (multi-stage cuts inherited the freeze flag); fixed in the router (commit 81d0924be) and relaunched."
+  },
   {
    "t": "11-18 06:30",
    "text": "Budget-matched results (complete schedules, 4x pool): dense full fine-tune 0.189 at 495 PF and 0.151 at 991 PF; at 495 PF LoRA 50%/20%/7% 0.136, LoRA 50%/20% 0.140, recipe 0.146: 2.1-2.5x FLOPs-to-match against the dense frontier; at 991 PF full fine-tune 50%/20% 0.113 (1.6x). The 10%/3% arm is behind the recipe mid-run, so the best step cost is around 0.3x. Launched early-blocks-forward-only versions of the drop arms (about 0.13-0.24x per step) at 495 and 991 PF, with dense LoRA from block 7 as their baseline."
@@ -400,8 +404,8 @@
    "family": "dynamic drop (11-18 rules)",
    "title": "Equal FLOPs, more rows: do cheap arms reach the dense final loss?",
    "what": "Give each arm the FLOPs of one dense full fine-tune epoch (1,982 PF) on a pool with 4x the rows, with its LR schedule stretched over its own step count: LoRA keep 50% then 20% (1,525 steps), LoRA keep 50% after block 16 (905), the old recipe 20% then 7% (1,952, the whole pool), full fine-tune keep 50% then 20% (1,108), and dense LoRA as the equal-FLOP baseline (642). The test of the deepest-loss rule: at equal FLOPs, which arm ends lowest, and how many FLOPs does each need to reach the dense full fine-tune final loss.",
-   "status": "running",
-   "result": "At the FLOPs of one dense full fine-tune epoch (about 1,982 PF) on the 4x pool, 16k CE (320 rows, one seed each): LoRA keep 50%/20% 0.078 (1,525 steps), full fine-tune 50%/20% 0.082 (1,108 steps), keep ramp 0.088 (762 steps), LoRA 50% after block 16 0.088 (905 steps). Baselines at the same FLOPs: dense LoRA with more rows 0.101 (642 steps), dense full fine-tune one epoch 0.114 / 0.119. So the dense baseline family also gains from LoRA plus more rows, and dropping adds a further 0.013-0.023 at equal FLOPs. The 20%/7% recipe over the whole 4x pool: 0.083 at 1,762 PF. Still running: LoRA 50%/20%/7% (0.082 at 1,410 PF). The FLOP ratio at these losses needs the dense curves beyond 1,982 PF (dense full fine-tune 976 steps: 0.110 at 2,440 PF mid-schedule; dense full fine-tune and dense LoRA over the whole 4x pool, running) and the budget-matched runs at 495 and 991 PF (tag bud, running). The 16x pool is built (124,928 rows); runs at 1,982 and 3,964 PF on it are running (recipe, 10%/3%, 50%/20%/7%, 50%/20%, dense LoRA)."
+   "status": "done",
+   "result": "At about 1,980 PF on the 4x pool (16k CE, 320 rows, one seed each): LoRA 50%/20%/7% 0.072 (1,683 steps), LoRA 50%/20% 0.078 (1,525), full fine-tune 50%/20% 0.082 (1,108), recipe 20%/7% 0.083 (whole pool, 1,762 PF), keep ramp 0.088 (762), LoRA 50% after block 16 0.088 (905). Dense at the same FLOPs: dense LoRA with more rows 0.101, dense full fine-tune one epoch 0.114 / 0.119; dense full fine-tune needs 3,960 PF (976 steps) to reach 0.081. So cheap dropped steps on more rows beat dense at equal FLOPs by a wide margin, worth about 2x in FLOPs; see the budget-matched idea for the ratios."
   },
   {
    "id": "gradcomp",
@@ -425,7 +429,7 @@
    "title": "Budget-matched FLOPs-to-match (complete schedules)",
    "what": "Every arm, dense included, gets a fixed FLOP budget (495 or 991 PF) on the 4x pool with its own complete LR schedule; the ratio is the FLOPs the dense frontier (dense full fine-tune and dense LoRA at every budget) needs for the arm's final loss, divided by the arm's FLOPs. This is the headline measure: it gives cheaper arms proportionally more steps and compares finished runs only.",
    "status": "running",
-   "result": "First points (16k CE on 320 rows, one seed). Dense full fine-tune: 0.189 at 495 PF, 0.151 at 991 PF, 0.114 / 0.119 at 1,982 PF. At 495 PF: LoRA 50%/20%/7% 0.136 (2.5x), LoRA 50%/20% 0.140 (2.3x), recipe 20%/7% 0.146 (2.1x). At 991 PF: full fine-tune 50%/20% 0.113 (1.6x against the frontier, which includes dense LoRA on more rows; over 2x against dense full fine-tune alone). The remaining 991 PF arms and dense LoRA at 991 PF are running."
+   "result": "Finished runs with complete schedules on the 4x pool (16k CE on 320 rows, one seed each). Dense frontier: dense full fine-tune 0.189 at 495 PF, 0.151 at 991 PF, 0.114 / 0.119 at 1,982 PF, 0.081 at 3,960 PF; dense LoRA 0.139 at 991 PF, 0.101 at 1,963 PF. Drop arms: at 495 PF LoRA 50%/20%/7% 0.136, LoRA 50%/20% 0.140, recipe 20%/7% 0.146 (1.8-2.2x fewer FLOPs than the frontier); at 991 PF LoRA 50%/20% 0.097, LoRA 50%/20%/7% 0.100, recipe 0.101 (2.0-2.3x), full fine-tune 50%/20% 0.113 (1.6x); at about 1,980 PF LoRA 50%/20%/7% 0.072 and LoRA 50%/20% 0.078 (both below dense full fine-tune at 3,960 PF, so over 2.0x), recipe 0.083 at 1,762 PF (2.2x), full fine-tune 50%/20% 0.082 (2.0x), keep ramp and LoRA 50% after block 16 0.088 (1.6x). So the gain is about 2x at every budget from 495 to 1,980 PF and does not shrink with data; LoRA with a three-cut 50%/20%/7% or two-cut 50%/20% keep is the best arm; the 10%/3% arm is worse per FLOP. Against dense full fine-tune alone the ratios are 2.2-2.8x. Runs at 3,964 PF on the 16x pool and dense over the whole 4x pool are running."
   },
   {
    "id": "earlyfreeze",
@@ -506,6 +510,16 @@
    "xw": null,
    "mem": null,
    "note": "FLOPs-to-match against the dense frontier (dense full fine-tune and dense LoRA at every budget): LoRA with keep 50% / 20% / 7% over three cuts, 420 steps on the 4x pool, complete schedule. LoRA 50%/20% 2.3x, recipe 20%/7% 2.1x at the same budget."
+  },
+  {
+   "t": "11-18 07:00",
+   "arm": "lo-p50-20-7-x4",
+   "idea": "budget",
+   "x": 2.0,
+   "level": "1,980 PF on the 4x pool: 16k CE 0.072, below dense full fine-tune at 3,960 PF (0.081); lower bound (320 rows, one seed)",
+   "xw": null,
+   "mem": null,
+   "note": "LoRA with keep 50% / 20% / 7% over three cuts, 1,683 steps. The ratio against the dense frontier is at least 2.0x at this budget; the same arm is 2.1-2.2x at 495 and 991 PF. The gain does not shrink between 495 and 1,980 PF."
   }
  ],
  "validation": [

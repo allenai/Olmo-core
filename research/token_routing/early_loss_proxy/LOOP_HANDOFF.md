@@ -42,6 +42,10 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 07:00 dense-x4 (976 steps, 3,960 PF) = 0.081. x4 finals ~1,980 PF: lo-p50-20-7 0.072, lo-r50to20 0.078 (both > x2.0 lower bound), recipe 0.083 @1,762 (x2.15),
+  ft-r50to20 0.082 (x1.95), ramp / lo-c16k50 0.088 (x1.6). b991: lo-r50to20 0.097 (x2.25), lo-p50-20-7 0.100 (x2.07), recipe 0.101 (x2.0), denselora 0.139, dense 0.151.
+  => ~2x at 495 / 991 / 1,980 PF vs the dense frontier; no decay with data. fz7 arms: first launch FAILED (later stages inherited freeze_early); fixed in
+  src/olmo_core/nn/online_token_router.py (commit 81d0924be) and relaunched 07:05 (ids 01M7QJR7..., 01M7QJRZ..., 01M7QJSS..., 01M7QJTJ..., 01M7QJVA...); check they pass step 0.
 - 06:30 BUDGET-MATCHED (ftm.py): dense FT 0.189 @495 PF, 0.151 @991 PF. b495: lo-p50-20-7 0.136 (x2.5 vs dense frontier), lo-r50to20 0.140 (x2.3), recipe 0.146 (x2.1).
   b991: ft-r50to20 0.113 (x1.6 vs frontier incl. dense LoRA; >x2 vs dense FT). lo-r10to3 behind recipe mid-run -> best step cost ~0.3x.
   Launched (tag bud): EARLY BLOCKS FORWARD-ONLY (--st-otr-early-lora-start 7 --st-otr-freeze-early): recipe-fz7-b495 (907 steps; step counts assume guessed

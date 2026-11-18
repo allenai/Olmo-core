@@ -68,5 +68,15 @@
   "xw": null,
   "mem": null,
   "note": "FLOPs-to-match against the dense frontier (dense full fine-tune and dense LoRA at every budget): LoRA with keep 50% / 20% / 7% over three cuts, 420 steps on the 4x pool, complete schedule. LoRA 50%/20% 2.3x, recipe 20%/7% 2.1x at the same budget."
+ },
+ {
+  "t": "11-18 07:00",
+  "arm": "lo-p50-20-7-x4",
+  "idea": "budget",
+  "x": 2.0,
+  "level": "1,980 PF on the 4x pool: 16k CE 0.072, below dense full fine-tune at 3,960 PF (0.081); lower bound (320 rows, one seed)",
+  "xw": null,
+  "mem": null,
+  "note": "LoRA with keep 50% / 20% / 7% over three cuts, 1,683 steps. The ratio against the dense frontier is at least 2.0x at this budget; the same arm is 2.1-2.2x at 495 and 991 PF. The gain does not shrink between 495 and 1,980 PF."
  }
 ]
