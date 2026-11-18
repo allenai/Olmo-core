@@ -49,7 +49,8 @@ rows.sort(key=lambda x: (x[0], -x[1] if x[0] else x[1]))
 
 e = html.escape
 out = ['<tr><th>arm</th><th class="n">seed</th><th class="n">step cost vs dense full FT</th>' + "".join(f'<th class="n">step {s}</th>' for s in STEPS)
-       + '<th class="n">deepest same-adapter dense level reached</th><th class="n">FLOP ratio there</th></tr>']
+       + '<th class="n">deepest same-adapter dense level reached</th><th class="n">FLOP ratio there</th>'
+       + '<th class="n">deepest dense full fine-tune level reached</th><th class="n">FLOP ratio there</th></tr>']
 for fam, _, r, arm, sd, tr in rows:
     cells = []
     for s in STEPS:
@@ -60,14 +61,17 @@ for fam, _, r, arm, sd, tr in rows:
     v = r.get("vs_same")
     deep = f'step {v["ref_step"]} of {v["ref_steps"]} (CE {v["level"]:.3f})' if v else ("baseline" if fam == 0 else "")
     x = (f'<b>{v["x"]:.2f}×</b>' + ("" if v["final"] else " (not the final level)")) if v else ""
+    w = r.get("vs_dense_ft")
+    deepw = f'step {w["ref_step"]} of {w["ref_steps"]} (CE {w["level"]:.3f})' if w else ("reference" if arm == "dense" else "")
+    xw = (f'<b>{w["x"]:.2f}×</b>' + (" ✓ final" if w["final"] else "")) if w else ""
     c = r.get("cost_vs_dense_ft")
     out.append(f'<tr><td>{e(DESC.get(arm, arm))}<br><code>{e(arm)}</code></td><td class="n">{e(sd)}</td><td class="n">{"" if c is None else f"{c:.2f}×"}</td>' + "".join(cells)
-               + f'<td class="n">{deep}</td><td class="n">{x}</td></tr>')
+               + f'<td class="n">{deep}</td><td class="n">{x}</td><td class="n">{deepw}</td><td class="n">{xw}</td></tr>')
 
 block = f'''<!-- AR:LADDER:START -->
 <details class="sec" open id="ar-ladder-sec"><summary><h2 id="ar-ladder">Current phase (rules of 11-18): dynamic token dropping against the same-adapter dense baseline</h2><span class="n">1 table · {len(rows)} runs</span></summary><div class="secbody">
 <p class="note sv">Rules since 2026-11-18: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method. Each drop arm is compared with the dense run that uses the same adapter (LoRA arms with dense LoRA, full fine-tune arms with dense full fine-tuning) at the same training step; a method counts only at the deepest loss the dense baseline reaches. The search starts from drop settings that track dense and lowers the step cost from there.</p>
-<p class="note">16k held-out CE (gen16k + rung16k of heldout_v3) at each probe step; in brackets the difference to the same-adapter dense baseline at that step (red when more than 0.01 behind). ⚠ eval_size 320, below 500; one seed per row, and two seeds of the same arm differ by about 0.005, so differences under 0.01 are noise. Full epoch on the standard pool (488 steps of 16 rows). Full fine-tune arms have no baseline cells until the dense full fine-tune run finishes. Step cost is PF per step relative to dense full fine-tuning (4.06 PF).</p>
+<p class="note">16k held-out CE (gen16k + rung16k of heldout_v3) at each probe step; in brackets the difference to the same-adapter dense baseline at that step (red when more than 0.01 behind). ⚠ eval_size 320, below 500; one seed per row, and two seeds of the same arm differ by about 0.005, so differences under 0.01 are noise. Full epoch on the standard pool (488 steps of 16 rows). The last two columns score every arm against dense full fine-tuning, the overall reference (16k CE 0.114 at step 488, 1,982 PF): the deepest level of its curve the arm reaches and how many times fewer FLOPs the arm needed there; "✓ final" marks arms that reach its final loss. Step cost is PF per step relative to dense full fine-tuning (4.06 PF). Rows marked running show live probes.</p>
 <div class="tbl"><table>
 {chr(10).join(out)}
 </table></div>
