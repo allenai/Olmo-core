@@ -42,6 +42,10 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 03:20 launched w3/ft-r50to20-ex50 (explore 0.5), w3/ft-r50to20-rnd (--st-otr-score random). Agent gradcomp (ae04a33f56958de1a, branch loop/gradcomp,
+  Beaker tag gc): backward-only gradient rescale of kept document tokens at each cut (inv_keep / inv_mass / sqrt). Agent keepsched still running (tag ks).
+  IN FLIGHT SUMMARY: w1 dense sd1 + dense-mix80x3 + ft-r20to7 sd1; w2 (10 arms, ends ~03:40-04:30); w3 (5 arms); x4 (7 arms incl. dense-x4, ends ~06:00-07:30);
+  ks (agent); gc (agent). ladder.py reads v3, w*, x4, sbw, ks; add gc to SRC when its runs exist.
 - sparsebwd DONE 03:10 (branch loop/sparsebwd @ d5457c575, flag --st-otr-sparse-bwd, not merged): dense forward + gradient only through kept tokens
   = 0.136 @488 at 0.54x (fwd-drop same budgets 0.138 at 0.30x; dense 0.114). DIAGNOSIS: the gap is the missing GRADIENT of dropped tokens, not the
   truncated context. So: number of gradient-carrying tokens (and when) is the lever -> keep ramps / schedules; fwd dropping is the efficient form.

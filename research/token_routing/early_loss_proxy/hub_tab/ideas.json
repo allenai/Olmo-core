@@ -198,5 +198,21 @@
   "what": "Give each arm the FLOPs of one dense full fine-tune epoch (1,982 PF) on a pool with 4x the rows, with its LR schedule stretched over its own step count: LoRA keep 50% then 20% (1,525 steps), LoRA keep 50% after block 16 (905), the old recipe 20% then 7% (1,952, the whole pool), full fine-tune keep 50% then 20% (1,108), and dense LoRA as the equal-FLOP baseline (642). The test of the deepest-loss rule: at equal FLOPs, which arm ends lowest, and how many FLOPs does each need to reach the dense full fine-tune final loss.",
   "status": "running",
   "result": ""
+ },
+ {
+  "id": "gradcomp",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Gradient compensation at the cut",
+  "what": "The diagnosis says the loss gap is the gradient that dropped tokens no longer carry. Rescale, in the backward pass only, the gradient flowing through the kept document tokens at each cut by 1 / kept share (or 1 / the predicted gradient mass they cover, or its square root), so the blocks below the cut see a less biased update. Forward pass and FLOPs unchanged.",
+  "status": "running",
+  "result": ""
+ },
+ {
+  "id": "whichtokens",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Does it matter which tokens carry the gradient?",
+  "what": "At keep 50% then 20% with full fine-tuning: half of the kept budget drawn at random, and a fully random keep, against the router's top-scored tokens. If a random choice does as well, coverage across steps matters more than selection.",
+  "status": "running",
+  "result": ""
  }
 ]
