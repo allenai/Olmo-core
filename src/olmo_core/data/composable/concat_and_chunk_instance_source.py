@@ -133,7 +133,8 @@ class ConcatAndChunkInstanceSource(InstanceSource):
 
             if source_start_offset <= idx < source_end_offset:
                 start_idx = (idx - source_start_offset) * self.sequence_length
-                return source.get_token_range(start_idx, start_idx + self.sequence_length)
+                instance = source.get_token_range(start_idx, start_idx + self.sequence_length)
+                return {**instance, "loss_valid_mask": [True] * self.sequence_length}
 
             source_start_offset = source_end_offset
         raise IndexError(f"Index {idx} out of range for {self.num_instances} instances.")

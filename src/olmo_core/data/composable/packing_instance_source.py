@@ -290,12 +290,14 @@ class PackingInstanceSource(InstanceSource):
 
         # Pad to target sequence length.
         pad_shape = (0, self.sequence_length - input_ids.size)
+        loss_valid_mask = np.pad(np.ones(input_ids.size, dtype=np.bool_), pad_shape)
         label_mask = np.pad(label_mask, pad_shape, constant_values=False)
         input_ids = np.pad(input_ids, pad_shape, constant_values=self.pad_token_id)
 
         return {
             "input_ids": typing.cast(Sequence[int], input_ids),
             "label_mask": typing.cast(Sequence[bool], label_mask),
+            "loss_valid_mask": typing.cast(Sequence[bool], loss_valid_mask),
         }
 
     def _get_indices_path(self, name: str, *sources: DocumentSource, ext="npy") -> Path:

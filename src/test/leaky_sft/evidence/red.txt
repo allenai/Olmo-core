@@ -1,0 +1,669 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFsssssssss                     [100%]
+=================================== FAILURES ===================================
+_____________ test_shift_boundaries_structural_and_instance_masks ______________
+src/test/leaky_sft/data_test.py:20: in test_shift_boundaries_structural_and_instance_masks
+    labels, output = utils.get_leaky_labels(batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'olmo_core.data.utils' has no attribute 'get_leaky_labels'
+______________________ test_missing_validity_fails_closed ______________________
+src/test/leaky_sft/data_test.py:29: in test_missing_validity_fails_closed
+    utils.get_leaky_labels(dict(input_ids=torch.tensor([[1, 2, 3]]),
+    ^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'olmo_core.data.utils' has no attribute 'get_leaky_labels'
+___________ test_collator_preserves_validity_and_masks_padding[left] ___________
+src/test/leaky_sft/data_test.py:38: in test_collator_preserves_validity_and_masks_padding
+    assert batch["loss_valid_mask"].dtype == torch.bool
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'loss_valid_mask'
+__________ test_collator_preserves_validity_and_masks_padding[right] ___________
+src/test/leaky_sft/data_test.py:38: in test_collator_preserves_validity_and_masks_padding
+    assert batch["loss_valid_mask"].dtype == torch.bool
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'loss_valid_mask'
+________ test_packer_and_loader_preserve_real_special_ids[False-dense] _________
+src/test/leaky_sft/data_test.py:58: in test_packer_and_loader_preserve_real_special_ids
+    mask = list(inst["loss_valid_mask"])
+                ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'loss_valid_mask'
+------------------------------ Captured log call -------------------------------
+13:52:46 - INFO - olmo_core.data.composable.packing_instance_source - Packing document into instances...
+13:52:46 - INFO - olmo_core.data.composable.packing_instance_source - Packing documents from (InMemoryDocumentSource([50 98  2 99  7 99]),) into instances...
+13:52:49 - INFO - olmo_core.data.composable.packing_instance_source - Packed 6 tokens from (InMemoryDocumentSource([50 98  2 99  7 99]),) into 1 instances of sequence length 16 using an average of 10.0 padding tokens per instance.
+_______ test_packer_and_loader_preserve_real_special_ids[False-landmark] _______
+src/test/leaky_sft/data_test.py:58: in test_packer_and_loader_preserve_real_special_ids
+    mask = list(inst["loss_valid_mask"])
+                ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'loss_valid_mask'
+------------------------------ Captured log call -------------------------------
+13:52:50 - INFO - olmo_core.data.composable.landmark_packing_instance_source - LandmarkPackingInstanceSource packed 6 content tokens from 2/2 documents into 1 instances of sequence length 16 using 'next_fit', with an average of 10.0 non-content tokens per instance (landmarks + block padding + tail).
+_________ test_packer_and_loader_preserve_real_special_ids[True-dense] _________
+src/test/leaky_sft/data_test.py:58: in test_packer_and_loader_preserve_real_special_ids
+    mask = list(inst["loss_valid_mask"])
+                ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'loss_valid_mask'
+------------------------------ Captured log call -------------------------------
+13:52:50 - INFO - olmo_core.data.composable.packing_instance_source - Packing document into instances...
+13:52:50 - INFO - olmo_core.data.composable.packing_instance_source - Packing documents from (InMemoryDocumentSource([50 98  2 99  7 99]),) into instances...
+13:52:53 - INFO - olmo_core.data.composable.packing_instance_source - Packed 6 tokens from (InMemoryDocumentSource([50 98  2 99  7 99]),) into 1 instances of sequence length 16 using an average of 10.0 padding tokens per instance.
+_______ test_packer_and_loader_preserve_real_special_ids[True-landmark] ________
+src/test/leaky_sft/data_test.py:58: in test_packer_and_loader_preserve_real_special_ids
+    mask = list(inst["loss_valid_mask"])
+                ^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'loss_valid_mask'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.data.composable.landmark_packing_instance_source - LandmarkPackingInstanceSource packed 6 content tokens from 2/2 documents into 1 instances of sequence length 16 using 'next_fit', with an average of 10.0 non-content tokens per instance (landmarks + block padding + tail).
+_________ test_attention_mask_excludes_targets_and_padding_predictors __________
+src/test/leaky_sft/data_test.py:80: in test_attention_mask_excludes_targets_and_padding_predictors
+    labels, output = utils.get_leaky_labels(batch)
+                     ^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'olmo_core.data.utils' has no attribute 'get_leaky_labels'
+_____________ test_train_batch_matches_full_batch_reference[8-0.0] _____________
+src/test/leaky_sft/integration_test.py:26: in test_train_batch_matches_full_batch_reference
+    cfg = TransformerTrainModuleConfig(rank_microbatch_size=microbatch, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.nn.transformer.config - Building transformer with 3,632 total params, 3,120 non-embedding params
+13:52:54 - INFO - olmo_core.nn.attention - Using attention backend 'torch'
+13:52:54 - INFO - olmo_core.nn.transformer.config - Transformer(
+  (embeddings): Embedding(32, 16)
+  (blocks): ModuleDict(
+    (0): TransformerBlock(
+      (attention): Attention(
+        (w_q): Linear(in_features=16, out_features=16, bias=False)
+        (w_k): Linear(in_features=16, out_features=16, bias=False)
+        (w_v): Linear(in_features=16, out_features=16, bias=False)
+        (w_out): Linear(in_features=16, out_features=16, bias=False)
+        (rope): RotaryEmbedding()
+        (backend): TorchAttentionBackend()
+      )
+      (attention_norm): RMSNorm((16,), eps=1e-05)
+      (attention_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=16, out_features=32, bias=False)
+        (w2): Linear(in_features=32, out_features=16, bias=False)
+        (w3): Linear(in_features=16, out_features=32, bias=False)
+      )
+      (feed_forward_norm): RMSNorm((16,), eps=1e-05)
+      (feed_forward_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+    )
+  )
+  (lm_head): LMHead(
+    (norm): RMSNorm((16,), eps=1e-05)
+    (w_out): Linear(in_features=16, out_features=32, bias=False)
+  )
+)
+13:52:54 - INFO - olmo_core.nn.transformer.config - Built model with:
+- 3,632 total params
+- 3,120 non-embedding params
+- 3,632 trainable params
+_____________ test_train_batch_matches_full_batch_reference[8-0.1] _____________
+src/test/leaky_sft/integration_test.py:26: in test_train_batch_matches_full_batch_reference
+    cfg = TransformerTrainModuleConfig(rank_microbatch_size=microbatch, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.nn.transformer.config - Building transformer with 3,632 total params, 3,120 non-embedding params
+13:52:54 - INFO - olmo_core.nn.attention - Using attention backend 'torch'
+13:52:54 - INFO - olmo_core.nn.transformer.config - Transformer(
+  (embeddings): Embedding(32, 16)
+  (blocks): ModuleDict(
+    (0): TransformerBlock(
+      (attention): Attention(
+        (w_q): Linear(in_features=16, out_features=16, bias=False)
+        (w_k): Linear(in_features=16, out_features=16, bias=False)
+        (w_v): Linear(in_features=16, out_features=16, bias=False)
+        (w_out): Linear(in_features=16, out_features=16, bias=False)
+        (rope): RotaryEmbedding()
+        (backend): TorchAttentionBackend()
+      )
+      (attention_norm): RMSNorm((16,), eps=1e-05)
+      (attention_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=16, out_features=32, bias=False)
+        (w2): Linear(in_features=32, out_features=16, bias=False)
+        (w3): Linear(in_features=16, out_features=32, bias=False)
+      )
+      (feed_forward_norm): RMSNorm((16,), eps=1e-05)
+      (feed_forward_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+    )
+  )
+  (lm_head): LMHead(
+    (norm): RMSNorm((16,), eps=1e-05)
+    (w_out): Linear(in_features=16, out_features=32, bias=False)
+  )
+)
+13:52:54 - INFO - olmo_core.nn.transformer.config - Built model with:
+- 3,632 total params
+- 3,120 non-embedding params
+- 3,632 trainable params
+_____________ test_train_batch_matches_full_batch_reference[8-1.0] _____________
+src/test/leaky_sft/integration_test.py:26: in test_train_batch_matches_full_batch_reference
+    cfg = TransformerTrainModuleConfig(rank_microbatch_size=microbatch, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.nn.transformer.config - Building transformer with 3,632 total params, 3,120 non-embedding params
+13:52:54 - INFO - olmo_core.nn.attention - Using attention backend 'torch'
+13:52:54 - INFO - olmo_core.nn.transformer.config - Transformer(
+  (embeddings): Embedding(32, 16)
+  (blocks): ModuleDict(
+    (0): TransformerBlock(
+      (attention): Attention(
+        (w_q): Linear(in_features=16, out_features=16, bias=False)
+        (w_k): Linear(in_features=16, out_features=16, bias=False)
+        (w_v): Linear(in_features=16, out_features=16, bias=False)
+        (w_out): Linear(in_features=16, out_features=16, bias=False)
+        (rope): RotaryEmbedding()
+        (backend): TorchAttentionBackend()
+      )
+      (attention_norm): RMSNorm((16,), eps=1e-05)
+      (attention_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=16, out_features=32, bias=False)
+        (w2): Linear(in_features=32, out_features=16, bias=False)
+        (w3): Linear(in_features=16, out_features=32, bias=False)
+      )
+      (feed_forward_norm): RMSNorm((16,), eps=1e-05)
+      (feed_forward_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+    )
+  )
+  (lm_head): LMHead(
+    (norm): RMSNorm((16,), eps=1e-05)
+    (w_out): Linear(in_features=16, out_features=32, bias=False)
+  )
+)
+13:52:54 - INFO - olmo_core.nn.transformer.config - Built model with:
+- 3,632 total params
+- 3,120 non-embedding params
+- 3,632 trainable params
+____________ test_train_batch_matches_full_batch_reference[16-0.0] _____________
+src/test/leaky_sft/integration_test.py:26: in test_train_batch_matches_full_batch_reference
+    cfg = TransformerTrainModuleConfig(rank_microbatch_size=microbatch, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.nn.transformer.config - Building transformer with 3,632 total params, 3,120 non-embedding params
+13:52:54 - INFO - olmo_core.nn.attention - Using attention backend 'torch'
+13:52:54 - INFO - olmo_core.nn.transformer.config - Transformer(
+  (embeddings): Embedding(32, 16)
+  (blocks): ModuleDict(
+    (0): TransformerBlock(
+      (attention): Attention(
+        (w_q): Linear(in_features=16, out_features=16, bias=False)
+        (w_k): Linear(in_features=16, out_features=16, bias=False)
+        (w_v): Linear(in_features=16, out_features=16, bias=False)
+        (w_out): Linear(in_features=16, out_features=16, bias=False)
+        (rope): RotaryEmbedding()
+        (backend): TorchAttentionBackend()
+      )
+      (attention_norm): RMSNorm((16,), eps=1e-05)
+      (attention_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=16, out_features=32, bias=False)
+        (w2): Linear(in_features=32, out_features=16, bias=False)
+        (w3): Linear(in_features=16, out_features=32, bias=False)
+      )
+      (feed_forward_norm): RMSNorm((16,), eps=1e-05)
+      (feed_forward_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+    )
+  )
+  (lm_head): LMHead(
+    (norm): RMSNorm((16,), eps=1e-05)
+    (w_out): Linear(in_features=16, out_features=32, bias=False)
+  )
+)
+13:52:54 - INFO - olmo_core.nn.transformer.config - Built model with:
+- 3,632 total params
+- 3,120 non-embedding params
+- 3,632 trainable params
+____________ test_train_batch_matches_full_batch_reference[16-0.1] _____________
+src/test/leaky_sft/integration_test.py:26: in test_train_batch_matches_full_batch_reference
+    cfg = TransformerTrainModuleConfig(rank_microbatch_size=microbatch, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.nn.transformer.config - Building transformer with 3,632 total params, 3,120 non-embedding params
+13:52:54 - INFO - olmo_core.nn.attention - Using attention backend 'torch'
+13:52:54 - INFO - olmo_core.nn.transformer.config - Transformer(
+  (embeddings): Embedding(32, 16)
+  (blocks): ModuleDict(
+    (0): TransformerBlock(
+      (attention): Attention(
+        (w_q): Linear(in_features=16, out_features=16, bias=False)
+        (w_k): Linear(in_features=16, out_features=16, bias=False)
+        (w_v): Linear(in_features=16, out_features=16, bias=False)
+        (w_out): Linear(in_features=16, out_features=16, bias=False)
+        (rope): RotaryEmbedding()
+        (backend): TorchAttentionBackend()
+      )
+      (attention_norm): RMSNorm((16,), eps=1e-05)
+      (attention_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=16, out_features=32, bias=False)
+        (w2): Linear(in_features=32, out_features=16, bias=False)
+        (w3): Linear(in_features=16, out_features=32, bias=False)
+      )
+      (feed_forward_norm): RMSNorm((16,), eps=1e-05)
+      (feed_forward_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+    )
+  )
+  (lm_head): LMHead(
+    (norm): RMSNorm((16,), eps=1e-05)
+    (w_out): Linear(in_features=16, out_features=32, bias=False)
+  )
+)
+13:52:54 - INFO - olmo_core.nn.transformer.config - Built model with:
+- 3,632 total params
+- 3,120 non-embedding params
+- 3,632 trainable params
+____________ test_train_batch_matches_full_batch_reference[16-1.0] _____________
+src/test/leaky_sft/integration_test.py:26: in test_train_batch_matches_full_batch_reference
+    cfg = TransformerTrainModuleConfig(rank_microbatch_size=microbatch, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.nn.transformer.config - Building transformer with 3,632 total params, 3,120 non-embedding params
+13:52:54 - INFO - olmo_core.nn.attention - Using attention backend 'torch'
+13:52:54 - INFO - olmo_core.nn.transformer.config - Transformer(
+  (embeddings): Embedding(32, 16)
+  (blocks): ModuleDict(
+    (0): TransformerBlock(
+      (attention): Attention(
+        (w_q): Linear(in_features=16, out_features=16, bias=False)
+        (w_k): Linear(in_features=16, out_features=16, bias=False)
+        (w_v): Linear(in_features=16, out_features=16, bias=False)
+        (w_out): Linear(in_features=16, out_features=16, bias=False)
+        (rope): RotaryEmbedding()
+        (backend): TorchAttentionBackend()
+      )
+      (attention_norm): RMSNorm((16,), eps=1e-05)
+      (attention_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=16, out_features=32, bias=False)
+        (w2): Linear(in_features=32, out_features=16, bias=False)
+        (w3): Linear(in_features=16, out_features=32, bias=False)
+      )
+      (feed_forward_norm): RMSNorm((16,), eps=1e-05)
+      (feed_forward_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+    )
+  )
+  (lm_head): LMHead(
+    (norm): RMSNorm((16,), eps=1e-05)
+    (w_out): Linear(in_features=16, out_features=32, bias=False)
+  )
+)
+13:52:54 - INFO - olmo_core.nn.transformer.config - Built model with:
+- 3,632 total params
+- 3,120 non-embedding params
+- 3,632 trainable params
+_________________________ test_legacy_config_is_opt_in _________________________
+src/test/leaky_sft/integration_test.py:52: in test_legacy_config_is_opt_in
+    assert cfg.cpt_loss_scaler is None
+           ^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'TransformerTrainModuleConfig' object has no attribute 'cpt_loss_scaler'
+_______________ test_invalid_config_fails_before_training[-1.0] ________________
+src/test/leaky_sft/integration_test.py:58: in test_invalid_config_fails_before_training
+    TransformerTrainModuleConfig(rank_microbatch_size=8, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+________________ test_invalid_config_fails_before_training[nan] ________________
+src/test/leaky_sft/integration_test.py:58: in test_invalid_config_fails_before_training
+    TransformerTrainModuleConfig(rank_microbatch_size=8, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+________________ test_invalid_config_fails_before_training[1.1] ________________
+src/test/leaky_sft/integration_test.py:58: in test_invalid_config_fails_before_training
+    TransformerTrainModuleConfig(rank_microbatch_size=8, max_sequence_length=8,
+E   TypeError: TransformerTrainModuleConfig.__init__() got an unexpected keyword argument 'cpt_loss_scaler'
+_____________ test_context_parallel_shards_output_mask_with_labels _____________
+src/test/leaky_sft/integration_test.py:76: in test_context_parallel_shards_output_mask_with_labels
+    torch.testing.assert_close(kwargs["output_mask"], output[:, [0, 2, 5, 7]])
+                               ^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'output_mask'
+------------------------------ Captured log call -------------------------------
+13:52:54 - INFO - olmo_core.nn.transformer.config - Building transformer with 3,632 total params, 3,120 non-embedding params
+13:52:54 - INFO - olmo_core.nn.attention - Using attention backend 'torch'
+13:52:54 - INFO - olmo_core.nn.transformer.config - Transformer(
+  (embeddings): Embedding(32, 16)
+  (blocks): ModuleDict(
+    (0): TransformerBlock(
+      (attention): Attention(
+        (w_q): Linear(in_features=16, out_features=16, bias=False)
+        (w_k): Linear(in_features=16, out_features=16, bias=False)
+        (w_v): Linear(in_features=16, out_features=16, bias=False)
+        (w_out): Linear(in_features=16, out_features=16, bias=False)
+        (rope): RotaryEmbedding()
+        (backend): TorchAttentionBackend()
+      )
+      (attention_norm): RMSNorm((16,), eps=1e-05)
+      (attention_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+      (feed_forward): FeedForward(
+        (w1): Linear(in_features=16, out_features=32, bias=False)
+        (w2): Linear(in_features=32, out_features=16, bias=False)
+        (w3): Linear(in_features=16, out_features=32, bias=False)
+      )
+      (feed_forward_norm): RMSNorm((16,), eps=1e-05)
+      (feed_forward_residual_stream): ResidualStream(
+        (dropout): Identity()
+      )
+    )
+  )
+  (lm_head): LMHead(
+    (norm): RMSNorm((16,), eps=1e-05)
+    (w_out): Linear(in_features=16, out_features=32, bias=False)
+  )
+)
+13:52:54 - INFO - olmo_core.nn.transformer.config - Built model with:
+- 3,632 total params
+- 3,120 non-embedding params
+- 3,632 trainable params
+________________ test_loss_gradients_and_diagnostics[mixed-0.0] ________________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[mixed-0.001] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+________________ test_loss_gradients_and_diagnostics[mixed-0.1] ________________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+________________ test_loss_gradients_and_diagnostics[mixed-1.0] ________________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[outputs-0.0] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+______________ test_loss_gradients_and_diagnostics[outputs-0.001] ______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[outputs-0.1] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[outputs-1.0] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[context-0.0] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+______________ test_loss_gradients_and_diagnostics[context-0.001] ______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[context-0.1] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[context-1.0] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+________________ test_loss_gradients_and_diagnostics[empty-0.0] ________________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_loss_gradients_and_diagnostics[empty-0.001] _______________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+________________ test_loss_gradients_and_diagnostics[empty-0.1] ________________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+________________ test_loss_gradients_and_diagnostics[empty-1.0] ________________
+src/test/leaky_sft/loss_test.py:36: in test_loss_gradients_and_diagnostics
+    actual = head(x, labels=labels, output_mask=output, cpt_loss_scaler=alpha, return_logits=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_accumulation_and_uneven_rank_partition[0.0] _______________
+src/test/leaky_sft/loss_test.py:63: in test_accumulation_and_uneven_rank_partition
+    out = head(x[lo:hi], labels=labels[lo:hi], output_mask=output[lo:hi],
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_accumulation_and_uneven_rank_partition[0.1] _______________
+src/test/leaky_sft/loss_test.py:63: in test_accumulation_and_uneven_rank_partition
+    out = head(x[lo:hi], labels=labels[lo:hi], output_mask=output[lo:hi],
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+_______________ test_accumulation_and_uneven_rank_partition[1.0] _______________
+src/test/leaky_sft/loss_test.py:63: in test_accumulation_and_uneven_rank_partition
+    out = head(x[lo:hi], labels=labels[lo:hi], output_mask=output[lo:hi],
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+______________________ test_invalid_scaler_rejected[-0.1] ______________________
+src/test/leaky_sft/loss_test.py:78: in test_invalid_scaler_rejected
+    head(torch.randn(1, 2, 4), labels=torch.ones(1, 2, dtype=torch.long),
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+______________________ test_invalid_scaler_rejected[1.1] _______________________
+src/test/leaky_sft/loss_test.py:78: in test_invalid_scaler_rejected
+    head(torch.randn(1, 2, 4), labels=torch.ones(1, 2, dtype=torch.long),
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+______________________ test_invalid_scaler_rejected[nan] _______________________
+src/test/leaky_sft/loss_test.py:78: in test_invalid_scaler_rejected
+    head(torch.randn(1, 2, 4), labels=torch.ones(1, 2, dtype=torch.long),
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+______________________ test_invalid_scaler_rejected[inf] _______________________
+src/test/leaky_sft/loss_test.py:78: in test_invalid_scaler_rejected
+    head(torch.randn(1, 2, 4), labels=torch.ones(1, 2, dtype=torch.long),
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1739: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/olmo-core/lib/python3.12/site-packages/torch/nn/modules/module.py:1750: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: LMHead.forward() got an unexpected keyword argument 'output_mask'
+=========================== short test summary info ============================
+FAILED src/test/leaky_sft/data_test.py::test_shift_boundaries_structural_and_instance_masks
+FAILED src/test/leaky_sft/data_test.py::test_missing_validity_fails_closed - ...
+FAILED src/test/leaky_sft/data_test.py::test_collator_preserves_validity_and_masks_padding[left]
+FAILED src/test/leaky_sft/data_test.py::test_collator_preserves_validity_and_masks_padding[right]
+FAILED src/test/leaky_sft/data_test.py::test_packer_and_loader_preserve_real_special_ids[False-dense]
+FAILED src/test/leaky_sft/data_test.py::test_packer_and_loader_preserve_real_special_ids[False-landmark]
+FAILED src/test/leaky_sft/data_test.py::test_packer_and_loader_preserve_real_special_ids[True-dense]
+FAILED src/test/leaky_sft/data_test.py::test_packer_and_loader_preserve_real_special_ids[True-landmark]
+FAILED src/test/leaky_sft/data_test.py::test_attention_mask_excludes_targets_and_padding_predictors
+FAILED src/test/leaky_sft/integration_test.py::test_train_batch_matches_full_batch_reference[8-0.0]
+FAILED src/test/leaky_sft/integration_test.py::test_train_batch_matches_full_batch_reference[8-0.1]
+FAILED src/test/leaky_sft/integration_test.py::test_train_batch_matches_full_batch_reference[8-1.0]
+FAILED src/test/leaky_sft/integration_test.py::test_train_batch_matches_full_batch_reference[16-0.0]
+FAILED src/test/leaky_sft/integration_test.py::test_train_batch_matches_full_batch_reference[16-0.1]
+FAILED src/test/leaky_sft/integration_test.py::test_train_batch_matches_full_batch_reference[16-1.0]
+FAILED src/test/leaky_sft/integration_test.py::test_legacy_config_is_opt_in
+FAILED src/test/leaky_sft/integration_test.py::test_invalid_config_fails_before_training[-1.0]
+FAILED src/test/leaky_sft/integration_test.py::test_invalid_config_fails_before_training[nan]
+FAILED src/test/leaky_sft/integration_test.py::test_invalid_config_fails_before_training[1.1]
+FAILED src/test/leaky_sft/integration_test.py::test_context_parallel_shards_output_mask_with_labels
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[mixed-0.0]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[mixed-0.001]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[mixed-0.1]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[mixed-1.0]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[outputs-0.0]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[outputs-0.001]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[outputs-0.1]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[outputs-1.0]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[context-0.0]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[context-0.001]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[context-0.1]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[context-1.0]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[empty-0.0]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[empty-0.001]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[empty-0.1]
+FAILED src/test/leaky_sft/loss_test.py::test_loss_gradients_and_diagnostics[empty-1.0]
+FAILED src/test/leaky_sft/loss_test.py::test_accumulation_and_uneven_rank_partition[0.0]
+FAILED src/test/leaky_sft/loss_test.py::test_accumulation_and_uneven_rank_partition[0.1]
+FAILED src/test/leaky_sft/loss_test.py::test_accumulation_and_uneven_rank_partition[1.0]
+FAILED src/test/leaky_sft/loss_test.py::test_invalid_scaler_rejected[-0.1] - ...
+FAILED src/test/leaky_sft/loss_test.py::test_invalid_scaler_rejected[1.1] - T...
+FAILED src/test/leaky_sft/loss_test.py::test_invalid_scaler_rejected[nan] - T...
+FAILED src/test/leaky_sft/loss_test.py::test_invalid_scaler_rejected[inf] - T...
+43 failed, 9 skipped in 12.09s

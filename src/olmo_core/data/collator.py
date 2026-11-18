@@ -51,6 +51,7 @@ class DataCollator:
         all_attention_mask = []
         all_attention_bias = []
         all_label_mask = []
+        all_loss_valid_mask = []
         all_indices = []
         all_metadata = []
         all_instance_mask = []
@@ -82,6 +83,11 @@ class DataCollator:
 
             # Pad attention mask.
             attention_mask = x.get("attention_mask") if isinstance(x, dict) else None
+            if attention_mask is None and isinstance(x, dict) and "loss_valid_mask" in x:
+                if max_len != len(input_ids):
+                    attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
+                elif any(len(item["input_ids"]) != max_len for item in items):
+                    attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
             if attention_mask is not None:
                 if not isinstance(attention_mask, torch.Tensor):
                     attention_mask = torch.tensor(attention_mask)
@@ -121,6 +127,13 @@ class DataCollator:
                         pad_shape,
                         value=False,
                     )
+                )
+
+            # Indices.
+            valid_mask = x.get("loss_valid_mask") if isinstance(x, dict) else None
+            if valid_mask is not None:
+                all_loss_valid_mask.append(
+                    F.pad(torch.as_tensor(valid_mask, dtype=torch.bool), pad_shape, value=False)
                 )
 
             # Indices.
@@ -164,6 +177,10 @@ class DataCollator:
             out["attention_bias"] = torch.stack(all_attention_bias)
         if all_label_mask:
             out["label_mask"] = torch.stack(all_label_mask)
+        if all_loss_valid_mask:
+            if len(all_loss_valid_mask) != len(items):
+                raise ValueError("loss_valid_mask must be supplied for every instance in a batch")
+            out["loss_valid_mask"] = torch.stack(all_loss_valid_mask)
         if all_indices:
             out["index"] = torch.stack(all_indices)
         if all_instance_mask:

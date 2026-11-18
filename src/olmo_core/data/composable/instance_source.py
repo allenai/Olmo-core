@@ -31,7 +31,9 @@ class Instance(TypedDict):
     input_ids: Sequence[int]
     """The token IDs for this instance."""
     label_mask: NotRequired[Sequence[bool]]
-    """An optional mask indicating which tokens should contribute to the loss."""
+    """An optional mask indicating which tokens should contribute to the SFT loss."""
+    loss_valid_mask: NotRequired[Sequence[bool]]
+    """Real prediction targets, including prompts but excluding structural/padding positions."""
     doc_lens: NotRequired[Sequence[int]]
     """Optional explicit per-document lengths within this instance (they must sum to the instance
     length). When present, the data loader uses these for intra-document masking instead of deriving

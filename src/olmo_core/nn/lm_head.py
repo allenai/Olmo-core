@@ -27,6 +27,7 @@ from .functional import (
     l2_normalize,
 )
 from .layer_norm import LayerNormConfig
+from .functional.leaky_sft import leaky_ce_sums, validate_cpt_loss_scaler
 
 __all__ = [
     "LMHeadType",
@@ -35,10 +36,22 @@ __all__ = [
     "LMHead",
     "NormalizedLMHead",
     "LMOutputWithLoss",
+    "LeakyLMOutputWithLoss",
 ]
 
 
 log = logging.getLogger(__name__)
+
+
+class LeakyLMOutputWithLoss(NamedTuple):
+    """Weighted loss plus detached, unnormalized sums for both token groups."""
+
+    logits: Optional[torch.Tensor]
+    loss: torch.Tensor
+    ce_loss: torch.Tensor
+    z_loss: Optional[torch.Tensor]
+    output_ce_sum: torch.Tensor
+    context_ce_sum: torch.Tensor
 
 
 class LMHeadType(StrEnum):
@@ -209,7 +222,9 @@ class LMHead(nn.Module):
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
         return_logits: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-    ) -> Union[torch.Tensor, LMOutputWithLoss]:
+        output_mask: Optional[torch.Tensor] = None,
+        cpt_loss_scaler: Optional[float] = None,
+    ) -> Union[torch.Tensor, LMOutputWithLoss, LeakyLMOutputWithLoss]:
         """
         Applies the language modeling (LM) head to the input hidden states.
 
@@ -221,11 +236,26 @@ class LMHead(nn.Module):
         :param loss_div_factor: (Optional) Divisor for the loss, can be a scalar or tensor.
         :param return_logits: If True, returns logits along with the loss when labels are provided.
         :param logits_to_keep: If nonzero, restricts computation to the last N positions (if int) or to specific positions (if tensor).
+        :param output_mask: Next-token-aligned answer mask for LeakySFT. Invalid labels stay ignored.
+        :param cpt_loss_scaler: Opt into LeakySFT with context weight in [0, 1]. With mean reduction,
+            divide by the sum of token weights. With sum reduction, use loss_div_factor for
+            normalization across the full optimizer batch. Returns LeakyLMOutputWithLoss.
 
         :returns: If ``labels`` is ``None``, returns the logits tensor of shape ``(batch_size, seq_len, vocab_size)``.
                   If ``labels`` is provided, returns an ``LMOutputWithLoss`` named tuple containing the loss and optionally the logits.
         """
         B = x.shape[0]
+
+        if cpt_loss_scaler is not None:
+            validate_cpt_loss_scaler(cpt_loss_scaler)
+            if self.tp_enabled:
+                raise NotImplementedError("LeakySFT tensor parallel loss is not implemented")
+            if z_loss_multiplier is not None:
+                raise NotImplementedError("LeakySFT currently requires z_loss_multiplier=None")
+            if labels is None or output_mask is None or output_mask.shape != labels.shape:
+                raise ValueError("LeakySFT requires labels and an equally shaped output_mask")
+            if loss_reduction not in ("mean", "sum"):
+                raise ValueError("LeakySFT supports loss_reduction='sum' or 'mean'")
 
         h = self.norm(x) if self.norm is not None else x
 
@@ -235,10 +265,55 @@ class LMHead(nn.Module):
                 h = h[:, -logits_to_keep:, :]
                 if labels is not None:
                     labels = labels[:, -logits_to_keep:]
+                if output_mask is not None:
+                    output_mask = output_mask[:, -logits_to_keep:]
         else:  # logits_to_keep is a tensor specifying positions to keep
             h = h.gather(1, logits_to_keep.unsqueeze(-1).expand(-1, -1, h.size(-1)))
             if labels is not None:
                 labels = labels.gather(1, logits_to_keep)
+            if output_mask is not None:
+                output_mask = output_mask.gather(1, logits_to_keep)
+
+        if cpt_loss_scaler is not None:
+            assert labels is not None and output_mask is not None
+            output_sum, context_sum = leaky_ce_sums(
+                get_local_tensor(h),
+                get_local_tensor(self.w_out.weight),
+                get_local_tensor(self.w_out.bias) if self.w_out.bias is not None else None,
+                get_local_tensor(labels),
+                get_local_tensor(output_mask),
+                cpt_loss_scaler=cpt_loss_scaler,
+                ignore_index=ignore_index,
+                fused=self.loss_implementation == LMLossImplementation.fused_linear,
+            )
+            weighted = output_sum + cpt_loss_scaler * context_sum
+            if loss_reduction == "mean":
+                valid = labels != ignore_index
+                denominator = (valid & output_mask).sum() + cpt_loss_scaler * (
+                    valid & ~output_mask
+                ).sum()
+                weighted = weighted / denominator.clamp_min(torch.finfo(torch.float32).tiny)
+            weighted = self._finalize_loss(
+                weighted,
+                B,
+                loss_reduction="sum",
+                loss_div_factor=loss_div_factor,
+            )
+            logits = None
+            if return_logits is not False:
+                if self.loss_implementation == LMLossImplementation.fused_linear:
+                    if return_logits is True:
+                        raise ValueError("fused_linear cannot return logits")
+                else:
+                    logits = self.w_out(h)
+            return LeakyLMOutputWithLoss(
+                logits,
+                weighted,
+                weighted.detach(),
+                None,
+                output_sum.detach(),
+                context_sum.detach(),
+            )
 
         if labels is None:
             if return_logits is False:

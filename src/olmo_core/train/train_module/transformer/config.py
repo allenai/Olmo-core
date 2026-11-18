@@ -322,6 +322,12 @@ class TransformerTrainModuleConfig(TrainModuleConfig):
 
     autocast_precision: Optional[DType] = None
     label_ignore_index: int = -100
+    cpt_loss_scaler: Optional[float] = None
+    """Opt into LeakySFT: context CE weight in [0, 1]; None preserves legacy SFT.
+
+    Explicit zero uses the answer-only objective with context-loss diagnostics and
+    structural/boundary exclusions. Requires data with ``loss_valid_mask``.
+    """
 
     def build(
         self,
@@ -336,6 +342,9 @@ class TransformerTrainModuleConfig(TrainModuleConfig):
         """
         from .pipeline_train_module import TransformerPipelineTrainModule
         from .train_module import TransformerTrainModule
+
+        if self.cpt_loss_scaler is not None and self.pp_config is not None:
+            raise NotImplementedError("LeakySFT pipeline parallel training is not implemented")
 
         kwargs = self.as_dict(exclude_none=True, recurse=False)
         if (autocast_precision := kwargs.pop("autocast_precision", None)) is not None:

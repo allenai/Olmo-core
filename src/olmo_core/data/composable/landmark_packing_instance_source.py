@@ -316,6 +316,7 @@ class LandmarkPackingInstanceSource(InstanceSource):
         idx = self.validate_index(idx)
         input_ids: List[int] = []
         label_mask: List[bool] = []
+        loss_valid_mask: List[bool] = []
         doc_lens: List[int] = []
         for doc_i in self._windows[idx]:
             s, e = self._offsets[doc_i]
@@ -326,6 +327,10 @@ class LandmarkPackingInstanceSource(InstanceSource):
             raw_mask = rng.get("label_mask")
             mask = list(raw_mask) if raw_mask is not None else [True] * len(content)
             ids, m = self._emit_document(content, mask)
+            # Reuse the positional transformation with all real tokens eligible. This preserves
+            # natural special IDs and the optional exclusion of landmark predictors.
+            _, valid = self._emit_document(content, [True] * len(content))
+            loss_valid_mask.extend(valid)
             input_ids.extend(ids)
             label_mask.extend(m)
             doc_lens.append(len(ids))
@@ -344,9 +349,15 @@ class LandmarkPackingInstanceSource(InstanceSource):
             for _ in range(tail // self.block_size):
                 input_ids.extend([self.pad_id] * self.mem_freq + [self.mem_id] * self.num_landmarks)
                 label_mask.extend([False] * self.block_size)
+                loss_valid_mask.extend([False] * self.block_size)
             doc_lens.append(tail)
 
-        return {"input_ids": input_ids, "label_mask": label_mask, "doc_lens": doc_lens}
+        return {
+            "input_ids": input_ids,
+            "label_mask": label_mask,
+            "loss_valid_mask": loss_valid_mask,
+            "doc_lens": doc_lens,
+        }
 
     def children(self):
         return [self._source]

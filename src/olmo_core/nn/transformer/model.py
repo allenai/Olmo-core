@@ -55,7 +55,7 @@ from ..attention.summary_token import SummaryTokenAttention
 from ..buffer_cache import BufferCache
 from ..functional import l2_normalize
 from ..layer_norm import LayerNormConfig
-from ..lm_head import LMHeadConfig, LMOutputWithLoss
+from ..lm_head import LeakyLMOutputWithLoss, LMHeadConfig, LMOutputWithLoss
 from ..moe import MoEBase
 from ..rope import RoPEBuffers, RotaryEmbeddingBase
 from ..utils import selective_checkpointing_context_fn
@@ -661,6 +661,9 @@ class Transformer(nn.Module):
         # so we have to be careful here.
         B, S = input_ids.shape[:2]
 
+        output_mask = kwargs.pop("output_mask", None)
+        cpt_loss_scaler = kwargs.pop("cpt_loss_scaler", None)
+
         all_block_kwargs: Dict[str, Any] = {}
         per_block_kwargs: Dict[int, Dict[str, Any]] = defaultdict(dict)
         lm_head_kwargs: Dict[str, Any] = dict(
@@ -793,6 +796,12 @@ class Transformer(nn.Module):
                 pad_values.append(ignore_index)
                 keys.append("labels")
 
+            if output_mask is not None:
+                inputs.append(output_mask)
+                seq_dims.append(1)
+                pad_values.append(False)
+                keys.append("output_mask")
+
             if cache_leftpad is not None:
                 raise NotImplementedError("cache_leftpad is not supported with context parallelism")
 
@@ -834,6 +843,7 @@ class Transformer(nn.Module):
 
             input_ids = all_block_kwargs.pop("input_ids")
             labels = all_block_kwargs.pop("labels", None)
+            output_mask = all_block_kwargs.pop("output_mask", None)
         else:
             input_ids = move_to_device(input_ids, self.device)
             labels = move_to_device(labels, self.device)
@@ -900,6 +910,10 @@ class Transformer(nn.Module):
         if "cu_doc_lens" in all_block_kwargs:
             mark_dynamic(all_block_kwargs["cu_doc_lens"], 0, strict=False)  # type: ignore[arg-type]
 
+        if cpt_loss_scaler is not None:
+            lm_head_kwargs["cpt_loss_scaler"] = cpt_loss_scaler
+            lm_head_kwargs["output_mask"] = move_to_device(output_mask, self.device)
+
         return (
             input_ids,
             labels,
@@ -920,7 +934,7 @@ class Transformer(nn.Module):
         return_logits: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
-    ) -> Union[torch.Tensor, LMOutputWithLoss]:
+    ) -> Union[torch.Tensor, LMOutputWithLoss, LeakyLMOutputWithLoss]:
         """
         Run the transformer on the token input IDs.
 

@@ -16,7 +16,7 @@ from torch.distributed.tensor import DTensor
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import Optimizer
 
-from olmo_core.data.utils import get_labels, split_batch
+from olmo_core.data.utils import get_labels, get_leaky_labels, split_batch
 from olmo_core.distributed.checkpoint import (
     merge_state_dicts,
     prune_state_dict,
@@ -35,7 +35,8 @@ from olmo_core.distributed.utils import (
 )
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.float8 import Float8Config
-from olmo_core.nn.lm_head import LMOutputWithLoss
+from olmo_core.nn.lm_head import LeakyLMOutputWithLoss, LMOutputWithLoss
+from olmo_core.nn.functional.leaky_sft import validate_cpt_loss_scaler
 from olmo_core.nn.transformer import Transformer
 from olmo_core.nn.transformer.config import TransformerActivationCheckpointingMode
 from olmo_core.optim import OptimConfig, SkipStepOptimizer
@@ -121,8 +122,21 @@ class TransformerTrainModule(TrainModule):
         state_dict_load_opts: Optional[dist_cp_sd.StateDictOptions] = None,
         load_key_mapping: Optional[Dict[str, str]] = None,
         label_ignore_index: int = -100,
+        cpt_loss_scaler: Optional[float] = None,
     ):
         super().__init__()
+
+        if cpt_loss_scaler is not None:
+            validate_cpt_loss_scaler(cpt_loss_scaler)
+            if tp_config is not None:
+                raise NotImplementedError("LeakySFT tensor parallel training is not implemented")
+            if z_loss_multiplier is not None:
+                raise NotImplementedError("LeakySFT currently requires z_loss_multiplier=None")
+            from olmo_core.nn.lm_head import NormalizedLMHead
+
+            if isinstance(model.lm_head, NormalizedLMHead):
+                raise NotImplementedError("LeakySFT requires the standard LM head")
+        self.cpt_loss_scaler = cpt_loss_scaler
 
         # Validate some options.
         if rank_microbatch_size % max_sequence_length != 0:
@@ -343,6 +357,8 @@ class TransformerTrainModule(TrainModule):
             gc_cuda()
 
     def train_batch(self, batch: Dict[str, Any], dry_run: bool = False):
+        if self.cpt_loss_scaler is not None:
+            return self._train_leaky_batch(batch, dry_run=dry_run)
         # Set model to train mode if it isn't already.
         self._set_model_mode("train")
 
@@ -467,6 +483,77 @@ class TransformerTrainModule(TrainModule):
                 namespace="train",
             )
 
+    def _train_leaky_batch(self, batch: Dict[str, Any], dry_run: bool = False):
+        """One optimizer batch with a globally token-weighted objective.
+
+        Sum counts before microbatching. DP gradient averaging requires dividing by
+        global_weight_sum / DP_size; the LM head retains its existing CP correction.
+        """
+        assert self.cpt_loss_scaler is not None
+        alpha = self.cpt_loss_scaler
+        self._set_model_mode("train")
+        if "labels" in batch:
+            raise ValueError("LeakySFT builds labels from input_ids and explicit masks")
+        batch = dict(batch)
+        labels, output_mask = get_leaky_labels(batch, self.label_ignore_index)
+        batch["labels"], batch["output_mask"] = labels, output_mask
+        valid = labels != self.label_ignore_index
+        counts = torch.stack([(valid & output_mask).sum(), (valid & ~output_mask).sum()])
+        counts = counts.to(device=self.device, dtype=torch.float64)
+        dp_size = get_world_size(self.dp_process_group) if is_distributed() else 1
+        if is_distributed():
+            dist.all_reduce(counts, group=self.dp_process_group)
+        denominator = (counts[0] + alpha * counts[1]) / dp_size
+        denominator = denominator.clamp_min(torch.finfo(torch.float32).tiny).float()
+        seq_len = batch["input_ids"].shape[1]
+        if self.rank_microbatch_size < seq_len:
+            raise RuntimeError("Microbatch size is smaller than sequence length")
+        micro_batches = split_batch(batch, self.rank_microbatch_size // seq_len)
+        sums = torch.zeros(2, device=self.device, dtype=torch.float64)
+        for index, micro in enumerate(micro_batches):
+            with self._train_microbatch_context(index, len(micro_batches)):
+                ids, targets, kwargs = self._prepare_batch(micro)
+                result = self.model_forward(
+                    ids,
+                    labels=targets,
+                    ignore_index=self.label_ignore_index,
+                    loss_reduction="sum",
+                    loss_div_factor=denominator,
+                    cpt_loss_scaler=alpha,
+                    return_logits=False,
+                    **kwargs,
+                )
+                assert isinstance(result, LeakyLMOutputWithLoss)
+                sums += torch.stack([result.output_ce_sum, result.context_ce_sum]).detach()
+                result.loss.backward()
+        self.model.post_batch(dry_run=dry_run)
+        if dry_run:
+            self.model.reset_auxiliary_metrics()
+            return
+        # Each context shard contributes disjoint numerator terms. Counts above were
+        # computed BEFORE context sharding and reduced only across the DP dimension.
+        if is_distributed():
+            dist.all_reduce(sums)
+        weighted = sums[0] + alpha * sums[1]
+        ce = (
+            weighted / (counts[0] + alpha * counts[1]).clamp_min(torch.finfo(torch.float32).tiny)
+        ).float()
+        self.record_ce_loss(ce)
+        if isinstance(self.optim, SkipStepOptimizer):
+            self.optim.latest_loss = ce
+        for name, value in {
+            "leaky/output_ce": sums[0] / counts[0].clamp_min(1),
+            "leaky/context_ce": sums[1] / counts[1].clamp_min(1),
+            "leaky/output_tokens": counts[0],
+            "leaky/context_tokens": counts[1],
+            "leaky/context_loss_fraction": alpha
+            * sums[1]
+            / weighted.clamp_min(torch.finfo(torch.float32).tiny),
+        }.items():
+            self.record_metric(name, value.float(), namespace="train")
+        for name, (value, reduction) in self.model.compute_auxiliary_metrics(reset=True).items():
+            self.record_metric(name, value, reduction, namespace="train")
+
     def eval_batch(
         self, batch: Dict[str, Any], labels: Optional[torch.Tensor] = None
     ) -> Union[torch.Tensor, LMOutputWithLoss]:
@@ -540,7 +627,7 @@ class TransformerTrainModule(TrainModule):
 
     def model_forward(
         self, input_ids: torch.Tensor, labels: Optional[torch.Tensor] = None, **kwargs
-    ) -> Union[torch.Tensor, LMOutputWithLoss]:
+    ) -> Union[torch.Tensor, LMOutputWithLoss, LeakyLMOutputWithLoss]:
         """
         Run a forward pass on a micro-batch, returning the logits.
         """

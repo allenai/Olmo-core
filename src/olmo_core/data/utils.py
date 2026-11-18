@@ -625,6 +625,45 @@ def get_doc_lengths_from_indices(doc_indices: np.ndarray) -> np.ndarray:
     return doc_indices[1::2] - doc_indices[0::2]
 
 
+def get_leaky_labels(
+    batch: Dict[str, Any], label_ignore_index: int = -100
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Return valid next-token labels and the aligned answer mask, without mutating batch.
+
+    ``loss_valid_mask`` identifies real targets, independently of the SFT label mask.
+    Never infer it from token IDs: real text can contain the pad/landmark vocabulary IDs.
+    Document boundaries are excluded whenever document lengths are supplied.
+    """
+    if "loss_valid_mask" not in batch:
+        raise ValueError("LeakySFT requires an explicit loss_valid_mask from the instance source")
+    ids = batch["input_ids"]
+    valid = batch["loss_valid_mask"].bool().clone()
+    if valid.shape != ids.shape:
+        raise ValueError("loss_valid_mask must have the same shape as input_ids")
+    output = batch.get("label_mask", torch.ones_like(valid)).bool()
+    attention = batch.get("attention_mask")
+    if attention is not None:
+        valid &= attention.bool()
+    if (instances := batch.get("instance_mask")) is not None:
+        valid &= instances.unsqueeze(-1)
+    # A document's first token cannot be predicted by the preceding isolated document.
+    if (lengths := batch.get("doc_lens")) is not None:
+        for row, lens in enumerate(lengths.tolist()):
+            start = 0
+            for length in lens:
+                if length > 0 and start < ids.shape[1]:
+                    valid[row, start] = False
+                start += length
+    targets = ids.masked_fill(~valid, label_ignore_index)
+    labels = F.pad(targets[..., 1:], (0, 1), value=label_ignore_index)
+    output = F.pad((output & valid)[..., 1:], (0, 1), value=False)
+    # Attention padding is invalid as a predictor too; landmarks can still predict content.
+    if attention is not None:
+        labels = labels.masked_fill(~attention.bool(), label_ignore_index)
+        output &= attention.bool()
+    return labels, output
+
+
 def get_labels(batch: Dict[str, Any], label_ignore_index: int = -100) -> torch.Tensor:
     # Labels are just input IDs shifted to the left (first item is ignored).
     labels, label_mask, attention_mask, instance_mask = (

@@ -486,6 +486,9 @@ class ComposableDataLoader(TextDataLoaderBase):
                 if (label_mask := instance.get("label_mask")) is not None:
                     out["label_mask"] = as_tensor(label_mask)
 
+                if (valid_mask := instance.get("loss_valid_mask")) is not None:
+                    out["loss_valid_mask"] = as_tensor(valid_mask)
+
                 # A source may emit explicit document lengths (e.g. block-aligned landmark packing);
                 # those take precedence over EOS-derived boundaries.
                 if (doc_lens := instance.get("doc_lens")) is not None:
