@@ -329,6 +329,7 @@ class SoftTokenOptions(VariantOptions):
     st_gdd_keep_range: str = ""
     st_gdd_max_gold_frac: float = 0.5
     st_gdd_whole_frac: float = 0.0
+    st_gdd_keep_power: float = 1.0
     st_gdd_thin_range: str = ""
     st_gdd_thin_keep_first: int = 8
     st_gdd_only_fps: str = ""
@@ -1419,7 +1420,7 @@ class SoftToken(Variant):
             kr = [float(x) for x in (o.st_gdd_keep_range or "1,1").split(",")]
             tr = [float(x) for x in (o.st_gdd_thin_range or "1,1").split(",")]
             gcfg = GoldDocDropConfig(keep_lo=kr[0], keep_hi=kr[-1], max_gold_frac=o.st_gdd_max_gold_frac,
-                                     whole_frac=o.st_gdd_whole_frac, thin_lo=tr[0], thin_hi=tr[-1],
+                                     whole_frac=o.st_gdd_whole_frac, keep_power=o.st_gdd_keep_power, thin_lo=tr[0], thin_hi=tr[-1],
                                      thin_keep_first=o.st_gdd_thin_keep_first, seed=ctx.seed,
                                      only_fps_path=o.st_gdd_only_fps)
             model._gold_doc_drop = GoldDocDrop(gcfg, router=model._online_token_router, doc_start_id=ctx.ids.doc_start,

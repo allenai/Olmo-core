@@ -2107,6 +2107,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-gdd-max-gold-frac", type=float, default=0.5)
     ap.add_argument("--st-gdd-whole-frac", type=float, default=0.0,
                     help="gold doc drop: fraction of rows left untouched (no drop, no gold prior)")
+    ap.add_argument("--st-gdd-keep-power", type=float, default=1.0,
+                    help="gold doc drop: keep share r = lo + (hi-lo)*u**p; 1 = uniform, >1 biases toward lo, <1 toward hi")
     ap.add_argument("--st-gdd-thin-range", default="",
                     help="gold doc drop: 'lo,hi' per-row body-token keep fraction on the other rows (uniform tokens)")
     ap.add_argument("--st-gdd-thin-keep-first", type=int, default=8)

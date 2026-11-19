@@ -39,6 +39,9 @@ class GoldDocDropConfig:
     keep_hi: float = 1.0
     max_gold_frac: float = 0.5
     whole_frac: float = 0.0
+    #: skew of the per-row distractor keep share: r = keep_lo + (keep_hi - keep_lo) * u**keep_power, u ~ U(0,1).
+    #: 1.0 = uniform (unchanged); > 1 biases toward keep_lo (more rows dropped hard), < 1 toward keep_hi
+    keep_power: float = 1.0
     thin_lo: float = 1.0
     thin_hi: float = 1.0
     thin_keep_first: int = 8
@@ -123,7 +126,10 @@ class GoldDocDrop:
             remove = [False] * S
             new_gold: List[int] = list(sorted(gset))
             if len(gset) / nd <= c.max_gold_frac:
-                r = self.rng.uniform(c.keep_lo, c.keep_hi)
+                if c.keep_power == 1.0:
+                    r = self.rng.uniform(c.keep_lo, c.keep_hi)
+                else:
+                    r = c.keep_lo + (c.keep_hi - c.keep_lo) * self.rng.random() ** c.keep_power
                 ng = [d for d in range(nd) if d not in gset]
                 self.rng.shuffle(ng)
                 n_keep = int(round(r * len(ng)))
