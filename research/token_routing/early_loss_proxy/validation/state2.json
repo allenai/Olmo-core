@@ -1,0 +1,150 @@
+{
+ "runs": {
+  "elpv2-p50-x4-s1683": {
+   "ex": "01M7SVB0D20XWKAQ06YZQAFD9R",
+   "arm": "p50",
+   "budget": "mtb16kx4-s1683",
+   "seed": 0,
+   "data": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16kx4",
+   "steps_expected": 1683,
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x4-s642": {
+   "ex": "01M7SYC89PAVEG261Y0WJEP9ME",
+   "arm": "denselora",
+   "budget": "mtb16kx4-s642",
+   "seed": 0,
+   "data": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16kx4",
+   "steps_expected": 642,
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-dense-x4-s976": {
+   "ex": "01M7SV4FTKBZ2GDYYMNZH3EAW3",
+   "arm": "dense",
+   "budget": "mtb16kx4-s976",
+   "seed": 0,
+   "data": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16kx4",
+   "steps_expected": 976,
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x16-s1293": {
+   "ex": "01M7SYD4VQ3VY86C3Z9KTN4X9E",
+   "arm": "denselora",
+   "budget": "mtb16kx16-s1293",
+   "seed": 0,
+   "data": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/shards/mtb16kx16",
+   "steps_expected": 1293,
+   "state": "DONE",
+   "rc": 0
+  }
+ },
+ "evals": {
+  "elpv2-dense-x4-s976-evcontradiction": {
+   "ex": "01M7T1Y7WHXV8MCJW559P95P3P",
+   "train_run": "elpv2-dense-x4-s976",
+   "task": "contradiction",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-dense-x4-s976",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-dense-x4-s976-evoutlier": {
+   "ex": "01M7T1Z593JZJ84MD615F1J5Z8",
+   "train_run": "elpv2-dense-x4-s976",
+   "task": "outlier",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-dense-x4-s976",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-dense-x4-s976-evqdmatch_nq": {
+   "ex": "01M7T204VT2HTJFMNK4TAK2RKY",
+   "train_run": "elpv2-dense-x4-s976",
+   "task": "qdmatch_nq",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-dense-x4-s976",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-p50-x4-s1683-evcontradiction": {
+   "ex": "01M7T76N82VM5AF3E8PGW4D5QV",
+   "train_run": "elpv2-p50-x4-s1683",
+   "task": "contradiction",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-p50-x4-s1683",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-p50-x4-s1683-evoutlier": {
+   "ex": "01M7T77K25BPX7709TCB2TJMJA",
+   "train_run": "elpv2-p50-x4-s1683",
+   "task": "outlier",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-p50-x4-s1683",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-p50-x4-s1683-evqdmatch_nq": {
+   "ex": "01M7T78H27AXYZERY6Z32KWE1K",
+   "train_run": "elpv2-p50-x4-s1683",
+   "task": "qdmatch_nq",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-p50-x4-s1683",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-p50-x4-s1683-evreorder": {
+   "ex": "01M7T79D7AHJA4J6VN01YM2HQ2",
+   "train_run": "elpv2-p50-x4-s1683",
+   "task": "reorder",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-p50-x4-s1683",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x4-s642-evcontradiction": {
+   "ex": "01M7T91KE5QV2Q0959KTKXSCBH",
+   "train_run": "elpv2-denselora-x4-s642",
+   "task": "contradiction",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-denselora-x4-s642",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x4-s642-evoutlier": {
+   "ex": "01M7T92G5K5NZ866JC5GZ89T6V",
+   "train_run": "elpv2-denselora-x4-s642",
+   "task": "outlier",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-denselora-x4-s642",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x4-s642-evqdmatch_nq": {
+   "ex": "01M7T93E0KGVC72E06W6SHFN4M",
+   "train_run": "elpv2-denselora-x4-s642",
+   "task": "qdmatch_nq",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-denselora-x4-s642",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x16-s1293-evcontradiction": {
+   "ex": "01M7T9DM6X7CCYVF6D54GATS15",
+   "train_run": "elpv2-denselora-x16-s1293",
+   "task": "contradiction",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-denselora-x16-s1293",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x16-s1293-evoutlier": {
+   "ex": "01M7T9EHYNJQRKX8PW76T85XXE",
+   "train_run": "elpv2-denselora-x16-s1293",
+   "task": "outlier",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-denselora-x16-s1293",
+   "state": "DONE",
+   "rc": 0
+  },
+  "elpv2-denselora-x16-s1293-evqdmatch_nq": {
+   "ex": "01M7T9FG14A75THF4YTJX0507B",
+   "train_run": "elpv2-denselora-x16-s1293",
+   "task": "qdmatch_nq",
+   "ckpt": "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/ctc_suite/ckpts/elpv2-denselora-x16-s1293",
+   "state": "DONE",
+   "rc": 0
+  }
+ }
+}
