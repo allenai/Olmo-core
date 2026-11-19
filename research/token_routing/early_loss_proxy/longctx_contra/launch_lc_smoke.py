@@ -78,7 +78,7 @@ def main():
     ex = getattr(wl, "id", None) or getattr(getattr(wl, "experiment", None), "id", None)
     print(f"[lc-smoke] SUBMITTED id={ex} url=https://beaker.org/ex/{ex}", flush=True)
     subprocess.run([OPS, "register", "--run-id", f"lc-{a.tag}-bk{str(ex)[-8:]}", "--experiment", "tokdrop_lr",
-                    "--cluster", "beaker", "--kind", "smoke", "--job-id", str(ex), "--expected-minutes", str(a.minutes),
+                    "--cluster", "beaker", "--kind", "other", "--job-id", str(ex), "--expected-minutes", str(a.minutes),
                     "--git", REPO])
 
 
