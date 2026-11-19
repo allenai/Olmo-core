@@ -42,6 +42,13 @@ while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLA
          --base-checkpoint "$BASE" --data "$ROOT/shards/$DATA" --work-dir "$LOC/work_$NAME" --save-folder "$SAVE"
          --seq-len "$SEQLEN" --epochs 1 --lr "$LR" --global-batch "$GB" --micro-batch-instances 1 --seed 0
          --no-compile --no-wandb $CKPTFL --max-steps "$STEPS")
+  # live progress for long runs: every SYNC_S seconds copy the log tail and the result JSON to weka + S3
+  ( while sleep "${SYNC_S:-600}"; do
+      tail -c 2000000 "$LOC/$NAME.log" > "$OUT/$NAME.live.log" 2>/dev/null
+      sync_out "$OUT/$NAME.live.log" "$S3/results/$TAG" >/dev/null
+      [ -f "$OUT/$NAME.json" ] && sync_out "$OUT/$NAME.json" "$S3/results/$TAG" >/dev/null
+    done ) &
+  SYNCPID=$!
   # --probe-* words in FLAGS go to dense_probe (before the --), the rest to the trainer
   PFL=(); TFL=(); set -f; W=($FLAGS); set +f; i=0
   while [ $i -lt ${#W[@]} ]; do
@@ -75,6 +82,7 @@ while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLA
   fi
   RC=$?
   T1=$(date +%s)
+  kill "$SYNCPID" 2>/dev/null
   cp "$LOC/$NAME.log" "$OUT/$NAME.log"
   [ -f "$SAVE/flops.json" ] && cp "$SAVE/flops.json" "$OUT/$NAME.flops.json"
   grep -a "dense-probe\|flop-meter\] wrote\|step=\|train/CE\|TFLOPs_per_GPU\|total petaflops\|OutOfMemory\|out of memory\|Error\|nan" "$LOC/$NAME.log" | cut -c1-300 | tail -n 40
