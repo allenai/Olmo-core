@@ -50,6 +50,8 @@ def scores(res, arm):
     files = glob.glob(os.path.join(res, f"lcS-{arm}", "score*-s*.json")) + glob.glob(os.path.join(res, "lcS-base", "score*-s0.json"))
     for f in files:
         m = re.search(r"-s(\d+)\.json$", f)
+        if not m:  # .rc.json / .flops.json siblings
+            continue
         st = int(m.group(1))
         d = json.load(open(f))
         if not d.get("probes"):

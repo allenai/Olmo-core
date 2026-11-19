@@ -33,10 +33,13 @@ case $ARM in
     RUNS=()
     for st in ${STEPS//,/ }; do
       CK=$SR/$SA/step$st/model_and_optim
-      RUNS+=(--run "score-$SA-s$st|probe|8|$V|1e-5|kl2k|4096|8|1|lc256k:160,lc16k:160|$F --base-checkpoint $CK")
-      [ "$SA" = gdd1m ] && RUNS+=(--run "score1m-$SA-s$st|probe|8|full|1e-5|lcmixsmk|262144|2|1|lc1m:64|$LORA --cp-degree 4 --pack --gdn-int32-safe --base-checkpoint $CK")
+      [ "${ONLY1M:-}" ] || RUNS+=(--run "score-$SA-s$st|probe|8|$V|1e-5|kl2k|4096|8|1|lc256k:160,lc16k:160|$F $( [ $st = 0 ] || echo --base-checkpoint $CK )")
+      # 1M held-out: CP8 (one data-parallel group, no duplicated rows; int32 bound 2,097,152), one job per checkpoint
+      case $SA in *1m) [ "${SKIP1M:-}" ] || python3 $L --env DENSE_PROBE_SCORE_ONLY=1 --tag lcS-$SA --minutes 60 --gpus 8 \
+        --cluster ai2/jupiter-cirrascale-2 --exclude-host jupiter-cs-aus-152 ${DRY:+--dry-run} \
+        --run "score1m-$SA-s$st|probe|8|full|1e-5|lc1mdense84|1048576|1|1|lc1m:64|$LORA --cp-degree 8 --shard-degree 1 --gdn-int32-safe --ffn-chunk-tokens 32768 --skip-dry-run $( [ $st = 0 ] || echo --base-checkpoint $CK )" ;; esac
     done
-    python3 $L --env DENSE_PROBE_SCORE_ONLY=1 --tag lcS-$SA --minutes $((40 * $(echo $STEPS | tr ',' ' ' | wc -w))) --gpus 8 --cluster ai2/jupiter-cirrascale-2 \
+    [ ${#RUNS[@]} -gt 0 ] && python3 $L --env DENSE_PROBE_SCORE_ONLY=1 --tag lcS-$SA --minutes $((40 * $(echo $STEPS | tr ',' ' ' | wc -w))) --gpus 8 --cluster ai2/jupiter-cirrascale-2 \
       --exclude-host jupiter-cs-aus-152 ${DRY:+--dry-run} "${RUNS[@]}"
     ;;
   dense1m)  # 84 x 1M rows = the first 84 long rows of the gold-drop 1M pool in its order (no short rows: --pack under CP8
