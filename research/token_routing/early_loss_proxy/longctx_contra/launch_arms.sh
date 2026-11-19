@@ -23,12 +23,12 @@ case $ARM in
     ;;
   dense256)  # 1,091 256k rows + 4,800 short rows packed into 262,144-token windows; 2 windows/step (CP4 x DP2)
     python3 $L --tag lcA-dense256 --minutes 300 "${COMMON[@]}" --presync "shards/lc256kmix_dense heldout_lc.npz" \
-      --run "dense256|probe|8|full|1e-5|lc256kmix_dense|262144|2|999999|lc16k:16|$LORA --cp-degree 4 --pack --ephemeral-save-interval 20 --save-interval 75 --probe-max-pf $BUDGET"
+      --run "dense256b|probe|8|full|1e-5|lc256kmix_dense|262144|2|999999|lc16k:16|$LORA --cp-degree 4 --pack --ephemeral-save-interval 20 --save-interval 75 --probe-max-pf $BUDGET"
     ;;
   score)
     SA=${2:?arm}; STEPS=${3:?steps}
     case $SA in
-      dense256) V=full; F="$LORA" ;;
+      dense256|dense256b) V=full; F="$LORA" ;;
       gdd256|gdd1m) V=softtoken; F="$R" ;;
     esac
     RUNS=()
