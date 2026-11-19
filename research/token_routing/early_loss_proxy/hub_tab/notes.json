@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-19 00:10",
+   "text": "With the idea queue nearly empty, checked whether the gain grows with context length: the earlier 64k runs put keep 20%/7% at 0.238-0.265 after 1,463 PF against dense LoRA at 0.244 by 3,180 PF (mid-run), about the same 2.2-2.5x as at 16k. Launched budget-matched dense runs at 64k (dense LoRA at 1,463 and 2,926 PF, dense full fine-tune at 1,463 PF; tag klb64) to make it exact."
+  },
+  {
    "t": "11-18 23:45",
    "text": "Selective-backward agent's final report: neutral at best at 991 PF (schedule variant 0.097 against 0.100), worse with fixed keep shares (0.106-0.119), and worse at 2,025 PF (0.080 against 0.074). Closed."
   },

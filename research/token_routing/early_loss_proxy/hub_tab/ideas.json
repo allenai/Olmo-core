@@ -254,5 +254,13 @@
   "what": "By 1,980 PF contradiction and outlier rows are at 0.01-0.03 loss while reorder carries most of what is left, so a growing share of the backward FLOPs goes to rows with almost no gradient. Every row still gets the cheap dropped forward; the backward runs only on rows whose training loss is above a running quantile (or sampled in proportion to loss), and the saved FLOPs buy more rows. Unlike the other step-cost cuts, the saving should grow with the budget. Budget-matched at 991 and 1,980 PF on top of the 50% / 20% / 7% token drop.",
   "status": "dropped",
   "result": "Negative (one seed, 16k CE on 320 rows; branch loop/selbp @ 569f3bb6a). On top of the 50% / 20% / 7% token drop, skipping the backward on the easier rows (decided per micro-step of 4 rows, so real compute is saved): at 991 PF keeping the harder half 0.108 (1.8x) or half sampled by loss 0.106 (1.9x), a quarter 0.119 (1.5x), against 0.100 (2.2x) without skipping; a schedule from all rows down to 30% 0.097 (2.4x), level. At 2025 PF on the 16x pool the schedule ends at 0.080 (2.0x) against 0.074 (2.4x) without skipping, so the hoped-for growth with budget does not appear (that run also used 4 GPUs and 8-row groups). The selector behaves as intended (reorder rows kept most, contradiction and outlier least), but the rows it skips still carried useful gradient."
+ },
+ {
+  "id": "len64k",
+  "family": "dynamic drop (11-18 rules)",
+  "title": "Does the gain grow at 64k rows?",
+  "what": "A token-drop step costs relatively less at longer rows (0.19x dense at 64k against 0.22-0.30x at 16k), so the FLOP ratio might grow with length. The keep-versus-length session already ran dense and drop arms for 225 steps on a 64k pool (3 tasks, 144 held-out rows); what is missing is dense at the drop arms' FLOPs with a complete schedule. Dense LoRA at 1,463 and 2,926 PF and dense full fine-tune at 1,463 PF supply it.",
+  "status": "running",
+  "result": "From the existing 64k runs (mean CE on 144 held-out rows, one or two seeds): keep 20% then 7% ends at 0.238 / 0.265 after 1,463 PF; dense LoRA mid-run is at 0.282 by 1,908 PF and 0.244 by 3,180 PF; dense full fine-tune 0.248 by 5,205 PF and 0.211 at 7,809 PF. Read mid-run, dense needs about 2.2-2.5x the FLOPs, the same range as at 16k; the budget-matched dense runs will make that exact."
  }
 ]
