@@ -30,6 +30,9 @@ def main():
     ap.add_argument("--tail", action="append", default=[], help="--ordered: pool name(s) whose rows come last")
     ap.add_argument("--long", default="", help="--ordered: comma list of the long pools (the rest count as short)")
     ap.add_argument("--seed", type=int, default=20261119)
+    ap.add_argument("--bucket", type=int, default=0,
+                    help="--ordered: group rows into length-homogeneous blocks of this many rows (= the global batch: "
+                    "every step is all-long or all-short, so data-parallel ranks do not wait on one long row), blocks shuffled")
     a = ap.parse_args()
     tmp, final = f"{a.root}/{a.out}_tmp", f"{a.root}/{a.out}"
     assert not os.path.exists(f"{final}/metadata.json"), f"{final} exists"
@@ -99,8 +102,22 @@ def main():
         n_tail_short = int(round(frac * len(short)))
         head = head_long + short[n_tail_short:]
         tail = tail_long + short[:n_tail_short]
-        head = [head[j] for j in rng.permutation(len(head))]
-        tail = [tail[j] for j in rng.permutation(len(tail))]
+        def arrange(rows_):
+            if not a.bucket:
+                return [rows_[j] for j in rng.permutation(len(rows_))], []
+            lo = [r for r in rows_ if r[0] in longs]
+            sh = [r for r in rows_ if r[0] not in longs]
+            lo = [lo[j] for j in rng.permutation(len(lo))]
+            sh = [sh[j] for j in rng.permutation(len(sh))]
+            b = a.bucket
+            blocks = [lo[i:i + b] for i in range(0, len(lo) - len(lo) % b, b)] + \
+                     [sh[i:i + b] for i in range(0, len(sh) - len(sh) % b, b)]
+            rest = lo[len(lo) - len(lo) % b:] + sh[len(sh) - len(sh) % b:]  # < 2 blocks of leftovers, mixed, at the end
+            blocks = [blocks[j] for j in rng.permutation(len(blocks))]
+            return [r for blk in blocks for r in blk], rest
+        head, head_rest = arrange(head)
+        tail, tail_rest = arrange(tail)
+        tail = tail + head_rest + tail_rest  # leftovers (< 2 blocks each) last, so every block stays step-aligned
         rows_o = head + tail
         with open(f"{tmp}/row_info.jsonl", "w") as info:
             for k, (pool, x, y, rec) in enumerate(rows_o):
