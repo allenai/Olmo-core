@@ -22,6 +22,9 @@ export AWS_PROFILE=${AWS_PROFILE:-S3} PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALL
 echo "[lc-smoke] job $JID host $(hostname) commit $(git rev-parse --short HEAD 2>/dev/null) tag $TAG start $(date -u +%FT%TZ)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 sync_out() { "$PY" research/token_routing/early_loss_proxy/s3sync.py up --force "$@" 2>&1 | tail -n 1; }
+for REL in ${PRESYNC:-}; do  # rel paths under early_loss_proxy/ to pull S3 -> weka first (new inputs)
+  "$PY" research/token_routing/early_loss_proxy/s3sync.py down "$S3/$REL" "$ROOT/$REL" 2>&1 | tail -n 1
+done
 echo "$SPEC_B64" | base64 -d > "$OUT/spec_${JID}.tsv"
 while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLAGS; do
   [ -z "$NAME" ] && continue

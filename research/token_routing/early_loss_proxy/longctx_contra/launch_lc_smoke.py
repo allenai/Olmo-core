@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--gpus", type=int, required=True)
     ap.add_argument("--minutes", type=int, required=True, help="expected job minutes (minRuntime = min(4h, 1.3x))")
     ap.add_argument("--cluster", default="ai2/jupiter-cirrascale-2,ai2/ceres-cirrascale")
+    ap.add_argument("--presync", default="", help="space-separated paths under early_loss_proxy/ to copy S3 -> weka first")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     lines = []
@@ -69,6 +70,8 @@ def main():
     cfg.step_soft_timeout = None
     cfg.env_vars += [BeakerEnvVar(name="TAG", value=a.tag),
                      BeakerEnvVar(name="SPEC_B64", value=base64.b64encode(spec.encode()).decode())]
+    if a.presync:
+        cfg.env_vars.append(BeakerEnvVar(name="PRESYNC", value=a.presync))
     print(f"[lc-smoke] {len(lines)} runs: {', '.join(l.split(chr(9))[0] for l in lines)}; commit {head[:9]} ({branch}) "
           f"gpus {a.gpus} expected {a.minutes} min minRuntime {min_rt}")
     if a.dry_run:
