@@ -728,8 +728,15 @@ def task_query_key_np(row: Any, doc_end_id: int, n_tok: int) -> int:
 #:   budget  1     1 = renormalise every step so the body-token-weighted mean first-cut share equals its task_stages
 #:                 value (fixed average cost); 0 = free
 #:   start   0     first optimizer step that adapts (the router needs a fit first)
+#:   signal  1     1 = MEASURED gradient (default): each task's mean ||dL/dh|| per body token at the first cut, from the
+#:                 exploration tokens (a uniform sample of the body whose gradients the step's own backward already
+#:                 measures for the router's fit; no extra pass), and m_t -> (g_t / token-weighted mean g)^power
+#:                 (optimal importance sampling keeps a token with probability proportional to its gradient norm;
+#:                 per task this gives keep_t proportional to g_t); the log-multiplier moves a share ``gain`` of the
+#:                 way each step. 0 = the router's PREDICTED coverage rule above (target / gain)
+#:   power   1     exponent of the measured-gradient rule
 TASK_ADAPT_DEFAULTS: Dict[str, float] = {"target": 0.0, "gain": 0.5, "ema": 0.8, "lo": 0.25, "hi": 4.0, "budget": 1.0,
-                                         "start": 0.0}
+                                         "start": 0.0, "signal": 1.0, "power": 1.0}
 
 
 def parse_task_adapt(spec: str) -> Dict[str, float]:
@@ -1233,11 +1240,33 @@ class OnlineTokenRouter:
         n = len(self._task_names) + 1
         acc = self._task_acc if self._task_acc is not None else torch.zeros(n, 3)
         self._task_acc = None
+        # measured gradient per task: exploration samples of the previous step's routed forwards (first cut)
+        gacc = torch.zeros(n, 2, dtype=torch.float64)
+        for e in self._pending:
+            if e.get("tidx") is None or e.get("dense") or e.get("gn") is None:
+                continue
+            ok = e["ok"] & e["explore"] & torch.isfinite(e["gn"])
+            if not bool(ok.any()):
+                continue
+            ti = e["tidx"][ok].cpu()
+            g = e["gn"][ok].double().exp().cpu()
+            gacc[:, 0].index_add_(0, ti, g)
+            gacc[:, 1].index_add_(0, ti, torch.ones_like(g))
+        acc = torch.cat([acc.double().cpu(), gacc], dim=1)
         if dist.is_available() and dist.is_initialized():
             dev = torch.device("cuda", torch.cuda.current_device()) if torch.cuda.is_available() else torch.device("cpu")
             acc = acc.to(dev)
             dist.all_reduce(acc)
-        acc = acc.float().cpu()
+        acc = acc.cpu()
+        gs = acc[:, 4] > 0
+        if not hasattr(self, "_task_g_ema"):
+            self._task_g_ema = torch.full((n,), float("nan"), dtype=torch.float64)
+        if bool(gs.any()):
+            gm = acc[:, 3] / acc[:, 4].clamp(min=1)
+            e_ = float(ta["ema"])
+            old = self._task_g_ema
+            self._task_g_ema = torch.where(gs & torch.isnan(old), gm, torch.where(gs, e_ * old + (1 - e_) * gm, old))
+        acc = acc[:, :3].float()
         seen = acc[:, 1] > 0
         if bool(seen.any()):
             cov = acc[:, 0] / acc[:, 1].clamp(min=1)
@@ -1247,14 +1276,25 @@ class OnlineTokenRouter:
                                              torch.where(seen, e * old + (1 - e) * cov, old))
             self._task_tok_ema = torch.where(seen, e * self._task_tok_ema + (1 - e) * acc[:, 2], self._task_tok_ema)
         valid = ~torch.isnan(self._task_cov_ema) & (self._task_tok_ema > 0)
+        if ta["signal"] > 0:
+            valid = valid & ~torch.isnan(self._task_g_ema).float().bool()
         if step >= int(ta["start"]) and int(valid.sum()) >= 2:
-            c = self._task_cov_ema
-            tgt = float(ta["target"]) if ta["target"] > 0 else float(
-                (c[valid] * self._task_tok_ema[valid]).sum() / self._task_tok_ema[valid].sum())
             lm = self._task_mult.log()
-            upd = float(ta["gain"]) * (tgt - c) / max(tgt, 0.05)
-            lm = torch.where(valid, lm + upd, lm).clamp(math.log(ta["lo"]), math.log(ta["hi"]))
-            self._task_mult = lm.exp()
+            if ta["signal"] > 0:
+                # measured-gradient rule: target log m_t = power * log(g_t / token-weighted mean g); move gain of the way
+                g = self._task_g_ema.float()
+                Nv = self._task_tok_ema[valid]
+                gbar = float((g[valid] * Nv).sum() / Nv.sum())
+                tgt_lm = float(ta["power"]) * torch.log(g.clamp(min=1e-30) / max(gbar, 1e-30))
+                lm = torch.where(valid, (1 - float(ta["gain"])) * lm + float(ta["gain"]) * tgt_lm, lm)
+                tgt = gbar
+            else:
+                c = self._task_cov_ema
+                tgt = float(ta["target"]) if ta["target"] > 0 else float(
+                    (c[valid] * self._task_tok_ema[valid]).sum() / self._task_tok_ema[valid].sum())
+                upd = float(ta["gain"]) * (tgt - c) / max(tgt, 0.05)
+                lm = torch.where(valid, lm + upd, lm)
+            self._task_mult = lm.clamp(math.log(ta["lo"]), math.log(ta["hi"])).exp()
             if ta["budget"] > 0:
                 # fixed average cost: one scale s on every multiplier so sum_t N_t sum_i span_i min(1, base_ti m_t s)
                 # equals sum_t N_t sum_i span_i base_ti (bisection on log s; caps make it monotone, not linear)
@@ -1280,6 +1320,8 @@ class OnlineTokenRouter:
         for j, name in enumerate(self._task_names):
             if bool(valid[j]):
                 self._stat(f"cov_{name}", float(self._task_cov_ema[j]))
+            if hasattr(self, "_task_g_ema") and not math.isnan(float(self._task_g_ema[j])):
+                self._stat(f"gmean_{name}", float(self._task_g_ema[j]))
             self._stat(f"mult_{name}", float(self._task_mult[j]))
             self._stat(f"abs0_{name}", float(a[j, 0]))
 
@@ -1511,6 +1553,9 @@ class OnlineTokenRouter:
             "target": None,
             "dense": dense,
             "task": (self._row_task[rows] if self._row_task is not None else None),
+            # task_adapt: each target sample's task index (first cut only: the multiplier reads its gradients)
+            "tidx": (self._row_tidx.to(rows.device)[rows]
+                     if (self.stage_idx == 0 and self._task_on and self._row_tidx is not None) else None),
             # weighted token sampling: importance weight 1 / p of each target sample (its inclusion probability)
             "ipw": ((1.0 / self._last_p[rows, cols].clamp(min=1e-12)) if self._last_p is not None else None),
         }
