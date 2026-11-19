@@ -148,8 +148,9 @@ def build_callback(cfg: Dict[str, str]):
             rank, ws = self._rank(), self._ws()
             n = len(rows)
             cp = int(getattr(model, "_cp_world_size", 1) or 1) if getattr(model, "_cp_load_balancer", None) is not None else 1
-            if cp > 1:
-                return self._probe_cp(step, model, was, t0, cp)
+            if cp > 1 or os.environ.get("DENSE_PROBE_LABELS_PATH"):
+                # (env DENSE_PROBE_LABELS_PATH: the CP path's labels / fused-CE forward without CP, to compare paths)
+                return self._probe_cp(step, model, was, t0, max(cp, 1))
             per = -(-n // ws)
             cached = self._cached0() if step == 0 else None
             if cached is not None:
@@ -232,7 +233,7 @@ def build_callback(cfg: Dict[str, str]):
                 tok = out.ce_loss if hasattr(out, "ce_loss") else out[2]
                 ce_sum[i] = tok.float().sum().double()
             dist.all_reduce(ce_sum)
-            ce_sum = ce_sum / float(ws // cp)
+            ce_sum = ce_sum / float(max(1, ws // cp))
             n_ans = torch.as_tensor([int(m.sum()) for _, _, _, m in rows], device="cuda", dtype=torch.float64)
             ce = ce_sum / n_ans
             model.train(was)

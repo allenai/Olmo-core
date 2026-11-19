@@ -44,6 +44,7 @@ def main():
     ap.add_argument("--presync", default="", help="space-separated paths under early_loss_proxy/ to copy S3 -> weka first")
     ap.add_argument("--save-root", default="", help="real arms: weka save root (no wipe; resumes; keeps stepN checkpoints)")
     ap.add_argument("--keep-ckpt", action="store_true", help="drop --no-final-checkpoint and keep every --save-interval checkpoint")
+    ap.add_argument("--env", action="append", default=[], metavar="K=V", help="extra env var for the job")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     lines = []
@@ -72,6 +73,9 @@ def main():
     cfg.step_soft_timeout = None
     cfg.env_vars += [BeakerEnvVar(name="TAG", value=a.tag),
                      BeakerEnvVar(name="SPEC_B64", value=base64.b64encode(spec.encode()).decode())]
+    for kv in a.env:
+        k, _, v = kv.partition("=")
+        cfg.env_vars.append(BeakerEnvVar(name=k, value=v))
     if a.save_root:
         cfg.env_vars.append(BeakerEnvVar(name="SAVE_ROOT", value=a.save_root))
     if a.keep_ckpt:
