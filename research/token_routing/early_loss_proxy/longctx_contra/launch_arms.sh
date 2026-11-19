@@ -3,6 +3,8 @@
 # (payload run_lc_smoke.sh, dense_probe wrapper: --probe-max-pf stops at the FLOP budget). Checkpoints on weka
 # (runs_lc/<arm>/stepN) for checkpoint-then-score (score_ckpts.sh): every arm is scored through the same 1-GPU dense
 # forward. Usage: bash launch_arms.sh gdd256 | dense256 | gdd1m   [DRY=1]
+#        bash launch_arms.sh score <arm> <step>[,<step>...]   (checkpoint-then-score: 1-GPU dense forward path, rows split
+#        over 8 data-parallel GPUs; lc256k 160 + lc16k 160 rows; the 1M arm also gets lc1m 64 rows under CP4)
 set -e
 ARM=${1:?arm}
 cd "$(dirname "$0")/../../../.."
@@ -22,6 +24,21 @@ case $ARM in
   dense256)  # 1,091 256k rows + 4,800 short rows packed into 262,144-token windows; 2 windows/step (CP4 x DP2)
     python3 $L --tag lcA-dense256 --minutes 300 "${COMMON[@]}" --presync "shards/lc256kmix_dense heldout_lc.npz" \
       --run "dense256|probe|8|full|1e-5|lc256kmix_dense|262144|2|999999|lc16k:16|$LORA --cp-degree 4 --pack --ephemeral-save-interval 20 --save-interval 75 --probe-max-pf $BUDGET"
+    ;;
+  score)
+    SA=${2:?arm}; STEPS=${3:?steps}
+    case $SA in
+      dense256) V=full; F="$LORA" ;;
+      gdd256|gdd1m) V=softtoken; F="$R" ;;
+    esac
+    RUNS=()
+    for st in ${STEPS//,/ }; do
+      CK=$SR/$SA/step$st/model_and_optim
+      RUNS+=(--run "score-$SA-s$st|probe|8|$V|1e-5|kl2k|4096|8|1|lc256k:160,lc16k:160|$F --base-checkpoint $CK")
+      [ "$SA" = gdd1m ] && RUNS+=(--run "score1m-$SA-s$st|probe|8|full|1e-5|lcmixsmk|262144|2|1|lc1m:64|$LORA --cp-degree 4 --pack --gdn-int32-safe --base-checkpoint $CK")
+    done
+    python3 $L --tag lcS-$SA --minutes $((40 * $(echo $STEPS | tr ',' ' ' | wc -w))) --gpus 8 --cluster ai2/jupiter-cirrascale-2 \
+      --exclude-host jupiter-cs-aus-152 ${DRY:+--dry-run} "${RUNS[@]}"
     ;;
   gdd1m)  # 1M rows (keep 0.05-0.4, no whole rows, int32 guard) + short rows; 8 rows/step, bucketed steps
     python3 $L --tag lcA-gdd1m --minutes 720 "${COMMON[@]}" --presync "shards/lc1mmix_gdd heldout_lc.npz" \
