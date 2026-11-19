@@ -47,6 +47,12 @@ case $ARM in
     python3 $L --tag lcA-dense1m --minutes 270 "${COMMON[@]}" --presync "shards/lc1mdense84 heldout_lc.npz" \
       --run "dense1m|probe|8|full|1e-5|lc1mdense84|1048576|1|999999|lc16k:16|$LORA --cp-degree 8 --gdn-int32-safe --ffn-chunk-tokens 32768 --shard-degree 1 --skip-dry-run --no-data-shuffle --ephemeral-save-interval 5 --save-interval 21"
     ;;
+  dense1m_mix)  # Prasann 11-19: dense LoRA 1M on gdd1m's mix = the first 1,515 rows of lc1mmix_gdd in its order (83 x 1M +
+    # 1,432 short; short:long 17.3 vs gdd1m's 14.5), packed into 1,048,576-token windows (doc lengths; the int32 guard now
+    # covers packed rows), CP8, 1 window/step; ~13,650 PF
+    python3 $L --tag lcA-dense1mmix --minutes 270 "${COMMON[@]}" --presync "shards/lc1mmixdense heldout_lc.npz" \
+      --run "dense1m_mix|probe|8|full|1e-5|lc1mmixdense|1048576|1|999999|lc16k:16|$LORA --cp-degree 8 --pack --gdn-int32-safe --ffn-chunk-tokens 32768 --shard-degree 1 --skip-dry-run --no-data-shuffle --ephemeral-save-interval 5 --save-interval 24"
+    ;;
   gdd1m)  # 1M rows (keep 0.05-0.4, no whole rows, int32 guard) + short rows; 8 rows/step, bucketed steps
     python3 $L --tag lcA-gdd1m --minutes 720 "${COMMON[@]}" --presync "shards/lc1mmix_gdd heldout_lc.npz" \
       --run "gdd1m|probe|8|softtoken|1e-5|lc1mmix_gdd|1048576|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.4 --st-gdd-whole-frac 0 --prefix-chunk 4096 --gdn-int32-safe --no-data-shuffle --ephemeral-save-interval 100 --save-interval 600 --probe-max-pf 17000"  # generous: read at the dense-1M arm's PF
