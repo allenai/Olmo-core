@@ -42,6 +42,11 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 11-19 01:35 BEAKER TRAP: ops shows "PREEMPTED" for jobs that actually FAILED TO START on jupiter node ...DSTT74YA ("failed to create container: path does not exist"); that node
+  keeps taking new jobs. Three klb64 launches died this way (and the agents' "preempted" jobs earlier). Workaround: --cluster ai2/ceres-cirrascale (4th klb64 launch, 01:35).
+  If a job shows PREEMPTED with no runtime, check `beaker experiment get <id> --format json` -> jobs[-1].status.message. Record written: records/flopdrop-dynamic-drop-budget-matched.md
+  (linked from ops/experiments/tokdrop_lr/STATUS.md records list; `ops exp records --write` rewrote records/README.md in the MAIN checkout, which does not have this branch's record).
+  Still owed: ds64_fast8k/experiment_log.json entry (main checkout file, other sessions edit it: add via the flopdrop-experiment-log procedure).
 - 11-19 00:40 klb64 first launch (8 GPUs) PREEMPTED on node ...TT74YA x3 -> cancelled, relaunched on 4 GPUs: 01M7SER00G... (denselora-b1463), 01M7SERRZ8... (denselora-b2926),
   01M7SESJB2... (dense-b1463). Hub v136 published (per-task + selective-backward closures). OWED HOUSEKEEPING: records/early-dense-loss-proxy.md update (or a new record for the
   11-18 phase), STATUS.md via the close-out-experiment skill, ds64_fast8k/experiment_log.json entry. Do it at the next quiet heartbeat.
