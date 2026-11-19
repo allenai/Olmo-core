@@ -1210,6 +1210,15 @@ def build_and_fit(opts: argparse.Namespace) -> None:
     train_module = train_module_config.build(model)
     for variant, vopts in active:
         variant.post_build_train_module(train_module, vopts, vctx)
+    if opts.selbp_keep < 1.0 or opts.selbp_sched:
+        from olmo_core.train.selective_backward import SelectiveBackward
+
+        sched = tuple(float(x) for x in opts.selbp_sched.split(":")) if opts.selbp_sched else None
+        train_module._selbp = SelectiveBackward(
+            keep=opts.selbp_keep, mode=opts.selbp_mode, sched=sched, window_rows=opts.selbp_window,
+            warmup_steps=opts.selbp_warmup, seed=opts.seed)
+        print(f"[selbp] selective backward on: keep={opts.selbp_keep} mode={opts.selbp_mode} sched={sched} "
+              f"window_rows={opts.selbp_window} warmup_steps={opts.selbp_warmup}", flush=True)
     if getattr(opts, "oracle_scope", ""):
         # oracle token selection (olmo_core.nn.oracle_token_select): dense pass -> exact per-token LoRA-gradient
         # attribution -> the smallest top-k set with attribution cos >= --oracle-target -> routed pass (applied)
@@ -1944,6 +1953,16 @@ def parse_args() -> argparse.Namespace:
                     help="online router: body tokens kept per row (fraction of the row's body tokens)")
     ap.add_argument("--st-otr-explore-frac", type=float, default=0.1,
                     help="online router: share of the kept budget drawn uniformly at random (exploration)")
+    ap.add_argument("--selbp-keep", type=float, default=1.0,
+                    help="selective backward (olmo_core.train.selective_backward): after each micro-step's forward, run "
+                    "its backward only for the hardest share p of micro-steps (answer CE vs recent ones; skipped ones "
+                    "are charged forward-only). 1 = off")
+    ap.add_argument("--selbp-mode", choices=("quantile", "sample"), default="quantile",
+                    help="selective backward: keep above the running (1-p) quantile, or with probability ~ loss (mean p)")
+    ap.add_argument("--selbp-sched", default="",
+                    help="selective backward: 'a:b' = p moves linearly from a to b over training (overrides --selbp-keep)")
+    ap.add_argument("--selbp-window", type=int, default=512, help="selective backward: rows in the running window")
+    ap.add_argument("--selbp-warmup", type=int, default=20, help="selective backward: steps with every backward kept")
     ap.add_argument("--st-otr-early-nograd", action="store_true",
                     help="online router, mid-stack: on routed steps run blocks [0, drop_layer) forward-only (they learn "
                     "only on the dense steps; charged forward-only)")

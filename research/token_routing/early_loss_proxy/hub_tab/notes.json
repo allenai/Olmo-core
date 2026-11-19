@@ -13,10 +13,6 @@
  ],
  "log": [
   {
-   "t": "11-18 15:35",
-   "text": "Started an agent on selective backward (skip the backward pass on rows whose training loss is below a running quantile; branch loop/selbp, tag sb), on top of the 50%/20%/7% token drop, at 991 and 1,980 PF."
-  },
-  {
    "t": "11-18 15:20",
    "text": "Per-task FLOPs-to-match computed (ftm_task.py; 80 rows per task, rough): LoRA 50%/20%/7% is about 2x on contradiction, 2.3-2.9x on outlier, about 2x on reorder at every budget; the 20%/7% recipe is 3-3.8x on outlier but 1.2-1.7x on reorder and below 1x at 3,957 PF; qdmatch_nq is on a plateau (0.05-0.06) where ratios are not meaningful. Started an agent on per-task keep budgets (branch loop/taskbudget, tag tb)."
   },

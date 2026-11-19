@@ -450,10 +450,15 @@ class TransformerTrainModule(TrainModule):
         micro_batches = split_batch(batch, self.rank_microbatch_size // seq_len)
         num_micro_batches = len(micro_batches)
 
+        # Selective backward (olmo_core.train.selective_backward; off unless a trainer installs it).
+        selbp = getattr(self, "_selbp", None)
+
         # Train one micro-batch at a time.
         for micro_batch_idx, micro_batch in enumerate(micro_batches):
             with self._train_microbatch_context(micro_batch_idx, num_micro_batches):
                 input_ids, labels, model_kwargs = self._prepare_batch(micro_batch)
+                if selbp is not None:
+                    selbp.begin_mb(self.model)
 
                 # Run forward pass, get losses.
                 _, loss, ce_loss, z_loss = self.model_forward(
@@ -468,7 +473,8 @@ class TransformerTrainModule(TrainModule):
                 )
 
                 # Update total batch CE and Z loss.
-                ce_batch_loss += get_local_tensor(ce_loss.detach())
+                mb_ce = get_local_tensor(ce_loss.detach())
+                ce_batch_loss += mb_ce
                 del ce_loss
                 if z_batch_loss is not None:
                     assert z_loss is not None
@@ -476,7 +482,14 @@ class TransformerTrainModule(TrainModule):
                     del z_loss
 
                 # Run backward pass.
-                loss.backward()
+                if selbp is None or selbp.decide(
+                    self, input_ids, labels, mb_ce, batch_num_tokens_for_loss, self.label_ignore_index,
+                    micro_batch_idx == num_micro_batches - 1, dry_run,
+                ):
+                    loss.backward()
+                else:
+                    del loss
+                    selbp.skipped(self.model)
 
         del batch  # In case this helps with memory utilization.
 

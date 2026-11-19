@@ -856,6 +856,17 @@ class OnlineTokenRouter:
     def _flop(self, model, n: float) -> None:
         model._flop_extra_actual = float(getattr(model, "_flop_extra_actual", 0.0)) + float(n)
 
+    def _selbp_fwd_price(self, model, price, adj: float, head: int, n: int) -> None:
+        """Selective backward (--selbp-keep): also price this forward as forward-only (every block, adapter and the
+        head at 1/3 of forward + backward) and accumulate (forward-only - charged) in ``model._selbp_fwd_delta``; the
+        train module adds that delta to the FLOP meter for a micro-batch whose backward it skips."""
+        if getattr(model, "_selbp_fwd_delta", None) is None or not model.training:
+            return
+        if self._nograd_fwd or getattr(model, "_ffn_width", None) is not None:
+            raise NotImplementedError("selective backward: forward-only pricing with early_nograd / freeze / ffn-width")
+        abf = [x / 3.0 for x in self._block_extra(model, [1.0] * n)]
+        model._selbp_fwd_delta += price([1.0 / 3.0] * n, head / 3.0, abf) - adj
+
     def _hidden(self, model, input_ids: torch.Tensor) -> torch.Tensor:
         """(B, T, D) hidden state at ``feature_layer`` on the full row, no grad."""
         with torch.no_grad():
@@ -1550,21 +1561,28 @@ class OnlineTokenRouter:
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
         ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
-        for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
-            fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
-            fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
-            if self.stage_idx == 0:
-                actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
-                          + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
-                adj += actual - L * (sum(fb) + head)
-                # adapters: blocks below the drop at the full length, the rest at the kept length
-                adj += L * sum(ab[:L0]) + Lk * sum(ab[L0:])
-            else:
-                # a later pyramid stage: the earlier stages already charged blocks >= L0 at THIS stage's entry length L
-                adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx)
-                        - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + headx))
-                adj += (Lk - L) * sum(ab[L0:])
+
+        def price(fac, headx, ab):
+            adj = 0.0
+            for L, Lk in zip(real.sum(dim=1).tolist(), counts.tolist()):
+                fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
+                fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
+                if self.stage_idx == 0:
+                    actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
+                              + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
+                    adj += actual - L * (sum(fb) + head)
+                    # adapters: blocks below the drop at the full length, the rest at the kept length
+                    adj += L * sum(ab[:L0]) + Lk * sum(ab[L0:])
+                else:
+                    # a later pyramid stage: the earlier stages already charged blocks >= L0 at THIS stage's entry length L
+                    adj += (Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx)
+                            - L * (sum(f * x for f, x in zip(fac[L0:], fb[L0:])) + headx))
+                    adj += (Lk - L) * sum(ab[L0:])
+            return adj
+
+        adj += price(fac, headx, ab)
         self._flop(model, adj)
+        self._selbp_fwd_price(model, price, adj, head, len(blocks))
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         if self._next is not None:
             self._next._mid = self._stash_for_next(fp, ids, cid, Tr, Tw, order, valid)
@@ -1645,14 +1663,20 @@ class OnlineTokenRouter:
         fac = self._block_factors(len(blocks))
         self._stat("early_nograd", float(self._nograd_fwd))
         ab = self._block_extra(model, fac) if model.training else [0.0] * len(blocks)
-        adj = 0.0
-        for L, Lk in zip(lens.tolist(), counts.tolist()):
-            fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
-            fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
-            actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
-                      + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
-            adj += actual - L * (sum(fb) + head) + L * sum(ab[:L0]) + Lk * sum(ab[L0:])
+
+        def price(fac, headx, ab):
+            adj = 0.0
+            for L, Lk in zip(lens.tolist(), counts.tolist()):
+                fb = [int(b.num_flops_per_token(int(L))) if b is not None else 0 for b in blocks]
+                fk = [int(b.num_flops_per_token(int(Lk))) if b is not None else 0 for b in blocks[L0:]]
+                actual = (L * sum(f * x for f, x in zip(fac[:L0], fb[:L0]))
+                          + Lk * (sum(f * x for f, x in zip(fac[L0:], fk)) + headx))
+                adj += actual - L * (sum(fb) + head) + L * sum(ab[:L0]) + Lk * sum(ab[L0:])
+            return adj
+
+        adj = price(fac, headx, ab)
         self._flop(model, adj)
+        self._selbp_fwd_price(model, price, adj, head, len(blocks))
         self._stat("mid_row_frac", float(counts.sum()) / max(1.0, float(real.sum())))
         return h_new, kw
 
@@ -1694,6 +1718,8 @@ class OnlineTokenRouter:
                 else:
                     adj += (fac[i] - 1.0) * L * fb[i]
         self._flop(model, adj)
+        if getattr(model, "_selbp_fwd_delta", None) is not None:
+            raise NotImplementedError("selective backward: forward-only pricing of mod_layers")
         self._stat("mod_row_frac", float(counts.sum()) / max(1.0, float(real.sum())) if not dense else 1.0)
         return h, block_kwargs
 
