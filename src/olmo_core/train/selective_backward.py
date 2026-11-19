@@ -16,7 +16,8 @@ Modes:
 - ``quantile``: keep if the score is >= the (1 - p) quantile of the last ``window`` rows' worth of micro-step scores.
 - ``sample``: keep with probability min(1, c * score / mean(recent scores)), c solved on the recent window so the
   mean probability is p (softer, lower bias than the hard threshold).
-Warm-up: everything is kept for the first ``warmup_steps`` steps (the window fills meanwhile). ``sched=(a, b)``: p
+The backward-FLOP-weighted share actually kept is corrected toward p (effective share p + (p - recent realized
+share)), so PF/step ~ forward + p x backward. Warm-up: everything is kept for the first ``warmup_steps`` steps (the window fills meanwhile). ``sched=(a, b)``: p
 moves linearly from a to b over training progress. If no micro-step of a step was kept by its last micro-step, the
 last one is kept (forced) so every optimizer step has a gradient; forced keeps are counted.
 
@@ -37,7 +38,7 @@ __all__ = ["SelectiveBackward"]
 
 class SelectiveBackward:
     def __init__(self, keep: float, mode: str = "quantile", sched: Optional[Tuple[float, float]] = None,
-                 window_rows: int = 512, warmup_steps: int = 20, key_tokens: int = 11, seed: int = 0,
+                 window_rows: int = 512, warmup_steps: int = 20, key_tokens: int = 22, seed: int = 0,
                  log_every: int = 10):
         if not (0.0 < keep <= 1.0):
             raise ValueError(f"--selbp-keep must be in (0, 1], got {keep}")
@@ -48,6 +49,8 @@ class SelectiveBackward:
         self.log_every = int(log_every)
         self.rng = random.Random(1000003 + int(seed))  # same sequence on every rank (decisions are identical)
         self.hist: Optional[deque] = None
+        self.dec: Optional[deque] = None  # recent post-warm-up (keep, backward cost), for the correction
+        self._p_eff = keep
         self._fsdp_mods: Optional[List[Any]] = None
         self._step = -1
         self._step_kept = 0
@@ -102,23 +105,41 @@ class SelectiveBackward:
         dev = mb_ce.device
         x = torch.stack([(mb_ce.double().reshape(()) * torch.as_tensor(div_factor).to(dev).double().reshape(())),
                          (labels != ignore_index).sum().to(dev).double(),
-                         torch.tensor(float(input_ids.shape[0]), device=dev, dtype=torch.float64)])
+                         torch.tensor(float(input_ids.shape[0]), device=dev, dtype=torch.float64),
+                         torch.tensor(-float(getattr(tm.model, "_selbp_fwd_delta", 0.0) or 0.0), device=dev,
+                                      dtype=torch.float64)])
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(x)
-        ce_sum, ntok, nrows = x.tolist()
+        ce_sum, ntok, nrows, bwd_cost = x.tolist()  # summed over ranks: identical decisions everywhere
         score = ce_sum / max(1.0, ntok)
         if self.hist is None:
             self.hist = deque(maxlen=max(8, int(round(self.window_rows / max(1.0, nrows)))))
+            self.dec = deque(maxlen=self.hist.maxlen)
         p = self.p_now(step, trainer.max_steps)
         forced = False
         if step <= self.warmup_steps or p >= 1.0 or len(self.hist) < 8:
             keep = True
-        elif self.mode == "quantile":
-            keep = score >= self._threshold(p)
         else:
-            keep = self.rng.random() < self._sample_prob(score, p)
+            # keep-rate correction: the loss falls while the window lags, so a fixed quantile keeps fewer than p;
+            # move the effective share by the recent shortfall (p + (p - realized)), clipped
+            # realized share is cost-weighted (each micro-step weighted by its backward FLOPs), so PF/step tracks
+            # forward + p x backward
+            pe = p
+            if self.dec is not None and len(self.dec) >= 8:
+                tot = sum(c for _, c in self.dec)
+                real = sum(c for k, c in self.dec if k) / tot if tot > 0 else p
+                pe = min(1.0, max(0.02, p + (p - real)))
+            self._p_eff = pe
+            if pe >= 1.0:
+                keep = True
+            elif self.mode == "quantile":
+                keep = score >= self._threshold(pe)
+            else:
+                keep = self.rng.random() < self._sample_prob(score, pe)
         if not keep and is_last_mb and self._step_kept == 0:
             keep = forced = True
+        if step > self.warmup_steps and p < 1.0 and self.dec is not None:
+            self.dec.append((keep, max(0.0, bwd_cost)))  # forced keeps count toward the realized share
         self.hist.append(score)
         self._step_groups += 1
         self._step_kept += int(keep)
@@ -186,6 +207,6 @@ class SelectiveBackward:
                 for key, v in k.items():
                     kept[key] = kept.get(key, 0) + v
             per = {",".join(map(str, key)): [kept.get(key, 0), v] for key, v in sorted(seen.items(), key=lambda t: -t[1])}
-            print(f"[selbp] step {step} p={p:.3f} step_kept={self._step_kept}/{self._step_groups} "
+            print(f"[selbp] step {step} p={p:.3f} p_eff={self._p_eff:.3f} step_kept={self._step_kept}/{self._step_groups} "
                   f"saved_pf={float(saved.item()) / 1e15:.4f} run_kept={self.tot_kept}/{self.tot_groups} "
                   f"forced={self.tot_forced} thr_hist={len(self.hist or [])} per_task_kept_seen={per}", flush=True)
