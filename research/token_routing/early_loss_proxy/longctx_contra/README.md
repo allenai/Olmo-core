@@ -36,3 +36,21 @@ Required on long rows: `--skip-dry-run` (the trainer's mock batch is a full-leng
 (the router's warmup step otherwise trains the full context densely). Pooled soft tokens do not support CP, so the gold-drop
 arm runs plain DP. `cost_model.py` / `mix_tables.py`: the FLOP model (calibrated on memscale and checked on these smokes) and the
 length-mix tables.
+
+## Arms (launched 2026-11-19; `launch_arms.sh`, scoring `launch_arms.sh score <arm> <steps>`)
+
+| arm | Beaker | pool | setup | budget / stop |
+|---|---|---|---|---|
+| dense LoRA 256k (`dense256b`) | 01M7SJP9PY8W3H8B2JM7SXW87S | `lc256kmix_dense`: 1,091 x 256k + 1,200 each 2k/4k/8k/16k (first rows of the T pools) | CP4 x DP2, `--pack` (doc lengths), 2 windows/step, ~615 steps | 15,206 PF |
+| gold drop 256k (`gdd256`) | 01M7SHSBVSZ7HR6KQZ83V6HYW0 | `lc256kmix_gdd` (ordered, bucketed 8-row steps): 18,000 + 1,980 reused-gold 256k rows (tail, from row 83,008) + 71,993 short | DP8, keep 0.05-0.5, whole 0.05, prefix-chunk 4096, `--no-data-shuffle`, 11,496 steps | 15,206 PF |
+| dense LoRA 1M (`dense1m`) | 01M7SQ9K76E66V5R1KV24B68AB | `lc1mdense84`: the first 84 1M rows of `lc1mmix_gdd` in its order | CP8, `--gdn-int32-safe --ffn-chunk-tokens 32768 --shard-degree 1`, 1 row/step, 84 steps (168.5 s/row) | 84 rows = ~31.5 GPU-h (~13,600 PF) |
+| gold drop 1M (`gdd1m`) | 01M7SKA30E465Z6AZQTDZEJEEA | `lc1mmix_gdd` (ordered, bucketed): 4,971 x 1M + 71,993 short | DP8, keep 0.05-0.4, whole 0, prefix-chunk 4096, `--gdn-int32-safe`, 9,620 steps | max 17,000 PF; read at dense1m's PF |
+
+Checkpoints: weka `.../early_loss_proxy/runs_lc/<arm>/stepN`. Scoring = checkpoint-then-score in the dense-LoRA model class:
+256k / 16k held-out on the 1-GPU logits path (both 256k arms), 1M held-out (64 rows) under CP4 with the z-loss-corrected
+labels path (matches the 1-GPU path to -0.0035 mean on 256k rows). Live logs: S3 `early_loss_proxy/results/lcA-<arm>/<run>.live.log`.
+
+Findings on the way (details in the smoke table and commits): the trainer's `--pack` emitted no document lengths
+(cross-example attention, one FLOP charge per window) -> fixed; the FLOP meter counted every CP rank -> fixed; the
+fused-linear CE (liger) always adds 1e-4 * lse^2 (z-loss) to the training loss and to the labels-path CE (+0.05 per token)
+-> probe path fixed, training unchanged; Beaker node jupiter-cs-aus-152 fails container start (`--exclude-host`).
