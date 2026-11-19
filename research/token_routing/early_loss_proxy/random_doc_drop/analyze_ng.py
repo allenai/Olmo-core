@@ -93,13 +93,13 @@ def main():
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        col = {"dft": "#555555", "k20": "#2a6fdb", "rddA": "#d9480f", "rddB": "#2f9e44", "dftA": "#9c36b5"}
+        col = {"dft": "#555555", "k20": "#2a6fdb", "rddA": "#d9480f", "rddB": "#2f9e44", "rddAnr": "#9c36b5", "dftA": "#e8590c"}
         fig, ax = plt.subplots(1, 4, figsize=(18, 4.2))
         for i, key in enumerate(["mean"] + TASKS):
             for arm, seeds in out["arms"].items():
                 for sd, r in seeds.items():
                     y = r["ce"] if key == "mean" else r["by_task"][key]
-                    ax[i].plot(r["pf"], y, "-o", ms=3, color=col.get(arm, "k"), alpha=1.0 if sd == 0 else 0.5,
+                    ax[i].plot(r["pf"], y, marker="o", ms=3, color=col.get(arm, "k"), alpha=1.0 if sd == 0 else 0.5,
                                ls="-" if sd == 0 else "--", label=f"{arm} sd{sd}")
             ax[i].set_xscale("log")
             ax[i].set_yscale("log")

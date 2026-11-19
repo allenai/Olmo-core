@@ -23,5 +23,11 @@ Record: `records/random-doc-drop-no-gold.md`. Experiment `tokdrop_lr`.
 - Launch: `python3 random_doc_drop/launch_ng.py --arms dft,k20,rddA,rddB,rddAnr --seeds 0` (Beaker 2 x H100).
 - Fetch: `bash ../fetch_beaker_results.sh ng16k`; score: `python3 analyze_ng.py --root <dir>/ng16k --out ng_results.json --png ng_loss_vs_pf.png`.
 
-## State
-(see bottom, updated as runs land)
+## State (2026-11-18 ~19:00 PT): DONE
+- Seed 0: dft, k20, rddA, rddB, rddAnr. Seed 1: k20, rddA, rddAnr (pools rddA_s1 / rddB_s1 / rddAnr_s1 are built and
+  staged). All Beaker runs have finished and are marked done in ops; 52 rows were added with `ops result add --check`.
+- Verdict (record): random doc drop is not reliably ahead of the recipe on no-gold tasks. Savings at own lowest loss
+  vs k20 are 1.25x / 0.90x for rddA. Reorder is behind at matched FLOPs, grouping is level, and oolong is ahead but
+  noisy. The no-rewrite control beats the rewritten arm on every task (-0.016 / -0.014 mean CE).
+- Open, if wanted: rddB seed 1 (its pool is staged); deeper budgets (multi-epoch / bigger pool) to see whether the
+  shallow-level advantage survives; a fresh OpenAlex pool for grouping to remove the 89% held-out abstract overlap.
