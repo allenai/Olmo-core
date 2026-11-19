@@ -42,6 +42,9 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 11-19 09:05 experiment_log.json entry ADDED (main checkout research/token_routing/ds64_fast8k/experiment_log.json, +10 lines, UNCOMMITTED there on prasann/flopdrop_clean: the main
+  session commits it; copy in this folder: experiment_log_entry_loop.json) and spliced into the hub with hub_live/update_log.py -> hub v139. All housekeeping done (record, STATUS link,
+  log entry, hub). NOTHING IN FLIGHT; waiting for Prasann's direction (accept ~2x / change task mix / ideas outside per-step token dropping). Heartbeats: answer in one line.
 - 11-19 08:45 genval2 FINAL (loop/validate2 @ 69ec057f4; table copied to hub_tab/genval2_table.json): generation F1 16k mean3: lo-p50-20-7 @1,980 PF 0.942; dense LoRA @1,963
   0.851; dense FT @3,960 0.929; dense LoRA @3,986 0.938. HEADLINE CONFIRMED on the task metric (one seed). The agent removed 39 duplicate rows it had added
   to ~/ops_state/results.jsonl (backup in the scratchpad). The broken jupiter node is jupiter-cs-aus-152; beaker_ctc_suite.py on that branch has --hostnames. NOTHING IN FLIGHT.
