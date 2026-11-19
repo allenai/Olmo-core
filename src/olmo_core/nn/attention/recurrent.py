@@ -597,7 +597,52 @@ class GatedDeltaNet(SequenceMixer):
                 s_safe = int32_safe_tokens(width, limit=getattr(self, "_int32_safe_limit", 2**30))
                 if q.size(1) > s_safe:
                     safe_seg = s_safe if seg <= 0 else min(seg, s_safe)
-            if safe_seg > 0:
+            packed_safe = False
+            if getattr(self, "_int32_safe", False) and cu_doc_lens is not None and initial_state is None \
+                    and cache is None and q.size(0) == 1:
+                width = max(q.shape[2] * q.shape[3], v.shape[2] * v.shape[3])
+                s_safe_p = int32_safe_tokens(width, limit=getattr(self, "_int32_safe_limit", 2**30))
+                packed_safe = q.size(1) > s_safe_p
+            if packed_safe:
+                # Packed rows (cu_doc_lens) past the bound (longctx_contra, 2026-11-19): documents are independent, so
+                # run the kernel per GROUP of whole documents below the bound (local cu_seqlens, no state carried
+                # between groups) and any single document past the bound as state-carrying segments. Exact.
+                cu = [int(c) for c in cu_doc_lens.tolist()]
+                outs, grp = [], []
+
+                def _flush():
+                    if not grp:
+                        return
+                    g0, g1 = grp[0][0], grp[-1][1]
+                    loc = torch.tensor([d0 - g0 for d0, _ in grp] + [g1 - g0], dtype=cu_doc_lens.dtype,
+                                       device=cu_doc_lens.device)
+                    o_g, _ = dispatch_chunk_gated_delta_rule(
+                        q=q[:, g0:g1], k=k[:, g0:g1], v=v[:, g0:g1], g=g[:, g0:g1], beta=beta[:, g0:g1],
+                        cu_seqlens=loc, initial_state=None, output_final_state=False, use_qk_l2norm_in_kernel=True,
+                    )
+                    outs.append(o_g)
+                    grp.clear()
+
+                for d0, d1 in zip(cu[:-1], cu[1:]):
+                    if d1 <= d0:
+                        continue
+                    if d1 - d0 > s_safe_p:
+                        _flush()
+                        st = None
+                        for s0 in range(d0, d1, s_safe_p):
+                            sl = slice(s0, min(s0 + s_safe_p, d1))
+                            o_s, st = dispatch_chunk_gated_delta_rule(
+                                q=q[:, sl], k=k[:, sl], v=v[:, sl], g=g[:, sl], beta=beta[:, sl],
+                                initial_state=st, output_final_state=s0 + s_safe_p < d1, use_qk_l2norm_in_kernel=True,
+                            )
+                            outs.append(o_s)
+                        continue
+                    if grp and d1 - grp[0][0] > s_safe_p:
+                        _flush()
+                    grp.append((d0, d1))
+                _flush()
+                o, new_state = torch.cat(outs, dim=1), None
+            elif safe_seg > 0:
                 outs, st = [], initial_state
                 Tq = q.size(1)
                 for s0 in range(0, Tq, safe_seg):
