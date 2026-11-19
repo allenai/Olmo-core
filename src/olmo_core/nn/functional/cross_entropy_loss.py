@@ -110,7 +110,8 @@ def fused_linear_cross_entropy_loss(
         bias,
         ce_weight,
         ignore_index,
-        z_loss_multiplier,
+        # Liger's return_z_loss flag controls reporting, not regularization.
+        z_loss_multiplier if compute_z_loss else 0.0,
         label_smoothing,
         reduction,
         softcap,

@@ -42,7 +42,10 @@ def leaky_ce_sums(
             zero = flat_h.sum() * 0.0 + weight.sum() * 0.0
             return zero if bias is None else zero + bias.sum() * 0.0
         selected_h, selected_labels = flat_h[mask], targets[mask]
-        if fused:
+        # Liger 0.6.4 dereferences a missing bias gradient in no-grad mode.
+        # Use bounded FP32 CE chunks for biased diagnostic-only calls.
+        bias_diagnostic = bias is not None and not torch.is_grad_enabled()
+        if fused and not bias_diagnostic:
             loss, _ = fused_linear_cross_entropy_loss(
                 selected_h,
                 weight,
@@ -52,7 +55,17 @@ def leaky_ce_sums(
                 accum_dtype=torch.float32,
             )
             return loss
-        return F.cross_entropy(F.linear(selected_h, weight, bias), selected_labels, reduction="sum")
+        chunk_size = 1024 if fused and bias_diagnostic else len(selected_labels)
+        losses = []
+        for start in range(0, len(selected_labels), chunk_size):
+            logits = F.linear(selected_h[start:start + chunk_size], weight, bias)
+            # An FP16 context sum can overflow even with finite per-token CE.
+            if logits.dtype in (torch.float16, torch.bfloat16):
+                logits = logits.float()
+            losses.append(F.cross_entropy(
+                logits, selected_labels[start:start + chunk_size], reduction="sum"
+            ))
+        return torch.stack(losses).sum()
 
     output_sum = group_sum(valid & output)
     with torch.set_grad_enabled(torch.is_grad_enabled() and cpt_loss_scaler != 0):
