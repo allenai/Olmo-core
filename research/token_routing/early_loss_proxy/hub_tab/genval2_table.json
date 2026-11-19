@@ -1,0 +1,363 @@
+{
+ "elpv2-p50-x4-s1683": {
+  "steps": 1683,
+  "pf": 1980.01918,
+  "final_train_ce_last10": 0.11055999999999999,
+  "proxy_16k_ce": 0.074,
+  "cells": {
+   "contradiction@4k": {
+    "value": 0.992,
+    "eval_size": 500,
+    "se": 0.004,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@8k": {
+    "value": 0.987,
+    "eval_size": 500,
+    "se": 0.0051,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@16k": {
+    "value": 0.976,
+    "eval_size": 500,
+    "se": 0.0068,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@4k": {
+    "value": 0.999,
+    "eval_size": 500,
+    "se": 0.0014,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@8k": {
+    "value": 0.966,
+    "eval_size": 500,
+    "se": 0.0081,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@16k": {
+    "value": 0.965,
+    "eval_size": 500,
+    "se": 0.0082,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@4k": {
+    "value": 0.986,
+    "eval_size": 500,
+    "se": 0.0053,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@8k": {
+    "value": 0.96,
+    "eval_size": 500,
+    "se": 0.0088,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@16k": {
+    "value": 0.885,
+    "eval_size": 500,
+    "se": 0.0143,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "reorder@4k": {
+    "value": 0.104,
+    "eval_size": 500,
+    "se": 0.0137,
+    "parse_rate": 0.372,
+    "metric": "kendall_tau"
+   },
+   "reorder@8k": {
+    "value": 0.033,
+    "eval_size": 500,
+    "se": 0.008,
+    "parse_rate": 0.148,
+    "metric": "kendall_tau"
+   },
+   "reorder@16k": {
+    "value": 0.0,
+    "eval_size": 500,
+    "se": 0.0,
+    "parse_rate": 0.0,
+    "metric": "kendall_tau"
+   }
+  },
+  "mean3": {
+   "4k": [
+    0.9923,
+    0.0022
+   ],
+   "8k": [
+    0.971,
+    0.0043
+   ],
+   "16k": [
+    0.942,
+    0.0059
+   ]
+  }
+ },
+ "elpv2-denselora-x4-s642": {
+  "steps": 642,
+  "pf": 1962.97641,
+  "final_train_ce_last10": 0.1434,
+  "proxy_16k_ce": 0.103,
+  "cells": {
+   "contradiction@4k": {
+    "value": 0.991,
+    "eval_size": 500,
+    "se": 0.0042,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@8k": {
+    "value": 0.971,
+    "eval_size": 500,
+    "se": 0.0075,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@16k": {
+    "value": 0.949,
+    "eval_size": 500,
+    "se": 0.0098,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@4k": {
+    "value": 0.973,
+    "eval_size": 500,
+    "se": 0.0072,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@8k": {
+    "value": 0.907,
+    "eval_size": 500,
+    "se": 0.013,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@16k": {
+    "value": 0.726,
+    "eval_size": 500,
+    "se": 0.0199,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@4k": {
+    "value": 0.989,
+    "eval_size": 500,
+    "se": 0.0047,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@8k": {
+    "value": 0.955,
+    "eval_size": 500,
+    "se": 0.0093,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@16k": {
+    "value": 0.878,
+    "eval_size": 500,
+    "se": 0.0146,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   }
+  },
+  "mean3": {
+   "4k": [
+    0.9843,
+    0.0032
+   ],
+   "8k": [
+    0.9443,
+    0.0059
+   ],
+   "16k": [
+    0.851,
+    0.0089
+   ]
+  }
+ },
+ "elpv2-dense-x4-s976": {
+  "steps": 976,
+  "pf": 3959.57156,
+  "final_train_ce_last10": 0.12355000000000001,
+  "proxy_16k_ce": 0.081,
+  "cells": {
+   "contradiction@4k": {
+    "value": 0.995,
+    "eval_size": 500,
+    "se": 0.0032,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@8k": {
+    "value": 0.986,
+    "eval_size": 500,
+    "se": 0.0053,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@16k": {
+    "value": 0.97,
+    "eval_size": 500,
+    "se": 0.0076,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@4k": {
+    "value": 0.998,
+    "eval_size": 500,
+    "se": 0.002,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@8k": {
+    "value": 0.988,
+    "eval_size": 500,
+    "se": 0.0049,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@16k": {
+    "value": 0.929,
+    "eval_size": 500,
+    "se": 0.0115,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@4k": {
+    "value": 0.987,
+    "eval_size": 500,
+    "se": 0.0051,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@8k": {
+    "value": 0.956,
+    "eval_size": 500,
+    "se": 0.0092,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@16k": {
+    "value": 0.889,
+    "eval_size": 500,
+    "se": 0.014,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   }
+  },
+  "mean3": {
+   "4k": [
+    0.9933,
+    0.0021
+   ],
+   "8k": [
+    0.9767,
+    0.0039
+   ],
+   "16k": [
+    0.9293,
+    0.0066
+   ]
+  }
+ },
+ "elpv2-denselora-x16-s1293": {
+  "steps": 1293,
+  "pf": 3985.81577,
+  "final_train_ce_last10": 0.10811,
+  "proxy_16k_ce": 0.078,
+  "cells": {
+   "contradiction@4k": {
+    "value": 0.997,
+    "eval_size": 500,
+    "se": 0.0024,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@8k": {
+    "value": 0.987,
+    "eval_size": 500,
+    "se": 0.0051,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "contradiction@16k": {
+    "value": 0.972,
+    "eval_size": 500,
+    "se": 0.0074,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@4k": {
+    "value": 0.998,
+    "eval_size": 500,
+    "se": 0.002,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@8k": {
+    "value": 0.982,
+    "eval_size": 500,
+    "se": 0.0059,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "outlier@16k": {
+    "value": 0.954,
+    "eval_size": 500,
+    "se": 0.0094,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@4k": {
+    "value": 0.989,
+    "eval_size": 500,
+    "se": 0.0047,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@8k": {
+    "value": 0.959,
+    "eval_size": 500,
+    "se": 0.0089,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   },
+   "qdmatch_nq@16k": {
+    "value": 0.887,
+    "eval_size": 500,
+    "se": 0.0142,
+    "parse_rate": 1.0,
+    "metric": "f1"
+   }
+  },
+  "mean3": {
+   "4k": [
+    0.9947,
+    0.0019
+   ],
+   "8k": [
+    0.976,
+    0.0039
+   ],
+   "16k": [
+    0.9377,
+    0.0062
+   ]
+  }
+ }
+}

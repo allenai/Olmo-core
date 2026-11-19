@@ -1,6 +1,6 @@
 {
- "updated": "2026-11-19 03:58 PT",
- "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline (finished runs with complete schedules, 16k CE on 320 rows; two seeds at 495, 991 and 1,980 PF, one seed at 3,975 PF): token dropping with LoRA and a 50% / 20% / 7% keep over three cuts needs 2.3x, 2.1x and 2.4x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget up to 7,934 PF) at 495, 991 and 1,980 PF, and 1.9-2.0x at 3,975 PF on the 16x pool; the gain does not shrink with data over an 8-fold range of budgets. That is far from the 10-20x target. Everything tried to go below about 0.3x dense per step lost per FLOP or faded with data: smaller keep shares, an earlier first cut, more stages, keep schedules, gradient compensation, frozen early blocks, mixture-of-depths, sparse backward, and skipping the backward on easy rows. Two additions give small gains at small budgets only: dropping distractor documents on 16k rows (2.7-2.9x at 465-990 PF, level by 1,970 PF) and per-task keep budgets (2.6x on two seeds at 991 PF, about 0.005 better than the uniform arm). At 64k rows the ratio against dense LoRA is 1.6-2.0x (3-4x against dense full fine-tune alone), so it does not grow with context length either. In flight: a generation-eval check of the 2x headline (four checkpointed runs). The idea queue for further speedups is empty.",
+ "updated": "2026-11-19 08:37 PT",
+ "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline (finished runs with complete schedules, 16k CE on 320 rows; two seeds at 495, 991 and 1,980 PF, one seed at 3,975 PF): token dropping with LoRA and a 50% / 20% / 7% keep over three cuts needs 2.3x, 2.1x and 2.4x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget up to 7,934 PF) at 495, 991 and 1,980 PF, and 1.9-2.0x at 3,975 PF on the 16x pool; the gain does not shrink with data over an 8-fold range of budgets. That is far from the 10-20x target. Everything tried to go below about 0.3x dense per step lost per FLOP or faded with data: smaller keep shares, an earlier first cut, more stages, keep schedules, gradient compensation, frozen early blocks, mixture-of-depths, sparse backward, and skipping the backward on easy rows. Two additions give small gains at small budgets only: dropping distractor documents on 16k rows (2.7-2.9x at 465-990 PF, level by 1,970 PF) and per-task keep budgets (2.6x on two seeds at 991 PF, about 0.005 better than the uniform arm). At 64k rows the ratio against dense LoRA is 1.6-2.0x (3-4x against dense full fine-tune alone), so it does not grow with context length either. Generation evals confirm it on one seed: at 1,980 PF the token-drop arm scores 0.942 mean F1 at 16k (3 tasks, 500 examples per cell) against 0.851 for dense LoRA at equal FLOPs and 0.929 / 0.938 for dense at twice the FLOPs. Nothing is in flight; the idea queue for further speedups is empty.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
   "At fixed steps the dense forward (full context, no dropping, adapters on) is scored on held-out rows from the CTC-suite eval files: teacher-forced answer CE, 16 rows per task and length (4k, 8k, 16k) except reorder at 16k, where only 8 eval rows fit in 16,384 tokens; eval_size 184.",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-19 08:45",
+   "text": "Generation evals back the headline (one seed, eval_size 500 per cell): token drop 50%/20%/7% at 1,980 PF scores 3-task mean F1 0.942 at 16k against 0.851 for dense LoRA at the same FLOPs and 0.929 / 0.938 for dense full fine-tune / dense LoRA at about twice the FLOPs."
+  },
   {
    "t": "11-19 04:00",
    "text": "Idea queue empty; started the one non-speculative step: an agent training four checkpointed runs (token drop at 1,980 PF, dense LoRA at 1,965 and 3,986 PF, dense full fine-tune at 3,960 PF) and scoring them with generation evals, to confirm the 2x headline on the task metric (branch loop/validate2)."
@@ -564,8 +568,8 @@
    "family": "reference",
    "title": "Generation-eval check of the 2x headline",
    "what": "The headline is measured with a proxy (dense-forward answer CE on 320 held-out rows). Train four runs with checkpoints at the proxy runs' exact step counts and schedules (token drop 50% / 20% / 7% at 1,980 PF; dense LoRA at 1,965 PF; dense full fine-tune at 3,960 PF; dense LoRA at 3,986 PF) and score contradiction, outlier and qdmatch_nq generations at 4k / 8k / 16k with 500 examples per cell: does the drop arm beat dense LoRA at equal FLOPs, and does it match dense at twice the FLOPs?",
-   "status": "running",
-   "result": ""
+   "status": "done",
+   "result": "Confirmed on one seed (generation F1, no-cot, eval_size 500 per cell, parse rate 1.0 in all 36 cells; reorder left out because its grader still fails: parse rate 0.0-0.37). token drop 50% / 20% / 7% (LoRA), 1,683 steps, 1,980 PF: 16k F1 contradiction 0.976, outlier 0.965, qdmatch_nq 0.885; 3-task mean 4k / 8k / 16k 0.992 / 0.971 / 0.942 (SE 0.006 at 16k); dense LoRA, 642 steps, 1,963 PF: 16k F1 contradiction 0.949, outlier 0.726, qdmatch_nq 0.878; 3-task mean 4k / 8k / 16k 0.984 / 0.944 / 0.851 (SE 0.009 at 16k); dense full fine-tune, 976 steps, 3,960 PF: 16k F1 contradiction 0.970, outlier 0.929, qdmatch_nq 0.889; 3-task mean 4k / 8k / 16k 0.993 / 0.977 / 0.929 (SE 0.007 at 16k); dense LoRA, 1,293 steps, 3,986 PF: 16k F1 contradiction 0.972, outlier 0.954, qdmatch_nq 0.887; 3-task mean 4k / 8k / 16k 0.995 / 0.976 / 0.938 (SE 0.006 at 16k). (a) At equal FLOPs the token-drop arm beats dense LoRA at 16k by 0.091 (about 9 combined standard errors), mostly on outlier (0.965 against 0.726); qdmatch_nq is a tie. (b) It is level with dense runs that used about twice the FLOPs: 16k mean 0.942 against 0.929 (dense full fine-tune) and 0.938 (dense LoRA); about one standard error lower at 8k (0.971 against 0.977 / 0.976). So the 2x holds on the task metric. Training reproduced the proxy runs exactly (same steps, data order, PF within 0.1; train CE within 0.002 on the 2-GPU runs). Evals used the first validation's path (legacy native ladder on the suite rows), not the olmo-eval launcher. Branch loop/validate2 @ 69ec057f4; checkpoints on weka under ctc_suite/ckpts/elpv2-*."
   }
  ],
  "best_by_hour": [
@@ -688,6 +692,16 @@
    "xw": null,
    "mem": null,
    "note": "LoRA + keep 50% / 20% / 7% token drop + keep 25% of the distractor documents on 16k rows. 2.75x at 465 PF. One seed; seed 1 and a 1,980 PF run are in flight. Uses gold-document labels. UPDATE 14:30: at 1,971 PF the same setting is level with the token drop alone (0.073 against 0.074), so this gain fades with data and is not the headline."
+  },
+  {
+   "t": "11-19 08:45",
+   "arm": "lo-p50-20-7 (generation evals)",
+   "idea": "genval2",
+   "x": 2.0,
+   "level": "generation F1 at 16k, 3-task mean, eval_size 500 per cell: 0.942 at 1,980 PF against 0.929 / 0.938 for dense at 3,960-3,986 PF",
+   "xw": null,
+   "mem": null,
+   "note": "The 2x holds on the task metric (one seed): the token-drop arm at 1,980 PF matches dense at about twice the FLOPs and beats dense LoRA at equal FLOPs (0.851)."
   }
  ],
  "validation": [

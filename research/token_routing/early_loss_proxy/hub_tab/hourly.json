@@ -118,5 +118,15 @@
   "xw": null,
   "mem": null,
   "note": "LoRA + keep 50% / 20% / 7% token drop + keep 25% of the distractor documents on 16k rows. 2.75x at 465 PF. One seed; seed 1 and a 1,980 PF run are in flight. Uses gold-document labels. UPDATE 14:30: at 1,971 PF the same setting is level with the token drop alone (0.073 against 0.074), so this gain fades with data and is not the headline."
+ },
+ {
+  "t": "11-19 08:45",
+  "arm": "lo-p50-20-7 (generation evals)",
+  "idea": "genval2",
+  "x": 2.0,
+  "level": "generation F1 at 16k, 3-task mean, eval_size 500 per cell: 0.942 at 1,980 PF against 0.929 / 0.938 for dense at 3,960-3,986 PF",
+  "xw": null,
+  "mem": null,
+  "note": "The 2x holds on the task metric (one seed): the token-drop arm at 1,980 PF matches dense at about twice the FLOPs and beats dense LoRA at equal FLOPs (0.851)."
  }
 ]
