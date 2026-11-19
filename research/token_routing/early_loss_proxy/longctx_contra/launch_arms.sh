@@ -35,7 +35,7 @@ case $ARM in
       CK=$SR/$SA/step$st/model_and_optim
       [ "${ONLY1M:-}" ] || RUNS+=(--run "score-$SA-s$st|probe|8|$V|1e-5|kl2k|4096|8|1|lc256k:160,lc16k:160|$F $( [ $st = 0 ] || echo --base-checkpoint $CK )")
       # 1M held-out: CP8 (one data-parallel group, no duplicated rows; int32 bound 2,097,152), one job per checkpoint
-      case $SA in *1m) [ "${SKIP1M:-}" ] || python3 $L --env DENSE_PROBE_SCORE_ONLY=1 --tag lcS-$SA --minutes 60 --gpus 8 \
+      case $SA in *1m|*1m_mix) [ "${SKIP1M:-}" ] || python3 $L --env DENSE_PROBE_SCORE_ONLY=1 --tag lcS-$SA --minutes 60 --gpus 8 \
         --cluster ai2/jupiter-cirrascale-2 --exclude-host jupiter-cs-aus-152 ${DRY:+--dry-run} \
         --run "score1m-$SA-s$st|probe|8|full|1e-5|lc1mdense84|1048576|1|1|lc1m:64|$LORA --cp-degree 8 --shard-degree 1 --gdn-int32-safe --ffn-chunk-tokens 32768 --skip-dry-run $( [ $st = 0 ] || echo --base-checkpoint $CK )" ;; esac
     done
