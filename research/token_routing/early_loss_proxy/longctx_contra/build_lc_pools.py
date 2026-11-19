@@ -43,6 +43,7 @@ KW = f"{P.WORK}/lc"
 SH = "/data/prasann/early_loss_proxy/shards"
 HO_OUT = "/data/prasann/early_loss_proxy/heldout_lc.npz"
 SUFFIX = [""]
+GEN_SEED = [P.SEED]  # --gen-seed: another seed gives the SAME gold pairs per row index (pool order) with new fillers / order
 
 
 def env(r):
@@ -67,7 +68,7 @@ def _gen(job):
     t0 = time.time()
     if kind == "train":
         out, target = f"{KW}/gen/{r}", f"{KW}/gen/{r}/{T}/train.jsonl"
-        args = ["--split", "train", "--train", str(GEN[r]), "--seed", str(P.SEED)]
+        args = ["--split", "train", "--train", str(GEN[r]), "--seed", str(GEN_SEED[0])]
     else:
         out, target = f"{KW}/hogen/{r}", f"{KW}/hogen/{r}/{T}/eval_{r}.jsonl"
         args = ["--split", "eval", "--eval-size", str(HO_GEN[r]), "--allow-small-eval", "--eval-seed", "99"]
@@ -271,8 +272,11 @@ def main():
     ap.add_argument("--sizes", default="", help="override train rows per length, e.g. 256k=18000:18000,1m=5000:5000 "
                     "(generated:kept); with --suffix the pools are lc<L><suffix> and the work dir v2build/lc<suffix>")
     ap.add_argument("--suffix", default="", help="pool-name / work-dir suffix (e.g. L); held-out stays heldout_lc.npz")
+    ap.add_argument("--gen-seed", type=int, default=0, help="ctc train-stream seed (default 42 = setA / kl pools)")
     a = ap.parse_args()
     global KW
+    if a.gen_seed:
+        GEN_SEED[0] = a.gen_seed
     for kv in [x for x in a.sizes.split(",") if x]:
         r, _, v = kv.partition("=")
         g, _, k = v.partition(":")

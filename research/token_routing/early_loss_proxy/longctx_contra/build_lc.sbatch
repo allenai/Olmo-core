@@ -16,6 +16,6 @@ export TMPDIR=/data/prasann/tmp HF_HOME=/data/prasann/early_loss_proxy/v2build/h
 cd "$CODE"
 for st in ${STAGES:-gen tokenize build}; do  # (+ addho for held-out sets)
   echo "=== $st $(date +%T)"
-  $PY research/token_routing/early_loss_proxy/longctx_contra/build_lc_pools.py $st ${LENS:+--lens $LENS} ${SIZES:+--sizes $SIZES} ${SUFFIX:+--suffix $SUFFIX}
+  $PY research/token_routing/early_loss_proxy/longctx_contra/build_lc_pools.py $st ${LENS:+--lens $LENS} ${SIZES:+--sizes $SIZES} ${SUFFIX:+--suffix $SUFFIX} ${GENSEED:+--gen-seed $GENSEED}
 done
 echo "=== LC_BUILD_DONE $(date +%T)"
