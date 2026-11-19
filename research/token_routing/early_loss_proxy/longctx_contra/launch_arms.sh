@@ -27,10 +27,9 @@ case $ARM in
     ;;
   score)
     SA=${2:?arm}; STEPS=${3:?steps}
-    case $SA in
-      dense256|dense256b) V=full; F="$LORA" ;;
-      gdd256|gdd1m) V=softtoken; F="$R" ;;
-    esac
+    # every arm is scored in the SAME model class (dense LoRA): the router arms' early-LoRA adapters load under the
+    # same parameter names (verified 2026-11-19: a gold-drop checkpoint scores 1.1678 both ways, lcsmO)
+    V=full; F="$LORA"
     RUNS=()
     for st in ${STEPS//,/ }; do
       CK=$SR/$SA/step$st/model_and_optim
