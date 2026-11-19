@@ -23,6 +23,11 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--src", action="append", required=True)
     ap.add_argument("--root", default=SH)
+    ap.add_argument("--pad-long-to", type=int, default=0,
+                    help="after every row longer than --pad-long-min, append a label-free filler document (token 220 x k + "
+                    "EOS) so the row + filler fill exactly this many tokens (one --pack window; train with "
+                    "--pack-unpack-long). 0 = off")
+    ap.add_argument("--pad-long-min", type=int, default=524288)
     ap.add_argument("--min-len", type=int, default=0, help="take only rows at least this long (e.g. the long rows of a mixed pool, in its order)")
     ap.add_argument("--ordered", action="store_true",
                     help="write ONE part with the rows in a planned order (train with --no-data-shuffle): every --src is "
@@ -69,6 +74,13 @@ def main():
                 ids.append(np.asarray(mm[p][0][s0:s0 + r["len"]]))
                 msk.append(np.asarray(mm[p][1][s0:s0 + r["len"]]))
                 assert ids[-1][-1] == meta0.get("eos_token_id", ids[-1][-1])
+                if a.pad_long_to and r["len"] >= a.pad_long_min:
+                    k = a.pad_long_to - r["len"]
+                    assert k >= 2, (r["len"], a.pad_long_to)
+                    fill = np.full(k, 220, dtype=np.uint32)
+                    fill[-1] = meta0["eos_token_id"]
+                    ids[-1] = np.concatenate([ids[-1], fill])  # row + filler doc, one array (one info row)
+                    msk[-1] = np.concatenate([msk[-1], np.zeros(k, dtype=np.bool_)])
                 fp = r["fingerprint"]
                 assert fp not in gold, f"duplicate row {fp}"
                 gold[fp] = g[fp]

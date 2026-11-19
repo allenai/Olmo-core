@@ -1,3 +1,4 @@
+import os
 import logging
 from collections import defaultdict
 from functools import cached_property
@@ -2685,6 +2686,18 @@ class Transformer(nn.Module):
                 "shards `input_ids`/`labels`/RoPE while `input_embeddings` stays full-size, which "
                 "would misalign the hidden states."
             )
+
+        # Packed windows holding a document longer than OLMO_UNPACK_LONG_DOCS tokens (trainer --pack-unpack-long) run
+        # down the UNPACKED path: no doc lengths, exactly a single-row step (longctx_contra 2026-11-19: a packed 1M
+        # window OOMed where the same row unpacked peaks at 67 GiB). The pool pads such rows to the full window with a
+        # label-free filler document, so nothing else shares the window; the FLOP meter then charges the row up to its
+        # first EOS.
+        _ul = int(os.environ.get("OLMO_UNPACK_LONG_DOCS", "0") or 0)
+        if _ul and kwargs.get("doc_lens") is not None:
+            _dl = kwargs["doc_lens"]
+            if int(_dl.max()) > _ul:
+                kwargs.pop("doc_lens", None)
+                kwargs.pop("max_doc_lens", None)
 
         # Soft-token document pooling ("B1"): during training, compact the sequence (pooled docs ->
         # one placeholder each) BEFORE anything else sees it. Eval/generation forwards untouched.

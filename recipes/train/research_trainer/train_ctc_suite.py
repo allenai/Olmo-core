@@ -2458,6 +2458,10 @@ def parse_args() -> argparse.Namespace:
         "full save costs ~82G of user quota and ~25 min of NFS writes that nothing reads. "
         "Incompatible with resuming the run later.",
     )
+    ap.add_argument("--pack-unpack-long", type=int, default=0,
+                    help="--pack: windows holding a document longer than N tokens run unpacked (no doc lengths); pair with "
+                    "a pool whose long rows are padded to the window by a label-free filler document (assemble_mix "
+                    "--pad-long-to). 0 = off")
     ap.add_argument("--no-data-shuffle", action="store_true",
                     help="train on the pool's rows in file order (parts in glob order, rows in part order) instead of the "
                     "seeded shuffle; for pools whose order is planned (e.g. longctx_contra assemble_mix.py --ordered)")
@@ -2492,6 +2496,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--prefix-chunk-offload", action="store_true",
                     help="--prefix-chunk: keep the prefix blocks' activation-checkpoint inputs in pinned host memory")
     opts = ap.parse_args()
+    if opts.pack_unpack_long:
+        os.environ["OLMO_UNPACK_LONG_DOCS"] = str(opts.pack_unpack_long)
     if opts.prefix_chunk_offload:
         os.environ["OLMO_OTR_PREFIX_OFFLOAD"] = "1"
     if opts.otr_keep_cap:
