@@ -877,6 +877,10 @@ def resolve_plan(opts: argparse.Namespace, world_size: int) -> Dict[str, Any]:
         seed=34521 + opts.seed,
         num_workers=opts.num_workers,
         shuffle=not opts.no_data_shuffle,
+        # --pack: emit per-instance document lengths so the model masks attention (and resets the GDN state) at
+        # example boundaries and the FLOP meter charges each packed example at its own length. Without it the
+        # packed examples attended to each other and the meter charged one example per window (2026-11-19).
+        generate_doc_lengths=bool(opts.pack),
     )
     return dict(
         meta=meta,
