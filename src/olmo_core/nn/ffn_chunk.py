@@ -29,7 +29,7 @@ from .ffn_width import parse_layer_range
 
 log = logging.getLogger(__name__)
 
-__all__ = ["install_ffn_chunk", "install_gdn_segments"]
+__all__ = ["install_ffn_chunk", "install_gdn_segments", "enable_int32_safe_long_seq"]
 
 
 def _ffn_sublayer(block: nn.Module, h: torch.Tensor) -> torch.Tensor:
@@ -88,4 +88,24 @@ def install_gdn_segments(model: Any, tokens: int) -> int:
     if n == 0:
         raise RuntimeError("gdn segments: the model has no GatedDeltaNet layers")
     log.info("[gdn-segment] %d-token segments on %d GatedDeltaNet layers", tokens, n)
+    return n
+
+
+def enable_int32_safe_long_seq(model: Any) -> int:
+    """Make every GatedDeltaNet correct on long rows. fla 0.4.1's ``chunk_gated_delta_rule`` returns wrong outputs
+    from token 2^30 / (H_v * D_v) on (Qwen3.5-4B: 262,144; 0.8B: 524,288; measured on A100, see
+    ``research/token_routing/dense_longctx/README.md``) -- the "dense forward breaks past ~262k" failure. With this on,
+    the kernel runs over exact state-carrying segments below that bound; the short conv and the gated output norm are
+    also segmented at the 2^31 bound as a precaution (measured correct to 1.5 x 2^31 / 1.1 x 2^31 without it).
+    Shorter rows are untouched (bit-identical). Default off. Returns the number of GDN modules patched."""
+    from .attention.recurrent import GatedDeltaNet
+
+    n = 0
+    for m in model.modules():
+        if isinstance(m, GatedDeltaNet):
+            m._int32_safe = True
+            for c in m._convs():
+                c._int32_safe = True
+            n += 1
+    log.info("[int32-safe] long-sequence guard on %d GatedDeltaNet layers", n)
     return n

@@ -675,7 +675,7 @@ def build_train_module_config(
     # Context parallelism (long-context arms): CP shards the SEQUENCE/activations across cp_degree
     # ranks; params/optimizer are sharded by the FSDP dp dimension, which is world_size//cp_degree.
     # Ulysses only (ring flash-attn isn't guaranteed in the image, and GDN blocks reject ring), so
-    # cp_degree is bounded by n_kv_heads (dense=8, hybrid=4). Off by default (--cp-degree 0/1).
+    # cp_degree must divide n_heads (KV heads are replicated when it exceeds n_kv_heads: qwen3_5 4B up to 16, 0.8B up to 8). Off by default (--cp-degree 0/1).
     cp_degree = opts.cp_degree if opts.cp_degree and opts.cp_degree > 1 else 1
     if world_size % cp_degree != 0:
         raise SystemExit(f"world_size {world_size} not divisible by --cp-degree {cp_degree}")
@@ -1172,6 +1172,11 @@ def build_and_fit(opts: argparse.Namespace) -> None:
         from olmo_core.nn.attention.fla_autotune import freeze_fla_length_autotune
 
         print(f"[ctc-suite] FLA length autotune frozen on {freeze_fla_length_autotune()} kernel(s)")
+    if opts.gdn_int32_safe:
+        # Long rows: fla 0.4.1's chunked delta rule is wrong past token 2^30/(H_v*D_v) (4B: 262,144). Exact; default off.
+        from olmo_core.nn.ffn_chunk import enable_int32_safe_long_seq
+
+        print(f"[ctc-suite] GDN int32-safe long-sequence guard on {enable_int32_safe_long_seq(model)} layers")
     ids = RESERVED_IDS[opts.model_family]
     # Forwards per rank over the whole run = steps x grad-accum: the horizon the ffnmoe schedules
     # (target / exploration / layer curriculum) and the softtoken mixing curriculum anneal over.
@@ -1579,6 +1584,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--lora-freeze-head", action="store_true",
                     help="--lora-rank: also freeze the LM head (final norm + vocab projection): no weight gradient / "
                     "Adam state; charged at 2/3")
+    ap.add_argument("--gdn-int32-safe", action="store_true",
+                    help="GatedDeltaNet long-row guard (exact): run fla's chunked delta rule over state-carrying segments "
+                    "below its offset bound; without it outputs past token 262,144 (4B) / 524,288 (0.8B) are wrong")
     ap.add_argument("--gdn-segment-tokens", type=int, default=0,
                     help="GatedDeltaNet training forward over segments of this many tokens (multiple of 64) carrying "
                     "the recurrent state: backward rebuilds one segment's chunk states at a time (exact). 0 = off")
@@ -2361,8 +2369,8 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="context-parallel (Ulysses) degree for long-context arms. 0/1 = no CP (default). "
-        "Shards the sequence over cp_degree GPUs; bounded by n_kv_heads (dense qwen3=8, hybrid "
-        "qwen3_5=4). world_size must be divisible by it; the dp/FSDP dim becomes world_size/cp.",
+        "Shards the sequence over cp_degree GPUs; must divide n_heads (KV heads replicated past n_kv_heads; "
+        "qwen3_5 4B <= 16, 0.8B <= 8). world_size must be divisible by it; the dp/FSDP dim becomes world_size/cp.",
     )
     ap.add_argument(
         "--rope-yarn-factor",

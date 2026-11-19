@@ -7,7 +7,16 @@ from torch.distributed.device_mesh import DeviceMesh
 
 from olmo_core.nn.attention.flash_linear_attn_api import dispatch_causal_conv1d
 
-__all__ = ["CausalConv1d"]
+__all__ = ["CausalConv1d", "int32_safe_tokens"]
+
+#: Largest element offset a 32-bit index can hold. fla's Triton kernels (0.4.x) compute the
+#: within-row offset ``t * row_width`` in int32, so a (seq_len x row_width) operand must stay below it.
+_INT32_LIMIT = 2**31 - 1
+
+
+def int32_safe_tokens(row_width: int, multiple: int = 1024, limit: int = _INT32_LIMIT) -> int:
+    """The longest segment (a multiple of ``multiple`` tokens) whose ``seq_len * row_width`` offsets stay below ``limit``."""
+    return max(multiple, (int(limit) // max(1, int(row_width))) // multiple * multiple)
 
 
 class CausalConv1d(nn.Conv1d):
@@ -78,6 +87,30 @@ class CausalConv1d(nn.Conv1d):
             weight = weight[self._cp_channel_slice]
             if bias is not None:
                 bias = bias[self._cp_channel_slice]
+
+        seg = int32_safe_tokens(x.shape[-1]) if getattr(self, "_int32_safe", False) else 0
+        if seg and cu_seqlens is None and x.dim() == 3 and x.shape[1] > seg:
+            # Long-sequence guard (``enable_int32_safe_long_seq``): fla's conv kernel indexes a row
+            # with 32-bit offsets (t * C), which wrap once seq_len * channels >= 2^31 (Qwen3.5-4B's
+            # fused q|k|v conv: 8192 channels -> 262,144 tokens) and silently read garbage. Run it
+            # on segments below that bound, each with the previous ``kernel_size - 1`` inputs
+            # prepended and their outputs dropped, which is exactly the full causal convolution.
+            W = self.kernel_size[0]
+            outs = []
+            T = x.shape[1]
+            for s0 in range(0, T, seg):
+                a = max(0, s0 - (W - 1))
+                y = dispatch_causal_conv1d(
+                    x=x[:, a : min(s0 + seg, T)],
+                    weight=weight.squeeze(1),
+                    bias=bias,
+                    activation=self.activation,
+                    backend=self.backend,
+                    cu_seqlens=None,
+                    use_experimental_kernels=self.use_experimental_kernels,
+                )[0]
+                outs.append(y[:, s0 - a :])
+            return torch.cat(outs, dim=1)
 
         output = dispatch_causal_conv1d(
             x=x,
