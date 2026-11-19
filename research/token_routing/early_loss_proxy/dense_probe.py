@@ -229,7 +229,8 @@ def build_callback(cfg: Dict[str, str]):
                 lab = torch.full_like(x, -100)
                 ans = torch.as_tensor(np.nonzero(m)[0], device="cuda")
                 lab[0, ans - 1] = x[0, ans]
-                out = model(x, labels=lab, ignore_index=-100, loss_reduction="none", return_logits=False)
+                red = os.environ.get("DENSE_PROBE_REDUCTION", "sum")  # "none" = the first version (+0.05 CE offset)
+                out = model(x, labels=lab, ignore_index=-100, loss_reduction=red, return_logits=False)
                 tok = out.ce_loss if hasattr(out, "ce_loss") else out[2]
                 ce_sum[i] = tok.float().sum().double()
             dist.all_reduce(ce_sum)
