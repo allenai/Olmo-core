@@ -42,6 +42,10 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 11-19 03:30 64k CHECK DONE (klb64 on ceres): dense FT 0.385 @1,457; dense LoRA 0.325 @1,475, 0.236 @2,925 (ref 0.199 @5,723); k20 0.238 / 0.265 @1,463 = x2.0 / x1.6 vs dense LoRA
+  (x4.1 / x3.2 vs dense FT); k40 x1.3-1.4. No growth with length vs the LoRA baseline. NOTHING IN FLIGHT. IDEA QUEUE EMPTY. Record + STATUS link done; experiment_log.json entry still owed.
+  If Prasann has not redirected by the next heartbeats: do NOT burn compute on low-value variants; options worth his call: (a) accept ~2x and move to generation-eval confirmation of
+  lo-p50-20-7 at 1,980 / 3,973 PF, (b) change the task mix (reorder dominates the loss), (c) ideas outside per-step token dropping.
 - 11-19 01:35 BEAKER TRAP: ops shows "PREEMPTED" for jobs that actually FAILED TO START on jupiter node ...DSTT74YA ("failed to create container: path does not exist"); that node
   keeps taking new jobs. Three klb64 launches died this way (and the agents' "preempted" jobs earlier). Workaround: --cluster ai2/ceres-cirrascale (4th klb64 launch, 01:35).
   If a job shows PREEMPTED with no runtime, check `beaker experiment get <id> --format json` -> jobs[-1].status.message. Record written: records/flopdrop-dynamic-drop-budget-matched.md

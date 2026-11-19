@@ -104,7 +104,9 @@ router's 0.119-0.126; mixture-of-depths 0.134-0.137; adaptive keep by predicted 
 - Runs at 1,980 PF and above on the 16x pool used 4 GPUs (the 4x-pool runs 2 GPUs); 12 contradiction and 12 outlier gen16k held-out rows have a gold item appearing as training filler on the 16x pool.
 - qdmatch_nq sits on a plateau (0.05-0.06) for every arm past about 2,000 PF; per-task ratios there are not meaningful (`ftm_task.py`).
 - Proxy loss only: no generation evals in this phase (the 11-17 validation showed the proxy ordering holds on generation scores for the recipe vs dense LoRA).
-- A budget-matched check at 64k rows was launched (tag `klb64`) and had not finished when this was written.
+- 64k check (tag `klb64`, pool `kl64k`, held-out `heldout_kl.npz` set kl64k: **eval_size 144**, 3 tasks; drop arms from the keep-versus-length session): dense full fine-tune 0.385 at 1,457 PF and 0.211 at 7,809 PF;
+  dense LoRA 0.325 at 1,475 PF, 0.236 at 2,925 PF, 0.199 at 5,723 PF; keep 20% / 7% 0.238 / 0.265 (two seeds) at 1,463 PF = 2.0x / 1.6x against dense LoRA, 4.1x / 3.2x against dense full fine-tune alone.
+  The gain does not grow with context length against the LoRA baseline.
 
 ## Where things are
 
