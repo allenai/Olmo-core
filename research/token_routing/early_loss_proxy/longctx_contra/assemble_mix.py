@@ -23,6 +23,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--src", action="append", required=True)
     ap.add_argument("--root", default=SH)
+    ap.add_argument("--min-len", type=int, default=0, help="take only rows at least this long (e.g. the long rows of a mixed pool, in its order)")
     ap.add_argument("--ordered", action="store_true",
                     help="write ONE part with the rows in a planned order (train with --no-data-shuffle): every --src is "
                     "shuffled into the head, except --tail sources, which go (shuffled, with a proportional share of the "
@@ -55,7 +56,7 @@ def main():
             for r in ri:  # row offsets inside each part (rows of a part are concatenated in row order)
                 start[(r["part"], r["row"])] = off.get(r["part"], 0)
                 off[r["part"]] = off.get(r["part"], 0) + r["len"]
-            sel = [r for r in ri if r["task"] == "contradiction"][:n]
+            sel = [r for r in ri if r["task"] == "contradiction" and r["len"] >= a.min_len][:n]
             assert len(sel) == n, f"{pool}: only {len(sel)} contradiction rows < {n}"
             ids, msk = [], []
             mm = {}
