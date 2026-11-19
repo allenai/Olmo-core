@@ -38,6 +38,7 @@ DESC = {  # arm -> plain description
     "ds-p-k25-b1980-x16": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on 16k rows", "ds-dl-k25": "dense LoRA + keep 25% of distractor documents on 16k rows (no token drop)",
     "tb-A": "per-task budgets: reorder 50% / 20% / 7%, other tasks 20% / 7%", "tb-B": "per-task budgets: reorder 70% / 40% / 20%, other tasks 20% / 7%",
     "tb-C": "per-task budgets: reorder 70% / 40% / 20%, qdmatch_nq 50% / 20% / 7%, outlier and contradiction 20% / 7%", "tb-D": "per-task budgets: the agent's own split",
+    "tb-A-x16": "per-task budgets: reorder 50% / 20% / 7%, other tasks 20% / 7%", "sb-r-x16": "LoRA 50% / 20% / 7% + backward share scheduled from all rows to 30%",
     "tb-ong": "per-task budgets set online (first rule)", "tb-onh": "per-task budgets set online (second rule)",
     "sb-q50": "LoRA 50% / 20% / 7% + backward only on the harder half of the rows", "sb-q25": "LoRA 50% / 20% / 7% + backward only on the hardest quarter of the rows",
     "sb-s50": "LoRA 50% / 20% / 7% + backward on half of the rows, sampled by loss", "sb-r": "LoRA 50% / 20% / 7% + backward share scheduled from all rows to 30%",
