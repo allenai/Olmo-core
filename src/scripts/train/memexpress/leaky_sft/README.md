@@ -166,3 +166,17 @@ implementation; the original three LeakySFT test files are still unchanged.
 `AUDIT_NORMALIZED=1` enables a two-GPU fused-loss gradient audit with unequal
 answer counts and two microbatches per rank, including direct alpha=0 comparison
 to the regular SFT code path. No new sweep is launched by this implementation.
+
+### NormalizedLeakySFT sweep (2026-11-19)
+
+| Method | Arms | Control |
+| --- | --- | --- |
+| NormalizedLeakySFT | a00 / a01 / a03 / a05 / a07 | Same Qwen3.5-4B base and one-epoch filtered contradiction corpus as the original sweep |
+
+Launch with `launch_sweep.py --normalized --prefix NEW_UNIQUE_PREFIX --ref PUSHED_SHA --output-dir NEW_DIR --submit`.
+The five named NormalizedLeakySFT entry points share the original builder. Only
+objective selection and W&B group differ in scientific configs; data order,
+4,986 packed windows, 2,493 steps, batch size, optimizer, and checkpoint policy are
+unchanged. The prior prep is reused because neither data nor packing changed.
+All launches use the audited Liger 0.6.4 and the shared kernel/numerical fixes.
+Two GPUs per run, Jupiter, urgent, min-runtime=1h. No alpha=1 arm is included.

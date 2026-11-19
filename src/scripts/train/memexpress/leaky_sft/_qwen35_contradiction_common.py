@@ -9,7 +9,7 @@ This is a new two-GPU pilot, not a reproduction of the multi-task or 256K runs.
 
 from dataclasses import replace
 
-from sweep_settings import ARMS, DATA_ROOT, GPUS, SEQUENCE_LENGTH
+from sweep_settings import ARMS, NORMALIZED_ARMS, DATA_ROOT, GPUS, SEQUENCE_LENGTH
 
 from olmo_core.config import DType
 from olmo_core.data import TokenizerConfig
@@ -41,13 +41,13 @@ SAVE_ROOT = "/weka/oe-training-default/ai2-llm/checkpoints/amandab"
 WORK_DIR = "/weka/oe-training-default/amandab/leakysft/xlong256k-filter32k-cache"
 
 
-def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig:
+def build_leaky_experiment(context: CliContext, *, arm: str, normalized: bool = False) -> ExperimentConfig:
     """Build a two-GPU arm; use launch_sweep.py for minimum-runtime enforcement."""
     if context.cmd in (SubCmd.launch, SubCmd.launch_prep):
         raise ValueError(
             "Use launch_sweep.py: it enforces two GPUs, Jupiter, urgent, min-runtime=1h"
         )
-    alpha = ARMS[arm]
+    alpha = (NORMALIZED_ARMS if normalized else ARMS)[arm]
     tokenizer = TokenizerConfig.qwen3_5()
     doc_tokenizer = replace(tokenizer, bos_token_id=None)
     model = TransformerConfig.qwen3_5_4B(
@@ -85,7 +85,8 @@ def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig
             generate_doc_lengths=True,
         ),
         train_module=TransformerTrainModuleConfig(
-            cpt_loss_scaler=alpha,
+            cpt_loss_scaler=None if normalized else alpha,
+            normalized_leaky_sft_alpha=alpha if normalized else None,
             rank_microbatch_size=SEQUENCE_LENGTH,
             max_sequence_length=SEQUENCE_LENGTH,
             optim=SkipStepAdamWConfig(
@@ -142,7 +143,7 @@ def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig
             "wandb",
             WandBCallback(
                 name=context.run_name,
-                group="LeakySFT-contradiction-xlong-filter32k-1ep",
+                group=("NormalizedLeakySFT" if normalized else "LeakySFT") + "-contradiction-xlong-filter32k-1ep",
                 entity="ai2-llm",
                 project="memory-networks",
                 enabled=True,
@@ -153,7 +154,8 @@ def build_leaky_experiment(context: CliContext, *, arm: str) -> ExperimentConfig
     # Keep the selected data, filtering, budget and parallelism fixed across the sweep.
     config = config.merge(context.overrides)
     if (
-        config.train_module.cpt_loss_scaler != alpha
+        config.train_module.cpt_loss_scaler != (None if normalized else alpha)
+        or config.train_module.normalized_leaky_sft_alpha != (alpha if normalized else None)
         or config.trainer.max_duration != Duration.epochs(1)
         or config.data_loader.global_batch_size != GPUS * SEQUENCE_LENGTH
         or config.train_module.max_sequence_length != SEQUENCE_LENGTH

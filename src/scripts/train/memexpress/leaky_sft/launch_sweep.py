@@ -10,14 +10,15 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sweep_settings import ARMS, CLUSTER, DATA_ROOT, GPUS, PACKED_WINDOWS, SEQUENCE_LENGTH
+from sweep_settings import ARMS, NORMALIZED_ARMS, CLUSTER, DATA_ROOT, GPUS, PACKED_WINDOWS, SEQUENCE_LENGTH
 
 FAMILY = "src/scripts/train/memexpress/leaky_sft"
 
 
-def build_command(arm, name, ref, output_dir):
-    if arm not in ARMS:
+def build_command(arm, name, ref, output_dir, *, normalized=False):
+    if arm not in (NORMALIZED_ARMS if normalized else ARMS):
         raise ValueError(f"Unknown arm: {arm}")
+    method = "NormalizedLeakySFT" if normalized else "LeakySFT"
     return [
         "uvx",
         "--from",
@@ -69,7 +70,7 @@ def build_command(arm, name, ref, output_dir):
         "PYTORCH_ALLOC_CONF=expandable_segments:True",
         "--system-python",
         "--install",
-        "python -m pip install -e '.[beaker,fla,wandb,transformers]' 'fla-core==0.4.2' liger-kernel",
+        "python -m pip install -e '.[beaker,fla,wandb,transformers]' 'fla-core==0.4.2' 'liger-kernel==0.6.4'",
         "--yes",
         "--no-logs",
         "--timeout",
@@ -77,18 +78,20 @@ def build_command(arm, name, ref, output_dir):
         "--save-spec",
         str(Path(output_dir) / f"{name}.yaml"),
         "--",
-        f"{FAMILY}/Qwen3.5-4B-contradiction-32k-1ep-LeakySFT-{arm}.py",
+        f"{FAMILY}/Qwen3.5-4B-contradiction-32k-1ep-{method}-{arm}.py",
         "train",
         name,
         CLUSTER,
     ]
 
 
-def make_plan(prefix, ref, output_dir):
+def make_plan(prefix, ref, output_dir, *, normalized=False):
     return [
         dict(
             arm=arm,
-            cpt_loss_scaler=alpha,
+            cpt_loss_scaler=None if normalized else alpha,
+            normalized_leaky_sft_alpha=alpha if normalized else None,
+            method="NormalizedLeakySFT" if normalized else "LeakySFT",
             run_name=f"{prefix}-{arm}",
             epochs=1,
             steps_per_epoch=PACKED_WINDOWS // GPUS,
@@ -104,9 +107,9 @@ def make_plan(prefix, ref, output_dir):
             max_example_tokens=SEQUENCE_LENGTH,
             long_doc_strategy="exclude",
             data_provenance="Qwen3.5 2K–256K corpus, retaining complete examples <=32768 tokens",
-            command=build_command(arm, f"{prefix}-{arm}", ref, output_dir),
+            command=build_command(arm, f"{prefix}-{arm}", ref, output_dir, normalized=normalized),
         )
-        for arm, alpha in ARMS.items()
+        for arm, alpha in (NORMALIZED_ARMS if normalized else ARMS).items()
     ]
 
 
@@ -120,6 +123,7 @@ def main():
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--submit", action="store_true")
+    parser.add_argument("--normalized", action="store_true", help="Launch five NormalizedLeakySFT arms, alpha=0/.1/.3/.5/.7")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_-]+", args.prefix):
         parser.error("prefix must contain only letters, digits, underscores and hyphens")
@@ -135,7 +139,7 @@ def main():
         if untracked.strip():
             parser.error("Commit and push the required source files before submission")
     args.output_dir.mkdir(parents=True, exist_ok=False)
-    plan = make_plan(args.prefix, args.ref, args.output_dir)
+    plan = make_plan(args.prefix, args.ref, args.output_dir, normalized=args.normalized)
     (args.output_dir / "plan.json").write_text(json.dumps(plan, indent=2) + "\n")
     if args.submit:
         with (args.output_dir / "launch-ledger.jsonl").open("a") as ledger:
