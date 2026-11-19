@@ -53,6 +53,32 @@ case $ARM in
     python3 $L --tag lcA-dense1mmix --minutes 270 "${COMMON[@]}" --presync "shards/lc1mmixdense2 heldout_lc.npz" \
       --run "dense1m_mix|probe|8|full|1e-5|lc1mmixdense2|1048576|1|999999|lc16k:16|$LORA --cp-degree 8 --pack --pack-unpack-long 262144 --gdn-int32-safe --ffn-chunk-tokens 32768 --shard-degree 1 --skip-dry-run --no-data-shuffle --ephemeral-save-interval 5 --save-interval 24"
     ;;
+  dense1m_chain|chainsmoke)  # fallback for dense1m_mix (Prasann 11-19): chained trainer runs in ONE job, each branching
+    # (--branch-from @PREV@ --branch-optim-only: LoRA + optimizer carried, fresh step counter) from the previous run's last
+    # checkpoint: 1M segments as dense1m (CP8, unpacked) and short segments as dense256b's short windows (262k, CP4, packed).
+    # LR: wsd, warmup only in the first segment, constant 1e-5, linear decay to 0 over the final 1M segment.
+    LF="$LORA --cp-degree 8 --gdn-int32-safe --ffn-chunk-tokens 32768 --shard-degree 1 --skip-dry-run --no-data-shuffle --ephemeral-save-interval 5"
+    SF="$LORA --cp-degree 4 --pack --no-data-shuffle --skip-dry-run"
+    CH="--branch-from @PREV@ --branch-optim-only"
+    C0="--scheduler wsd --wsd-decay-fraction 0 --warmup-fraction 0"
+    if [ "$ARM" = chainsmoke ]; then
+      python3 $L --tag lcsmChain --minutes 60 "${COMMON[@]}" --presync "shards/lc1mc_smkL shards/lc1mc_smkS heldout_lc.npz" \
+        --run "chs_L1|probe|8|full|1e-5|lc1mc_smkL|1048576|1|999999|lc16k:4|$LF --scheduler wsd --wsd-decay-fraction 0 --warmup-fraction 0.03" \
+        --run "chs_S1|probe|8|full|1e-5|lc1mc_smkS|262144|2|999999|lc16k:4|$SF $CH $C0" \
+        --run "chs_L2|probe|8|full|1e-5|lc1mc_smkL|1048576|1|999999|lc16k:4|$LF $CH --scheduler linear --warmup-fraction 0"
+    else
+      python3 $L --tag lcA-dense1mchain --minutes 300 "${COMMON[@]}" \
+        --presync "shards/lc1mc_L1 shards/lc1mc_L2 shards/lc1mc_L3 shards/lc1mc_L4 shards/lc1mc_S1 shards/lc1mc_S2 shards/lc1mc_S3 shards/lc1mc_S4 heldout_lc.npz" \
+        --run "d1mc_L1|probe|8|full|1e-5|lc1mc_L1|1048576|1|999999|lc16k:16|$LF --scheduler wsd --wsd-decay-fraction 0 --warmup-fraction 0.03" \
+        --run "d1mc_S1|probe|8|full|1e-5|lc1mc_S1|262144|2|999999|lc16k:16|$SF $CH $C0" \
+        --run "d1mc_L2|probe|8|full|1e-5|lc1mc_L2|1048576|1|999999|lc16k:16|$LF $CH $C0" \
+        --run "d1mc_S2|probe|8|full|1e-5|lc1mc_S2|262144|2|999999|lc16k:16|$SF $CH $C0" \
+        --run "d1mc_L3|probe|8|full|1e-5|lc1mc_L3|1048576|1|999999|lc16k:16|$LF $CH $C0" \
+        --run "d1mc_S3|probe|8|full|1e-5|lc1mc_S3|262144|2|999999|lc16k:16|$SF $CH $C0" \
+        --run "d1mc_S4|probe|8|full|1e-5|lc1mc_S4|262144|2|999999|lc16k:16|$SF $CH $C0" \
+        --run "d1mc_L4|probe|8|full|1e-5|lc1mc_L4|1048576|1|999999|lc16k:16|$LF $CH --scheduler linear --warmup-fraction 0"
+    fi
+    ;;
   gdd1m)  # 1M rows (keep 0.05-0.4, no whole rows, int32 guard) + short rows; 8 rows/step, bucketed steps
     python3 $L --tag lcA-gdd1m --minutes 720 "${COMMON[@]}" --presync "shards/lc1mmix_gdd heldout_lc.npz" \
       --run "gdd1m|probe|8|softtoken|1e-5|lc1mmix_gdd|1048576|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.4 --st-gdd-whole-frac 0 --prefix-chunk 4096 --gdn-int32-safe --no-data-shuffle --ephemeral-save-interval 100 --save-interval 600 --probe-max-pf 17000"  # generous: read at the dense-1M arm's PF
