@@ -31,7 +31,9 @@ CE = re.compile(r"train/CE loss[\"'=: ]+([0-9.]+(?:e[+-]?\d+)?)")
 STEP = re.compile(r"\[step=(\d+)/(\d+)")
 TASKS = ["contradiction", "outlier", "reorder", "qdmatch_nq"]
 RUNGS = ["4k", "8k", "16k"]
-DENSE_CURVE = ["elpv-denselora-f4", "elpv-denselora-f2", "elpv-denselora-f1"]
+PHASE = os.environ.get("ELPV_PHASE", "1")  # 2 = loop/validate2 runs (state2.json -> results2.json)
+SFX = "" if PHASE == "1" else PHASE
+DENSE_CURVE = ["elpv-denselora-f4", "elpv-denselora-f2", "elpv-denselora-f1"] if PHASE == "1" else []
 
 
 def beaker_job(ex):
@@ -129,9 +131,9 @@ def ftm(curve, pf, score):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--record", action="store_true", help="ops result add --check every finished cell")
-    ap.add_argument("--out", default=os.path.join(HERE, "results.json"))
+    ap.add_argument("--out", default=os.path.join(HERE, f"results{SFX}.json"))
     a = ap.parse_args()
-    st = json.load(open(os.path.join(HERE, "state.json")))
+    st = json.load(open(os.path.join(HERE, f"state{SFX}.json")))
     train = {n: train_point(n, r) for n, r in st["runs"].items() if r.get("ex")}
     cells = {}
     for ename, e in st["evals"].items():

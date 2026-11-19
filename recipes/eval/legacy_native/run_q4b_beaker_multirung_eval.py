@@ -79,6 +79,19 @@ SUITE_ROWS = {
     "oolong": ("oolong", "oolong", {"8k": 8192, "2k": 2048}, True),
     "contra": ("contradiction", "contradiction_iid", {"8k": 8192, "2k": 2560}, True),
 }
+#: --suite-rungs: rung label -> file tokens, and the long rungs each suite subset has at the pinned HF revision
+#: (r2k/r8k for every subset; staged by research/token_routing/mt11_64k/stage_long_rows_beaker.sh, manifest
+#: MANIFEST_long.json beside the rows). contradiction_iid's 2k rung stays rung_2560 (SUITE_ROWS above).
+SUITE_RUNG_TOKENS = {"2k": 2048, "4k": 4096, "8k": 8192, "16k": 16384, "32k": 32768, "64k": 65536}
+SUITE_LONG_RUNGS = {
+    **{s: ("16k", "32k", "64k") for s in ("nq", "hotpotqa", "qdmatch_nq", "outlier", "oolong", "contradiction_iid")},
+    **{s: ("16k", "32k") for s in ("xabsence", "strmatch", "grouping")},
+    "reorder": ("16k",),
+}
+# r4k (2026-11-17, early_loss_proxy validation): staged add-only for the four mtb16k tasks by
+# research/token_routing/early_loss_proxy/validation/stage_r4k_rows_beaker.sh (MANIFEST_elpv.json)
+for _s in ("contradiction_iid", "outlier", "reorder", "qdmatch_nq"):
+    SUITE_LONG_RUNGS[_s] = ("4k",) + SUITE_LONG_RUNGS[_s]
 #: rows staged by stage_suite_rows_beaker.sh (verified against ds64_fast8k/suite_rows_MANIFEST.json)
 SUITE_ROWS_ROOT = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/_eval_bundle/ctc_suite_rows"
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -225,11 +238,16 @@ def build_eval_launch_config(
     return launch_config
 
 
-def suite_rows_args(task, root):
-    """(DC_RUNG_FILES json, DC_RUNGS, extra env) scoring ``task`` on the staged CTC-suite rows."""
+def suite_rows_args(task, root, want=("8k", "2k")):
+    """(DC_RUNG_FILES json, DC_RUNGS, extra env) scoring ``task`` on the staged CTC-suite rows, at the rungs of
+    ``want`` the subset has (r2k / r8k always; the long rungs per SUITE_LONG_RUNGS); a missing rung is skipped."""
     import json
 
-    ltask, subset, rungs, ctc_grade = SUITE_ROWS[task]
+    ltask, subset, base_rungs, ctc_grade = SUITE_ROWS[task]
+    have = set(base_rungs) | set(SUITE_LONG_RUNGS.get(subset, ()))
+    rungs = {lab: base_rungs.get(lab, SUITE_RUNG_TOKENS[lab]) for lab in want if lab in have}
+    if not rungs:
+        raise SystemExit(f"--suite-rungs {','.join(want)}: none staged for {subset} (has {sorted(have)})")
     files = {ltask: {lab: f"{root}/{subset}/rung_{tok}.jsonl" for lab, tok in rungs.items()}}
     # REQUIRE_EVAL_SIZE: the runner fails the job if any rung scored 0 rows (a missing/unread rung
     # file otherwise writes an empty result with rc=0)
@@ -357,6 +375,9 @@ def main():
         "Use --query-position both for setA / mt11-trained checkpoints.",
     )
     ap.add_argument("--suite-rows-root", default=SUITE_ROWS_ROOT, help="<subset>/rung_<tokens>.jsonl tree")
+    ap.add_argument("--suite-rungs", default="8k,2k",
+                    help=f"--suite-rows: comma rung labels from {list(SUITE_RUNG_TOKENS)}; each task scores the ones its "
+                    "suite subset has (e.g. 2k,8k,16k,32k,64k: reorder stops at 16k, xabsence/strmatch/grouping at 32k)")
     ap.add_argument(
         "--env",
         action="append",
@@ -409,7 +430,8 @@ def main():
     for task in tasks:
         dc_rung_files, dc_rungs, extra_env = args.dc_rung_files, args.dc_rungs, list(args.env)
         if args.suite_rows:
-            dc_rung_files, dc_rungs, suite_env = suite_rows_args(task, args.suite_rows_root)
+            dc_rung_files, dc_rungs, suite_env = suite_rows_args(task, args.suite_rows_root,
+                                                                 tuple(args.suite_rungs.split(",")))
             extra_env = suite_env + extra_env
         # docchunk now evaluates the FULL ladder (all 9 tasks incl. OOD) via
         # eval_lc_native_docchunk_ladder.py (box-marker chunked prefill + bs=1 KV-cached decode).
