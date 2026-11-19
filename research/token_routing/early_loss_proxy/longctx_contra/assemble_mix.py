@@ -61,9 +61,9 @@ def main():
             mm = {}
             for r in sel:
                 p = r["part"]
-                if p not in mm:
-                    mm[p] = (np.memmap(f"{d}/token_ids_part_t{p}_000.npy", dtype=np.uint32, mode="r"),
-                             np.memmap(f"{d}/labels_mask_t{p}_000.npy", dtype=np.bool_, mode="r"))
+                if p not in mm:  # sequential full read (random memmap page-ins crawl on a busy ZFS node)
+                    mm[p] = (np.fromfile(f"{d}/token_ids_part_t{p}_000.npy", dtype=np.uint32),
+                             np.fromfile(f"{d}/labels_mask_t{p}_000.npy", dtype=np.bool_))
                 s0 = start[(p, r["row"])]
                 ids.append(np.asarray(mm[p][0][s0:s0 + r["len"]]))
                 msk.append(np.asarray(mm[p][1][s0:s0 + r["len"]]))
@@ -122,10 +122,12 @@ def main():
         with open(f"{tmp}/row_info.jsonl", "w") as info:
             for k, (pool, x, y, rec) in enumerate(rows_o):
                 info.write(json.dumps(dict(rec, part=0, row=k, src_pool=pool, tail=k >= len(head))) + "\n")
-        np.concatenate([h[1] for h in rows_o]).astype("uint32").tofile(f"{tmp}/token_ids_part_t0_000.npy")
-        bm = np.concatenate([h[2] for h in rows_o]).astype("bool")
-        bm.tofile(f"{tmp}/labels_mask_t0_000.npy")
-        loss = int(bm.sum())
+        loss = 0
+        with open(f"{tmp}/token_ids_part_t0_000.npy", "wb") as ft, open(f"{tmp}/labels_mask_t0_000.npy", "wb") as fm:
+            for h in rows_o:
+                ft.write(np.ascontiguousarray(h[1], dtype=np.uint32).tobytes())
+                fm.write(np.ascontiguousarray(h[2], dtype=np.bool_).tobytes())
+                loss += int(h[2].sum())
         lens = [len(h[1]) for h in rows_o]
         order_info = {"head_rows": len(head), "tail_rows": len(tail), "tail_long": len(tail_long),
                       "tail_short": n_tail_short, "train_with": "--no-data-shuffle"}
