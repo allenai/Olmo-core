@@ -36,6 +36,11 @@ DESC = {  # arm -> plain description
     "ds-p-k25": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on 16k rows", "ds-p-k50": "LoRA 50% / 20% / 7% + keep 50% of distractor documents on 16k rows",
     "ds-p-k25-l6k": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on 8k and 16k rows", "ds-p-k25-l3k": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on every row",
     "ds-p-k25-b1980-x16": "LoRA 50% / 20% / 7% + keep 25% of distractor documents on 16k rows", "ds-dl-k25": "dense LoRA + keep 25% of distractor documents on 16k rows (no token drop)",
+    "tb-A": "per-task budgets: reorder 50% / 20% / 7%, other tasks 20% / 7%", "tb-B": "per-task budgets: reorder 70% / 40% / 20%, other tasks 20% / 7%",
+    "tb-C": "per-task budgets: reorder 70% / 40% / 20%, qdmatch_nq 50% / 20% / 7%, outlier and contradiction 20% / 7%", "tb-D": "per-task budgets: the agent's own split",
+    "tb-ong": "per-task budgets set online (first rule)", "tb-onh": "per-task budgets set online (second rule)",
+    "sb-q50": "LoRA 50% / 20% / 7% + backward only on the harder half of the rows", "sb-q25": "LoRA 50% / 20% / 7% + backward only on the hardest quarter of the rows",
+    "sb-s50": "LoRA 50% / 20% / 7% + backward on half of the rows, sampled by loss", "sb-r": "LoRA 50% / 20% / 7% + backward share scheduled from all rows to 30%",
     "ds-p-r25": "LoRA 50% / 20% / 7% + document keep ramp 25% to 100%", "ds-p-r50": "LoRA 50% / 20% / 7% + document keep ramp 50% to 100%",
     "ds-dl-k50": "dense LoRA + keep 50% of distractor documents on 16k rows (no token drop)", "ds-p-k10": "LoRA 50% / 20% / 7% + keep 10% of distractor documents on 16k rows",
     "recipe-fz7": "LoRA 20% / 7%, blocks 0-6 forward-only", "lo-p50-20-7-fz7": "LoRA 50% / 20% / 7%, blocks 0-6 forward-only", "lo-r50to20-fz7": "LoRA 50% / 20%, blocks 0-6 forward-only",
@@ -132,6 +137,7 @@ if os.path.exists(fp):
         return (f"&gt; {x:.2f}× (dense has no point this deep)" if r.get(f"x_{key}_lower_bound") else f"&lt; {x:.2f}×")
     def nm(r):
         arm = r["arm"]; base = arm.rsplit("-b", 1)[0] if re.search(r"-b\d+$", arm) else (arm[:-3] if arm.endswith("-x4") else arm)
+        if base.startswith(("tb-tb-", "sb-sb-", "ds-ds-")): base = base[3:]
         return e(DESC.get(base, DESC.get(arm, arm)))
     fr = "".join(f'<tr><td>{nm(q)}<br><code>{e(q["run"])}</code></td><td class="n">{q["pool"]}</td><td class="n">{q["steps"]:,}</td><td class="n">{q["pf"]:,.0f}</td><td class="n">{q["ce"]:.3f}{" (" + " / ".join(f"{c:.3f}" for c in q["ce_seeds"]) + ")" if q.get("seeds", 1) > 1 else ""}</td></tr>' for q in Fm["frontier"])
     dr = [r for r in Fm["runs"] if r["kind"] == "drop"]

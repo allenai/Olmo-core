@@ -3091,6 +3091,54 @@
    }
   },
   {
+   "run": "tb-tb-onh-b991-sd0",
+   "baseline": "v3-denselora-sd0",
+   "done": true,
+   "eval_size": 320,
+   "steps": 1013,
+   "pf": 992.6619386435921,
+   "cost_vs_dense_ft": 0.24136033015225522,
+   "ce16k_last": 0.09452957282410353,
+   "track": [
+    [
+     253,
+     0.17379977368982508,
+     null
+    ],
+    [
+     506,
+     0.12846446947805817,
+     null
+    ],
+    [
+     759,
+     0.1102762872556923,
+     null
+    ],
+    [
+     1013,
+     0.09452957282410353,
+     null
+    ]
+   ],
+   "vs_same": {
+    "ref_step": 488,
+    "level": 0.12125086314408691,
+    "x": 2.5211939050386487,
+    "final": true,
+    "ref_final": 0.12125086314408691,
+    "ref_steps": 488
+   },
+   "vs_dense_ft": {
+    "ref_step": 488,
+    "level": 0.11371779909313773,
+    "x": 2.8476772654000397,
+    "final": true,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
+  },
+  {
    "run": "v3-denselora-sd0",
    "baseline": null,
    "done": true,

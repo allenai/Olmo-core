@@ -468,6 +468,28 @@
    "x_dense_ft_lower_bound": false
   },
   {
+   "run": "tb-tb-onh-b991-sd0",
+   "arm": "tb-onh-b991",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1013,
+   "pf": 992.6619386435921,
+   "ce": 0.09452957282410353,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0945
+   ],
+   "base_pf": 2578.883905090586,
+   "x_base": 2.597947805488002,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 3052.3423930384365,
+   "x_dense_ft": 3.074906243720056,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
    "run": "tb-tb-A-b991-sd0+1",
    "arm": "tb-A-b991",
    "kind": "drop",
