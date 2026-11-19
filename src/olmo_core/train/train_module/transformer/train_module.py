@@ -504,7 +504,7 @@ class TransformerTrainModule(TrainModule):
         if is_distributed():
             dist.all_reduce(counts, group=self.dp_process_group)
         denominator = (counts[0] + alpha * counts[1]) / dp_size
-        denominator = denominator.clamp_min(torch.finfo(torch.float32).tiny).float()
+        denominator = torch.where(denominator > 0, denominator, 1.0).float()
         seq_len = batch["input_ids"].shape[1]
         if self.rank_microbatch_size < seq_len:
             raise RuntimeError("Microbatch size is smaller than sequence length")

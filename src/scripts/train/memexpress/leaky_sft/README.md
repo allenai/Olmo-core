@@ -90,3 +90,37 @@ at 300 steps while retaining the original one-epoch LR schedule, two GPUs,
 Compare steps 51–300 with the same steps in the LeakySFT jobs; report checkpoint
 intervals separately from steady-state throughput. Launch with the same Gantry
 resources (Jupiter, urgent, minimum runtime 1h) and a fresh run/save name.
+
+## Implementation audit (2026-11-19)
+
+The completed sweep used commit `1866c6113` and the token-weighted mean
+`(answer_sum + alpha * context_sum) / (answer_count + alpha * context_count)`.
+The original frozen tests encode this objective. It is **not** an interpolation
+between mean SFT and mean CPT loss. On this corpus there are 522,027 answer
+and 161,966,731 valid context targets (310.27 context targets per answer target).
+At alpha=0.1, context has 96.88% of aggregate token weight, and its per-token
+coefficient is 97.19% of full CPT, rather than 10%. The last recorded alpha=0.1
+batch attributed 99.986% of its numerical loss to context. Changing the objective
+requires an explicit new experiment contract; the audit does not silently change it.
+
+Alpha=0 also differs from legacy SFT's distributed normalization: LeakySFT averages
+by global target count, whereas legacy SFT averages rank-local means. In 2,394 of
+2,493 actual batches the two ranks have unequal answer-target counts. Every answer
+label/mask in the packed dataset nevertheless matches the legacy label builder.
+
+The audit additionally reproduced and fixed:
+
+- The shared fused CE wrapper passed a nonzero z-loss coefficient even with
+  `compute_z_loss=False`. Liger 0.6.4's boolean controls returning the auxiliary
+  loss, not enabling it. This affected both the historical regular fused SFT and
+  LeakySFT paths. Explicit zero z-loss coefficients were also replaced by a default.
+- Biased fused heads crashed on alpha=0 context diagnostics under `no_grad`, due
+  to a Liger 0.6.4 missing bias-gradient dereference. A bounded CE fallback handles
+  these diagnostic-only calls. The Qwen3.5 sweep uses a bias-free head.
+- Non-fused FP16 loss sums could overflow on long contexts; empty-group zero
+  anchors could overflow as well. These paths now avoid low-precision reductions.
+  The sweep used fused BF16 loss, so these FP16 issues do not explain its scores.
+
+`audit_test.py` adds reproductions without modifying the three frozen test files.
+`audit_distributed.py` checks actual FSDP gradients against explicit full-batch CE.
+`audit_data.py` measures the real packed corpus and retrieves recorded diagnostics.

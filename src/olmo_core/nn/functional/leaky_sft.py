@@ -39,8 +39,8 @@ def leaky_ce_sums(
     def group_sum(mask: torch.Tensor) -> torch.Tensor:
         # Empty groups must be differentiable zeros, including for every head parameter.
         if not mask.any():
-            zero = flat_h.sum() * 0.0 + weight.sum() * 0.0
-            return zero if bias is None else zero + bias.sum() * 0.0
+            zero = flat_h.reshape(-1)[:1].sum() * 0.0 + weight.reshape(-1)[:1].sum() * 0.0
+            return zero if bias is None else zero + bias.reshape(-1)[:1].sum() * 0.0
         selected_h, selected_labels = flat_h[mask], targets[mask]
         # Liger 0.6.4 dereferences a missing bias gradient in no-grad mode.
         # Use bounded FP32 CE chunks for biased diagnostic-only calls.

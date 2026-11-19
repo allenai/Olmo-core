@@ -85,3 +85,14 @@ def test_explicit_zero_z_loss_stays_zero():
     x=torch.randn(1,8,4);labels=torch.ones(1,8,dtype=torch.long)
     result=head(x,labels=labels,z_loss_multiplier=0.,return_logits=False)
     assert result.z_loss.item()==0.
+
+
+def test_empty_fp16_groups_do_not_overflow_zero_anchor():
+    head=LMHeadConfig().build(d_model=4,vocab_size=32768).half()
+    with torch.no_grad():head.w_out.weight.fill_(1.)
+    x=torch.ones(1,4,4,dtype=torch.float16,requires_grad=True)
+    labels=torch.full((1,4),-100,dtype=torch.long)
+    result=head(x,labels=labels,output_mask=torch.zeros_like(labels,dtype=torch.bool),cpt_loss_scaler=.1,return_logits=False)
+    assert result.loss.item()==0.
+    result.loss.backward()
+    assert torch.count_nonzero(head.w_out.weight.grad)==0

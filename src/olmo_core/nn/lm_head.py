@@ -292,7 +292,10 @@ class LMHead(nn.Module):
                 denominator = (valid & output_mask).sum() + cpt_loss_scaler * (
                     valid & ~output_mask
                 ).sum()
-                weighted = weighted / denominator.clamp_min(torch.finfo(torch.float32).tiny)
+                # A zero-weight batch needs a unit denominator: using tiny
+                # makes the backward scale overflow before a low-precision zero.
+                denominator = torch.where(denominator > 0, denominator, 1.0)
+                weighted = weighted / denominator
             weighted = self._finalize_loss(
                 weighted,
                 B,

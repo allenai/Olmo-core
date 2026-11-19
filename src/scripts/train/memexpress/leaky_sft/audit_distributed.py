@@ -15,6 +15,7 @@ from olmo_core.train.train_module import TransformerTrainModuleConfig,Transforme
 
 init_distributed()
 rank=dist.get_rank(); device=torch.device('cuda',int(os.environ['LOCAL_RANK']))
+bf16=os.environ.get("AUDIT_BF16")=="1"
 results=[]
 legacy_grad=None
 for alpha in [None,0.,.1,.3,.5,.7,1.]:
@@ -25,11 +26,12 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     module=TransformerTrainModuleConfig(rank_microbatch_size=32,max_sequence_length=32,
         optim=AdamWConfig(),cpt_loss_scaler=alpha,
         dp_config=TransformerDataParallelConfig(name=DataParallelType.fsdp,shard_degree=2,num_replicas=1,
-            param_dtype=DType.float32,reduce_dtype=DType.float32)).build(cfg.build(),device=device)
+            param_dtype=DType.bfloat16 if bf16 else DType.float32,reduce_dtype=DType.float32)).build(cfg.build(),device=device)
     cfg.lm_head.loss_implementation=LMLossImplementation.default
     ref=cfg.build().to(device)
     ref.load_state_dict({k:v.full_tensor() if hasattr(v,'full_tensor') else v
                         for k,v in module.model.state_dict().items()})
+    if bf16:ref.bfloat16()
     torch.manual_seed(456)
     ids=torch.randint(0,128,(2,32),device=device)
     output=torch.zeros_like(ids,dtype=torch.bool);output[0,-2:]=True;output[1,-20:]=True
@@ -51,10 +53,14 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     for (name,p),(other,q) in zip(module.model.named_parameters(),ref.named_parameters()):
         assert name==other
         grad=p.grad.full_tensor() if hasattr(p.grad,'full_tensor') else p.grad
-        rel=(grad-q.grad).norm()/q.grad.norm().clamp_min(1e-20)
+        rel=(grad.float()-q.grad.float()).norm()/q.grad.float().norm().clamp_min(1e-20)
         worst=max(worst,rel.item())
-    assert worst<.001,(alpha,worst)
-    assert abs(metrics['loss']-float(loss))<1e-4
+    assert worst<(.04 if bf16 else .001),(alpha,worst)
+    if alpha is None:
+        # Legacy AdamW defers mean-reduction of logged CE to Trainer.
+        logged=torch.tensor(metrics['loss'],device=device)
+        dist.all_reduce(logged);metrics['loss']=float(logged/dist.get_world_size())
+    assert abs(metrics['loss']-float(loss))<(.02 if bf16 else 1e-4),(alpha,metrics['loss'],float(loss))
     flat=torch.cat([p.grad.flatten() for p in ref.parameters()])
     if alpha is None:legacy_grad=flat.detach().clone()
     difference=float((flat-legacy_grad).norm()/legacy_grad.norm())
@@ -63,5 +69,5 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     torch.cuda.empty_cache()
 if rank==0:
     print(json.dumps(results,indent=2))
-    open('/results/distributed-audit.json','w').write(json.dumps(results,indent=2))
+    open('/results/distributed-audit'+('-bf16' if bf16 else '-fp32')+'.json','w').write(json.dumps(results,indent=2))
 dist.destroy_process_group()
