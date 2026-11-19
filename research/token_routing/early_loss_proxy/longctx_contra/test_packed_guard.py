@@ -6,7 +6,19 @@ module and input with the guard off (plain varlen kernel; far below the real int
 Also checks the gradient (backward through both paths)."""
 import torch
 
+import olmo_core.nn.attention.recurrent as R
 from olmo_core.nn.attention.recurrent import GatedDeltaNet
+
+CALLS = []
+_orig = R.dispatch_chunk_gated_delta_rule
+
+
+def _counted(**kw):
+    CALLS.append((kw["q"].shape[1], kw.get("cu_seqlens") is not None, kw.get("initial_state") is not None))
+    return _orig(**kw)
+
+
+R.dispatch_chunk_gated_delta_rule = _counted
 
 torch.manual_seed(0)
 dev = "cuda"
@@ -24,7 +36,9 @@ def run(guard):
     width = max(m.n_heads * m.head_k_dim, m.n_v_heads * m.head_v_dim) if hasattr(m, "head_k_dim") else 512
     m._int32_safe_limit = 2048 * width if guard else 2 ** 30
     xi = x.detach().clone().requires_grad_(True)
+    CALLS.clear()
     y = m(xi, cu_doc_lens=cu)
+    print(f"guard={guard}: kernel calls (tokens, varlen, carried state): {CALLS}")
     y.float().pow(2).mean().backward()
     return y.detach().float(), xi.grad.detach().float()
 
