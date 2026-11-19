@@ -3240,6 +3240,9 @@ class Transformer(nn.Module):
             self._cp_load_balancer = ring.load_balancer.build(cp_mesh)
         elif uly is not None:
             self._cp_load_balancer = uly.load_balancer.build(cp_mesh)
+        # CP group size: every rank of a CP group sees (and logs) the same examples, so per-example accounting
+        # (FlopMeterCallback) divides its all-reduced sums by this
+        self._cp_world_size = int(cp_mesh.size())
 
         for block in self.blocks.values():
             cast(TransformerBlockBase, block).apply_cp(cp_mesh, ring=ring, uly=uly)

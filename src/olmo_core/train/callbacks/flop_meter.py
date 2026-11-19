@@ -153,6 +153,9 @@ class FlopMeterCallback(Callback):
         )
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(v, op=dist.ReduceOp.SUM)
+        # context parallelism: every rank of a CP group logged the same (full) examples, so the world sum counts
+        # each example cp times (2026-11-19: dense LoRA 256k CP4 read 24 examples for 6 rows)
+        v = v / float(getattr(m, "_cp_world_size", 1) or 1)
         m._flop_example_lens = {"dense": [], "actual": []}
         return float(v[0]), float(v[1]), int(v[2]), int(v[3])
 
@@ -175,7 +178,7 @@ class FlopMeterCallback(Callback):
             ns = torch.tensor([int((get_labels(batch) != -100).sum().item())], device=batch["input_ids"].device)
             if dist.is_available() and dist.is_initialized():
                 dist.all_reduce(ns, op=dist.ReduceOp.SUM)
-            self._supervised_this_step = int(ns.item())
+            self._supervised_this_step = int(ns.item()) // self._cp_size()
         if self.pad_id is None:
             return
 
@@ -183,7 +186,12 @@ class FlopMeterCallback(Callback):
         n = torch.tensor([int((ids != self.pad_id).sum().item())], device=ids.device)
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(n, op=dist.ReduceOp.SUM)
-        self._real_tokens_this_step = int(n.item())
+        self._real_tokens_this_step = int(n.item()) // self._cp_size()
+
+    def _cp_size(self) -> int:
+        """CP group size (each CP rank holds the same full batch before the model shards it); 1 without CP."""
+        m = self._model_or_none()
+        return int(getattr(m, "_cp_world_size", 1) or 1) if m is not None else 1
     _ffn_per_tok: Optional[int] = None
     _dense_per_tok: Optional[int] = None
     _attn_score_per_tok: Optional[int] = None

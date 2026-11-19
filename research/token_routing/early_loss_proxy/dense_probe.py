@@ -147,6 +147,9 @@ def build_callback(cfg: Dict[str, str]):
             model.eval()
             rank, ws = self._rank(), self._ws()
             n = len(rows)
+            cp = int(getattr(model, "_cp_world_size", 1) or 1) if getattr(model, "_cp_load_balancer", None) is not None else 1
+            if cp > 1:
+                return self._probe_cp(step, model, was, t0, cp)
             per = -(-n // ws)
             cached = self._cached0() if step == 0 else None
             if cached is not None:
@@ -208,6 +211,44 @@ def build_callback(cfg: Dict[str, str]):
                     by.setdefault(f"{s}/{t}", []).append(c)
                 msg = " ".join(f"{k}={np.mean(v):.4f}" for k, v in by.items())
                 print(f"[dense-probe] step {step} lr {rec['lr'][0]:.3g} probe {dt:.1f}s train_cum "
+                      f"{self._train_s:.1f}s wall {rec['wall_s']:.0f}s | {msg}", flush=True)
+                self._write()
+
+        @torch.no_grad()
+        def _probe_cp(self, step: int, model, was: bool, t0: float, cp: int):
+            """Context-parallel probe: every rank feeds every held-out row in full (the model shards the sequence over
+            its CP group itself); per-token CE comes back sharded, so the world sum of the answer-token CE counts each
+            row once per data-parallel replica (world / cp of them). No step-0 cache (scored in full)."""
+            n = len(rows)
+            ws = self._ws()
+            ce = torch.zeros(n, device="cuda", dtype=torch.float64)
+            ce_sum = torch.zeros(n, device="cuda", dtype=torch.float64)
+            for i, (_, _, r, m) in enumerate(rows):
+                x = torch.as_tensor(r[None], device="cuda")
+                lab = torch.full_like(x, -100)
+                ans = torch.as_tensor(np.nonzero(m)[0], device="cuda")
+                lab[0, ans - 1] = x[0, ans]
+                out = model(x, labels=lab, ignore_index=-100, loss_reduction="none", return_logits=False)
+                tok = out.ce_loss if hasattr(out, "ce_loss") else out[2]
+                ce_sum[i] = tok.float().sum().double()
+            dist.all_reduce(ce_sum)
+            ce_sum = ce_sum / float(ws // cp)
+            n_ans = torch.as_tensor([int(m.sum()) for _, _, _, m in rows], device="cuda", dtype=torch.float64)
+            ce = ce_sum / n_ans
+            model.train(was)
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.synchronize()
+            dt = time.time() - t0
+            rec = {"step": step, "ce": ce.cpu().tolist(), "ce_sum": ce_sum.cpu().tolist(), "lr": self._lrs(),
+                   "flops": self._flops(), "probe_s": dt, "train_s_cum": self._train_s, "src": f"scored-cp{cp}",
+                   "wall_s": time.time() - T_START}
+            self.res["probes"].append(rec)
+            if self._rank() == 0:
+                by: Dict[str, List[float]] = {}
+                for (s_, t, _, _), c in zip(rows, rec["ce"]):
+                    by.setdefault(f"{s_}/{t}", []).append(c)
+                msg = " ".join(f"{k}={np.mean(v):.4f}" for k, v in by.items())
+                print(f"[dense-probe] step {step} (cp{cp}) lr {rec['lr'][0]:.3g} probe {dt:.1f}s train_cum "
                       f"{self._train_s:.1f}s wall {rec['wall_s']:.0f}s | {msg}", flush=True)
                 self._write()
 

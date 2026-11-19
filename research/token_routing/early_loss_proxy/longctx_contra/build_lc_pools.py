@@ -32,12 +32,13 @@ import build_pool_v2 as P  # noqa: E402
 import build_kl_pools as K  # noqa: E402
 
 T = "contradiction"
-LENS = {"128k": 131072, "256k": 262144, "1m": 1048576}
-NDOCS = {"128k": 2720, "256k": 5550, "1m": 22500}
-GEN = {"128k": 1100, "256k": 1800, "1m": 420}       # train rows generated per cell
-ROWS = {"128k": 1000, "256k": 1600, "1m": 360}       # rows kept in the pool (first ROWS eligible under the cap)
-HO_GEN = {"128k": 96, "256k": 200, "1m": 80}         # eval-split candidates
-HO_ROWS = {"128k": 64, "256k": 160, "1m": 64}        # held-out rows kept
+# short bins (2k-16k) use the keepfrac_len kl<L> cells' document counts and caps, so their first rows are kl<L>'s
+LENS = {"128k": 131072, "256k": 262144, "1m": 1048576, "2k": 4096, "4k": 6144, "8k": 12288, "16k": 16384}
+NDOCS = {"128k": 2720, "256k": 5550, "1m": 22500, "2k": 56, "4k": 92, "8k": 187, "16k": 324}
+GEN = {"128k": 1100, "256k": 1800, "1m": 420, "2k": 4300, "4k": 4300, "8k": 4300, "16k": 4300}  # train rows generated
+ROWS = {"128k": 1000, "256k": 1600, "1m": 360, "2k": 4000, "4k": 4000, "8k": 4000, "16k": 4000}  # rows kept
+HO_GEN = {"128k": 96, "256k": 200, "1m": 80, "2k": 16, "4k": 16, "8k": 16, "16k": 200}  # eval-split candidates
+HO_ROWS = {"128k": 64, "256k": 160, "1m": 64, "2k": 0, "4k": 0, "8k": 0, "16k": 160}  # held-out rows kept
 KW = f"{P.WORK}/lc"
 SH = "/data/prasann/early_loss_proxy/shards"
 HO_OUT = "/data/prasann/early_loss_proxy/heldout_lc.npz"
@@ -81,7 +82,7 @@ def _gen(job):
 
 
 def lens_of(a):
-    return [r for r in LENS if not a.lens or r in a.lens.split(",")]
+    return [r for r in (a.lens.split(",") if a.lens else ["128k", "256k", "1m"])]
 
 
 def gen(a):
@@ -232,9 +233,38 @@ def build(a):
         print(f"[lc build] wrote {final}: {json.dumps(st)}", flush=True)
 
 
+def addho(a):
+    """Append (or replace) held-out sets lc<L> for --lens from this work dir's eval-split rows into heldout_lc.npz."""
+    z = np.load(HO_OUT)
+    keep = [j for j in range(len(z["sets"])) if str(z["sets"][j]) not in {f"lc{r}" for r in lens_of(a)}]
+    o = z["offsets"]
+    rows = [(str(z["sets"][j]), str(z["tasks"][j]), int(z["src_idx"][j]), z["ids"][o[j]:o[j + 1]], z["mask"][o[j]:o[j + 1]])
+            for j in keep]
+    st = json.load(open(HO_OUT.replace(".npz", "_stats.json")))
+    for r in lens_of(a):
+        exs = P.read_jsonl(f"{KW}/hogen/{r}/{T}/eval_{r}.jsonl")
+        _, toks = P.load_shard_rows(f"{KW}/hotok/{r}")
+        assert len(toks) == len(exs)
+        sel = [(i, ids, m) for i, (ids, m) in enumerate(toks) if len(ids) <= LENS[r]][:HO_ROWS[r]]
+        assert len(sel) == HO_ROWS[r], (r, len(sel))
+        rows += [(f"lc{r}", T, i, ids, m) for i, ids, m in sel]
+        L = np.array([len(x[1]) for x in sel])
+        st[f"lc{r}"] = {"rows": len(sel), "candidates": len(exs), "len_mean": float(L.mean()), "len_min": int(L.min()),
+                        "len_max": int(L.max()), "n_docs": NDOCS[r], "source": f"{KW}/hogen/{r}",
+                        "answer_tokens_mean": float(np.mean([int(x[2].sum()) for x in sel]))}
+        print(f"[lc addho] lc{r}: {json.dumps(st[f'lc{r}'])}", flush=True)
+    offs = np.concatenate([[0], np.cumsum([len(x[3]) for x in rows])])
+    np.savez(HO_OUT + ".tmp.npz", ids=np.concatenate([np.asarray(x[3], dtype=np.uint32) for x in rows]),
+             mask=np.concatenate([np.asarray(x[4], dtype=bool) for x in rows]), offsets=offs,
+             sets=np.asarray([x[0] for x in rows]), tasks=np.asarray([x[1] for x in rows]),
+             src_idx=np.asarray([x[2] for x in rows]))
+    os.replace(HO_OUT + ".tmp.npz", HO_OUT)
+    json.dump(st, open(HO_OUT.replace(".npz", "_stats.json"), "w"), indent=1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["gen", "tokenize", "build"])
+    ap.add_argument("stage", choices=["gen", "tokenize", "build", "addho"])
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--shuffle-seed", type=int, default=20261118)
     ap.add_argument("--lens", default="")
@@ -250,7 +280,7 @@ def main():
     if a.suffix:
         KW = f"{P.WORK}/lc{a.suffix}"
         SUFFIX[0] = a.suffix
-    {"gen": gen, "tokenize": tokenize, "build": build}[a.stage](a)
+    {"gen": gen, "tokenize": tokenize, "build": build, "addho": addho}[a.stage](a)
 
 
 if __name__ == "__main__":
