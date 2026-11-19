@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import json
 import math
 import os
 import subprocess
@@ -44,6 +45,9 @@ def main():
     ap.add_argument("--presync", default="", help="space-separated paths under early_loss_proxy/ to copy S3 -> weka first")
     ap.add_argument("--save-root", default="", help="real arms: weka save root (no wipe; resumes; keeps stepN checkpoints)")
     ap.add_argument("--keep-ckpt", action="store_true", help="drop --no-final-checkpoint and keep every --save-interval checkpoint")
+    ap.add_argument("--exclude-host", action="append", default=[],
+                    help="substring of a bad host to avoid (pins the job to every other uncordoned host of the FIRST "
+                         "--cluster, e.g. jupiter-cs-aus-152 = weka mount missing, 2026-11-19)")
     ap.add_argument("--env", action="append", default=[], metavar="K=V", help="extra env var for the job")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
@@ -73,6 +77,14 @@ def main():
     cfg.step_soft_timeout = None
     cfg.env_vars += [BeakerEnvVar(name="TAG", value=a.tag),
                      BeakerEnvVar(name="SPEC_B64", value=base64.b64encode(spec.encode()).decode())]
+    if a.exclude_host:
+        out = subprocess.run(["beaker", "cluster", "nodes", a.cluster.split(",")[0], "--format", "json"],
+                             capture_output=True, text=True).stdout
+        hosts = [n.get("hostname") for n in json.loads(out) if not n.get("cordoned")]
+        hosts = [h for h in hosts if h and not any(x in h for x in a.exclude_host)]
+        assert hosts, "no hosts left"
+        cfg.hostnames = hosts
+        print(f"[lc-smoke] pinned to {len(hosts)} hosts (excluding {a.exclude_host})")
     for kv in a.env:
         k, _, v = kv.partition("=")
         cfg.env_vars.append(BeakerEnvVar(name=k, value=v))
