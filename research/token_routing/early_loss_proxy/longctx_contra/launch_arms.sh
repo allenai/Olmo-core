@@ -48,10 +48,12 @@ case $ARM in
       --run "dense1m|probe|8|full|1e-5|lc1mdense84|1048576|1|999999|lc16k:16|$LORA --cp-degree 8 --gdn-int32-safe --ffn-chunk-tokens 32768 --shard-degree 1 --skip-dry-run --no-data-shuffle --ephemeral-save-interval 5 --save-interval 21"
     ;;
   dense1m_mix)  # Prasann 11-19: dense LoRA 1M on gdd1m's mix = the first 1,515 rows of lc1mmix_gdd in its order (83 x 1M +
-    # 1,432 short; short:long 17.3 vs gdd1m's 14.5), packed into 1,048,576-token windows (doc lengths; the int32 guard now
-    # covers packed rows), CP8, 1 window/step; ~13,650 PF
-    python3 $L --tag lcA-dense1mmix --minutes 270 "${COMMON[@]}" --presync "shards/lc1mmixdense2 heldout_lc.npz" \
-      --run "dense1m_mix|probe|8|full|1e-5|lc1mmixdense2|1048576|1|999999|lc16k:16|$LORA --cp-degree 8 --pack --pack-unpack-long 262144 --gdn-int32-safe --ffn-chunk-tokens 32768 --shard-degree 1 --skip-dry-run --no-data-shuffle --ephemeral-save-interval 5 --save-interval 24"
+    # 1,432 short; short:long 17.3 vs gdd1m's 14.5), packed into 1,048,576-token windows, CP8, 1 window/step. Windows whose
+    # first document is a 1M row run unpacked (--pack-unpack-long; co-packed docs masked); short windows stay packed with
+    # GDN calls grouped at 131,072 tokens (exact). Smoke lcsmQ5: 1M step 167 s / 51 GiB, short window 118 s / 55 GiB.
+    python3 $L --tag lcA-dense1mmix --minutes 270 "${COMMON[@]}" --env OLMO_GDN_PACKED_GROUP=131072 \
+      --presync "shards/lc1mmixdense heldout_lc.npz" \
+      --run "dense1m_mix|probe|8|full|1e-5|lc1mmixdense|1048576|1|999999|lc16k:16|$LORA --cp-degree 8 --pack --pack-unpack-long 262144 --gdn-int32-safe --gdn-segment-tokens 131072 --ffn-chunk-tokens 16384 --shard-degree 1 --skip-dry-run --no-data-shuffle --ephemeral-save-interval 5 --save-interval 24"
     ;;
   dense1m_chain|chainsmoke)  # fallback for dense1m_mix (Prasann 11-19): chained trainer runs in ONE job, each branching
     # (--branch-from @PREV@ --branch-optim-only: LoRA + optimizer carried, fresh step counter) from the previous run's last

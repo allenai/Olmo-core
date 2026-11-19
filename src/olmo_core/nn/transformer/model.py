@@ -2698,8 +2698,11 @@ class Transformer(nn.Module):
             if os.environ.get("OLMO_UNPACK_DEBUG") and self.training:
                 _nz = _dl[_dl > 0]
                 print(f"[unpack-long] window docs {int(_nz.numel())} max {int(_dl.max())} first {_nz[:4].tolist()} "
-                      f"unpack {int(_dl.max()) > _ul}", flush=True)
-            if int(_dl.max()) > _ul:
+                      f"unpack {int(_nz[0]) > _ul if _nz.numel() else False}", flush=True)
+            # the FIRST document decides: a long row starts its own window, while the packer's trailing fill can
+            # also show up as one long "document" in a window of short rows (lcsmQ5: 151 docs, max 661,055)
+            _first = _dl[0][_dl[0] > 0][:1] if _dl.dim() == 2 else _dl[_dl > 0][:1]
+            if _first.numel() and int(_first[0]) > _ul:
                 kwargs.pop("doc_lens", None)
                 kwargs.pop("max_doc_lens", None)
                 # documents packed after the long one would now see it: take them out of the loss
