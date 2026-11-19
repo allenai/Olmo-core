@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 11-19 04:00 Agent genval2 (a508aee77f4605381, branch loop/validate2): 4 checkpointed runs (lo-p50-20-7 1,683 steps x4; dense LoRA 642 steps x4; dense FT 976 steps x4; dense LoRA 1,293
+  steps x16) + generation evals (3 tasks x 4k/8k/16k, eval_size 500/cell). Several hours. Only thing in flight. Hub at v137.
 - 11-19 03:30 64k CHECK DONE (klb64 on ceres): dense FT 0.385 @1,457; dense LoRA 0.325 @1,475, 0.236 @2,925 (ref 0.199 @5,723); k20 0.238 / 0.265 @1,463 = x2.0 / x1.6 vs dense LoRA
   (x4.1 / x3.2 vs dense FT); k40 x1.3-1.4. No growth with length vs the LoRA baseline. NOTHING IN FLIGHT. IDEA QUEUE EMPTY. Record + STATUS link done; experiment_log.json entry still owed.
   If Prasann has not redirected by the next heartbeats: do NOT burn compute on low-value variants; options worth his call: (a) accept ~2x and move to generation-eval confirmation of

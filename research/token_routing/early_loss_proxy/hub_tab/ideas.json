@@ -262,5 +262,13 @@
   "what": "A token-drop step costs relatively less at longer rows (0.19x dense at 64k against 0.22-0.30x at 16k), so the FLOP ratio might grow with length. The keep-versus-length session already ran dense and drop arms for 225 steps on a 64k pool (3 tasks, 144 held-out rows); what is missing is dense at the drop arms' FLOPs with a complete schedule. Dense LoRA at 1,463 and 2,926 PF and dense full fine-tune at 1,463 PF supply it.",
   "status": "done",
   "result": "No: the ratio against the dense frontier is not larger at 64k (mean CE on 144 held-out rows, 3 tasks, far below 500; drop arms from the keep-versus-length session, 225 steps on a 64k pool). Budget-matched dense points with complete schedules: dense full fine-tune 0.385 at 1,457 PF and 0.211 at 7,809 PF; dense LoRA 0.325 at 1,475 PF, 0.236 at 2,925 PF, 0.199 at 5,723 PF. That session's keep-20% arm (k20: 20% then 7%) ends at 0.238 / 0.265 (two seeds) after 1,463 PF: 2.0x / 1.6x fewer FLOPs than dense LoRA, 4.1x / 3.2x fewer than dense full fine-tune alone. That session's keep-40% arm (k40) at 1,897 PF: 0.246 / 0.258, 1.4x / 1.3x against dense LoRA. So at 64k the more aggressive budget is the better one, dense full fine-tune is much weaker than dense LoRA at small budgets, and against the LoRA baseline the gain is about 1.6-2.0x, the same range as at 16k."
+ },
+ {
+  "id": "genval2",
+  "family": "reference",
+  "title": "Generation-eval check of the 2x headline",
+  "what": "The headline is measured with a proxy (dense-forward answer CE on 320 held-out rows). Train four runs with checkpoints at the proxy runs' exact step counts and schedules (token drop 50% / 20% / 7% at 1,980 PF; dense LoRA at 1,965 PF; dense full fine-tune at 3,960 PF; dense LoRA at 3,986 PF) and score contradiction, outlier and qdmatch_nq generations at 4k / 8k / 16k with 500 examples per cell: does the drop arm beat dense LoRA at equal FLOPs, and does it match dense at twice the FLOPs?",
+  "status": "running",
+  "result": ""
  }
 ]
