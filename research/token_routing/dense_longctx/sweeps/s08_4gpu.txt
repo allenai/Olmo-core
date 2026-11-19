@@ -1,0 +1,5 @@
+4 s08_1m_g4_cp4_full    --scale 0.8b --seq-len 1048576 --cp 4 --ac full --gdn-safe --steps 3
+4 s08_1m_g4_cp4_lora    --scale 0.8b --seq-len 1048576 --cp 4 --ac full --gdn-safe --steps 3 --lora-rank 16
+4 s08_64k_g4_cp4_full   --scale 0.8b --seq-len 65536 --cp 4 --ac full --gdn-safe --steps 3
+4 s08_262k_g4_cp4_full  --scale 0.8b --seq-len 262144 --cp 4 --ac full --gdn-safe --steps 3
+4 s08_524k_g4_cp4_full  --scale 0.8b --seq-len 524288 --cp 4 --ac full --gdn-safe --steps 3

@@ -1,0 +1,5 @@
+1 s08_131k_g1_cp1_full  --scale 0.8b --seq-len 131072 --cp 1 --ac full --gdn-safe --steps 3
+1 s08_262k_g1_cp1_full  --scale 0.8b --seq-len 262144 --cp 1 --ac full --gdn-safe --steps 2
+1 s08_524k_g1_cp1_full  --scale 0.8b --seq-len 524288 --cp 1 --ac full --gdn-safe --steps 2
+1 s08_524k_g1_cp1_lora  --scale 0.8b --seq-len 524288 --cp 1 --ac full --gdn-safe --steps 2 --lora-rank 16
+1 s08_1m_g1_cp1_full    --scale 0.8b --seq-len 1048576 --cp 1 --ac full --gdn-safe --steps 2

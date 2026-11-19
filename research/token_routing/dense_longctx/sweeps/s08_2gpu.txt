@@ -1,0 +1,3 @@
+2 s08_524k_g2_cp2_full  --scale 0.8b --seq-len 524288 --cp 2 --ac full --gdn-safe --steps 2
+2 s08_1m_g2_cp2_full    --scale 0.8b --seq-len 1048576 --cp 2 --ac full --gdn-safe --steps 2
+2 s08_1m_g2_cp2_lora    --scale 0.8b --seq-len 1048576 --cp 2 --ac full --gdn-safe --steps 2 --lora-rank 16
