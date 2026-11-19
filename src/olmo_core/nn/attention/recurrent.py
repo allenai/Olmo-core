@@ -1,3 +1,4 @@
+import os
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Tuple
@@ -602,6 +603,11 @@ class GatedDeltaNet(SequenceMixer):
                     and cache is None and q.size(0) == 1:
                 width = max(q.shape[2] * q.shape[3], v.shape[2] * v.shape[3])
                 s_safe_p = int32_safe_tokens(width, limit=getattr(self, "_int32_safe_limit", 2**30))
+                # OLMO_GDN_PACKED_GROUP: also cap each packed kernel call at this many tokens (memory: the varlen
+                # backward over a full 1M packed window OOMed at CP8; exact, same grouping logic)
+                _pg = int(os.environ.get("OLMO_GDN_PACKED_GROUP", "0") or 0)
+                if _pg:
+                    s_safe_p = min(s_safe_p, max(1024, _pg // 1024 * 1024))
                 packed_safe = q.size(1) > s_safe_p
             if packed_safe:
                 # Packed rows (cu_doc_lens) past the bound (longctx_contra, 2026-11-19): documents are independent, so

@@ -2698,6 +2698,14 @@ class Transformer(nn.Module):
             if int(_dl.max()) > _ul:
                 kwargs.pop("doc_lens", None)
                 kwargs.pop("max_doc_lens", None)
+                # documents packed after the long one would now see it: take them out of the loss
+                _eos = getattr(self, "_flop_pad_id", None)
+                if labels is not None and _eos is not None:
+                    for _b in range(input_ids.shape[0]):
+                        _pos = torch.nonzero(input_ids[_b] == _eos)
+                        if _pos.numel():
+                            labels = labels.clone() if _b == 0 else labels
+                            labels[_b, int(_pos[0]):] = ignore_index
 
         # Soft-token document pooling ("B1"): during training, compact the sequence (pooled docs ->
         # one placeholder each) BEFORE anything else sees it. Eval/generation forwards untouched.

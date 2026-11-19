@@ -2498,6 +2498,7 @@ def parse_args() -> argparse.Namespace:
     opts = ap.parse_args()
     if opts.pack_unpack_long:
         os.environ["OLMO_UNPACK_LONG_DOCS"] = str(opts.pack_unpack_long)
+        os.environ.setdefault("OLMO_GDN_PACKED_GROUP", str(opts.pack_unpack_long))
     if opts.prefix_chunk_offload:
         os.environ["OLMO_OTR_PREFIX_OFFLOAD"] = "1"
     if opts.otr_keep_cap:
