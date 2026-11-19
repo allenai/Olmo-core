@@ -50,7 +50,7 @@ def scores(res, arm):
     files = glob.glob(os.path.join(res, f"lcS-{arm}", "score*-s*.json")) + glob.glob(os.path.join(res, "lcS-base", "score*-s0.json"))
     for f in files:
         m = re.search(r"-s(\d+)\.json$", f)
-        if not m:  # .rc.json / .flops.json siblings
+        if not m or os.path.basename(f).startswith("score1m-base-"):  # siblings; the CP4 base 1M score (CP8 = score1m8-base)
             continue
         st = int(m.group(1))
         d = json.load(open(f))
