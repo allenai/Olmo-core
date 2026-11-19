@@ -89,7 +89,7 @@ def main():
                 loss += int(bm.sum())
             tot += ntok
             bins.append({"src": pool, "rows": n, "tokens": ntok, "len_mean": float(ntok / n)})
-            print(f"[mix] {a.out} part {pi}: {pool} x {n}: {bt.size} tokens", flush=True)
+            print(f"[mix] {a.out} part {pi}: {pool} x {n}: {ntok} tokens", flush=True)
     order_info = None
     if a.ordered:
         rng = np.random.default_rng(a.seed)
