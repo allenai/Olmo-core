@@ -7,7 +7,9 @@
 - kl8k has gold_fingerprints.json and gdd_only_contradiction.json; gold share per task (row_info gold / n_docs):
   8k 3.2% / 5.3% / 7.1% (contradiction / outlier / qdmatch_nq), 32k 0.9 / 1.6 / 1.9%, 64k 0.5 / 0.8 / 0.9%: all
   < 0.5, so grJ drops documents on all three tasks (incl. qdmatch_nq).
-- Then: `[gold-doc-drop]` log counts per arm, score, fold 64k k70 (landed), record / log entry / ops rows.
+- DONE 16:40 PT: both 8k grJ seeds and 64k k70 scored (finalize.sh + gold_table.py), record section "Gold drop at
+  8k vs 32k / 64k", log entries (both status done), hub head, 14 new ops rows (425 total). Verdict: 8k grJ never
+  reaches dft's mid-epoch CE on the mean (outlier 0.18 vs 0.068), both seeds. Nothing running.
 
 ## 2026-11-17 19:35 PT (takeover session, latest)
 - 64k seed 1 (k40/k20/k10) and 32k k70 seed 1 landed, scored (finalize.sh), record verdict + hub head + log entry

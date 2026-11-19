@@ -1,11 +1,11 @@
 [
  {
-  "date": "2026-11-17",
-  "status": "running",
+  "date": "2026-11-18",
+  "status": "done",
   "track": "64k",
   "who": "side session (keepfrac-len)",
   "title": "Does the recipe's best keep fraction fall as context grows? Keep 70%..1.25% at 2k-64k, single-length pools, dense held-out-loss proxy",
-  "result": "No. Best keep is 20-40% at every length the proxy resolves and does not fall with length: 8k 40% (tied with 20%), 16k 20-40% tie, 32k 40% beats the recipe at matched FLOPs on both seeds (-0.019 / -0.010 CE; 70% ties: -0.022 / -0.002), 64k 20% (40% +0.015 / +0.017 on both seeds). Low keeps break harder the longer the rows: 10% vs the recipe at matched FLOPs +0.003 CE at 8k, +0.002/+0.014 at 16k, +0.011/+0.031 at 32k, +0.080/+0.033 at 64k; 2.5% collapses at 32k/64k and 1.25% at 64k (+0.60). Constant fraction fits; a constant kept-token count (would predict 20/10/5% at 16/32/64k) is rejected. 2k/4k saturate (held-out CE ~0.01): unresolvable. Below 20% the per-step FLOP saving flattens (64k: 0.185 -> 0.140x dense) because blocks 0-6 stay dense. Margins between 20% and 40% are no larger than the seed spread (up to 0.027 CE at 64k). A 70% arm at 64k is still running. Proxy: eval_size 144 per length (below 500), ranks only, cannot resolve < ~0.03-0.05 CE.",
+  "result": "No. Best keep is 20-40% at every length the proxy resolves and does not fall with length: 8k 40% (tied with 20%), 16k 20-40% tie, 32k 40% beats the recipe at matched FLOPs on both seeds (-0.019 / -0.010 CE; 70% ties: -0.022 / -0.002), 64k 20% (40% +0.015 / +0.017 on both seeds). Low keeps break harder the longer the rows: 10% vs the recipe at matched FLOPs +0.003 CE at 8k, +0.002/+0.014 at 16k, +0.011/+0.031 at 32k, +0.080/+0.033 at 64k; 2.5% collapses at 32k/64k and 1.25% at 64k (+0.60). Constant fraction fits; a constant kept-token count (would predict 20/10/5% at 16/32/64k) is rejected. 2k/4k saturate (held-out CE ~0.01): unresolvable. Below 20% the per-step FLOP saving flattens (64k: 0.185 -> 0.140x dense) because blocks 0-6 stay dense. Margins between 20% and 40% are no larger than the seed spread (up to 0.027 CE at 64k). At 64k, 70% is +0.047 at matched FLOPs but the only router arm whose every task reaches dense's mid-epoch level (1 seed). Proxy: eval_size 144 per length (below 500), ranks only, cannot resolve < ~0.03-0.05 CE.",
   "match": "same base (q35-4b-base-markerfix), per-length pool (3 tasks x 1,200 rows) and held-out rows (48/task), one epoch = 225 steps with the real LR schedule; FLOPs from the trainer meter; reference = dense full fine-tune",
   "record": "records/keep-fraction-vs-length.md",
   "branch": "claude/keepfrac-vs-length-4bf10c",
@@ -25,7 +25,7 @@
       "+0.006 / +0.018",
       "+0.007",
       "-0.022 / -0.002",
-      "-"
+      "+0.047"
      ],
      [
       "k40",
@@ -99,7 +99,7 @@
       "2.99 / 2.53",
       "2.94",
       "3.57 / 2.54",
-      "-"
+      "2.27"
      ],
      [
       "k40",
@@ -159,7 +159,7 @@
       "grJ",
       "-",
       "-",
-      "-",
+      "not reached / not reached",
       "-",
       "6.17",
       "8.41"
@@ -178,14 +178,228 @@
   ]
  },
  {
-  "date": "2026-11-17",
+  "date": "2026-11-18",
   "status": "done",
   "track": "mechanism",
   "who": "side session (keepfrac-len)",
-  "title": "Gold-aware stochastic keep (grJ) and its outlier-safe variant (grJc, document drop on contradiction only) at 32k and 64k",
-  "result": "grJ: largest mean speedups (6.2x at 32k, 8.4x at 64k vs dense full FT at its mid-epoch CE; 0.08 / 0.067 of dense FLOPs per step) but outlier never reaches that level (final outlier CE 0.249 vs 0.187 at 32k, 0.284 vs 0.220 at 64k): the mean hides an outlier stall. grJc: 32k 4.16x / 4.15x mean (2 seeds), worst task 2.82x on seed 0 but contradiction not reached on seed 1; ends 0.015-0.019 CE above 40%/14% at equal steps (contradiction +0.04). 64k (1 seed): 4.10x mean, contradiction (0.191 vs 0.086) and outlier do not reach dense's mid-epoch level. Outlier-safe at 32k, not at 64k; contradiction is its weak task. Proxy, eval_size 144.",
+  "title": "Gold-aware stochastic keep (grJ) at 8k, 32k, 64k and its outlier-safe variant (grJc, document drop on contradiction only) at 32k and 64k",
+  "result": "grJ (all rows; 0.10 / 0.08 / 0.067 of dense FLOPs per step at 8k / 32k / 64k) stalls on outlier at every length: final outlier CE 0.182 / 0.177 vs dense full FT 0.068 at 8k (2 seeds), 0.249 vs 0.187 at 32k, 0.284 vs 0.220 at 64k; outlier never reaches dense's mid-epoch CE. At 8k this decides the mean: mean CE never reaches dense's mid-epoch level (0.092 vs level 0.081; dense ends 0.045), both seeds; at 32k / 64k the mean still shows 6.2x / 8.4x vs dense at that level. qdmatch_nq reaches it at 5.8-21x at every length, contradiction at 4.5-5.8x at 8k/32k, not at 64k. Gold share of documents is 0.5-7% for all tasks, so grJ drops documents on all three tasks (8k: 1,535 / 1,527 of 1,802 rows dropped, doc-token keep 0.42). grJc (32k 2 seeds, 64k 1): 32k 4.16x / 4.15x mean, worst task 2.82x on seed 0 but contradiction not reached on seed 1; 64k 4.10x mean with contradiction and outlier not reached: outlier-safe at 32k, not at 64k. Proxy, eval_size 144 per length (below 500).",
   "match": "recipe 20%/7% router + gold-aware whole-document keep (--st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 0.15); same pools/held-out as the keep-vs-length study",
   "record": "records/keep-fraction-vs-length.md",
-  "branch": "claude/keepfrac-vs-length-4bf10c"
+  "branch": "claude/keepfrac-vs-length-4bf10c",
+  "tables": [
+   {
+    "title": "Gold drop vs dense full FT (x at dft's mid-epoch CE; final CE contradiction / outlier / qdmatch_nq), per seed",
+    "cols": [
+     "length",
+     "arm",
+     "seed",
+     "FLOPs/step vs dense",
+     "x @ mid (mean)",
+     "x @ mid per task",
+     "final CE per task"
+    ],
+    "rows": [
+     [
+      "8k",
+      "dft",
+      0,
+      1.0,
+      1.0,
+      "1.00 / 1.00 / 1.00",
+      "0.022 / 0.068 / 0.044"
+     ],
+     [
+      "8k",
+      "k20",
+      0,
+      0.224,
+      3.37,
+      "2.47 / 5.98 / 3.21",
+      "0.033 / 0.067 / 0.043"
+     ],
+     [
+      "8k",
+      "k20",
+      1,
+      0.224,
+      3.23,
+      "2.96 / 4.05 / 2.78",
+      "0.023 / 0.085 / 0.048"
+     ],
+     [
+      "8k",
+      "k40",
+      0,
+      0.284,
+      3.57,
+      "2.50 / 4.86 / 3.66",
+      "0.022 / 0.042 / 0.033"
+     ],
+     [
+      "8k",
+      "k40",
+      1,
+      0.284,
+      3.11,
+      "2.92 / 7.02 / 3.67",
+      "0.023 / 0.061 / 0.033"
+     ],
+     [
+      "8k",
+      "grJ",
+      0,
+      0.1,
+      "not reached",
+      "5.06 / nr / 6.63",
+      "0.045 / 0.182 / 0.050"
+     ],
+     [
+      "8k",
+      "grJ",
+      1,
+      0.102,
+      "not reached",
+      "4.54 / nr / 5.80",
+      "0.048 / 0.177 / 0.050"
+     ],
+     [
+      "32k",
+      "dft",
+      0,
+      1.0,
+      1.0,
+      "1.00 / 1.00 / 1.00",
+      "0.063 / 0.187 / 0.182"
+     ],
+     [
+      "32k",
+      "k20",
+      0,
+      0.201,
+      2.7,
+      "nr / 2.77 / 3.95",
+      "0.122 / 0.192 / 0.202"
+     ],
+     [
+      "32k",
+      "k20",
+      1,
+      0.201,
+      3.01,
+      "nr / 4.22 / 3.80",
+      "0.119 / 0.189 / 0.211"
+     ],
+     [
+      "32k",
+      "k40",
+      0,
+      0.259,
+      3.5,
+      "2.72 / 2.89 / 4.22",
+      "0.072 / 0.184 / 0.175"
+     ],
+     [
+      "32k",
+      "k40",
+      1,
+      0.259,
+      2.98,
+      "2.41 / 2.81 / 3.95",
+      "0.079 / 0.181 / 0.186"
+     ],
+     [
+      "32k",
+      "grJ",
+      0,
+      0.08,
+      6.17,
+      "5.80 / nr / 12.87",
+      "0.106 / 0.249 / 0.204"
+     ],
+     [
+      "32k",
+      "grJc",
+      0,
+      0.158,
+      4.16,
+      "2.82 / 4.46 / 6.47",
+      "0.108 / 0.197 / 0.172"
+     ],
+     [
+      "32k",
+      "grJc",
+      1,
+      0.158,
+      4.15,
+      "nr / 3.64 / 5.55",
+      "0.117 / 0.199 / 0.185"
+     ],
+     [
+      "64k",
+      "dft",
+      0,
+      1.0,
+      1.0,
+      "1.00 / 1.00 / 1.00",
+      "0.086 / 0.220 / 0.327"
+     ],
+     [
+      "64k",
+      "k20",
+      0,
+      0.185,
+      3.61,
+      "3.57 / nr / 4.02",
+      "0.129 / 0.243 / 0.343"
+     ],
+     [
+      "64k",
+      "k20",
+      1,
+      0.185,
+      2.72,
+      "2.67 / nr / 2.85",
+      "0.166 / 0.234 / 0.395"
+     ],
+     [
+      "64k",
+      "k40",
+      0,
+      0.24,
+      2.87,
+      "2.82 / nr / 2.98",
+      "0.117 / 0.240 / 0.382"
+     ],
+     [
+      "64k",
+      "k40",
+      1,
+      0.24,
+      2.3,
+      "2.94 / nr / 1.98",
+      "0.124 / 0.232 / 0.418"
+     ],
+     [
+      "64k",
+      "grJ",
+      0,
+      0.067,
+      8.41,
+      "nr / nr / 21.13",
+      "0.185 / 0.284 / 0.327"
+     ],
+     [
+      "64k",
+      "grJc",
+      0,
+      0.144,
+      4.1,
+      "nr / nr / 6.84",
+      "0.191 / 0.235 / 0.337"
+     ]
+    ]
+   }
+  ]
  }
 ]

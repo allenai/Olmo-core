@@ -1,14 +1,14 @@
 ---
 title: Does the recipe's best keep fraction fall as context grows? (keep 70%..1.25% at 2k-64k, dense held-out-loss proxy)
 date: 2026-11-17
-updated: 2026-11-17
+updated: 2026-11-18
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: current (11-17; the 64k 70% arm is still running)
+status: current (11-18: all arms landed, incl. 64k 70% and the 8k gold-drop check)
 superseded_by: 
 artifact: 
-summary: No. On single-length pools at 2k-64k scored by the early dense held-out-loss proxy (one epoch, eval_size 144 per length), the best router keep is 20-40% at every length the proxy resolves and does not fall with length (8k 40% tied with 20%; 16k 20-40% tie; 32k 40% beats the 20%/7% recipe at matched FLOPs by 0.01-0.02 CE on both seeds, 70% ties; 64k 20%, 40% +0.015 on both seeds). Low keeps break harder the longer the rows (10%/3.5%: +0.003 CE vs the recipe at 8k, +0.08 at 64k; 2.5% and 1.25% collapse at 32k/64k), so constant fraction fits and a constant kept-token count is rejected; 2k/4k saturate. Gold-aware keep grJ has the biggest mean speedups (6-8x vs dense full FT) but stalls on outlier; grJc is outlier-safe at 32k, not at 64k.
+summary: No. On single-length pools at 2k-64k scored by the early dense held-out-loss proxy (one epoch, eval_size 144 per length), the best router keep is 20-40% at every length the proxy resolves and does not fall with length (8k 40% tied with 20%; 16k 20-40% tie; 32k 40% beats the 20%/7% recipe at matched FLOPs by 0.01-0.02 CE on both seeds, 70% ties; 64k 20%, 40% +0.015 on both seeds). Low keeps break harder the longer the rows (10%/3.5%: +0.003 CE vs the recipe at 8k, +0.08 at 64k; 2.5% and 1.25% collapse at 32k/64k), so constant fraction fits and a constant kept-token count is rejected; 2k/4k saturate. Gold-aware keep grJ has the biggest mean speedups at 32k/64k (6-8x vs dense full FT) but stalls on outlier at every length, and at 8k never reaches dense's mid-epoch loss on the mean (2 seeds); grJc is outlier-safe at 32k, not at 64k.
 ---
 # Does the recipe's best keep fraction fall as context grows? (keepfrac_len)
 
@@ -36,8 +36,9 @@ keeps break harder the longer the rows.** Constant fraction fits; constant kept-
     end-of-epoch CE on seed 0 (3.95x / 4.09x).
   - 64k: **20%/7%**: 40% is +0.015 / +0.017 at matched FLOPs (both seeds; at equal steps +0.008 / -0.007, a tie),
     10% +0.080 / +0.033, 5% +0.103, 2.5% +0.278, 1.25% +0.602 (collapse). Only 20% and 40% reach dft's mid-epoch CE
-    (seed means 3.17x and 2.58x); no router arm reaches dft's end-of-epoch CE (0.211; recipe 0.238 / 0.265). A 70%
-    arm is still running.
+    (seed means 3.17x and 2.58x); no router arm reaches dft's end-of-epoch CE (0.211; recipe 0.238 / 0.265). 70%/24.5%
+    (1 seed) is +0.047 at matched FLOPs (2.27x at the mid level) but ends lowest at equal steps (0.222) and is the
+    only router arm whose every task reaches dft's mid-epoch level (worst task outlier 1.96x).
 - **Margin vs seed noise.** Seed-to-seed |Δ mean CE| at the end of the epoch is 0.001-0.018 per arm at 8k-32k
   (k20 at 32k 0.0006, k40 0.005, k10 0.015, k70 0.018) and up to 0.027 at 64k (k20); the speedup at the mid level
   moves by up to 1.0x between seeds (32k k70: 3.57 vs 2.54; 64k k20: 3.61 vs 2.72). So 40% vs 20% at 8k/16k and
@@ -71,6 +72,66 @@ keeps break harder the longer the rows.** Constant fraction fits; constant kept-
 The proxy understates gains relative to generation evals (recipe 1.9-2.2x on the proxy vs 3.3x on generation evals,
 `records/early-dense-loss-proxy.md`) and cannot resolve final gaps below about 0.03-0.05 CE: use these numbers to
 rank keeps, not to quote speedups.
+
+## Gold drop at 8k vs 32k / 64k (Prasann 11-18: "does gold dropping work at 8k at a similar level?")
+
+**No. At 8k `grJ` (gold-aware stochastic whole-document keep on all rows) never reaches dense full FT's mid-epoch
+held-out CE on the mean, on both seeds: it stalls on outlier, as at 32k/64k, and at 8k that stall decides the mean.**
+
+- 8k `grJ`, seeds 0 / 1 (Beaker `elp-kl8k-bkRPQTGH7X` / `-bk3M9X4FBD`, eval_size 144 ⚠, 48 per task): step cost
+  0.100 / 0.102 of dense (32k 0.080, 64k 0.067). Final mean CE 0.0922 / 0.0918 vs dft 0.0445, recipe 0.0476 /
+  0.0519, 40%/14% 0.0324 / 0.0390. Per task (contradiction / outlier / qdmatch_nq): `grJ` 0.045 / 0.182 / 0.050 and
+  0.048 / 0.177 / 0.050; dft 0.022 / 0.068 / 0.044; recipe 0.033 / 0.067 / 0.043 and 0.023 / 0.085 / 0.048; 40%
+  0.022 / 0.042 / 0.033 and 0.023 / 0.061 / 0.033.
+- FLOP speedup vs dft at dft's mid-epoch CE: mean **not reached** (dft level 0.081; `grJ` ends at 0.092), per task
+  contradiction 5.06x / 4.54x, outlier **not reached** (level 0.134; `grJ` ends at 0.18), qdmatch_nq 6.63x / 5.80x.
+  At dft's end-of-epoch CE: not reached on the mean or on any task.
+- Same arm across lengths (seed 0): mean speedup at the mid level 8k not reached, 32k 6.17x, 64k 8.41x; outlier
+  never reaches the mid level at any length; its final outlier gap to dft is +0.114 (8k), +0.062 (32k), +0.064
+  (64k) CE and its contradiction gap +0.023, +0.043, +0.099. The mean "works" at 32k/64k only because the outlier
+  gap is a smaller share of a larger CE scale. Per task: qdmatch_nq reaches dft's mid level at 5.8-21x at every
+  length, contradiction at 4.5-5.8x at 8k/32k but not at all at 64k, outlier never; no task reaches dft's
+  end-of-epoch CE except 32k `grJc` qdmatch_nq.
+- What was dropped (`[gold-doc-drop]`, rank 0's cumulative counts, 1,802 rows each): 8k sd0 1,535 rows dropped /
+  267 whole / 0 full / 0 not-selected / 0 miss, doc-token keep 0.417; sd1 1,527 / 275 / 0 / 0 / 0, keep 0.420. 32k
+  sd0 1,505 / 297, keep 0.404; 64k sd0 1,541 / 260, keep 0.383. Gold share of documents per row (row_info gold /
+  n_docs; contradiction / outlier / qdmatch_nq): 8k 3.2 / 5.3 / 7.1%, 32k 0.9 / 1.6 / 1.9%, 64k 0.5 / 0.8 / 0.9%: all
+  below the module's 0.5 cut, so `grJ` drops documents on all three tasks including qdmatch_nq (the module docstring's
+  "qdmatch_nq keeps every document" does not describe these pools). `grJc` was not run at 8k (scope set by Prasann).
+- Resolution: 8k sits near the proxy's floor (dft ends at 0.045, the routed arms at 0.03-0.05), so the proxy cannot
+  rank dft / 20% / 40% there (their gaps are ≤ 0.02). The `grJ` failure is resolvable: its outlier gap (+0.11 CE)
+  and mean gap (+0.040 to +0.060 vs recipe / 40%, paired SE 0.006, both seeds) are well above the 0.03-0.05 floor.
+
+Gold-drop comparison table (per seed; x = FLOP speedup vs dft at dft's own CE level; levels in the last row of each
+block; eval_size 144 per length, 48 per task ⚠):
+
+| length | arm | seed | FLOPs/step vs dense | x dft @ mid CE (mean) | x dft @ end CE (mean) | x @ mid: contradiction / outlier / qdmatch_nq | x @ end: contradiction / outlier / qdmatch_nq | final CE mean | final CE contradiction / outlier / qdmatch_nq |
+|---|---|---|---|---|---|---|---|---|---|
+| 8k | dft | 0 | 1.000 | 1.00 | 1.00 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 | 0.0445 | 0.022 / 0.068 / 0.044 |
+| 8k | k40 | 0 | 0.284 | 3.57 | 4.41 | 2.50 / 4.86 / 3.66 | not reached / 4.52 / 3.18 | 0.0324 | 0.022 / 0.042 / 0.033 |
+| 8k | k40 | 1 | 0.284 | 3.11 | 4.01 | 2.92 / 7.02 / 3.67 | not reached / 3.77 / 3.39 | 0.0390 | 0.023 / 0.061 / 0.033 |
+| 8k | k20 | 0 | 0.224 | 3.37 | not reached | 2.47 / 5.98 / 3.21 | not reached / 6.58 / 2.81 | 0.0476 | 0.033 / 0.067 / 0.043 |
+| 8k | k20 | 1 | 0.224 | 3.23 | not reached | 2.96 / 4.05 / 2.78 | 4.49 / not reached / not reached | 0.0519 | 0.023 / 0.085 / 0.048 |
+| 8k | grJ | 0 | 0.100 | not reached | not reached | 5.06 / not reached / 6.63 | not reached / not reached / not reached | 0.0922 | 0.045 / 0.182 / 0.050 |
+| 8k | grJ | 1 | 0.102 | not reached | not reached | 4.54 / not reached / 5.80 | not reached / not reached / not reached | 0.0918 | 0.048 / 0.177 / 0.050 |
+| 8k | levels | | | mid (dft step 100) 0.0808 | end 0.0445 | 0.051 / 0.134 / 0.058 | 0.022 / 0.068 / 0.044 | | |
+| 32k | dft | 0 | 1.000 | 1.00 | 1.00 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 | 0.1440 | 0.063 / 0.187 / 0.182 |
+| 32k | k40 | 0 | 0.259 | 3.50 | 3.95 | 2.72 / 2.89 / 4.22 | not reached / 3.96 / 4.52 | 0.1438 | 0.072 / 0.184 / 0.175 |
+| 32k | k40 | 1 | 0.259 | 2.98 | not reached | 2.41 / 2.81 / 3.95 | not reached / 3.27 / not reached | 0.1487 | 0.079 / 0.181 / 0.186 |
+| 32k | k20 | 0 | 0.201 | 2.70 | not reached | not reached / 2.77 / 3.95 | not reached / not reached / not reached | 0.1722 | 0.122 / 0.192 / 0.202 |
+| 32k | k20 | 1 | 0.201 | 3.01 | not reached | not reached / 4.22 / 3.80 | not reached / 3.70 / not reached | 0.1728 | 0.119 / 0.189 / 0.211 |
+| 32k | grJ | 0 | 0.080 | 6.17 | not reached | 5.80 / not reached / 12.87 | not reached / not reached / not reached | 0.1860 | 0.106 / 0.249 / 0.204 |
+| 32k | grJc | 0 | 0.158 | 4.16 | not reached | 2.82 / 4.46 / 6.47 | not reached / not reached / 7.97 | 0.1590 | 0.108 / 0.197 / 0.172 |
+| 32k | grJc | 1 | 0.158 | 4.15 | not reached | not reached / 3.64 / 5.55 | not reached / not reached / not reached | 0.1673 | 0.117 / 0.199 / 0.185 |
+| 32k | levels | | | mid (dft step 100) 0.1922 | end 0.1440 | 0.109 / 0.204 / 0.264 | 0.063 / 0.187 / 0.182 | | |
+| 64k | dft | 0 | 1.000 | 1.00 | 1.00 | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 | 0.2110 | 0.086 / 0.220 / 0.327 |
+| 64k | k40 | 0 | 0.240 | 2.87 | not reached | 2.82 / not reached / 2.98 | not reached / not reached / not reached | 0.2464 | 0.117 / 0.240 / 0.382 |
+| 64k | k40 | 1 | 0.240 | 2.30 | not reached | 2.94 / not reached / 1.98 | not reached / not reached / not reached | 0.2578 | 0.124 / 0.232 / 0.418 |
+| 64k | k20 | 0 | 0.185 | 3.61 | not reached | 3.57 / not reached / 4.02 | not reached / not reached / not reached | 0.2382 | 0.129 / 0.243 / 0.343 |
+| 64k | k20 | 1 | 0.185 | 2.72 | not reached | 2.67 / not reached / 2.85 | not reached / not reached / not reached | 0.2650 | 0.166 / 0.234 / 0.395 |
+| 64k | grJ | 0 | 0.067 | 8.41 | not reached | not reached / not reached / 21.13 | not reached / not reached / not reached | 0.2652 | 0.185 / 0.284 / 0.327 |
+| 64k | grJc | 0 | 0.144 | 4.10 | not reached | not reached / not reached / 6.84 | not reached / not reached / not reached | 0.2544 | 0.191 / 0.235 / 0.337 |
+| 64k | levels | | | mid (dft step 100) 0.2785 | end 0.2110 | 0.184 / 0.227 / 0.424 | 0.086 / 0.220 / 0.327 | | |
 
 ## Setup
 
@@ -161,6 +222,7 @@ difference between two arms on the same rows is 0.003-0.006 at the end of the ep
 | 10% / 3.5% | 0 | 0.195 | +0.0030 | 3.21 | not reached | not reached (contradiction) | not reached | 5.75 | 2.83 | 0.0584 | 0.052 / 0.077 / 0.046 |
 | 5% / 1.75% | 0 | 0.180 | +0.0119 | 3.30 | not reached | not reached (contradiction) | not reached | 4.35 | not reached | 0.0712 | 0.057 / 0.092 / 0.065 |
 | 2.5% / 0.9% | 0 | 0.173 | +0.0690 | not reached | not reached | not reached (contradiction) | not reached | 2.87 | not reached | 0.1295 | 0.130 / 0.127 / 0.132 |
+| grJ (gold-aware stochastic keep) | 0,1 | 0.100 | +0.0071 / -0.0027 | not reached / not reached | not reached / not reached | not reached (outlier) / not reached (outlier) | 5.06 / 4.54 | not reached / not reached | 6.63 / 5.80 | 0.0922 / 0.0918 | 0.045 / 0.182 / 0.050 ; 0.048 / 0.177 / 0.050 |
 
 **16k** (eval_size 144 ⚠ < 500, 48 rows/task; matched level = dft's mean held-out CE at step 100 = 0.1455; end of epoch 0.1230)
 
@@ -196,6 +258,7 @@ difference between two arms on the same rows is 0.003-0.006 at the end of the ep
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | dense full FT | 0 | 1.000 | +0.1634 | 1.00 | 1.00 | 1.00 (contradiction) | 1.00 | 1.00 | 1.00 | 0.2110 | 0.086 / 0.220 / 0.327 |
 | dense LoRA | 0 | 0.723 | +0.0961 | 1.34 | 1.84 | 1.34 (qdmatch_nq) | 1.71 | 1.83 | 1.34 | 0.1994 | 0.089 / 0.212 / 0.297 |
+| 70% / 24.5% | 0 | 0.335 | +0.0468 | 2.27 | not reached | 1.96 (outlier) | 2.30 | 1.96 | 2.35 | 0.2217 | 0.106 / 0.215 / 0.344 |
 | 40% / 14% | 0,1 | 0.240 | +0.0145 / +0.0170 | 2.58 (2.30-2.87) | not reached / not reached | not reached (outlier) / not reached (outlier) | 2.82 / 2.94 | not reached / not reached | 2.98 / 1.98 | 0.2464 / 0.2578 | 0.117 / 0.240 / 0.382 ; 0.124 / 0.232 / 0.418 |
 | 20% / 7% (recipe) | 0,1 | 0.185 | +0.0000 / +0.0000 | 3.17 (2.72-3.61) | not reached / not reached | not reached (outlier) / not reached (outlier) | 3.57 / 2.67 | not reached / not reached | 4.02 / 2.85 | 0.2382 / 0.2650 | 0.129 / 0.243 / 0.343 ; 0.166 / 0.234 / 0.395 |
 | 10% / 3.5% | 0,1 | 0.160 | +0.0797 / +0.0329 | not reached / not reached | not reached / not reached | not reached (contradiction) / not reached (contradiction) | not reached / not reached | not reached / not reached | not reached / not reached | 0.3311 / 0.3128 | 0.285 / 0.253 / 0.456 ; 0.237 / 0.255 / 0.446 |
@@ -207,10 +270,10 @@ difference between two arms on the same rows is 0.003-0.006 at the end of the ep
 
 <!-- tables:end -->
 
-## Still running (2026-11-17 19:30 PT)
+## Still running
 
-- 70%/24.5% at 64k, seed 0 (Beaker `elp-kl64k-bkBX8XWK0M`, 01M7P6T8EEKK6T00K0BX8XWK0M; expected done ~21:30 PT).
-- Re-score: `bash research/token_routing/early_loss_proxy/keepfrac_len/finalize.sh`, then update the verdict lines.
+Nothing (2026-11-18 16:40 PT). Re-score from scratch: `bash research/token_routing/early_loss_proxy/keepfrac_len/finalize.sh`
+and `python3 .../keepfrac_len/gold_table.py --summary keepfrac_len/kl_summary.json`.
 
 ## Limits
 
