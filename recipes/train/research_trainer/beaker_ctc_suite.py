@@ -406,6 +406,7 @@ def main() -> None:
     if opts.hostnames:
         hosts = open(opts.hostnames[1:]).read() if opts.hostnames.startswith("@") else opts.hostnames
         launch_config.hostnames = [h.strip() for h in hosts.split(",") if h.strip()]
+        launch_config.clusters = []  # gantry refuses hostnames together with cluster constraints
     launch_config.allow_dirty = opts.allow_dirty
     # Doc-chunked attention's FlexAttention/eager mask path needs headroom beyond what the default
     # caching allocator leaves reachable at 40960 tokens (same fragmentation fix as the proven
