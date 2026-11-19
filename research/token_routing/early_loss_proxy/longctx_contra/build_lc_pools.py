@@ -41,6 +41,7 @@ HO_ROWS = {"128k": 64, "256k": 160, "1m": 64}        # held-out rows kept
 KW = f"{P.WORK}/lc"
 SH = "/data/prasann/early_loss_proxy/shards"
 HO_OUT = "/data/prasann/early_loss_proxy/heldout_lc.npz"
+SUFFIX = [""]
 
 
 def env(r):
@@ -145,7 +146,7 @@ def build(a):
 
     drops = json.load(open(f"{KW}/drops.json"))
     ho_rows, ho_stats, ho_keys = [], {}, set()
-    for r in lens_of(a):  # held-out first
+    for r in ([] if SUFFIX[0] else lens_of(a)):  # held-out first (main build only; a suffixed build reuses it)
         exs = P.read_jsonl(f"{KW}/hogen/{r}/{T}/eval_{r}.jsonl")
         _, rows = P.load_shard_rows(f"{KW}/hotok/{r}")
         assert len(rows) == len(exs)
@@ -158,16 +159,21 @@ def build(a):
             ho_rows.append((f"lc{r}", T, i, ids, m))
             ho_keys.add(H.keys(ids, m))
         print(f"[lc heldout] lc{r}: {json.dumps(ho_stats[f'lc{r}'])}", flush=True)
-    offs = np.concatenate([[0], np.cumsum([len(x[3]) for x in ho_rows])])
-    np.savez(HO_OUT + ".tmp.npz", ids=np.concatenate([np.asarray(x[3], dtype=np.uint32) for x in ho_rows]),
-             mask=np.concatenate([np.asarray(x[4], dtype=bool) for x in ho_rows]), offsets=offs,
-             sets=np.asarray([x[0] for x in ho_rows]), tasks=np.asarray([x[1] for x in ho_rows]),
-             src_idx=np.asarray([x[2] for x in ho_rows]))
-    os.replace(HO_OUT + ".tmp.npz", HO_OUT)
-    json.dump(ho_stats, open(HO_OUT.replace(".npz", "_stats.json"), "w"), indent=1)
+    if SUFFIX[0]:
+        hz = np.load(HO_OUT)
+        for j in range(len(hz["sets"])):
+            ho_keys.add(H.keys(hz["ids"][hz["offsets"][j]:hz["offsets"][j + 1]], hz["mask"][hz["offsets"][j]:hz["offsets"][j + 1]]))
+    offs = np.concatenate([[0], np.cumsum([len(x[3]) for x in ho_rows])]) if ho_rows else None
+    if ho_rows:
+        np.savez(HO_OUT + ".tmp.npz", ids=np.concatenate([np.asarray(x[3], dtype=np.uint32) for x in ho_rows]),
+                 mask=np.concatenate([np.asarray(x[4], dtype=bool) for x in ho_rows]), offsets=offs,
+                 sets=np.asarray([x[0] for x in ho_rows]), tasks=np.asarray([x[1] for x in ho_rows]),
+                 src_idx=np.asarray([x[2] for x in ho_rows]))
+        os.replace(HO_OUT + ".tmp.npz", HO_OUT)
+        json.dump(ho_stats, open(HO_OUT.replace(".npz", "_stats.json"), "w"), indent=1)
 
     for r in lens_of(a):
-        cap, name = LENS[r], f"lc{r}"
+        cap, name = LENS[r], f"lc{r}{SUFFIX[0]}"
         tmp, final = f"{SH}/{name}_tmp", f"{SH}/{name}"
         if os.path.exists(f"{final}/metadata.json"):
             print(f"[lc build] {final} exists, skip", flush=True)
@@ -232,7 +238,18 @@ def main():
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--shuffle-seed", type=int, default=20261118)
     ap.add_argument("--lens", default="")
+    ap.add_argument("--sizes", default="", help="override train rows per length, e.g. 256k=18000:18000,1m=5000:5000 "
+                    "(generated:kept); with --suffix the pools are lc<L><suffix> and the work dir v2build/lc<suffix>")
+    ap.add_argument("--suffix", default="", help="pool-name / work-dir suffix (e.g. L); held-out stays heldout_lc.npz")
     a = ap.parse_args()
+    global KW
+    for kv in [x for x in a.sizes.split(",") if x]:
+        r, _, v = kv.partition("=")
+        g, _, k = v.partition(":")
+        GEN[r], ROWS[r] = int(g), int(k or g)
+    if a.suffix:
+        KW = f"{P.WORK}/lc{a.suffix}"
+        SUFFIX[0] = a.suffix
     {"gen": gen, "tokenize": tokenize, "build": build}[a.stage](a)
 
 
