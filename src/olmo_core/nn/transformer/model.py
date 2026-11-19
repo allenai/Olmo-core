@@ -2695,6 +2695,10 @@ class Transformer(nn.Module):
         _ul = int(os.environ.get("OLMO_UNPACK_LONG_DOCS", "0") or 0)
         if _ul and kwargs.get("doc_lens") is not None:
             _dl = kwargs["doc_lens"]
+            if os.environ.get("OLMO_UNPACK_DEBUG") and self.training:
+                _nz = _dl[_dl > 0]
+                print(f"[unpack-long] window docs {int(_nz.numel())} max {int(_dl.max())} first {_nz[:4].tolist()} "
+                      f"unpack {int(_dl.max()) > _ul}", flush=True)
             if int(_dl.max()) > _ul:
                 kwargs.pop("doc_lens", None)
                 kwargs.pop("max_doc_lens", None)
