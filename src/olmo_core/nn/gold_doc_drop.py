@@ -53,9 +53,12 @@ class GoldDocDropConfig:
     #: optional JSON ``{row fingerprint: [group id per document]}`` (or ``{"groups": {...}}``); when set, a dropped row
     #: keeps every gold document plus a share r of the NON-gold GROUPS (whole groups, at least ``min_groups``) instead
     #: of a share r of individual distractors (label-valid drop for outlier: each kept topic keeps all its passages).
-    #: Rows absent from the sidecar are passed through whole. Empty = the per-document drop above (unchanged).
+    #: A row mapped to ``null`` (or a list of the wrong length) is passed through whole (label cannot be kept valid).
+    #: Rows absent from the sidecar get the ordinary per-document drop unless ``groups_absent_whole`` (then whole).
+    #: Empty = the per-document drop above (unchanged).
     groups_path: str = ""
     min_groups: int = 2
+    groups_absent_whole: bool = False
 
 
 class GoldDocDrop:
@@ -131,8 +134,11 @@ class GoldDocDrop:
                 continue
             grp = None
             if self.groups is not None:
+                listed = fp in self.groups
                 grp = self.groups.get(fp)
-                if grp is None or len(grp) != nd:
+                if listed and grp is not None and len(grp) == nd:
+                    self._acc("grouped", 1)
+                elif listed or c.groups_absent_whole:
                     self._acc("nogroup", 1)
                     out_ids.append(row), out_lab.append(lab)
                     self._acc("tok_out", float(sum(e - s + 1 for s, e in spans)))
@@ -201,7 +207,7 @@ class GoldDocDrop:
                   f"whole {s.get('whole', 0):.0f} dropped {s.get('dropped_rows', 0):.0f} "
                   f"(docs {s.get('docs_out', 0):.0f}/{s.get('docs_in', 0):.0f}) thin {s.get('thin_rows', 0):.0f} "
                   f"full {s.get('full_rows', 0):.0f} not-selected {s.get('not_selected', 0):.0f}"
-                  + (f" nogroup {s.get('nogroup', 0):.0f} (groups {s.get('groups_out', 0):.0f}/{s.get('groups_in', 0):.0f})"
+                  + (f" nogroup {s.get('nogroup', 0):.0f} grouped {s.get('grouped', 0):.0f} (groups {s.get('groups_out', 0):.0f}/{s.get('groups_in', 0):.0f})"
                      if self.groups is not None else "")
                   + f"; doc-token keep {s.get('tok_out', 0) / max(1.0, s.get('tok_in', 1)):.3f}",
                   flush=True)
