@@ -169,6 +169,27 @@ def build_callback(cfg: Dict[str, str]):
                 lg = model(x, logits_to_keep=(ans - 1)[None])
                 lg = lg[0] if not isinstance(lg, torch.Tensor) or lg.dim() == 3 else lg
                 l = F.cross_entropy(lg.float(), x[0, ans], reduction="none")
+                if os.environ.get("DENSE_PROBE_DUMP") and real and i < int(os.environ["DENSE_PROBE_DUMP"]):
+                    # CE-path diagnosis: per-token CE of the logits path vs the labels / fused-CE path on this row
+                    lab = torch.full_like(x, -100)
+                    lab[0, ans - 1] = x[0, ans]
+                    out = model(x, labels=lab, ignore_index=-100, loss_reduction="none", return_logits=False)
+                    tok = (out.ce_loss if hasattr(out, "ce_loss") else out[2]).float().reshape(-1)
+                    nz = torch.nonzero(lab.reshape(-1) != -100).reshape(-1)
+                    lf = model(x, logits_to_keep=(ans - 1)[None])
+                    lf = lf[0] if lf.dim() == 3 else lf
+                    l64 = F.cross_entropy(lf.double(), x[0, ans], reduction="none")
+                    lh = model.lm_head
+                    print(f"[ce-dump] row {i} len {x.shape[1]} n_ans {len(ans)} | logits dtype {lg.dtype} | "
+                          f"lm_head loss_impl {getattr(lh, 'loss_implementation', None)} z_loss_mult "
+                          f"{getattr(model, 'z_loss_multiplier', None)} | labels-path tokens scored "
+                          f"{int((tok != 0).sum())} at {nz[:3].tolist()}..{nz[-3:].tolist()} | ans-1 {(ans - 1)[:3].tolist()}"
+                          f"..{(ans - 1)[-3:].tolist()}\n[ce-dump] logits-path f32 {[round(v, 4) for v in l.tolist()]}\n"
+                          f"[ce-dump] logits-path f64 {[round(v, 4) for v in l64.tolist()]}\n"
+                          f"[ce-dump] labels-path     {[round(v, 4) for v in tok[nz].tolist()]}\n"
+                          f"[ce-dump] labels-path nonzero outside scored positions: "
+                          f"{int((tok != 0).sum()) - int((tok[nz] != 0).sum())}; total sum {float(tok.sum()):.4f} "
+                          f"vs logits-path sum {float(l.sum()):.4f}; tokens {x[0, ans][:6].tolist()}", flush=True)
                 if real:
                     ce[i] = l.mean().double()
                     ce_sum[i] = l.sum().double()
