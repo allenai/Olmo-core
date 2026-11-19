@@ -5,7 +5,7 @@ updated: 2026-11-18
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: current (11-18: all arms landed, incl. 64k 70% and the 8k gold-drop check)
+status: current (11-18: + 16k gold-drop ablation / more-data runs; w0 r05to50 3.2x held, not run)
 superseded_by: 
 artifact: 
 summary: No. On single-length pools at 2k-64k scored by the early dense held-out-loss proxy (one epoch, eval_size 144 per length), the best router keep is 20-40% at every length the proxy resolves and does not fall with length (8k 40% tied with 20%; 16k 20-40% tie; 32k 40% beats the 20%/7% recipe at matched FLOPs by 0.01-0.02 CE on both seeds, 70% ties; 64k 20%, 40% +0.015 on both seeds). Low keeps break harder the longer the rows (10%/3.5%: +0.003 CE vs the recipe at 8k, +0.08 at 64k; 2.5% and 1.25% collapse at 32k/64k), so constant fraction fits and a constant kept-token count is rejected; 2k/4k saturate. Gold-aware keep grJ has the biggest mean speedups at 32k/64k (6-8x vs dense full FT) but stalls on outlier at every length, and at 8k never reaches dense's mid-epoch loss on the mean (2 seeds); grJc is outlier-safe at 32k, not at 64k.
@@ -132,6 +132,83 @@ block; eval_size 144 per length, 48 per task ⚠):
 | 64k | grJ | 0 | 0.067 | 8.41 | not reached | not reached / not reached / 21.13 | not reached / not reached / not reached | 0.2652 | 0.185 / 0.284 / 0.327 |
 | 64k | grJc | 0 | 0.144 | 4.10 | not reached | not reached / not reached / 6.84 | not reached / not reached / not reached | 0.2544 | 0.191 / 0.235 / 0.337 |
 | 64k | levels | | | mid (dft step 100) 0.2785 | end 0.2110 | 0.184 / 0.227 / 0.424 | 0.086 / 0.220 / 0.327 | | |
+
+## Gold-drop ablation at 16k, and more data at matched FLOPs (Prasann 11-18)
+
+Arms = the 20%/7% router plus gold-aware whole-document drop (`--st-gdd-keep-range lo,hi --st-gdd-whole-frac w`,
+`--st-gdd-keep-power` for the skewed ones), named `w<whole%> r<lo>to<hi>`. One seed each, ⚠ eval_size 144 (48 per
+task, kl16k held-out), so the paired SE of a final-CE difference is about 0.005-0.006 and seed-to-seed spread at 16k is
+up to 0.014. The 1x arms are Prasann's runs: sneetches `results/kl16kabl/` (slurm 5204526 / 5204533 / 5204565; I checked
+every number against the JSONs) and Lambda tag kl16kabl (jobs 115238-115240). Step-0 CE agrees across Beaker H100,
+sneetches H200 and Lambda A100 to within 0.003 per task.
+
+**Does the aggressive arm (w0 r05to20) catch up when given more data for the same FLOPs? No.** On the 6x pool it
+reached 0.221 (running min) at 138 PF and 0.220 at 157 PF, step 600 of 1,350, when Prasann cancelled it. Its outlier
+CE was 0.34-0.42 across those probes. At the same 138 PF: the 1x w15 r05to50 arm ends at 0.142, the recipe is at
+0.184 / 0.167 (two seeds) and dft at 0.311. The run is partial (its LR had not annealed), but it trails every other
+gold-drop arm by more than 0.07 CE at matched FLOPs, and outlier does not move.
+
+**More data does help the baseline.** w15 r05to50 on the 2.4x pool (540 steps, 334 PF) ends at 0.1143 (contradiction
+0.041, outlier 0.205, qdmatch_nq 0.096). Compared with:
+- the recipe at the same 333 PF (0.1265 / 0.1203): -0.012 ± 0.005 and -0.006 ± 0.006 paired, i.e. as good or slightly
+  better;
+- 40%/14% at 426 PF (0.1143): equal;
+- dft at 1,531 PF (0.1230): -0.009 ± 0.007.
+
+It reaches dft's end-of-epoch CE with **5.7x** fewer FLOPs, and the recipe's best (seed 0) with 1.31x fewer. Its
+outlier (0.205) is at dft's level (0.213); at 16k this arm shows no outlier stall, unlike `grJ` at 8k / 32k / 64k.
+
+Per task at matched FLOPs (contradiction / outlier / qdmatch_nq):
+- At 138 PF: 6x aggressive 0.146 / 0.343 / 0.169; 1x w15 0.073 / 0.224 / 0.127; recipe 0.184 / 0.222 / 0.143
+  (seed 0).
+- At 333 PF: 2.4x w15 0.041 / 0.204 / 0.095; recipe 0.067 / 0.207 / 0.106 and 0.061 / 0.211 / 0.089; dft
+  0.167 / 0.242 / 0.248.
+
+Not run: w0 r05to50 on the 3.2x pool (slurm 5204547). Prasann put it on hold, and it was still held when this was
+written. The skewed `p0.5` arm of 5204565 has no result (that job was cancelled).
+
+Speedups ("x vs dft", "x vs recipe sd0") are the FLOPs the reference needs to reach the arm's lowest CE, divided by
+the arm's FLOPs. When the arm gets below the reference's own best, the level is the reference's best instead. CE at
+matched FLOPs reads each run's running-minimum curve, interpolated linearly between probes ("-" = the run spent more
+than 2% less than that budget). Per-task values use per-task running minima.
+
+| arm (whole% / keep range / skew) | pool | where | steps | FLOPs/step vs dense | PF | final CE mean | final CE contra / outlier / qdmatch | CE @ 59 PF | CE @ 138 PF | CE @ 333 PF | x vs dft | x vs recipe sd0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| dft (dense full FT) | kl16k (1x) | Beaker 2 x H100 | 225 | 1.000 | 1531 | 0.1230 | 0.057 / 0.213 / 0.099 | 0.4923 | 0.3112 | 0.2236 | 1.00 | 0.24 |
+| recipe 20%/7%, seed 0 | kl16k (1x) | Beaker 2 x H100 | 225 | 0.214 | 333 | 0.1265 | 0.066 / 0.207 / 0.105 | 0.2704 | 0.1843 | 0.1265 | 4.10 | 1.00 |
+| recipe 20%/7%, seed 1 | kl16k (1x) | Beaker 2 x H100 | 225 | 0.214 | 333 | 0.1203 | 0.061 / 0.211 / 0.089 | 0.2835 | 0.1670 | 0.1203 | 5.14 | 1.20 |
+| 40%/14%, seed 0 | kl16k (1x) | Beaker 2 x H100 | 225 | 0.273 | 426 | 0.1143 | 0.050 / 0.204 / 0.089 | 0.2566 | 0.1719 | 0.1251 | 4.41 | 1.03 |
+| 40%/14%, seed 1 | kl16k (1x) | Beaker 2 x H100 | 225 | 0.273 | 426 | 0.1188 | 0.051 / 0.206 / 0.100 | 0.2522 | 0.1703 | 0.1341 | 4.13 | 0.93 |
+| `w0 r05to20` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.038 | 59 | 0.2862 | 0.211 / 0.423 / 0.226 | 0.2722 | - | - | 3.59 | 1.26 |
+| `w0 r05to50` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.067 | 105 | 0.1774 | 0.103 / 0.287 / 0.143 | 0.2062 | - | - | 4.39 | 1.47 |
+| `w15 r05to50` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.088 | 138 | 0.1416 | 0.073 / 0.225 / 0.127 | 0.1939 | 0.1416 | - | 6.52 | 1.78 |
+| `w15 r25to75` | kl16k (1x) | Lambda 2 x A100 | 225 | 0.126 | 197 | 0.1299 | 0.070 / 0.226 / 0.094 | 0.2056 | 0.1452 | - | 5.52 | 1.55 |
+| `w30 r05to50` | kl16k (1x) | Lambda 2 x A100 | 225 | 0.110 | 172 | 0.1366 | 0.077 / 0.219 / 0.113 | 0.1893 | 0.1468 | - | 5.59 | 1.50 |
+| `w5 r05to50 p2` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.061 | 95 | 0.1552 | 0.094 / 0.258 / 0.114 | 0.1847 | - | - | 5.83 | 1.92 |
+| `w5 r05to50 p3` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.054 | 84 | 0.1703 | 0.108 / 0.263 / 0.140 | 0.1825 | - | - | 5.71 | 1.94 |
+| `w5 r05to50` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.075 | 116 | 0.1515 | 0.076 / 0.269 / 0.110 | 0.1901 | - | - | 5.16 | 1.60 |
+| `w50 r05to50` | kl16k (1x) | Lambda 2 x A100 | 225 | 0.140 | 218 | 0.1257 | 0.055 / 0.210 / 0.113 | 0.2181 | 0.1508 | - | 6.45 | 1.57 |
+| `w0 r05to20` ⚠ CANCELLED at step 600 of 1,350 (partial, LR not annealed) | kl16k_x6 (6x) | sneetches 8 x H200 | 600 | 0.038 | 157 | 0.2200 | 0.135 / 0.364 / 0.161 | 0.2879 | 0.2211 | - | 2.20 | 0.57 |
+| `w15 r05to50` | kl16k_x2p4 (2.4x) | sneetches 8 x H200 | 540 | 0.089 | 334 | 0.1143 | 0.041 / 0.205 / 0.096 | 0.2074 | 0.1666 | 0.1141 | 5.73 | 1.31 |
+
+Pools (sneetches `/data/prasann/early_loss_proxy/shards/`, built by `keepfrac_len/grow_pool.py`, slurm 5204543):
+- `kl16k_x6` (7,200 rows per task), `kl16k_x3p2` (3,840), `kl16k_x2p4` (2,880).
+- Each is kl16k's 1,200 rows per task first (same part order), then mtb16kx16's other 16k rows of the same generator
+  cells (seed 42; n_docs 324 / 96 / 174). All 3,600 kl16k rows are in mtb16kx16, by fingerprint.
+- Not a fresh builder run: a fresh run would have taken more than 1 h, mostly outlier generation.
+- Held-out hygiene against the kl16k held-out (heldout_v3 gen16k):
+  - mtb16kx16_overlap.json reports 0 prompt hits and 0 gold-as-gold hits;
+  - outlier rows containing any held-out outlier passage were dropped, as build_kl_pools does (7 rows). The passage
+    hash is computed from decoded tokens and matched the source-text hash on 1,920 of 1,920 kl16k documents.
+- Not re-checked: build_kl_pools' other exclusions (suite eval rungs, heldout_v4 candidates). Those come from
+  mtb16kx16's own builder.
+- Mean row length is 14,932 tokens, the same as kl16k.
+- The trainer shuffles the whole pool. "Contains kl16k" means a superset, not a prefix in training order.
+
+Runs: tag kl16kx, sneetches 8 x H200, `code_e5c1dfe30` (the code of the 1x ablation), one epoch of each pool, so the LR
+schedule runs over each run's own length. Probes at 10, 25, 50, 75 and then every 75 steps. Results:
+`sneetches:/data/prasann/early_loss_proxy/results/kl16kx/`. Scored by `keepfrac_len/ablation_16k.py` into
+`keepfrac_len/ablation_16k.json`.
 
 ## Setup
 
@@ -272,8 +349,9 @@ difference between two arms on the same rows is 0.003-0.006 at the end of the ep
 
 ## Still running
 
-Nothing (2026-11-18 16:40 PT). Re-score from scratch: `bash research/token_routing/early_loss_proxy/keepfrac_len/finalize.sh`
-and `python3 .../keepfrac_len/gold_table.py --summary keepfrac_len/kl_summary.json`.
+Nothing of mine is running. slurm 5204547 (w0 r05to50 on `kl16k_x3p2`, 720 steps) is on user hold by Prasann and has not
+run. Re-score from scratch: `bash research/token_routing/early_loss_proxy/keepfrac_len/finalize.sh`, `gold_table.py`,
+`ablation_16k.py --root <dir with kl16k, kl16kabl, kl16kx>`.
 
 ## Limits
 

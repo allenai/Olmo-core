@@ -401,5 +401,16 @@
     ]
    }
   ]
+ },
+ {
+  "date": "2026-11-18",
+  "status": "done",
+  "track": "mechanism",
+  "who": "side session (keepfrac-len) + Prasann's 1x arms",
+  "title": "16k gold-drop ablation (whole-row share / keep range / skew) and more data at matched FLOPs",
+  "result": "1x kl16k pool, one seed each, eval_size 144: w15 r05to50 0.142 at 138 PF (0.088x dense/step; 6.5x vs dense full FT at its best, 1.78x vs the recipe); w5 0.152 / 116 PF; w0 r05to50 0.177 / 105 PF; aggressive w0 r05to20 0.286 / 59 PF; w30 0.137 / 172 PF; w50 0.126 / 218 PF; w15 r25to75 0.130 / 197 PF; skew p2 0.155 / 95 PF, p3 0.170 / 84 PF. More data, matched FLOPs: the aggressive arm on a 6x pool does NOT catch up (0.221 at 138 PF, outlier 0.34-0.42; cancelled at step 600 of 1,350 by Prasann); the w15 baseline on 2.4x data at 334 PF ends at 0.114 (contra 0.041 / outlier 0.205 / qdmatch 0.096), below the recipe at the same FLOPs (0.127 / 0.120) and below dense full FT's end-of-epoch CE (0.123 at 1,531 PF), which it reaches with 5.7x fewer FLOPs; no outlier stall at 16k. w0 r05to50 on 3.2x held, not run.",
+  "match": "kl16k held-out (48 rows/task); pools kl16k_x6 / kl16k_x2p4 = kl16k + mtb16kx16's other 16k rows (same generator); one epoch of each pool",
+  "record": "records/keep-fraction-vs-length.md",
+  "branch": "claude/keepfrac-vs-length-4bf10c"
  }
 ]

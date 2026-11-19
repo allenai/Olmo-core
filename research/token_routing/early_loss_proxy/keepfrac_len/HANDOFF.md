@@ -11,8 +11,12 @@
   over the run's length), probes 10,25,50,75 then every 75 (+ the last step).
 - 1x arms (Prasann's, sneetches results/kl16kabl/, verified from JSONs): w15 r05to50 137.9 PF 0.1416; w0 r05to50
   104.7 PF 0.1774; w0 r05to20 59.1 PF 0.2862 (0.211 / 0.423 / 0.226); w5 r05to50 116.1 PF 0.1515.
-- Next: interim when the aggressive run passes ~138 PF (probe 525/600), then score (copy results to
-  /tmp/claude-3018/keepfrac_len_results/kl16kx + kl16kabl), record section, ops rows, commit.
+- DONE 17:45 PT: 5204545 (aggressive 6x) CANCELLED by Prasann at step 600 (partial, recorded as such; ops
+  final_state cancelled); 5204546 (w15 2.4x) done; 5204547 (w0 r05to50 3.2x) ON USER HOLD by Prasann, not run.
+  Scored with ablation_16k.py (incl. all kl16kabl arms from sneetches + Lambda 115238-115240), record section
+  "Gold-drop ablation at 16k", log entry (3rd), 84 ops rows. If 5204547 is released and runs: copy its JSON to
+  <root>/kl16kx, rerun ablation_16k.py (--rows only for elp-kl16kx-gd_w0_r05to50_x3p2-sd0-probe), add its row to the
+  record table.
 
 ## 2026-11-18 15:40 PT (8k gold-drop check, Prasann)
 - Asked: does gold dropping work at 8k like at 32k/64k? Scope (revised): `grJ` only (all rows), seeds 0 and 1, kl8k,

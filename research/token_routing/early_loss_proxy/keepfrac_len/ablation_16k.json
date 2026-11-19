@@ -1,0 +1,674 @@
+{
+ "dft": {
+  "steps": 225,
+  "x_dense_step": 1.0,
+  "pf": 1530.9036154081996,
+  "final_ce": 0.12299221892964043,
+  "final_by_task": {
+   "contradiction": 0.05714867266457683,
+   "outlier": 0.213221479828159,
+   "qdmatch_nq": 0.09860650429618545
+  },
+  "min_ce": 0.12299221892964043,
+  "ce_at_pf": {
+   "59": 0.49234991141685835,
+   "138": 0.3111680021100031,
+   "333": 0.2235997040408949
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.49098165930251025,
+    "outlier": 0.43858806920892224,
+    "qdmatch_nq": 0.5474800057391429
+   },
+   "138": {
+    "contradiction": 0.31631329061463,
+    "outlier": 0.26724650759101815,
+    "qdmatch_nq": 0.3499442081243612
+   },
+   "333": {
+    "contradiction": 0.1665206985137106,
+    "outlier": 0.2421853051831325,
+    "qdmatch_nq": 0.2477116368381144
+   }
+  },
+  "x_vs_dft_at_min": 1.0,
+  "x_vs_rec_at_min": 0.24366877040798965,
+  "level_dft": 0.12299221892964043,
+  "level_rec": 0.12645202246171217,
+  "node": "beaker:fdb868a6f904",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16k/elp-kl16k-dft-sd0.json"
+ },
+ "k20 (recipe) sd0": {
+  "steps": 225,
+  "x_dense_step": 0.21385128182592344,
+  "pf": 333.3345688322798,
+  "final_ce": 0.12645202246171217,
+  "final_by_task": {
+   "contradiction": 0.06646718755170393,
+   "outlier": 0.20741450041532516,
+   "qdmatch_nq": 0.10547437941810738
+  },
+  "min_ce": 0.12645202246171217,
+  "ce_at_pf": {
+   "59": 0.2703651706166036,
+   "138": 0.18429275757560684,
+   "333": 0.1264921555367435
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.3231354205280101,
+    "outlier": 0.22701445439209542,
+    "qdmatch_nq": 0.2597492651630664
+   },
+   "138": {
+    "contradiction": 0.1837152681757136,
+    "outlier": 0.2219849412019054,
+    "qdmatch_nq": 0.14346121790180547
+   },
+   "333": {
+    "contradiction": 0.06652092468154237,
+    "outlier": 0.20742963173277051,
+    "qdmatch_nq": 0.10552591019591762
+   }
+  },
+  "x_vs_dft_at_min": 4.1039317362074685,
+  "x_vs_rec_at_min": 1.0,
+  "level_dft": 0.12645202246171217,
+  "level_rec": 0.12645202246171217,
+  "node": "beaker:e71ea851f5e9",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16k/elp-kl16k-k20-sd0.json"
+ },
+ "k20 (recipe) sd1": {
+  "steps": 225,
+  "x_dense_step": 0.21385724622358432,
+  "pf": 333.3438656665361,
+  "final_ce": 0.12025825301275796,
+  "final_by_task": {
+   "contradiction": 0.06069762088009156,
+   "outlier": 0.2108874088153243,
+   "qdmatch_nq": 0.089189729342858
+  },
+  "min_ce": 0.12025825301275796,
+  "ce_at_pf": {
+   "59": 0.28348673962620224,
+   "138": 0.16697145877424208,
+   "333": 0.1202848934277412
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.2790847298882978,
+    "outlier": 0.23438230172125082,
+    "qdmatch_nq": 0.3369931872690582
+   },
+   "138": {
+    "contradiction": 0.13921953949476856,
+    "outlier": 0.21204931661486626,
+    "qdmatch_nq": 0.1443971167385104
+   },
+   "333": {
+    "contradiction": 0.06073534981683294,
+    "outlier": 0.21089836499756237,
+    "qdmatch_nq": 0.08920432003359975
+   }
+  },
+  "x_vs_dft_at_min": 5.136316996683304,
+  "x_vs_rec_at_min": 1.204454740831228,
+  "level_dft": 0.12299221892964043,
+  "level_rec": 0.12645202246171217,
+  "node": "beaker:ae6ba4c15bfa",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16k/elp-kl16k-k20-sd1.json"
+ },
+ "k40 sd0": {
+  "steps": 225,
+  "x_dense_step": 0.2733242236471338,
+  "pf": 426.03631581220964,
+  "final_ce": 0.11434157411309166,
+  "final_by_task": {
+   "contradiction": 0.04956199158914387,
+   "outlier": 0.20436486912270388,
+   "qdmatch_nq": 0.08909786162742724
+  },
+  "min_ce": 0.11434157411309166,
+  "ce_at_pf": {
+   "59": 0.2566075823715988,
+   "138": 0.17185649436649478,
+   "333": 0.12512493537403388
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.2842058015265118,
+    "outlier": 0.24470838626514835,
+    "qdmatch_nq": 0.24090855932313632
+   },
+   "138": {
+    "contradiction": 0.14336281147577876,
+    "outlier": 0.23324281504998604,
+    "qdmatch_nq": 0.1314142432766336
+   },
+   "333": {
+    "contradiction": 0.06734169603062855,
+    "outlier": 0.21131218120587067,
+    "qdmatch_nq": 0.09370532371579664
+   }
+  },
+  "x_vs_dft_at_min": 4.408980048260384,
+  "x_vs_rec_at_min": 1.033509842486248,
+  "level_dft": 0.12299221892964043,
+  "level_rec": 0.12645202246171217,
+  "node": "beaker:cb313569b8cc",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16k/elp-kl16k-k40-sd0.json"
+ },
+ "k40 sd1": {
+  "steps": 225,
+  "x_dense_step": 0.273329252705055,
+  "pf": 426.0441547123998,
+  "final_ce": 0.11876068113876197,
+  "final_by_task": {
+   "contradiction": 0.05066144131706096,
+   "outlier": 0.20591479912400246,
+   "qdmatch_nq": 0.09970580297522247
+  },
+  "min_ce": 0.11876068113876197,
+  "ce_at_pf": {
+   "59": 0.25220166488961815,
+   "138": 0.17030497298074626,
+   "333": 0.13413798524553303
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.24346655357835856,
+    "outlier": 0.24428172693881292,
+    "qdmatch_nq": 0.26885671415168294
+   },
+   "138": {
+    "contradiction": 0.13396810671439202,
+    "outlier": 0.22698476910591125,
+    "qdmatch_nq": 0.14591257995072365
+   },
+   "333": {
+    "contradiction": 0.06889981665771386,
+    "outlier": 0.21742329530024665,
+    "qdmatch_nq": 0.11136233051680282
+   }
+  },
+  "x_vs_dft_at_min": 4.127206327757814,
+  "x_vs_rec_at_min": 0.9281057149176534,
+  "level_dft": 0.12299221892964043,
+  "level_rec": 0.12645202246171217,
+  "node": "beaker:87a63bf7bc32",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16k/elp-kl16k-k40-sd1.json"
+ },
+ "kl16kabl-gd-w0-r05to20-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.03790112803045059,
+  "pf": 59.07729924467441,
+  "final_ce": 0.2862441939877398,
+  "final_by_task": {
+   "contradiction": 0.2105054359223383,
+   "outlier": 0.42264240452398855,
+   "qdmatch_nq": 0.22558474151689248
+  },
+  "min_ce": 0.2721775087734891,
+  "ce_at_pf": {
+   "59": 0.2721775087734891,
+   "138": null,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.2087252787896432,
+    "outlier": 0.33260047622025013,
+    "qdmatch_nq": 0.2063099954975769
+   },
+   "138": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 3.5888996972910996,
+  "x_vs_rec_at_min": 1.2576001603708231,
+  "level_dft": 0.2721775087734891,
+  "level_rec": 0.2721775087734891,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w0-r05to20-sd0.json"
+ },
+ "kl16kabl-gd-w0-r05to50-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.06718781160711482,
+  "pf": 104.72707959296962,
+  "final_ce": 0.17740894509026678,
+  "final_by_task": {
+   "contradiction": 0.10256991353041182,
+   "outlier": 0.28670674562454224,
+   "qdmatch_nq": 0.14295017611584626
+  },
+  "min_ce": 0.17740894509026678,
+  "ce_at_pf": {
+   "59": 0.20619654968146975,
+   "138": null,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.14896254747498933,
+    "outlier": 0.26239053284128505,
+    "qdmatch_nq": 0.16398559375701177
+   },
+   "138": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 4.385650563374638,
+  "x_vs_rec_at_min": 1.469364076834984,
+  "level_dft": 0.17740894509026678,
+  "level_rec": 0.17740894509026678,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w0-r05to50-sd0.json"
+ },
+ "kl16kabl-gd-w15-r05to50-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.08845583401151993,
+  "pf": 137.87800119398412,
+  "final_ce": 0.14155060800516772,
+  "final_by_task": {
+   "contradiction": 0.07277828664518893,
+   "outlier": 0.22470510999361673,
+   "qdmatch_nq": 0.12716842737669745
+  },
+  "min_ce": 0.14155060800516772,
+  "ce_at_pf": {
+   "59": 0.19392952601140243,
+   "138": 0.14155060800516772,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.18958236517176852,
+    "outlier": 0.23886408367805056,
+    "qdmatch_nq": 0.15334212918438817
+   },
+   "138": {
+    "contradiction": 0.07277828664518893,
+    "outlier": 0.22445215253780285,
+    "qdmatch_nq": 0.12716842737669745
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 6.523677396695659,
+  "x_vs_rec_at_min": 1.7825969376735225,
+  "level_dft": 0.14155060800516772,
+  "level_rec": 0.14155060800516772,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w15-r05to50-sd0.json"
+ },
+ "kl16kabl-gd-w15-r25to75-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.1262096935591194,
+  "pf": 196.72574990328357,
+  "final_ce": 0.12986956046208636,
+  "final_by_task": {
+   "contradiction": 0.06979382623103447,
+   "outlier": 0.22599869159360728,
+   "qdmatch_nq": 0.09381616356161733
+  },
+  "min_ce": 0.12986956046208636,
+  "ce_at_pf": {
+   "59": 0.2056468175950943,
+   "138": 0.14521573710089886,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.21610288583549042,
+    "outlier": 0.24425406598796448,
+    "qdmatch_nq": 0.15223065565785257
+   },
+   "138": {
+    "contradiction": 0.09080855393836182,
+    "outlier": 0.23035625461488962,
+    "qdmatch_nq": 0.11354276566016659
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 5.522409362483947,
+  "x_vs_rec_at_min": 1.5495902802918617,
+  "level_dft": 0.12986956046208636,
+  "level_rec": 0.12986956046208636,
+  "node": "lambda-hyperplane02",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w15-r25to75-sd0.json"
+ },
+ "kl16kabl-gd-w30-r05to50-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.11026852643137067,
+  "pf": 171.87791160256737,
+  "final_ce": 0.13660503844019128,
+  "final_by_task": {
+   "contradiction": 0.0771691959137873,
+   "outlier": 0.21923978688816229,
+   "qdmatch_nq": 0.11340613251862426
+  },
+  "min_ce": 0.13660503844019128,
+  "ce_at_pf": {
+   "59": 0.18931484475153448,
+   "138": 0.146812807589864,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.17053888936172623,
+    "outlier": 0.2475416098688363,
+    "qdmatch_nq": 0.14986403502404094
+   },
+   "138": {
+    "contradiction": 0.09740084983746888,
+    "outlier": 0.2283840471253547,
+    "qdmatch_nq": 0.11247370801478003
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 5.586716760399242,
+  "x_vs_rec_at_min": 1.5025418823630035,
+  "level_dft": 0.13660503844019128,
+  "level_rec": 0.13660503844019128,
+  "node": "lambda-hyperplane02",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w30-r05to50-sd0.json"
+ },
+ "kl16kabl-gd-w5-r05to50-p2-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.06064693668655309,
+  "pf": 94.53167789691574,
+  "final_ce": 0.1551996639593401,
+  "final_by_task": {
+   "contradiction": 0.09366043862731506,
+   "outlier": 0.2583481449012955,
+   "qdmatch_nq": 0.1135904083494097
+  },
+  "min_ce": 0.1551996639593401,
+  "ce_at_pf": {
+   "59": 0.18473669906818502,
+   "138": null,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.1657787956103135,
+    "outlier": 0.25738359540118294,
+    "qdmatch_nq": 0.12468587141484022
+   },
+   "138": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 5.8268970927565,
+  "x_vs_rec_at_min": 1.9168318368789816,
+  "level_dft": 0.1551996639593401,
+  "level_rec": 0.1551996639593401,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w5-r05to50-p2-sd0.json"
+ },
+ "kl16kabl-gd-w5-r05to50-p3-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.053748677247682154,
+  "pf": 83.77921330509253,
+  "final_ce": 0.17031961345734695,
+  "final_by_task": {
+   "contradiction": 0.10797606350388378,
+   "outlier": 0.2625614233935873,
+   "qdmatch_nq": 0.14042135347456983
+  },
+  "min_ce": 0.17031961345734695,
+  "ce_at_pf": {
+   "59": 0.18249448397234555,
+   "138": null,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.13611965768479492,
+    "outlier": 0.2692213735232751,
+    "qdmatch_nq": 0.13998719632401052
+   },
+   "138": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 5.709560695227272,
+  "x_vs_rec_at_min": 1.940846953360536,
+  "level_dft": 0.17031961345734695,
+  "level_rec": 0.17031961345734695,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w5-r05to50-p3-sd0.json"
+ },
+ "kl16kabl-gd-w5-r05to50-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.07451457868206549,
+  "pf": 116.14746820607714,
+  "final_ce": 0.15154414417015183,
+  "final_by_task": {
+   "contradiction": 0.07576442114077508,
+   "outlier": 0.2690293748552601,
+   "qdmatch_nq": 0.10983863651442032
+  },
+  "min_ce": 0.15154414417015183,
+  "ce_at_pf": {
+   "59": 0.19009202635213374,
+   "138": null,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.12995509818513423,
+    "outlier": 0.26341550673047703,
+    "qdmatch_nq": 0.14569810447217724
+   },
+   "138": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 5.164284825427919,
+  "x_vs_rec_at_min": 1.5988114307548937,
+  "level_dft": 0.15154414417015183,
+  "level_rec": 0.15154414417015183,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w5-r05to50-sd0.json"
+ },
+ "kl16kabl-gd-w50-r05to50-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.13973694155404282,
+  "pf": 217.8109608001982,
+  "final_ce": 0.12568374295046347,
+  "final_by_task": {
+   "contradiction": 0.05470346213163187,
+   "outlier": 0.2095014350488782,
+   "qdmatch_nq": 0.11284633167088032
+  },
+  "min_ce": 0.12568374295046347,
+  "ce_at_pf": {
+   "59": 0.2180525587064166,
+   "138": 0.1507729208428523,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.22225038116663157,
+    "outlier": 0.24311233249803385,
+    "qdmatch_nq": 0.18529288608473002
+   },
+   "138": {
+    "contradiction": 0.08762526244542733,
+    "outlier": 0.22987970882919942,
+    "qdmatch_nq": 0.13294115327317033
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 6.4466930606503245,
+  "x_vs_rec_at_min": 1.569112077724206,
+  "level_dft": 0.12568374295046347,
+  "level_rec": 0.12645202246171217,
+  "node": "lambda-hyperplane02",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w50-r05to50-sd0.json"
+ },
+ "kl16kx-gd_w0_r05to20_x6-sd0": {
+  "steps": 600,
+  "x_dense_step": 0.03778682903456594,
+  "pf": 157.12923300309117,
+  "final_ce": 0.21997274849854875,
+  "final_by_task": {
+   "contradiction": 0.13501524322782643,
+   "outlier": 0.36358443880453706,
+   "qdmatch_nq": 0.16131856346328277
+  },
+  "min_ce": 0.21997274849854875,
+  "ce_at_pf": {
+   "59": 0.2879423413103339,
+   "138": 0.22111360328281746,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.24622069719778317,
+    "outlier": 0.3866696723576275,
+    "qdmatch_nq": 0.22995557527245236
+   },
+   "138": {
+    "contradiction": 0.14586651570681017,
+    "outlier": 0.343352757083873,
+    "qdmatch_nq": 0.16870469490493636
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 2.1952941459537505,
+  "x_vs_rec_at_min": 0.570522797418283,
+  "level_dft": 0.21997274849854875,
+  "level_rec": 0.21997274849854875,
+  "node": null,
+  "eval_size": 144,
+  "done": null,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kx/elp-kl16kx-gd_w0_r05to20_x6-sd0.json"
+ },
+ "kl16kx-gd_w15_r05to50_x2p4-sd0": {
+  "steps": 540,
+  "x_dense_step": 0.0892585861033819,
+  "pf": 333.7896993992843,
+  "final_ce": 0.11431378610076434,
+  "final_by_task": {
+   "contradiction": 0.041434124621446244,
+   "outlier": 0.20509119859586158,
+   "qdmatch_nq": 0.0964160350849852
+  },
+  "min_ce": 0.1141384411675972,
+  "ce_at_pf": {
+   "59": 0.20742841598815706,
+   "138": 0.16657071219723293,
+   "333": 0.1141384411675972
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.20485340186496076,
+    "outlier": 0.2443222232293057,
+    "qdmatch_nq": 0.17310962287020476
+   },
+   "138": {
+    "contradiction": 0.09473987631622396,
+    "outlier": 0.23728952960421643,
+    "qdmatch_nq": 0.14552309177815914
+   },
+   "333": {
+    "contradiction": 0.0414772249526363,
+    "outlier": 0.20430609614898762,
+    "qdmatch_nq": 0.0947819216720139
+   }
+  },
+  "x_vs_dft_at_min": 5.730889481056761,
+  "x_vs_rec_at_min": 1.3131518999687963,
+  "level_dft": 0.12299221892964043,
+  "level_rec": 0.12645202246171217,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kx/elp-kl16kx-gd_w15_r05to50_x2p4-sd0.json"
+ }
+}
