@@ -445,28 +445,6 @@
    "x_dense_ft_lower_bound": false
   },
   {
-   "run": "tb-tb-A-b991-sd0",
-   "arm": "tb-A-b991",
-   "kind": "drop",
-   "pool": "mtb16kx4",
-   "steps": 1013,
-   "pf": 987.0338834409662,
-   "ce": 0.09271724577338318,
-   "seeds": 1,
-   "ce_seeds": [
-    0.0927
-   ],
-   "base_pf": 2734.115147070374,
-   "x_base": 2.7700317009774666,
-   "x_base_exact": true,
-   "x_base_lower_bound": false,
-   "x_base_upper_bound": false,
-   "dense_ft_pf": 3162.5648480849936,
-   "x_dense_ft": 3.204109708027206,
-   "x_dense_ft_exact": true,
-   "x_dense_ft_lower_bound": false
-  },
-  {
    "run": "ds-ds-p-k25-b991-sd0+1",
    "arm": "ds-p-k25-b991",
    "kind": "drop",
@@ -486,6 +464,29 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 3159.184986690481,
    "x_dense_ft": 3.2039629980730053,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "tb-tb-A-b991-sd0+1",
+   "arm": "tb-A-b991",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1013,
+   "pf": 985.8228029319816,
+   "ce": 0.09488602366964187,
+   "seeds": 2,
+   "ce_seeds": [
+    0.0927,
+    0.0971
+   ],
+   "base_pf": 2549.406184715566,
+   "x_base": 2.586069400234259,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 3031.120060482121,
+   "x_dense_ft": 3.0747108420165628,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },

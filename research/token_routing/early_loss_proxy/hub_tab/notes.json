@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 21:00",
+   "text": "Per-task split A on seed 1: two-seed mean 0.095 (0.093 / 0.097), 2.59x against 2.2x for the uniform arm: a gain of about 0.005, inside the noise. Two agent jobs (a selective-backward run at 1,980 PF and a per-task run) were preempted on Beaker."
+  },
+  {
    "t": "11-18 19:30",
    "text": "Selective backward at 991 PF: keeping the harder half of the rows 0.108 (1.8x) / 0.106 (1.9x), a quarter 0.119 (1.5x): worse than the plain token drop (0.100); a schedule from all rows to 30% 0.097 (2.4x): level. Per-task budgets: the online rule 0.100 (2.2x), no gain; the hand-set split A stays the only positive (0.093, one seed)."
   },

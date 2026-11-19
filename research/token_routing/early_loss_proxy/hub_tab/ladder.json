@@ -2851,6 +2851,54 @@
    }
   },
   {
+   "run": "tb-tb-A-b991-sd1",
+   "baseline": "w2-denselora-sd1",
+   "done": true,
+   "eval_size": 320,
+   "steps": 1013,
+   "pf": 984.6117224229971,
+   "cost_vs_dense_ft": 0.23940296403478845,
+   "ce16k_last": 0.09705480156590056,
+   "track": [
+    [
+     253,
+     0.17494640831137076,
+     null
+    ],
+    [
+     506,
+     0.134580315106723,
+     null
+    ],
+    [
+     759,
+     0.10683567198720993,
+     null
+    ],
+    [
+     1013,
+     0.09705480156590056,
+     null
+    ]
+   ],
+   "vs_same": {
+    "ref_step": 488,
+    "level": 0.11777590980418609,
+    "x": 2.3331510812838614,
+    "final": true,
+    "ref_final": 0.11777590980418609,
+    "ref_steps": 488
+   },
+   "vs_dense_ft": {
+    "ref_step": 488,
+    "level": 0.11371779909313773,
+    "x": 2.92539804408626,
+    "final": true,
+    "ref_final": 0.11371779909313773,
+    "ref_steps": 488
+   }
+  },
+  {
    "run": "tb-tb-B-b991-sd0",
    "baseline": "v3-denselora-sd0",
    "done": true,

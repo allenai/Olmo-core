@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-18 19:28 PT",
+ "updated": "2026-11-18 20:58 PT",
  "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline (finished runs with complete schedules, 16k CE on 320 rows; two seeds at 495, 991 and 1,980 PF, one seed at 3,975 PF): token dropping with LoRA and a 50% / 20% / 7% keep over three cuts needs 2.3x, 2.1x and 2.4x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget up to 7,934 PF) at 495, 991 and 1,980 PF, and 1.9-2.0x at 3,975 PF on the 16x pool; the gain does not shrink with data over an 8-fold range of budgets. That is far from the 10-20x target: every attempt to go below about 0.3x dense per step (smaller keep shares, an earlier first cut, more stages, frozen early blocks, keep schedules, gradient compensation) lost per FLOP. In flight: runs at 3,964 PF on a 16x pool, and input document subsampling combined with the token drop.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 21:00",
+   "text": "Per-task split A on seed 1: two-seed mean 0.095 (0.093 / 0.097), 2.59x against 2.2x for the uniform arm: a gain of about 0.005, inside the noise. Two agent jobs (a selective-backward run at 1,980 PF and a per-task run) were preempted on Beaker."
+  },
   {
    "t": "11-18 19:30",
    "text": "Selective backward at 991 PF: keeping the harder half of the rows 0.108 (1.8x) / 0.106 (1.9x), a quarter 0.119 (1.5x): worse than the plain token drop (0.100); a schedule from all rows to 30% 0.097 (2.4x): level. Per-task budgets: the online rule 0.100 (2.2x), no gain; the hand-set split A stays the only positive (0.093, one seed)."
@@ -517,7 +521,7 @@
    "title": "Per-task keep budgets",
    "what": "The four tasks respond differently to dropping: the aggressive 20% / 7% budget is the best arm on outlier (3-4x per task) but loses on reorder, where every document is needed (1.2-1.7x, fading with data), and reorder is 60-70% of the mean loss; the gentler 50% / 20% / 7% budget holds about 2x on reorder. Give each task its own keep shares in the mixed batch: first hand-set as an existence test at 991 PF, then set online so that every task loses the same share of predicted gradient mass.",
    "status": "running",
-   "result": "Interim, one seed at 991 PF (16k CE on 320 rows; per-task numbers on 80 rows). Hand-set split A (reorder rows keep 50% / 20% / 7%, the other three tasks 20% / 7%): 0.093 (2.77x), against 0.100 (2.2x, two seeds) for uniform 50% / 20% / 7% and 0.101 (2.1x) for uniform 20% / 7%: a gain of 0.007, at the edge of the noise. Per task it takes outlier from the aggressive arm (0.056) and improves reorder beyond both uniform arms (0.227 against 0.243 and 0.272), because the cheaper non-reorder rows buy 20% more steps. Giving reorder a still gentler budget (70% / 40% / 20%; splits B, C, D) does not help: 0.103, 0.099, 0.103. The first online rule (equalising the predicted gradient mass each task loses) gives 0.100 (2.2x): no gain. More runs from the agent are in flight."
+   "result": "Interim at 991 PF (16k CE on 320 rows; per-task numbers on 80 rows). Hand-set split A (reorder rows keep 50% / 20% / 7%, the other three tasks 20% / 7%): 0.093 (2.77x), against 0.100 (2.2x, two seeds) for uniform 50% / 20% / 7% and 0.101 (2.1x) for uniform 20% / 7%: a gain of 0.007, at the edge of the noise. Seed 1 of split A: two-seed mean 0.095 (0.093 / 0.097; 2.6x), so the gain over the uniform arms is about 0.005: small and not clearly outside the noise. Per task it takes outlier from the aggressive arm (0.056) and improves reorder beyond both uniform arms (0.227 against 0.243 and 0.272), because the cheaper non-reorder rows buy 20% more steps. Giving reorder a still gentler budget (70% / 40% / 20%; splits B, C, D) does not help: 0.103, 0.099, 0.103. The first online rule (equalising the predicted gradient mass each task loses) gives 0.100 (2.2x): no gain. More runs from the agent are in flight."
   },
   {
    "id": "selbp",
