@@ -231,6 +231,12 @@ def build_eval_launch_config(
     # BEAKER_MIN_RUNTIME (empty or "0" = always-preemptible).
     _mr = os.environ.get("BEAKER_MIN_RUNTIME", "1h")
     launch_config.min_runtime = None if _mr in ("", "0", "0s") else _mr
+    # BEAKER_HOSTNAMES (comma list or @file): place on these nodes only (avoid a node that fails at container start)
+    _hn = os.environ.get("BEAKER_HOSTNAMES", "")
+    if _hn:
+        _hn = open(_hn[1:]).read() if _hn.startswith("@") else _hn
+        launch_config.hostnames = [h.strip() for h in _hn.split(",") if h.strip()]
+        launch_config.clusters = []
     launch_config.step_soft_timeout = (
         None  # we submit with follow=False (don't block on many evals);
     )
