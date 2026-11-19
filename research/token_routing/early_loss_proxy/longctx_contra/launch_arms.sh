@@ -41,6 +41,6 @@ case $ARM in
     ;;
   gdd1m)  # 1M rows (keep 0.05-0.4, no whole rows, int32 guard) + short rows; 8 rows/step, bucketed steps
     python3 $L --tag lcA-gdd1m --minutes 720 "${COMMON[@]}" --presync "shards/lc1mmix_gdd heldout_lc.npz" \
-      --run "gdd1m|probe|8|softtoken|1e-5|lc1mmix_gdd|1048576|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.4 --st-gdd-whole-frac 0 --prefix-chunk 4096 --gdn-int32-safe --no-data-shuffle --ephemeral-save-interval 100 --save-interval 1200 --probe-max-pf $BUDGET --probe-pf-points 3800,7600,11400"
+      --run "gdd1m|probe|8|softtoken|1e-5|lc1mmix_gdd|1048576|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.4 --st-gdd-whole-frac 0 --prefix-chunk 4096 --gdn-int32-safe --no-data-shuffle --ephemeral-save-interval 100 --save-interval 600 --probe-max-pf 17000"  # generous: read at the dense-1M arm's PF
     ;;
 esac
