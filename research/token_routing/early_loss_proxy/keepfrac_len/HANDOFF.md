@@ -1,5 +1,19 @@
 # keepfrac_len handoff
 
+## 2026-11-18 16:15 PT (16k gold-drop ablation with more data, Prasann)
+- Pools (sneetches /data/prasann/early_loss_proxy/shards/, `grow_pool.py`, slurm CPU job 5204543, done):
+  kl16k_x6 (7,200 rows/task), kl16k_x3p2 (3,840), kl16k_x2p4 (2,880) = kl16k's 1,200 rows/task first (same part
+  order) + mtb16kx16's other 16k rows of the same generator cells; outlier rows with a held-out outlier passage
+  dropped (7); mtb16kx16_overlap.json: 0 prompt / gold-as-gold hits vs gen16k (= kl16k held-out).
+- Runs (sneetches, 8 x H200, preemptive_high, code_e5c1dfe30 as the 1x ablation, tag kl16kx, results
+  sneetches:/data/prasann/early_loss_proxy/results/kl16kx/): slurm 5204545 gd_w0_r05to20_x6 (1,350 steps),
+  5204546 gd_w15_r05to50_x2p4 (540), 5204547 gd_w0_r05to50_x3p2 (720); one epoch of their own pool each (LR schedule
+  over the run's length), probes 10,25,50,75 then every 75 (+ the last step).
+- 1x arms (Prasann's, sneetches results/kl16kabl/, verified from JSONs): w15 r05to50 137.9 PF 0.1416; w0 r05to50
+  104.7 PF 0.1774; w0 r05to20 59.1 PF 0.2862 (0.211 / 0.423 / 0.226); w5 r05to50 116.1 PF 0.1515.
+- Next: interim when the aggressive run passes ~138 PF (probe 525/600), then score (copy results to
+  /tmp/claude-3018/keepfrac_len_results/kl16kx + kl16kabl), record section, ops rows, commit.
+
 ## 2026-11-18 15:40 PT (8k gold-drop check, Prasann)
 - Asked: does gold dropping work at 8k like at 32k/64k? Scope (revised): `grJ` only (all rows), seeds 0 and 1, kl8k,
   full epoch, seq-len 10,240. Beaker elp-kl8k-bkRPQTGH7X (sd0, 01M7RG89GT036G206PRPQTGH7X) and elp-kl8k-bk3M9X4FBD
