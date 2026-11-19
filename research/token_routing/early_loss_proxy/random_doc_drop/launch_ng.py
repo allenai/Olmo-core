@@ -30,6 +30,8 @@ def arms(seed):
         "k20": ("softtoken", 1e-5, rec, "ng16k"),
         "rddA": ("softtoken", 1e-5, rec, f"ng16k_rddA_s{seed}"),
         "rddB": ("softtoken", 1e-5, rec, f"ng16k_rddB_s{seed}"),
+        # no-rewrite control: rddA's kept documents, dropped at the token level, question / answer of the full row
+        "rddAnr": ("softtoken", 1e-5, rec, f"ng16k_rddAnr_s{seed}"),
         # data controls: dense full FT on the drop pool
         "dftA": ("full", 5e-6, "--attn-backend flash_2", f"ng16k_rddA_s{seed}"),
     }
