@@ -84,6 +84,7 @@ def main():
         hosts = [h for h in hosts if h and not any(x in h for x in a.exclude_host)]
         assert hosts, "no hosts left"
         cfg.hostnames = hosts
+        cfg.clusters, cfg.gpu_types, cfg.tags = [], None, None  # hostnames may not be combined with cluster filters
         print(f"[lc-smoke] pinned to {len(hosts)} hosts (excluding {a.exclude_host})")
     for kv in a.env:
         k, _, v = kv.partition("=")
