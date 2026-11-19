@@ -114,3 +114,17 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def paired(root, a, b, seed=0):
+    """Final-probe per-row CE difference a - b on the same 144 held-out rows: mean and paired SE, overall and per task."""
+    da = json.load(open(f"{root}/elp-ng16k-{a}-sd{seed}.json"))
+    db = json.load(open(f"{root}/elp-ng16k-{b}-sd{seed}.json"))
+    ca, cb = np.asarray(da["probes"][-1]["ce"]), np.asarray(db["probes"][-1]["ce"])
+    tk = np.asarray([r["task"] for r in da["rows"]])
+    out = {}
+    for t in ["all"] + TASKS:
+        s = np.ones(len(tk), bool) if t == "all" else tk == t
+        d = ca[s] - cb[s]
+        out[t] = (float(d.mean()), float(d.std(ddof=1) / np.sqrt(s.sum())))
+    return out
