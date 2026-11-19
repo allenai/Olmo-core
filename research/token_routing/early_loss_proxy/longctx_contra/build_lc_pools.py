@@ -162,7 +162,7 @@ def build(a):
             ho_keys.add(H.keys(ids, m))
         print(f"[lc heldout] lc{r}: {json.dumps(ho_stats[f'lc{r}'])}", flush=True)
     if SUFFIX[0]:
-        hz = np.load(HO_OUT)
+        hz = dict(np.load(HO_OUT))
         for j in range(len(hz["sets"])):
             ho_keys.add(H.keys(hz["ids"][hz["offsets"][j]:hz["offsets"][j + 1]], hz["mask"][hz["offsets"][j]:hz["offsets"][j + 1]]))
     offs = np.concatenate([[0], np.cumsum([len(x[3]) for x in ho_rows])]) if ho_rows else None
@@ -236,7 +236,7 @@ def build(a):
 
 def addho(a):
     """Append (or replace) held-out sets lc<L> for --lens from this work dir's eval-split rows into heldout_lc.npz."""
-    z = np.load(HO_OUT)
+    z = dict(np.load(HO_OUT))  # materialize once (NpzFile re-reads an array from the archive on every access)
     keep = [j for j in range(len(z["sets"])) if str(z["sets"][j]) not in {f"lc{r}" for r in lens_of(a)}]
     o = z["offsets"]
     rows = [(str(z["sets"][j]), str(z["tasks"][j]), int(z["src_idx"][j]), z["ids"][o[j]:o[j + 1]], z["mask"][o[j]:o[j + 1]])
