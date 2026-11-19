@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 19:10",
+   "text": "Document-drop agent's final report: keep 25% holds on seed 1 at 495 and 991 PF and ties the plain token drop at 1,980 PF; keep 10% ties keep 25% at 991 PF (0.092); dense LoRA + keep 25% at 986 PF 0.137 (1.1x) against 0.143 without; lower length thresholds hurt the outlier task. The one failed job was a transient cloud DNS error at setup and was rerun. Closed as a small-budget gain."
+  },
+  {
    "t": "11-18 18:30",
    "text": "Per-task budgets, hand-set splits at 991 PF: split A (reorder 50%/20%/7%, others 20%/7%) 0.093 (2.77x) against 0.100-0.101 for the two uniform arms; gentler reorder budgets (B, C, D) 0.099-0.103, no gain. One seed; the 0.007 gain of A is at the edge of the noise."
   },

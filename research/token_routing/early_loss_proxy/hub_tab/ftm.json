@@ -423,6 +423,28 @@
    "x_dense_ft_lower_bound": false
   },
   {
+   "run": "ds-ds-p-k10-b991-sd0",
+   "arm": "ds-p-k10-b991",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1284,
+   "pf": 985.5186038702636,
+   "ce": 0.09184845556737856,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0918
+   ],
+   "base_pf": 2811.809038822091,
+   "x_base": 2.853126290848027,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 3216.8057218979134,
+   "x_dense_ft": 3.2640740715244605,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
    "run": "tb-tb-A-b991-sd0",
    "arm": "tb-A-b991",
    "kind": "drop",
@@ -464,6 +486,28 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 3159.184986690481,
    "x_dense_ft": 3.2039629980730053,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "sb-sb-r-sd0",
+   "arm": "sb-r",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1015,
+   "pf": 991.6383418753459,
+   "ce": 0.09702889917098219,
+   "seeds": 1,
+   "ce_seeds": [
+    0.097
+   ],
+   "base_pf": 2379.162359971831,
+   "x_base": 2.3992238495664218,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 2906.6117755895,
+   "x_dense_ft": 2.9311208056887303,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -531,6 +575,28 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 2762.736941735321,
    "x_dense_ft": 2.7949934981997804,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "tb-tb-ong-b991-sd0",
+   "arm": "tb-ong-b991",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1094,
+   "pf": 992.4905426251627,
+   "ce": 0.09994563667278271,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0999
+   ],
+   "base_pf": 2165.557651052295,
+   "x_base": 2.1819428579383136,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 2745.316934726352,
+   "x_dense_ft": 2.766088760367347,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -641,6 +707,50 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 2492.7692243081597,
    "x_dense_ft": 2.3093546198234365,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "sb-sb-s50-sd0",
+   "arm": "sb-s50",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1114,
+   "pf": 991.3855326745685,
+   "ce": 0.10575154878242757,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1058
+   ],
+   "base_pf": 1876.6913372633676,
+   "x_base": 1.892998511084193,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 2450.4041305955884,
+   "x_dense_ft": 2.4716964791536418,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "sb-sb-q50-sd0",
+   "arm": "sb-q50",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1114,
+   "pf": 999.4242713343991,
+   "ce": 0.10819090273034818,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1082
+   ],
+   "base_pf": 1802.8219301552751,
+   "x_base": 1.803860464333336,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 2336.153138944639,
+   "x_dense_ft": 2.3374989040695224,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -797,6 +907,28 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 1928.756685345421,
    "x_dense_ft": 1.0051229040932201,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "sb-sb-q25-sd0",
+   "arm": "sb-q25",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 1334,
+   "pf": 1009.7820061330002,
+   "ce": 0.11870775022325689,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1187
+   ],
+   "base_pf": 1516.2236007242857,
+   "x_base": 1.5015355705641096,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1898.6845899389816,
+   "x_dense_ft": 1.8802915663055522,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
@@ -1639,6 +1771,28 @@
    "x_base_upper_bound": false,
    "dense_ft_pf": 1306.3360644206284,
    "x_dense_ft": 2.7598645256754675,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
+   "run": "ds-ds-dl-k25-b991-sd0",
+   "arm": "ds-dl-k25-b991",
+   "kind": "drop",
+   "pool": "mtb16kx4",
+   "steps": 462,
+   "pf": 986.0074418280642,
+   "ce": 0.13724050384262226,
+   "seeds": 1,
+   "ce_seeds": [
+    0.1372
+   ],
+   "base_pf": 1090.306390901554,
+   "x_base": 1.1057790688477147,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 1303.8794968533361,
+   "x_dense_ft": 1.3223830181605274,
    "x_dense_ft_exact": true,
    "x_dense_ft_lower_bound": false
   },
