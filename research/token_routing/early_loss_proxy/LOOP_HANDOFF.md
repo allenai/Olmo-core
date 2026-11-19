@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 19:30 sb (selective backward) b991: sb-q50 0.108 (1.8x), sb-s50 0.106 (1.9x), sb-q25 0.119 (1.5x) = WORSE; sb-r (1 -> 0.3 schedule) 0.097 (2.4x) = level.
+  tb-ong (online per-task rule) 0.100 (2.2x) = no gain. 5 agent jobs still running (tb + sb follow-ups incl. 1,980 PF).
 - 19:10 docsub agent FINAL (loop/docsub @ 6e06dc547): k25 two-seed 0.130 @463 / 0.093 @986, ties plain at 1,971 PF; k10 0.121 @494, 0.092 @986; dl-k25-b991 0.137 (x1.11);
   l6k / l3k hurt outlier. CLOSED as a small-budget gain. In flight: taskbudget (online rule / 1,980 PF), selbp (4 arms at 991 PF).
 - 18:30 tb (per-task budgets) b991: tb-A (reorder 50/20/7, others 20/7) 0.093 x2.77 vs uniform 0.100 / 0.101; tb-B/C/D 0.099-0.103 (no gain). One seed, gain 0.007 = noise edge.

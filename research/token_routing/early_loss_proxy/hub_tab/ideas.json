@@ -245,7 +245,7 @@
   "title": "Per-task keep budgets",
   "what": "The four tasks respond differently to dropping: the aggressive 20% / 7% budget is the best arm on outlier (3-4x per task) but loses on reorder, where every document is needed (1.2-1.7x, fading with data), and reorder is 60-70% of the mean loss; the gentler 50% / 20% / 7% budget holds about 2x on reorder. Give each task its own keep shares in the mixed batch: first hand-set as an existence test at 991 PF, then set online so that every task loses the same share of predicted gradient mass.",
   "status": "running",
-  "result": "Interim, one seed at 991 PF (16k CE on 320 rows; per-task numbers on 80 rows). Hand-set split A (reorder rows keep 50% / 20% / 7%, the other three tasks 20% / 7%): 0.093 (2.77x), against 0.100 (2.2x, two seeds) for uniform 50% / 20% / 7% and 0.101 (2.1x) for uniform 20% / 7%: a gain of 0.007, at the edge of the noise. Per task it takes outlier from the aggressive arm (0.056) and improves reorder beyond both uniform arms (0.227 against 0.243 and 0.272), because the cheaper non-reorder rows buy 20% more steps. Giving reorder a still gentler budget (70% / 40% / 20%; splits B, C, D) does not help: 0.103, 0.099, 0.103. The online rule and a 1,980 PF run are still to come from the agent."
+  "result": "Interim, one seed at 991 PF (16k CE on 320 rows; per-task numbers on 80 rows). Hand-set split A (reorder rows keep 50% / 20% / 7%, the other three tasks 20% / 7%): 0.093 (2.77x), against 0.100 (2.2x, two seeds) for uniform 50% / 20% / 7% and 0.101 (2.1x) for uniform 20% / 7%: a gain of 0.007, at the edge of the noise. Per task it takes outlier from the aggressive arm (0.056) and improves reorder beyond both uniform arms (0.227 against 0.243 and 0.272), because the cheaper non-reorder rows buy 20% more steps. Giving reorder a still gentler budget (70% / 40% / 20%; splits B, C, D) does not help: 0.103, 0.099, 0.103. The first online rule (equalising the predicted gradient mass each task loses) gives 0.100 (2.2x): no gain. More runs from the agent are in flight."
  },
  {
   "id": "selbp",
@@ -253,6 +253,6 @@
   "title": "Skip the backward pass on rows already fitted",
   "what": "By 1,980 PF contradiction and outlier rows are at 0.01-0.03 loss while reorder carries most of what is left, so a growing share of the backward FLOPs goes to rows with almost no gradient. Every row still gets the cheap dropped forward; the backward runs only on rows whose training loss is above a running quantile (or sampled in proportion to loss), and the saved FLOPs buy more rows. Unlike the other step-cost cuts, the saving should grow with the budget. Budget-matched at 991 and 1,980 PF on top of the 50% / 20% / 7% token drop.",
   "status": "running",
-  "result": ""
+  "result": "Interim at 991 PF, one seed (16k CE on 320 rows; plain token drop 0.100, 2.2x): skipping the backward on the easier half of the rows hurts: quantile rule 0.108 (1.8x), loss-proportional sampling 0.106 (1.9x); keeping only a quarter 0.119 (1.5x). A schedule from all rows to 30% over training is level with the plain arm: 0.097 (2.4x). The agent is running the schedule variant at 1,980 PF, where more rows are easy."
  }
 ]

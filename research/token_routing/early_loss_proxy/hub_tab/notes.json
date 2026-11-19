@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 19:30",
+   "text": "Selective backward at 991 PF: keeping the harder half of the rows 0.108 (1.8x) / 0.106 (1.9x), a quarter 0.119 (1.5x): worse than the plain token drop (0.100); a schedule from all rows to 30% 0.097 (2.4x): level. Per-task budgets: the online rule 0.100 (2.2x), no gain; the hand-set split A stays the only positive (0.093, one seed)."
+  },
+  {
    "t": "11-18 19:10",
    "text": "Document-drop agent's final report: keep 25% holds on seed 1 at 495 and 991 PF and ties the plain token drop at 1,980 PF; keep 10% ties keep 25% at 991 PF (0.092); dense LoRA + keep 25% at 986 PF 0.137 (1.1x) against 0.143 without; lower length thresholds hurt the outlier task. The one failed job was a transient cloud DNS error at setup and was rerun. Closed as a small-budget gain."
   },
