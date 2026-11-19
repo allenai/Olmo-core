@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import math
 from dataclasses import replace
 from functools import cached_property, lru_cache
 from typing import Any, Dict, Generator, Literal, Optional, Tuple, Union
@@ -123,11 +124,18 @@ class TransformerTrainModule(TrainModule):
         load_key_mapping: Optional[Dict[str, str]] = None,
         label_ignore_index: int = -100,
         cpt_loss_scaler: Optional[float] = None,
+        normalized_leaky_sft_alpha: Optional[float] = None,
     ):
         super().__init__()
 
-        if cpt_loss_scaler is not None:
-            validate_cpt_loss_scaler(cpt_loss_scaler)
+        if cpt_loss_scaler is not None and normalized_leaky_sft_alpha is not None:
+            raise ValueError("cpt_loss_scaler and normalized_leaky_sft_alpha are mutually exclusive")
+        if normalized_leaky_sft_alpha is not None:
+            if not math.isfinite(normalized_leaky_sft_alpha) or not 0 <= normalized_leaky_sft_alpha <= 1:
+                raise ValueError("normalized_leaky_sft_alpha must be finite and in [0, 1]")
+        if cpt_loss_scaler is not None or normalized_leaky_sft_alpha is not None:
+            if cpt_loss_scaler is not None:
+                validate_cpt_loss_scaler(cpt_loss_scaler)
             if tp_config is not None:
                 raise NotImplementedError("LeakySFT tensor parallel training is not implemented")
             if z_loss_multiplier is not None:
@@ -137,6 +145,7 @@ class TransformerTrainModule(TrainModule):
             if isinstance(model.lm_head, NormalizedLMHead):
                 raise NotImplementedError("LeakySFT requires the standard LM head")
         self.cpt_loss_scaler = cpt_loss_scaler
+        self.normalized_leaky_sft_alpha = normalized_leaky_sft_alpha
 
         # Validate some options.
         if rank_microbatch_size % max_sequence_length != 0:
@@ -357,7 +366,7 @@ class TransformerTrainModule(TrainModule):
             gc_cuda()
 
     def train_batch(self, batch: Dict[str, Any], dry_run: bool = False):
-        if self.cpt_loss_scaler is not None:
+        if self.cpt_loss_scaler is not None or self.normalized_leaky_sft_alpha is not None:
             return self._train_leaky_batch(batch, dry_run=dry_run)
         # Set model to train mode if it isn't already.
         self._set_model_mode("train")
@@ -484,13 +493,15 @@ class TransformerTrainModule(TrainModule):
             )
 
     def _train_leaky_batch(self, batch: Dict[str, Any], dry_run: bool = False):
-        """One optimizer batch with a globally token-weighted objective.
+        """Train with historical LeakySFT or NormalizedLeakySFT.
 
-        Sum counts before microbatching. DP gradient averaging requires dividing by
-        global_weight_sum / DP_size; the LM head retains its existing CP correction.
+        Count before microbatching. Historical LeakySFT uses a global weighted
+        token mean; NormalizedLeakySFT interpolates rank-local SFT/CPT means,
+        matching legacy DP normalization. The head retains its CP correction.
         """
-        assert self.cpt_loss_scaler is not None
-        alpha = self.cpt_loss_scaler
+        normalized = self.normalized_leaky_sft_alpha is not None
+        alpha = self.normalized_leaky_sft_alpha if normalized else self.cpt_loss_scaler
+        assert alpha is not None
         self._set_model_mode("train")
         if "labels" in batch:
             raise ValueError("LeakySFT builds labels from input_ids and explicit masks")
@@ -501,10 +512,27 @@ class TransformerTrainModule(TrainModule):
         counts = torch.stack([(valid & output_mask).sum(), (valid & ~output_mask).sum()])
         counts = counts.to(device=self.device, dtype=torch.float64)
         dp_size = get_world_size(self.dp_process_group) if is_distributed() else 1
+        if normalized:
+            # Match legacy rank-local optimizer-batch means (not microbatch means).
+            # Retain its denominator convention for filtered-out instances.
+            excluded = 0
+            if (instance_mask := batch.get("instance_mask")) is not None:
+                excluded = (~instance_mask).sum().to(self.device) * batch["input_ids"].shape[1]
+            answer_count = (counts[0] + excluded).clamp_min(1)
+            all_count = (counts.sum() + excluded).clamp_min(1)
+            output_coefficient = (1 - alpha) / answer_count + alpha / all_count
+            context_coefficient = alpha / all_count
+            # Reuse disjoint fused CE sums: (S_out + ratio*S_ctx)/denom.
+            # This is exactly the interpolation, without changing historical LeakySFT.
+            head_alpha = float(context_coefficient / output_coefficient)
+            denominator = output_coefficient.reciprocal().float()
+        else:
+            head_alpha = alpha
         if is_distributed():
             dist.all_reduce(counts, group=self.dp_process_group)
-        denominator = (counts[0] + alpha * counts[1]) / dp_size
-        denominator = torch.where(denominator > 0, denominator, 1.0).float()
+        if not normalized:
+            denominator = (counts[0] + alpha * counts[1]) / dp_size
+            denominator = torch.where(denominator > 0, denominator, 1.0).float()
         seq_len = batch["input_ids"].shape[1]
         if self.rank_microbatch_size < seq_len:
             raise RuntimeError("Microbatch size is smaller than sequence length")
@@ -519,7 +547,7 @@ class TransformerTrainModule(TrainModule):
                     ignore_index=self.label_ignore_index,
                     loss_reduction="sum",
                     loss_div_factor=denominator,
-                    cpt_loss_scaler=alpha,
+                    cpt_loss_scaler=head_alpha,
                     return_logits=False,
                     **kwargs,
                 )
@@ -532,12 +560,23 @@ class TransformerTrainModule(TrainModule):
             return
         # Each context shard contributes disjoint numerator terms. Counts above were
         # computed BEFORE context sharding and reduced only across the DP dimension.
+        if normalized:
+            contributions = sums * torch.stack([output_coefficient, context_coefficient])
+            if is_distributed():
+                dist.all_reduce(contributions)
+            contributions /= dp_size
         if is_distributed():
             dist.all_reduce(sums)
-        weighted = sums[0] + alpha * sums[1]
-        ce = (
-            weighted / (counts[0] + alpha * counts[1]).clamp_min(torch.finfo(torch.float32).tiny)
-        ).float()
+        if normalized:
+            weighted = contributions.sum()
+            context_contribution = contributions[1]
+            ce = weighted.float()
+        else:
+            weighted = sums[0] + alpha * sums[1]
+            context_contribution = alpha * sums[1]
+            ce = (
+                weighted / (counts[0] + alpha * counts[1]).clamp_min(torch.finfo(torch.float32).tiny)
+            ).float()
         self.record_ce_loss(ce)
         if isinstance(self.optim, SkipStepOptimizer):
             self.optim.latest_loss = ce
@@ -546,10 +585,11 @@ class TransformerTrainModule(TrainModule):
             "leaky/context_ce": sums[1] / counts[1].clamp_min(1),
             "leaky/output_tokens": counts[0],
             "leaky/context_tokens": counts[1],
-            "leaky/context_loss_fraction": alpha
-            * sums[1]
+            "leaky/context_loss_fraction": context_contribution
             / weighted.clamp_min(torch.finfo(torch.float32).tiny),
         }.items():
+            if normalized:
+                name = name.replace("leaky/", "normalized_leaky/")
             self.record_metric(name, value.float(), namespace="train")
         for name, (value, reduction) in self.model.compute_auxiliary_metrics(reset=True).items():
             self.record_metric(name, value, reduction, namespace="train")

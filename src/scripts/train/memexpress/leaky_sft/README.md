@@ -124,3 +124,45 @@ The audit additionally reproduced and fixed:
 `audit_test.py` adds reproductions without modifying the three frozen test files.
 `audit_distributed.py` checks actual FSDP gradients against explicit full-batch CE.
 `audit_data.py` measures the real packed corpus and retrieves recorded diagnostics.
+
+## NormalizedLeakySFT
+
+The corrected method is a separate opt-in on `TransformerTrainModuleConfig`:
+
+```python
+normalized_leaky_sft_alpha=0.1,
+cpt_loss_scaler=None,
+```
+
+For each DP rank's **whole optimizer batch**, define `S_out`, `S_ctx`, `N_out`,
+`N_ctx` over the existing valid target masks. The objective is
+
+```
+(1 - alpha) * S_out / N_out + alpha * (S_out + S_ctx) / (N_out + N_ctx)
+```
+
+DP averages these rank-local objectives, just like regular SFT. Microbatches use
+these same batch denominators, so accumulation does not reweight short answers.
+Thus alpha=0 matches legacy SFT normalization for identical valid answer labels;
+alpha=1 is the all-valid-token CPT mean with the same rank averaging. At alpha=.1,
+each context target has exactly .1 of its coefficient in that CPT objective,
+regardless of the answer/context ratio. This describes objective coefficients,
+not a guarantee that context contributes 10% of the numerical loss or gradients.
+Empty groups contribute differentiable zero; denominators are clamped to one.
+For instance filtering, both means retain legacy SFT's convention of counting
+excluded instances as a full sequence of zero-loss slots.
+
+Implementation reuses the tested disjoint fused CE sums, with output coefficient
+`(1-alpha)/N_out + alpha/N_all` and context coefficient `alpha/N_all`. It passes
+their ratio and reciprocal output coefficient to the existing head. All masking,
+packing, and structural-token exclusions remain unchanged. The old
+`cpt_loss_scaler` objective remains available for historical reproducibility;
+setting both methods raises an error. Diagnostics use `train/normalized_leaky/*`.
+The existing TP/PP and z-loss restrictions also apply to the new method.
+
+The shared fixes for unintended fused z-loss, biased-head no-grad diagnostics,
+and FP16 overflow apply to both methods. `normalized_test.py` was committed before
+implementation; the original three LeakySFT test files are still unchanged.
+`AUDIT_NORMALIZED=1` enables a two-GPU fused-loss gradient audit with unequal
+answer counts and two microbatches per rank, including direct alpha=0 comparison
+to the regular SFT code path. No new sweep is launched by this implementation.

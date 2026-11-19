@@ -329,6 +329,15 @@ class TransformerTrainModuleConfig(TrainModuleConfig):
     structural/boundary exclusions. Requires data with ``loss_valid_mask``.
     """
 
+    normalized_leaky_sft_alpha: Optional[float] = None
+    """Opt into NormalizedLeakySFT: (1-alpha) * mean SFT + alpha * mean CPT.
+
+    Each mean uses the full rank-local optimizer batch, then DP averages rank
+    objectives, matching legacy SFT normalization at zero for identical valid
+    answer labels. Empty groups contribute zero. Requires ``loss_valid_mask``;
+    mutually exclusive with the historical ``cpt_loss_scaler`` method.
+    """
+
     def build(
         self,
         model: Transformer,
@@ -343,7 +352,7 @@ class TransformerTrainModuleConfig(TrainModuleConfig):
         from .pipeline_train_module import TransformerPipelineTrainModule
         from .train_module import TransformerTrainModule
 
-        if self.cpt_loss_scaler is not None and self.pp_config is not None:
+        if (self.cpt_loss_scaler is not None or self.normalized_leaky_sft_alpha is not None) and self.pp_config is not None:
             raise NotImplementedError("LeakySFT pipeline parallel training is not implemented")
 
         kwargs = self.as_dict(exclude_none=True, recurse=False)
