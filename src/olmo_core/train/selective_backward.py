@@ -99,9 +99,10 @@ class SelectiveBackward:
         step = int(trainer.global_step)
         if step != self._step:
             self._step, self._step_kept, self._step_groups, self._step_saved = step, 0, 0, 0.0
-        x = torch.stack([(mb_ce.float() * div_factor.float()).reshape(()),
-                         (labels != ignore_index).sum().float(),
-                         torch.tensor(float(input_ids.shape[0]), device=mb_ce.device)]).double()
+        dev = mb_ce.device
+        x = torch.stack([(mb_ce.double().reshape(()) * torch.as_tensor(div_factor).to(dev).double().reshape(())),
+                         (labels != ignore_index).sum().to(dev).double(),
+                         torch.tensor(float(input_ids.shape[0]), device=dev, dtype=torch.float64)])
         if dist.is_available() and dist.is_initialized():
             dist.all_reduce(x)
         ce_sum, ntok, nrows = x.tolist()
