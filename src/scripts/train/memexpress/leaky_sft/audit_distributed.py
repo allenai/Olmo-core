@@ -16,6 +16,7 @@ from olmo_core.train.train_module import TransformerTrainModuleConfig,Transforme
 init_distributed()
 rank=dist.get_rank(); device=torch.device('cuda',int(os.environ['LOCAL_RANK']))
 bf16=os.environ.get("AUDIT_BF16")=="1"
+normalized=os.environ.get("AUDIT_NORMALIZED")=="1"
 results=[]
 legacy_grad=None
 for alpha in [None,0.,.1,.3,.5,.7,1.]:
@@ -30,7 +31,10 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
                 param_dtype=DType.bfloat16 if bf16 else DType.float32,reduce_dtype=DType.float32)).build(cfg.build(),device=device)
     else:
         module.optim.zero_grad(set_to_none=True)
-        module.cpt_loss_scaler=alpha
+        if normalized:
+            module.normalized_leaky_sft_alpha=alpha
+        else:
+            module.cpt_loss_scaler=alpha
     cfg.lm_head.loss_implementation=LMLossImplementation.default
     ref=cfg.build().to(device)
     ref.load_state_dict({k:v.full_tensor() if hasattr(v,'full_tensor') else v
@@ -39,11 +43,22 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     torch.manual_seed(456)
     ids=torch.randint(0,128,(2,32),device=device)
     output=torch.zeros_like(ids,dtype=torch.bool);output[0,-2:]=True;output[1,-20:]=True
+    if normalized:
+        # Two microbatches per rank, with unequal counts within and between ranks.
+        ids=torch.cat([ids,ids.roll(1,dims=1)])
+        output=torch.zeros_like(ids,dtype=torch.bool)
+        for i,n in enumerate([1,3,15,25]):output[i,-n:]=True
     labels=F.pad(ids[:,1:],(0,1),value=-100)
     mask=F.pad(output[:,1:],(0,1),value=False)
     logits=ref(ids)
     ce=F.cross_entropy(logits.flatten(0,1).float(),labels.flatten(),reduction='none')
-    if alpha is None:
+    if normalized:
+        answer_sums=(ce.view_as(mask)*mask).reshape(2,-1).sum(1)
+        answer_counts=mask.reshape(2,-1).sum(1)
+        sft=(answer_sums/answer_counts).mean()
+        cpt=ce.sum()/(labels!=-100).sum()
+        loss=sft if alpha is None else (1-alpha)*sft+alpha*cpt
+    elif alpha is None:
         loss=((ce.view_as(mask)*mask).sum(1)/mask.sum(1)).mean()
     else:
         weights=torch.where(mask,1.,alpha)*(labels!=-100)
@@ -51,12 +66,16 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     loss.backward()
     metrics={};module.record_metric=lambda *a,**kw:None
     module.record_ce_loss=lambda value,*a,**kw:metrics.update(loss=float(value))
-    module.train_batch(dict(input_ids=ids[rank:rank+1],label_mask=output[rank:rank+1],
-        loss_valid_mask=torch.ones_like(output[rank:rank+1])))
+    per_rank=2 if normalized else 1
+    sl=slice(rank*per_rank,(rank+1)*per_rank)
+    module.train_batch(dict(input_ids=ids[sl],label_mask=output[sl],
+        loss_valid_mask=torch.ones_like(output[sl])))
     worst=0.
+    actual_grads=[]
     for (name,p),(other,q) in zip(module.model.named_parameters(),ref.named_parameters()):
         assert name==other
         grad=p.grad.full_tensor() if hasattr(p.grad,'full_tensor') else p.grad
+        actual_grads.append(grad.detach().float().flatten())
         rel=(grad.float()-q.grad.float()).norm()/q.grad.float().norm().clamp_min(1e-20)
         worst=max(worst,rel.item())
     assert worst<(.04 if bf16 else .001),(alpha,worst)
@@ -68,10 +87,15 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     flat=torch.cat([p.grad.flatten() for p in ref.parameters()])
     if alpha is None:legacy_grad=flat.detach().clone()
     difference=float((flat-legacy_grad).norm()/legacy_grad.norm())
+    actual_flat=torch.cat(actual_grads)
+    if alpha is None:legacy_actual=actual_flat.clone()
+    if normalized and alpha == 0:
+        endpoint_error=float((actual_flat-legacy_actual).norm()/legacy_actual.norm())
+        assert endpoint_error < (.01 if bf16 else 1e-5), endpoint_error
     results.append(dict(alpha=alpha,max_relative_grad_error=worst,loss=metrics['loss'],relative_to_legacy_sft=difference))
     del ref
     torch.cuda.empty_cache()
 if rank==0:
     print(json.dumps(results,indent=2))
-    open('/results/distributed-audit'+('-bf16' if bf16 else '-fp32')+'.json','w').write(json.dumps(results,indent=2))
+    open('/results/distributed-audit'+('-normalized' if normalized else '')+('-bf16' if bf16 else '-fp32')+'.json','w').write(json.dumps(results,indent=2))
 dist.destroy_process_group()
