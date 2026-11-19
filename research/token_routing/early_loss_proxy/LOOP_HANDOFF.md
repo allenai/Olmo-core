@@ -42,6 +42,9 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 11-19 00:30 taskbudget agent FINAL (loop/taskbudget @ a69050eec; flags --st-otr-task-stages, --st-otr-task-adapt): tb-A two-seed 0.095 (x2.59) @991; tb-onh (online, sqrt of measured
+  grad norm) 0.095; tb-A @1,984 PF (x16, 4 GPUs) 0.077 vs uniform 0.074 -> gain GONE at 1,980. CLOSED as a small-budget gain. ALL AGENTS DONE. In flight: klb64 (3 dense runs at 64k).
+  PATTERN: three add-ons (docsub, per-task, schedule/selbp) help at <= 991 PF and vanish by ~2,000 PF; the uniform 50/20/7 token drop is the only thing that holds (~2x to 3,975 PF).
 - 11-19 00:10 64k CHECK: existing kl64k runs (keepfrac-len session; pool shards/kl64k, heldout_kl.npz set kl64k:48, seq-len 65536, micro 1, 8 GPUs, 225 steps): dft 0.211 @7,809 PF,
   ref (dense LoRA) 0.199 @5,723, k20 0.238 / 0.265 @1,463, k40 0.246 / 0.258 @1,897. Launched tag klb64 (complete schedules via --max-tokens steps*16*65536): denselora-b1463 (58 steps),
   denselora-b2926 (115), dense-b1463 (42). Score by hand: FTM = dense PF for the k20 loss / 1,463 (results under /tmp/claude-3018/elp_beaker_results/klb64 after fetch; set name kl64k,
