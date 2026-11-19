@@ -140,6 +140,8 @@ def train_cmd(name, mode):
            "--experiment", EXPERIMENT, "--arm", f"{arm}-{budget}", "--expected-minutes", str(exp_min)]
     if extra:
         cmd += ["--extra-args", extra]
+    if os.environ.get("ELPV_HOSTNAMES"):  # e.g. @.../jupiter_hosts_ok.txt (jupiter minus the failing node)
+        cmd += ["--hostnames", os.environ["ELPV_HOSTNAMES"]]
     return cmd + [mode]
 
 

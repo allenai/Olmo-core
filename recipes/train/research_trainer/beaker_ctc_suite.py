@@ -180,6 +180,12 @@ def parse_args() -> argparse.Namespace:
         "to opt back into always-preemptible.",
     )
     ap.add_argument(
+        "--hostnames",
+        default="",
+        help="comma list (or @file) of Beaker node hostnames to place on; overrides --cluster placement. Use to "
+        "avoid a node that fails every job at container start (jupiter-cs-aus-152, 2026-11-19). Empty = off",
+    )
+    ap.add_argument(
         "--no-follow",
         dest="follow",
         action="store_false",
@@ -397,6 +403,9 @@ def main() -> None:
     )
     launch_config.priority = opts.priority
     launch_config.min_runtime = None if opts.min_runtime in ("", "0", "0s") else opts.min_runtime
+    if opts.hostnames:
+        hosts = open(opts.hostnames[1:]).read() if opts.hostnames.startswith("@") else opts.hostnames
+        launch_config.hostnames = [h.strip() for h in hosts.split(",") if h.strip()]
     launch_config.allow_dirty = opts.allow_dirty
     # Doc-chunked attention's FlexAttention/eager mask path needs headroom beyond what the default
     # caching allocator leaves reachable at 40960 tokens (same fragmentation fix as the proven
