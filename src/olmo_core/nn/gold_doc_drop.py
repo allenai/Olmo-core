@@ -50,6 +50,12 @@ class GoldDocDropConfig:
     #: optional JSON list of row content fingerprints; when set, ONLY those rows get the document drop / thinning
     #: (e.g. a pool's ``gdd_only_contradiction.json``), every other row is passed through whole
     only_fps_path: str = ""
+    #: optional JSON ``{row fingerprint: [group id per document]}`` (or ``{"groups": {...}}``); when set, a dropped row
+    #: keeps every gold document plus a share r of the NON-gold GROUPS (whole groups, at least ``min_groups``) instead
+    #: of a share r of individual distractors (label-valid drop for outlier: each kept topic keeps all its passages).
+    #: Rows absent from the sidecar are passed through whole. Empty = the per-document drop above (unchanged).
+    groups_path: str = ""
+    min_groups: int = 2
 
 
 class GoldDocDrop:
@@ -71,6 +77,13 @@ class GoldDocDrop:
 
             with open(cfg.only_fps_path) as f:
                 self.only_fps = set(json.load(f))
+        self.groups = None
+        if cfg.groups_path:
+            import json
+
+            with open(cfg.groups_path) as f:
+                g = json.load(f)
+            self.groups = g.get("groups", g) if isinstance(g, dict) else g
 
     def _acc(self, k: str, v: float) -> None:
         self.st[k] = self.st.get(k, 0.0) + v
@@ -116,6 +129,14 @@ class GoldDocDrop:
                 out_ids.append(row), out_lab.append(lab)
                 self._acc("tok_out", float(sum(e - s + 1 for s, e in spans)))
                 continue
+            grp = None
+            if self.groups is not None:
+                grp = self.groups.get(fp)
+                if grp is None or len(grp) != nd:
+                    self._acc("nogroup", 1)
+                    out_ids.append(row), out_lab.append(lab)
+                    self._acc("tok_out", float(sum(e - s + 1 for s, e in spans)))
+                    continue
             if self.rng.random() < c.whole_frac:
                 self.router.noprior_fps.add(fp)
                 self._acc("whole", 1)
@@ -130,10 +151,20 @@ class GoldDocDrop:
                     r = self.rng.uniform(c.keep_lo, c.keep_hi)
                 else:
                     r = c.keep_lo + (c.keep_hi - c.keep_lo) * self.rng.random() ** c.keep_power
-                ng = [d for d in range(nd) if d not in gset]
-                self.rng.shuffle(ng)
-                n_keep = int(round(r * len(ng)))
-                keep_docs = gset | set(ng[:n_keep])
+                if grp is not None:
+                    ggrp = {grp[g] for g in gset}
+                    topics = sorted({grp[d] for d in range(nd)} - ggrp)
+                    self.rng.shuffle(topics)
+                    n_t = min(len(topics), max(c.min_groups, int(round(r * len(topics)))))
+                    kt = set(topics[:n_t])
+                    keep_docs = gset | {d for d in range(nd) if grp[d] in kt}
+                    self._acc("groups_in", len(topics))
+                    self._acc("groups_out", n_t)
+                else:
+                    ng = [d for d in range(nd) if d not in gset]
+                    self.rng.shuffle(ng)
+                    n_keep = int(round(r * len(ng)))
+                    keep_docs = gset | set(ng[:n_keep])
                 for d, (s, e) in enumerate(spans):
                     if d not in keep_docs:
                         for i in range(s, e + 1):
@@ -169,7 +200,10 @@ class GoldDocDrop:
             print(f"[gold-doc-drop] call {self.calls}: rows {s.get('rows', 0):.0f} miss {s.get('miss', 0):.0f} "
                   f"whole {s.get('whole', 0):.0f} dropped {s.get('dropped_rows', 0):.0f} "
                   f"(docs {s.get('docs_out', 0):.0f}/{s.get('docs_in', 0):.0f}) thin {s.get('thin_rows', 0):.0f} "
-                  f"full {s.get('full_rows', 0):.0f} not-selected {s.get('not_selected', 0):.0f}; doc-token keep {s.get('tok_out', 0) / max(1.0, s.get('tok_in', 1)):.3f}",
+                  f"full {s.get('full_rows', 0):.0f} not-selected {s.get('not_selected', 0):.0f}"
+                  + (f" nogroup {s.get('nogroup', 0):.0f} (groups {s.get('groups_out', 0):.0f}/{s.get('groups_in', 0):.0f})"
+                     if self.groups is not None else "")
+                  + f"; doc-token keep {s.get('tok_out', 0) / max(1.0, s.get('tok_in', 1)):.3f}",
                   flush=True)
         if not changed:
             return input_ids, labels

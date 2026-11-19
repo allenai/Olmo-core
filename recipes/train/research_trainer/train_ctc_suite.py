@@ -2115,6 +2115,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-gdd-only-fps", default="",
                     help="gold doc drop: JSON list of row fingerprints; only those rows are dropped/thinned "
                     "(e.g. <pool>/gdd_only_contradiction.json)")
+    ap.add_argument("--st-gdd-groups", default="",
+                    help="gold doc drop: JSON {row fingerprint: [group id per document]}; drop whole non-gold groups "
+                    "(keep share r of the groups, >= 2) instead of single distractors; rows not listed pass through whole")
     ap.add_argument("--st-otr-target", choices=["gnorm", "gxh", "dh", "mix"], default="gnorm",
                     help="online router target: gnorm log ||dL/dh_t||; gxh log |<dL/dh_t, h_t>|; dh log ||h_t^L - h_t^0|| "
                     "(residual change through the first L blocks, mid-stack only); mix = average of the gnorm and dh ranks")
