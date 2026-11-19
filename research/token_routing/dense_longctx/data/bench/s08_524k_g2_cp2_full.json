@@ -1,0 +1,74 @@
+{
+ "args": {
+  "scale": "0.8b",
+  "seq_len": 524288,
+  "cp": 2,
+  "ac": "full",
+  "ac_interval": 2,
+  "lora_rank": 0,
+  "steps": 2,
+  "init": "random",
+  "gdn_safe": true,
+  "gdn_segment": 0,
+  "ffn_chunk": 0,
+  "sparse_head": false,
+  "label_tokens": 40,
+  "rows_npz": "",
+  "rows_set": "lc1m",
+  "row_index": 0,
+  "lr": 1e-05,
+  "attn_backend": "flash_2",
+  "offload_ckpt": false,
+  "check_grads": false,
+  "mem_snapshot": "",
+  "forward_only": false,
+  "out": "/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-dense1m/results/s08_524k_g2_cp2_full.json"
+ },
+ "T": 524288,
+ "n_label": 40,
+ "world": 2,
+ "gpu": "NVIDIA A100-SXM4-80GB",
+ "build_s": 1.8,
+ "model": {
+  "n_layers": 24,
+  "block_linear_params": 497614848,
+  "n_heads": 8,
+  "head_dim": 256,
+  "n_v_heads": 16,
+  "vocab": 248320,
+  "d_model": 1024,
+  "sparse_head": false
+ },
+ "pf": {
+  "total_pf": 22.69082762084352,
+  "linear_pf": 1.565360960569344,
+  "attn_pf": 20.26619832316723,
+  "gdn_pf": 0.059373627899904,
+  "head_pf": 0.79989470920704
+ },
+ "steps": [
+  {
+   "tag": "bench",
+   "step": 1,
+   "loss": 12.64871,
+   "s": 174.43,
+   "s_fwd_bwd": 174.11,
+   "peak_alloc_gib": 42.48,
+   "peak_reserved_gib": 47.82
+  },
+  {
+   "tag": "bench",
+   "step": 2,
+   "loss": 8.53359,
+   "s": 116.9,
+   "s_fwd_bwd": 101.19,
+   "peak_alloc_gib": 46.23,
+   "peak_reserved_gib": 50.05
+  }
+ ],
+ "trainable_params": 1006672704,
+ "s_per_step": 116.9,
+ "peak_alloc_gib": 46.23,
+ "peak_reserved_gib": 50.05,
+ "ok": true
+}

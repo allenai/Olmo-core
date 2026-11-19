@@ -1,0 +1,50 @@
+{
+ "args": {
+  "scale": "0.8b",
+  "seq_len": 524288,
+  "cp": 1,
+  "ac": "full",
+  "ac_interval": 2,
+  "lora_rank": 16,
+  "steps": 2,
+  "init": "random",
+  "gdn_safe": true,
+  "gdn_segment": 0,
+  "ffn_chunk": 0,
+  "sparse_head": false,
+  "label_tokens": 40,
+  "rows_npz": "",
+  "rows_set": "lc1m",
+  "row_index": 0,
+  "lr": 1e-05,
+  "attn_backend": "flash_2",
+  "offload_ckpt": false,
+  "check_grads": false,
+  "mem_snapshot": "",
+  "forward_only": false,
+  "out": "/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-dense1m/results/s08_524k_g1_cp1_lora.json"
+ },
+ "T": 524288,
+ "n_label": 40,
+ "world": 1,
+ "gpu": "NVIDIA A100-SXM4-80GB",
+ "build_s": 1.2,
+ "model": {
+  "n_layers": 24,
+  "block_linear_params": 497614848,
+  "n_heads": 8,
+  "head_dim": 256,
+  "n_v_heads": 16,
+  "vocab": 248320,
+  "d_model": 1024,
+  "sparse_head": false
+ },
+ "pf": {
+  "total_pf": 21.90240906425139,
+  "linear_pf": 1.043573973712896,
+  "attn_pf": 20.26619832316723,
+  "gdn_pf": 0.059373627899904,
+  "head_pf": 0.53326313947136
+ },
+ "oom": "CUDA out of memory. Tried to allocate 3.50 GiB. GPU 0 has a total capacity of 79.25 GiB of which 2.12 GiB is free. Including non-PyTorch memory, this process has 77.12 GiB memory in use. Of the allocated memory 76.00 GiB is allocated by PyTorch, and 175.89 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments"
+}

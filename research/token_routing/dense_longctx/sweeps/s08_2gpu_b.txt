@@ -1,0 +1,4 @@
+# 0.8B 1M on 2 GPUs (CP2): the CP2 OOM is a 3.5 GiB T_local x d_ff FFN intermediate -> sequence-chunk the FFN
+2 s08_1m_g2_cp2_lora_ffnc --scale 0.8b --seq-len 1048576 --cp 2 --ac full --gdn-safe --steps 3 --lora-rank 16 --ffn-chunk 65536
+2 s08_1m_g2_cp2_full_ffnc --scale 0.8b --seq-len 1048576 --cp 2 --ac full --gdn-safe --steps 3 --ffn-chunk 65536
+2 s08_1m_g2_cp2_full_ffnc_off --scale 0.8b --seq-len 1048576 --cp 2 --ac full --gdn-safe --steps 3 --ffn-chunk 65536 --offload-ckpt

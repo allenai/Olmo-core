@@ -1,0 +1,83 @@
+{
+ "args": {
+  "scale": "0.8b",
+  "seq_len": 65536,
+  "cp": 4,
+  "ac": "full",
+  "ac_interval": 2,
+  "lora_rank": 0,
+  "steps": 3,
+  "init": "random",
+  "gdn_safe": true,
+  "gdn_segment": 0,
+  "ffn_chunk": 0,
+  "sparse_head": false,
+  "label_tokens": 40,
+  "rows_npz": "",
+  "rows_set": "lc1m",
+  "row_index": 0,
+  "lr": 1e-05,
+  "attn_backend": "flash_2",
+  "offload_ckpt": false,
+  "check_grads": false,
+  "mem_snapshot": "",
+  "forward_only": false,
+  "out": "/accounts/projects/sewonm/prasann/ctc_suite/OLMo-core-dense1m/results/s08_64k_g4_cp4_full.json"
+ },
+ "T": 65536,
+ "n_label": 40,
+ "world": 4,
+ "gpu": "NVIDIA A100-SXM4-80GB",
+ "build_s": 1.5,
+ "model": {
+  "n_layers": 24,
+  "block_linear_params": 497614848,
+  "n_heads": 8,
+  "head_dim": 256,
+  "n_v_heads": 16,
+  "vocab": 248320,
+  "d_model": 1024,
+  "sparse_head": false
+ },
+ "pf": {
+  "total_pf": 0.619738011009024,
+  "linear_pf": 0.195670120071168,
+  "attn_pf": 0.316659348799488,
+  "gdn_pf": 0.007421703487488,
+  "head_pf": 0.09998683865088
+ },
+ "steps": [
+  {
+   "tag": "bench",
+   "step": 1,
+   "loss": 12.55253,
+   "s": 34.18,
+   "s_fwd_bwd": 33.85,
+   "peak_alloc_gib": 5.31,
+   "peak_reserved_gib": 6.62
+  },
+  {
+   "tag": "bench",
+   "step": 2,
+   "loss": 8.53621,
+   "s": 2.49,
+   "s_fwd_bwd": 2.24,
+   "peak_alloc_gib": 7.19,
+   "peak_reserved_gib": 8.47
+  },
+  {
+   "tag": "bench",
+   "step": 3,
+   "loss": 6.27556,
+   "s": 2.45,
+   "s_fwd_bwd": 2.19,
+   "peak_alloc_gib": 7.19,
+   "peak_reserved_gib": 8.47
+  }
+ ],
+ "trainable_params": 1006672704,
+ "s_per_step": 2.47,
+ "peak_alloc_gib": 7.19,
+ "peak_reserved_gib": 8.47,
+ "ok": true
+}

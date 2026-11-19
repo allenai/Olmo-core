@@ -1,0 +1,5 @@
+# Qwen3.5-4B dense steps on 8 A100s (one node), Ulysses CP8, full AC, int32 guard
+8 s4b_1m_g8_cp8_lora_real --scale 4b --init /accounts/projects/sewonm/prasann/ctc_suite/bases/q35-4b-base-modelonly/model_and_optim --rows-npz /accounts/projects/sewonm/prasann/ctc_suite/data/dense1m/heldout_lc.npz --rows-set lc1m --seq-len 0 --cp 8 --ac full --gdn-safe --steps 3 --lora-rank 16
+8 s4b_262k_g8_cp8_lora --scale 4b --seq-len 262144 --cp 8 --ac full --gdn-safe --steps 3 --lora-rank 16
+8 s4b_524k_g8_cp8_lora --scale 4b --seq-len 524288 --cp 8 --ac full --gdn-safe --steps 3 --lora-rank 16
+8 s4b_1m_g8_cp8_full --scale 4b --seq-len 1048576 --cp 8 --ac full --gdn-safe --steps 3

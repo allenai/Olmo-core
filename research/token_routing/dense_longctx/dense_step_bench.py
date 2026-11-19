@@ -183,8 +183,13 @@ def main():
                                   rank_microbatch_size=T, compile_model=False, dp_config=dp_cfg, cp_config=cp_cfg,
                                   ac_config=ac_cfg)
         if a.init != "random":
-            from olmo_core.distributed.checkpoint import load_model_and_optim_state
-            load_model_and_optim_state(a.init, model, strict=False if a.lora_rank else True)
+            if a.lora_rank:  # the trainer's tolerant load: base keys only, refuses missing backbone keys
+                sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+                from recipes.train.variants import tolerant_base_load
+                tolerant_base_load(a.init, model, "/tmp/dense_bench_save")
+            else:
+                from olmo_core.distributed.checkpoint import load_model_and_optim_state
+                load_model_and_optim_state(a.init, model)
         if a.lora_rank:
             from olmo_core.nn.early_lora import _reset_lora
             torch.manual_seed(0)
