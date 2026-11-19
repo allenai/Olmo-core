@@ -23,10 +23,14 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     cfg=TransformerConfig.llama_like(d_model=64,vocab_size=128,n_layers=1,n_heads=2,
         feed_forward=FeedForwardConfig(hidden_size=128,bias=False),attn_backend=AttentionBackendName.torch)
     cfg.lm_head.loss_implementation=LMLossImplementation.fused_linear
-    module=TransformerTrainModuleConfig(rank_microbatch_size=32,max_sequence_length=32,
-        optim=AdamWConfig(),cpt_loss_scaler=alpha,
-        dp_config=TransformerDataParallelConfig(name=DataParallelType.fsdp,shard_degree=2,num_replicas=1,
-            param_dtype=DType.bfloat16 if bf16 else DType.float32,reduce_dtype=DType.float32)).build(cfg.build(),device=device)
+    if alpha is None:
+        module=TransformerTrainModuleConfig(rank_microbatch_size=32,max_sequence_length=32,
+            optim=AdamWConfig(),cpt_loss_scaler=alpha,
+            dp_config=TransformerDataParallelConfig(name=DataParallelType.fsdp,shard_degree=2,num_replicas=1,
+                param_dtype=DType.bfloat16 if bf16 else DType.float32,reduce_dtype=DType.float32)).build(cfg.build(),device=device)
+    else:
+        module.optim.zero_grad(set_to_none=True)
+        module.cpt_loss_scaler=alpha
     cfg.lm_head.loss_implementation=LMLossImplementation.default
     ref=cfg.build().to(device)
     ref.load_state_dict({k:v.full_tensor() if hasattr(v,'full_tensor') else v
@@ -65,7 +69,7 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     if alpha is None:legacy_grad=flat.detach().clone()
     difference=float((flat-legacy_grad).norm()/legacy_grad.norm())
     results.append(dict(alpha=alpha,max_relative_grad_error=worst,loss=metrics['loss'],relative_to_legacy_sft=difference))
-    del module,ref
+    del ref
     torch.cuda.empty_cache()
 if rank==0:
     print(json.dumps(results,indent=2))
