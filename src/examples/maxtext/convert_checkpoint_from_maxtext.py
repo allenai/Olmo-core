@@ -6,8 +6,10 @@ thin CLI wrapper. It needs a MaxText checkout that has the model's decoder insta
 environment (CPU JAX is enough).
 
 Warnings:
-    - Only model weights are converted. Without optimizer state, OLMo Core starts the optimizer
-      fresh, so this is not a true resume.
+    - By default only model weights are converted, and OLMo Core starts the optimizer fresh. Pass
+      ``--optimizer-state`` to also convert the AdamW moments and step (MaxText's
+      ``opt_type=adamw``). They're written for the OLMoDDP train module; the FSDP train module
+      loads only the weights.
     - MaxText checkpoints don't describe the OLMo Core model, so this needs an OLMo Core
       ``config.json``: the copy that ``convert_checkpoint_to_maxtext.py`` saved next to the
       checkpoint, or one passed with ``--olmo-core-config``.
@@ -45,10 +47,20 @@ def parse_args():
         help="OLMo Core config.json describing the model. Defaults to the copy saved next to the checkpoint.",
     )
     parser.add_argument(
+        "--optimizer-state",
+        action="store_true",
+        help="Also convert the AdamW moments and step, as OLMoDDP optimizer state.",
+    )
+    parser.add_argument(
+        "--optim-key-prefix",
+        default="module.",
+        help="Prefix the OLMoDDP train module puts before parameter names in its optimizer state.",
+    )
+    parser.add_argument(
         "--skip-validation",
         dest="validate",
         action="store_false",
-        help="Skip checking that converting back reproduces the MaxText weights.",
+        help="Skip checking that converting back reproduces the MaxText tensors.",
     )
     parser.add_argument("--save-overwrite", action="store_true")
     return parser.parse_args()
@@ -60,6 +72,8 @@ def main():
         args.maxtext_input_path,
         args.checkpoint_output_dir,
         experiment_config=read_json(args.olmo_core_config) if args.olmo_core_config else None,
+        optimizer_state=args.optimizer_state,
+        optim_key_prefix=args.optim_key_prefix,
         validate=args.validate,
         save_overwrite=args.save_overwrite,
     )
