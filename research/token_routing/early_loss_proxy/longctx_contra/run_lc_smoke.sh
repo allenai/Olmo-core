@@ -49,6 +49,13 @@ while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLA
       [ -f "$OUT/$NAME.json" ] && sync_out "$OUT/$NAME.json" "$S3/results/$TAG" >/dev/null
     done ) &
   SYNCPID=$!
+  # @PREV@ in FLAGS = the newest stepN checkpoint of the PREVIOUS run in this spec (chained segments: --branch-from @PREV@)
+  if [[ "$FLAGS" == *@PREV@* ]]; then
+    PREVCK=$(ls -d "${PREVSAVE:?no previous run}"/step* 2>/dev/null | sort -V | tail -1)
+    [ -n "$PREVCK" ] || { echo "FATAL: no checkpoint in $PREVSAVE"; exit 4; }
+    FLAGS=${FLAGS//@PREV@/$PREVCK}
+    echo "[chain] $NAME branches from $PREVCK"
+  fi
   # --probe-* words in FLAGS go to dense_probe (before the --), the rest to the trainer
   PFL=(); TFL=(); set -f; W=($FLAGS); set +f; i=0
   while [ $i -lt ${#W[@]} ]; do
@@ -91,6 +98,7 @@ while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLA
   for f in "$OUT/$NAME".*; do sync_out "$f" "$S3/results/$TAG"; done
   [ -z "${SAVE_ROOT:-}" ] && rm -rf "$SAVE"
   rm -rf "$LOC/work_$NAME"
+  PREVSAVE=$SAVE
   echo "=== $NAME end $(date +%T) rc=$RC wall $((T1 - T0))s"
 done < "$OUT/spec_${JID}.tsv"
 rm -rf "$LOC"

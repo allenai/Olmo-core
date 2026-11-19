@@ -28,6 +28,7 @@ def main():
                     "EOS) so the row + filler fill exactly this many tokens (one --pack window; train with "
                     "--pack-unpack-long). 0 = off")
     ap.add_argument("--pad-long-min", type=int, default=524288)
+    ap.add_argument("--max-len", type=int, default=0, help="take only rows at most this long (0 = no limit)")
     ap.add_argument("--min-len", type=int, default=0, help="take only rows at least this long (e.g. the long rows of a mixed pool, in its order)")
     ap.add_argument("--ordered", action="store_true",
                     help="write ONE part with the rows in a planned order (train with --no-data-shuffle): every --src is "
@@ -51,7 +52,8 @@ def main():
     with open(f"{tmp}/row_info.jsonl", "w") as info:
         for pi, spec in enumerate(a.src):
             pool, _, n = spec.partition(":")
-            n = int(n)
+            n, _, off = n.partition("@")  # POOL:N@OFFSET = rows [OFFSET, OFFSET+N) after the length filters
+            n, off = int(n), int(off or 0)
             d = f"{a.root}/{pool}"
             meta0 = meta0 or json.load(open(f"{d}/metadata.json"))
             g = json.load(open(f"{d}/gold_fingerprints.json"))
@@ -61,7 +63,7 @@ def main():
             for r in ri:  # row offsets inside each part (rows of a part are concatenated in row order)
                 start[(r["part"], r["row"])] = off.get(r["part"], 0)
                 off[r["part"]] = off.get(r["part"], 0) + r["len"]
-            sel = [r for r in ri if r["task"] == "contradiction" and r["len"] >= a.min_len][:n]
+            sel = [r for r in ri if r["task"] == "contradiction" and a.min_len <= r["len"] <= (a.max_len or 1 << 40)][off:off + n]
             assert len(sel) == n, f"{pool}: only {len(sel)} contradiction rows < {n}"
             ids, msk = [], []
             mm = {}
