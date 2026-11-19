@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 18:30 tb (per-task budgets) b991: tb-A (reorder 50/20/7, others 20/7) 0.093 x2.77 vs uniform 0.100 / 0.101; tb-B/C/D 0.099-0.103 (no gain). One seed, gain 0.007 = noise edge.
+  Agent continues (online rule, 1,980 PF). ladder.py / ftm.py / ftm_task.py now read tags tb and sb. sb (selective backward) arms running since 17:20.
 - 15:35 Agent selbp (a1a0a53eb407decd0, branch loop/selbp, tag sb): skip backward on easy rows (quantile / sample / schedule), b991 then b1980. In flight: taskbudget + selbp.
 - 15:20 ds follow-up complete (k25 b495 two-seed 0.130 x2.67; l6k 0.134 no gain; dl-k25-b991 failed at start, not rerun; agent's written report still pending).
   NEW: ftm_task.py (per-task FTM, 80 rows/task): lo-p50-20-7 ~x2 on contradiction / reorder, x2.3-2.9 outlier; recipe x3-3.8 outlier but x1.2-1.7 reorder (fades);

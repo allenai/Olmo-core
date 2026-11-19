@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 18:30",
+   "text": "Per-task budgets, hand-set splits at 991 PF: split A (reorder 50%/20%/7%, others 20%/7%) 0.093 (2.77x) against 0.100-0.101 for the two uniform arms; gentler reorder budgets (B, C, D) 0.099-0.103, no gain. One seed; the 0.007 gain of A is at the edge of the noise."
+  },
+  {
    "t": "11-18 15:35",
    "text": "Started an agent on selective backward (skip the backward pass on rows whose training loss is below a running quantile; branch loop/selbp, tag sb), on top of the 50%/20%/7% token drop, at 991 and 1,980 PF."
   },

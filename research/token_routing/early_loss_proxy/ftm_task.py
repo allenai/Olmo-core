@@ -5,7 +5,7 @@ full fine-tune + dense LoRA at every budget.
 import glob, json, math, os, sys
 import numpy as np
 
-SRC = [p for pat in ("v3", "w[0-9]*", "x4", "bud", "x16", "ds") for p in sorted(glob.glob("/tmp/claude-3018/elp_beaker_results/" + pat))]
+SRC = [p for pat in ("v3", "w[0-9]*", "x4", "bud", "x16", "ds", "tb", "sb") for p in sorted(glob.glob("/tmp/claude-3018/elp_beaker_results/" + pat))]
 SRC += sorted(glob.glob("/net/sneetches/data/prasann/early_loss_proxy/results/w[0-9]*"))
 P = []
 for src in SRC:

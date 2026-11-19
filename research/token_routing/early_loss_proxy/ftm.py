@@ -21,7 +21,7 @@ for k, r in ladder.runs.items():
     arm = k.split("-", 1)[1].rsplit("-sd", 1)[0]
     if "mix" in arm or arm == "denselora2e5" or not pf: continue
     kind = "dense_ft" if arm.startswith("dense") and "lora" not in arm else ("dense_lora" if arm.startswith("denselora") else "drop")
-    pool = "mtb16kx16" if k.startswith("x16-") or "-x16-" in k else ("mtb16kx4" if k.startswith(("x4-", "bud-", "ds-")) else "mtb16k")
+    pool = "mtb16kx16" if k.startswith("x16-") or "-x16-" in k else ("mtb16kx4" if k.startswith(("x4-", "bud-", "ds-", "tb-", "sb-")) else "mtb16k")
     P.append(dict(run=k, arm=arm, kind=kind, pool=pool, steps=s, pf=pf, ce=ce))
 
 # average seeds of the same (arm, pool, steps) before anything else, so the frontier is not built from the luckier seed

@@ -245,7 +245,7 @@
   "title": "Per-task keep budgets",
   "what": "The four tasks respond differently to dropping: the aggressive 20% / 7% budget is the best arm on outlier (3-4x per task) but loses on reorder, where every document is needed (1.2-1.7x, fading with data), and reorder is 60-70% of the mean loss; the gentler 50% / 20% / 7% budget holds about 2x on reorder. Give each task its own keep shares in the mixed batch: first hand-set as an existence test at 991 PF, then set online so that every task loses the same share of predicted gradient mass.",
   "status": "running",
-  "result": ""
+  "result": "Interim, one seed at 991 PF (16k CE on 320 rows; per-task numbers on 80 rows). Hand-set split A (reorder rows keep 50% / 20% / 7%, the other three tasks 20% / 7%): 0.093 (2.77x), against 0.100 (2.2x, two seeds) for uniform 50% / 20% / 7% and 0.101 (2.1x) for uniform 20% / 7%: a gain of 0.007, at the edge of the noise. Per task it takes outlier from the aggressive arm (0.056) and improves reorder beyond both uniform arms (0.227 against 0.243 and 0.272), because the cheaper non-reorder rows buy 20% more steps. Giving reorder a still gentler budget (70% / 40% / 20%; splits B, C, D) does not help: 0.103, 0.099, 0.103. The online rule and a 1,980 PF run are still to come from the agent."
  },
  {
   "id": "selbp",
