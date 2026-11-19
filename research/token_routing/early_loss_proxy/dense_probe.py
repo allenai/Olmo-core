@@ -318,6 +318,14 @@ def build_callback(cfg: Dict[str, str]):
             if trace_steps:
                 self._install_memtrace()
             self._probe(0)
+            if os.environ.get("DENSE_PROBE_SCORE_ONLY"):
+                # checkpoint-then-score: the step-0 probe IS the score of the loaded checkpoint; stop before training
+                if self._rank() == 0:
+                    self.res["finished"] = "score only"
+                    self._write()
+                if dist.is_initialized():
+                    dist.barrier()
+                os._exit(0)
 
         def pre_step(self, batch: Dict[str, Any]):
             torch.cuda.synchronize()
