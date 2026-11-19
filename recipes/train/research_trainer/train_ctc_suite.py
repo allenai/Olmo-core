@@ -876,6 +876,7 @@ def resolve_plan(opts: argparse.Namespace, world_size: int) -> Dict[str, Any]:
         global_batch_size=opts.global_batch * opts.seq_len,
         seed=34521 + opts.seed,
         num_workers=opts.num_workers,
+        shuffle=not opts.no_data_shuffle,
     )
     return dict(
         meta=meta,
@@ -2445,6 +2446,9 @@ def parse_args() -> argparse.Namespace:
         "full save costs ~82G of user quota and ~25 min of NFS writes that nothing reads. "
         "Incompatible with resuming the run later.",
     )
+    ap.add_argument("--no-data-shuffle", action="store_true",
+                    help="train on the pool's rows in file order (parts in glob order, rows in part order) instead of the "
+                    "seeded shuffle; for pools whose order is planned (e.g. longctx_contra assemble_mix.py --ordered)")
     ap.add_argument("--no-compile", dest="compile", action="store_false")
     ap.add_argument(
         "--dry-run",

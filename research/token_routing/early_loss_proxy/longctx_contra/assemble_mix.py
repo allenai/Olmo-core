@@ -23,6 +23,13 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--src", action="append", required=True)
     ap.add_argument("--root", default=SH)
+    ap.add_argument("--ordered", action="store_true",
+                    help="write ONE part with the rows in a planned order (train with --no-data-shuffle): every --src is "
+                    "shuffled into the head, except --tail sources, which go (shuffled, with a proportional share of the "
+                    "head's short rows) into a final stretch")
+    ap.add_argument("--tail", action="append", default=[], help="--ordered: pool name(s) whose rows come last")
+    ap.add_argument("--long", default="", help="--ordered: comma list of the long pools (the rest count as short)")
+    ap.add_argument("--seed", type=int, default=20261119)
     a = ap.parse_args()
     tmp, final = f"{a.root}/{a.out}_tmp", f"{a.root}/{a.out}"
     assert not os.path.exists(f"{final}/metadata.json"), f"{final} exists"
@@ -31,6 +38,7 @@ def main():
     gold, pairs, fps, lens, bins = {}, {}, [], [], []
     tot = loss = 0
     meta0 = None
+    held, info_rows = [], []
     with open(f"{tmp}/row_info.jsonl", "w") as info:
         for pi, spec in enumerate(a.src):
             pool, _, n = spec.partition(":")
@@ -64,25 +72,59 @@ def main():
                     pairs[fp] = gp[fp]
                 fps.append(fp)
                 lens.append(r["len"])
-                info.write(json.dumps(dict(r, part=pi, row=len(ids) - 1, src_pool=pool)) + "\n")
-            bt, bm = np.concatenate(ids).astype("uint32"), np.concatenate(msk).astype("bool")
-            bt.tofile(f"{tmp}/token_ids_part_t{pi}_000.npy")
-            bm.tofile(f"{tmp}/labels_mask_t{pi}_000.npy")
-            tot += bt.size
-            loss += int(bm.sum())
-            bins.append({"src": pool, "rows": n, "tokens": int(bt.size), "len_mean": float(bt.size / n)})
+                rec = dict(r, part=pi, row=len(ids) - 1, src_pool=pool)
+                info_rows.append(rec)
+                if not a.ordered:
+                    info.write(json.dumps(rec) + "\n")
+            ntok = int(sum(len(x) for x in ids))
+            if a.ordered:
+                held.extend((pool, x, y, info_rows[-n:][k]) for k, (x, y) in enumerate(zip(ids, msk)))
+            else:
+                bt, bm = np.concatenate(ids).astype("uint32"), np.concatenate(msk).astype("bool")
+                bt.tofile(f"{tmp}/token_ids_part_t{pi}_000.npy")
+                bm.tofile(f"{tmp}/labels_mask_t{pi}_000.npy")
+                loss += int(bm.sum())
+            tot += ntok
+            bins.append({"src": pool, "rows": n, "tokens": ntok, "len_mean": float(ntok / n)})
             print(f"[mix] {a.out} part {pi}: {pool} x {n}: {bt.size} tokens", flush=True)
+    order_info = None
+    if a.ordered:
+        rng = np.random.default_rng(a.seed)
+        longs = set(x for x in a.long.split(",") if x)
+        tail_long = [h for h in held if h[0] in a.tail]
+        head_long = [h for h in held if h[0] in longs and h[0] not in a.tail]
+        short = [h for h in held if h[0] not in longs and h[0] not in a.tail]
+        short = [short[j] for j in rng.permutation(len(short))]
+        frac = len(tail_long) / max(1, len(tail_long) + len(head_long))
+        n_tail_short = int(round(frac * len(short)))
+        head = head_long + short[n_tail_short:]
+        tail = tail_long + short[:n_tail_short]
+        head = [head[j] for j in rng.permutation(len(head))]
+        tail = [tail[j] for j in rng.permutation(len(tail))]
+        rows_o = head + tail
+        with open(f"{tmp}/row_info.jsonl", "w") as info:
+            for k, (pool, x, y, rec) in enumerate(rows_o):
+                info.write(json.dumps(dict(rec, part=0, row=k, src_pool=pool, tail=k >= len(head))) + "\n")
+        np.concatenate([h[1] for h in rows_o]).astype("uint32").tofile(f"{tmp}/token_ids_part_t0_000.npy")
+        bm = np.concatenate([h[2] for h in rows_o]).astype("bool")
+        bm.tofile(f"{tmp}/labels_mask_t0_000.npy")
+        loss = int(bm.sum())
+        lens = [len(h[1]) for h in rows_o]
+        order_info = {"head_rows": len(head), "tail_rows": len(tail), "tail_long": len(tail_long),
+                      "tail_short": n_tail_short, "train_with": "--no-data-shuffle"}
+        print(f"[mix] ordered: head {len(head)} rows, tail {len(tail)} rows ({len(tail_long)} {a.tail} + {n_tail_short} short)",
+              flush=True)
     meta = dict(meta0)
     meta.update({"task": a.out, "num_instances": len(lens), "num_tokens": int(tot), "num_loss_tokens": int(loss),
                  "max_example_len": int(max(lens)), "min_example_len": int(min(lens)),
                  "merged_from": [{"src": b["src"], "task": "contradiction", "converter_task": "contradiction",
                                   "num_instances": b["rows"]} for b in bins],
-                 "tasks_order": [b["src"] for b in bins]})
+                 "tasks_order": [b["src"] for b in bins], "order": order_info})
     json.dump(meta, open(f"{tmp}/metadata.json", "w"), indent=1)
     json.dump(gold, open(f"{tmp}/gold_fingerprints.json", "w"))
     json.dump(pairs, open(f"{tmp}/gold_pairs_fingerprints.json", "w"))
     json.dump(fps, open(f"{tmp}/gdd_only_contradiction.json", "w"))
-    json.dump({"pool": a.out, "bins": bins, "rows": len(lens), "tokens": int(tot)}, open(f"{a.root}/{a.out}_stats.json", "w"), indent=1)
+    json.dump({"pool": a.out, "bins": bins, "rows": len(lens), "tokens": int(tot), "order": order_info}, open(f"{a.root}/{a.out}_stats.json", "w"), indent=1)
     os.rename(tmp, final)
     print(f"[mix] wrote {final}: {len(lens)} rows, {tot} tokens", flush=True)
 
