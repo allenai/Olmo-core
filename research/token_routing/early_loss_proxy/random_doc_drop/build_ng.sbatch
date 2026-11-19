@@ -23,5 +23,9 @@ for v in ${VARIANTS:-}; do
   IFS=: read -r N LO HI WH SD <<< "$v"
   echo "=== variant $v $(date +%T)"; $PY $B variants --name $N --lo $LO --hi $HI --whole $WH --seed $SD
 done
+for v in ${NOREWRITE:-}; do
+  IFS=: read -r N SRC <<< "$v"
+  echo "=== norewrite $v $(date +%T)"; $PY $B norewrite --name $N --src $SRC
+done
 [ -n "${ORDER:-}" ] && $PY $B order --pools "$ORDER"
 echo "=== NG_BUILD_DONE $(date +%T)"

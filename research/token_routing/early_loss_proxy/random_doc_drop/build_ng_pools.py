@@ -381,6 +381,77 @@ def variants(a):
     print(f"[ng var {name}] wrote {final}: token keep {stats['token_keep_all']:.3f}", flush=True)
 
 
+# ---------------------------------------------------------------------------------------------------------- norewrite
+def norewrite(a):
+    """NO-REWRITE control of a variant pool: the SAME kept documents per row slot as ``--from`` (its JSONL records
+    ``rdd_kept``; rows it left whole stay whole), but done on the full row's TOKENS: each dropped document's span
+    (start marker .. end marker, as gold_doc_drop removes it) is cut out, nothing else changes. Survivors keep their
+    printed ids (reorder "Passage [i]", grouping "[i]"), oolong keeps its preamble's original N, and question and
+    answer stay the full row's."""
+    _, base_rows = P.load_shard_rows(f"{SH}/ng16k")
+    tmp, final = f"{SH}/ng16k_{a.name}_tmp", f"{SH}/ng16k_{a.name}"
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
+    stats = {"name": a.name, "from": a.src, "tasks": {}}
+    tot = totl = 0
+    lens = []
+    info = open(f"{tmp}/row_info.jsonl", "w")
+    for ti, t in enumerate(TASKS):
+        var = P.read_jsonl(f"{W}/var/{a.src}/{t}.jsonl")
+        base_ex = P.read_jsonl(f"{W}/base/{t}_pool_rows.jsonl")
+        assert len(var) == ROWS == len(base_ex)
+        out, st = [], {"dropped": 0, "whole": 0, "units_in": 0, "units_out": 0}
+        for k in range(ROWS):
+            ids, m = base_rows[ti * ROWS + k]
+            spans = P.doc_spans(ids)
+            n = R.n_units(t, base_ex[k])
+            assert len(spans) == n, (t, k, len(spans), n)
+            st["units_in"] += n
+            keep = (var[k].get("_meta") or {}).get("rdd_kept") if t == "oolong" else var[k].get("rdd_kept") or \
+                (var[k].get("_meta") or {}).get("rdd_kept")
+            if keep is None:
+                st["whole"] += 1
+                st["units_out"] += n
+                out.append((ids, m))
+                continue
+            ks = set(keep)
+            rm = np.zeros(len(ids), bool)
+            for j, (s0, e0) in enumerate(spans):
+                if j not in ks:
+                    rm[s0:e0] = True
+            assert not m[rm].any()
+            st["dropped"] += 1
+            st["units_out"] += len(ks)
+            out.append((ids[~rm], m[~rm]))
+        L = np.array([len(x[0]) for x in out])
+        bl = np.array([len(base_rows[ti * ROWS + k][0]) for k in range(ROWS)])
+        st["unit_keep"] = st["units_out"] / st["units_in"]
+        st["token_keep"] = float(L.sum() / bl.sum())
+        stats["tasks"][t] = st
+        print(f"[ng norewrite {a.name}] {t}: {json.dumps(st)}", flush=True)
+        for k, (ids, m) in enumerate(out):
+            info.write(json.dumps({"part": ti, "row": k, "task": t, "len": int(len(ids)), "base_len": int(bl[k]),
+                                   "answer_tokens": int(m.sum())}) + "\n")
+        lens += L.tolist()
+        bt = np.concatenate([x[0] for x in out]).astype("uint32")
+        bm = np.concatenate([x[1] for x in out]).astype("bool")
+        bt.tofile(f"{tmp}/token_ids_part_t{ti}_000.npy")
+        bm.tofile(f"{tmp}/labels_mask_t{ti}_000.npy")
+        tot += bt.size
+        totl += int(bm.sum())
+    info.close()
+    meta = json.load(open(f"{SH}/ng16k/metadata.json"))
+    meta.update({"task": f"ng16k_{a.name}", "num_instances": len(lens), "num_tokens": int(tot), "num_loss_tokens": int(totl),
+                 "max_example_len": int(max(lens)), "min_example_len": int(min(lens)),
+                 "random_doc_drop_norewrite": {"from": a.src}})
+    json.dump(meta, open(f"{tmp}/metadata.json", "w"), indent=1)
+    stats["token_keep_all"] = float(tot / json.load(open(f"{SH}/ng16k/metadata.json"))["num_tokens"])
+    shutil.rmtree(final, ignore_errors=True)
+    os.rename(tmp, final)
+    json.dump(stats, open(f"{SH}/ng16k_{a.name}_stats.json", "w"), indent=1)
+    print(f"[ng norewrite {a.name}] wrote {final}: token keep {stats['token_keep_all']:.3f}", flush=True)
+
+
 # -------------------------------------------------------------------------------------------------------------- order
 def order(a):
     """Loader global order of trainer seed a.seed on each named pool: must be identical across pools."""
@@ -410,7 +481,8 @@ def order(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", choices=["gen", "base", "variants", "order", "overlap"])
+    ap.add_argument("stage", choices=["gen", "base", "variants", "norewrite", "order", "overlap"])
+    ap.add_argument("--src", default="", help="norewrite: the variant pool whose kept sets to reuse (e.g. rddA_s0)")
     ap.add_argument("--shuffle-seed", type=int, default=20261118)
     ap.add_argument("--name", default="")
     ap.add_argument("--lo", type=float, default=0.05)
@@ -422,7 +494,7 @@ def main():
     a = ap.parse_args()
     if a.stage == "overlap":
         return overlap_report()
-    {"gen": gen, "base": base, "variants": variants, "order": order}[a.stage](a)
+    {"gen": gen, "base": base, "variants": variants, "norewrite": norewrite, "order": order}[a.stage](a)
 
 
 if __name__ == "__main__":
