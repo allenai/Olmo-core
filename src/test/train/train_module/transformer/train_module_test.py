@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pytest
 import torch
@@ -48,16 +48,19 @@ def _model_config() -> TransformerConfig:
     )
 
 
-def _global_batch() -> Dict[str, torch.Tensor]:
+def _global_batch(zero_loss_tokens_on_last_instance: bool = False) -> Dict[str, torch.Tensor]:
     generator = torch.Generator().manual_seed(0)
     input_ids = torch.randint(0, VOCAB_SIZE, (NUM_INSTANCES, SEQ_LEN), generator=generator)
     labels = torch.full_like(input_ids, IGNORE_INDEX)
     labels[:, :-1] = input_ids[:, 1:]
     # Very unequal numbers of loss tokens per instance (as with SFT label masking):
-    # instances 0 and 1 (DP rank 0) have 7 and 6 loss tokens, 2 and 3 (DP rank 1) have 1 and 2.
+    # instances 0, 1, 2, 3 have 7, 6, 1 and 2 loss tokens.
     labels[1, :1] = IGNORE_INDEX
     labels[2, :6] = IGNORE_INDEX
     labels[3, :5] = IGNORE_INDEX
+    if zero_loss_tokens_on_last_instance:
+        # With 4 DP ranks, the last rank then has no loss tokens at all.
+        labels[3, :] = IGNORE_INDEX
     return {"input_ids": input_ids, "labels": labels}
 
 
@@ -70,7 +73,12 @@ def _full_grads(model: torch.nn.Module) -> Dict[str, torch.Tensor]:
     return grads
 
 
-def _run_global_token_loss_normalization(dp_type: DataParallelType, instances_per_microbatch: int):
+def _run_global_token_loss_normalization(
+    dp_type: DataParallelType,
+    instances_per_microbatch: int,
+    zero_loss_tokens_on_last_instance: bool = False,
+    shard_degree: Optional[int] = None,
+):
     dp_ws = dist.get_world_size()
     rank = dist.get_rank()
     device = torch.device("cpu")
@@ -79,7 +87,7 @@ def _run_global_token_loss_normalization(dp_type: DataParallelType, instances_pe
         rank_microbatch_size=instances_per_microbatch * SEQ_LEN,
         max_sequence_length=SEQ_LEN,
         optim=AdamWConfig(),
-        dp_config=TransformerDataParallelConfig(name=dp_type),
+        dp_config=TransformerDataParallelConfig(name=dp_type, shard_degree=shard_degree),
         label_ignore_index=IGNORE_INDEX,
     ).build(_model_config().build(init_device="cpu"), device=device)
     module._trainer = _StubTrainer()  # type: ignore[assignment]
@@ -92,7 +100,7 @@ def _run_global_token_loss_normalization(dp_type: DataParallelType, instances_pe
     }
     ref_model = _model_config().build(init_device="cpu")
     ref_model.load_state_dict(state_dict)
-    global_batch = _global_batch()
+    global_batch = _global_batch(zero_loss_tokens_on_last_instance)
     ref_logits = ref_model(global_batch["input_ids"])
     assert isinstance(ref_logits, torch.Tensor)
     ref_loss = F.cross_entropy(
@@ -132,4 +140,28 @@ def test_train_batch_normalizes_loss_by_global_token_count(
         backend="gloo",
         start_method="spawn",
         func_args=(dp_type, instances_per_microbatch),
+    )
+
+
+@pytest.mark.parametrize(
+    "dp_type, shard_degree",
+    [
+        pytest.param(DataParallelType.fsdp, None, id="fsdp"),
+        pytest.param(DataParallelType.ddp, None, id="ddp"),
+        pytest.param(DataParallelType.hsdp, 2, id="hsdp-2x2"),
+    ],
+)
+@pytest.mark.parametrize(
+    "zero_loss_tokens_on_last_instance",
+    [pytest.param(False, id="uneven"), pytest.param(True, id="rank-with-no-loss-tokens")],
+)
+def test_train_batch_normalizes_loss_by_global_token_count_4_ranks(
+    dp_type: DataParallelType, shard_degree: Optional[int], zero_loss_tokens_on_last_instance: bool
+):
+    run_distributed_test(
+        _run_global_token_loss_normalization,
+        world_size=4,
+        backend="gloo",
+        start_method="spawn",
+        func_args=(dp_type, 1, zero_loss_tokens_on_last_instance, shard_degree),
     )
