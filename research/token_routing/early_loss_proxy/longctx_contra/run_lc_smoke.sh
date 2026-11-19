@@ -32,11 +32,31 @@ while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLA
          --base-checkpoint "$BASE" --data "$ROOT/shards/$DATA" --work-dir "$LOC/work_$NAME" --save-folder "$SAVE"
          --seq-len "$SEQLEN" --epochs 1 --lr "$LR" --global-batch "$GB" --micro-batch-instances 1 --seed 0
          --no-compile --no-wandb --no-final-checkpoint --max-steps "$STEPS")
-  if [ "$MODE" = probe ]; then
+  # --probe-* words in FLAGS go to dense_probe (before the --), the rest to the trainer
+  PFL=(); TFL=(); set -f; W=($FLAGS); set +f; i=0
+  while [ $i -lt ${#W[@]} ]; do
+    if [[ ${W[$i]} == --probe-* ]]; then PFL+=("${W[$i]}" "${W[$((i+1))]}"); i=$((i+2)); else TFL+=("${W[$i]}"); i=$((i+1)); fi
+  done
+  FLAGS="${TFL[*]}"
+  if [ "$MODE" = resume ]; then
+    # resume check: stop at STEPS/2 (an ephemeral checkpoint must exist by then), rerun the same run name / save
+    # folder to STEPS; the second log must show the trainer loading the checkpoint and continuing past it
+    H=$((STEPS / 2))
+    TRAIN1=("${TRAIN[@]}"); TRAIN1[$((${#TRAIN1[@]} - 1))]=$H
+    # shellcheck disable=SC2086
+    "$PY" -m torch.distributed.run --nproc_per_node="$NGPU" --master_port=$((29000 + RANDOM % 1000)) \
+      recipes/train/research_trainer/train_ctc_suite.py "${TRAIN1[@]}" $FLAGS > "$LOC/$NAME.part1.log" 2>&1
+    echo "[resume] part 1 rc=$? (max-steps $H); save folder: $(ls "$SAVE" | tr '\n' ' ')"
+    cp "$LOC/$NAME.part1.log" "$OUT/$NAME.part1.log"
+    # shellcheck disable=SC2086
+    "$PY" -m torch.distributed.run --nproc_per_node="$NGPU" --master_port=$((29000 + RANDOM % 1000)) \
+      recipes/train/research_trainer/train_ctc_suite.py "${TRAIN[@]}" $FLAGS > "$LOC/$NAME.log" 2>&1
+    grep -a -i "checkpoint\|resum\|step=" "$LOC/$NAME.log" | cut -c1-250 | head -20
+  elif [ "$MODE" = probe ]; then
     # shellcheck disable=SC2086
     "$PY" -m torch.distributed.run --nproc_per_node="$NGPU" --master_port=$((29000 + RANDOM % 1000)) \
       research/token_routing/early_loss_proxy/dense_probe.py --probe-steps "$STEPS" --probe-sets "$PSETS" \
-      --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-memtrace 2 -- "${TRAIN[@]}" $FLAGS \
+      --probe-heldout "$HELDOUT" --probe-out "$OUT/$NAME.json" --probe-memtrace 2 "${PFL[@]}" -- "${TRAIN[@]}" $FLAGS \
       > "$LOC/$NAME.log" 2>&1
   else
     # shellcheck disable=SC2086
