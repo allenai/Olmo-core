@@ -52,8 +52,8 @@ def main():
     with open(f"{tmp}/row_info.jsonl", "w") as info:
         for pi, spec in enumerate(a.src):
             pool, _, n = spec.partition(":")
-            n, _, off = n.partition("@")  # POOL:N@OFFSET = rows [OFFSET, OFFSET+N) after the length filters
-            n, off = int(n), int(off or 0)
+            n, _, skip = n.partition("@")  # POOL:N@OFFSET = rows [OFFSET, OFFSET+N) after the length filters
+            n, skip = int(n), int(skip or 0)
             d = f"{a.root}/{pool}"
             meta0 = meta0 or json.load(open(f"{d}/metadata.json"))
             g = json.load(open(f"{d}/gold_fingerprints.json"))
@@ -63,7 +63,7 @@ def main():
             for r in ri:  # row offsets inside each part (rows of a part are concatenated in row order)
                 start[(r["part"], r["row"])] = off.get(r["part"], 0)
                 off[r["part"]] = off.get(r["part"], 0) + r["len"]
-            sel = [r for r in ri if r["task"] == "contradiction" and a.min_len <= r["len"] <= (a.max_len or 1 << 40)][off:off + n]
+            sel = [r for r in ri if r["task"] == "contradiction" and a.min_len <= r["len"] <= (a.max_len or 1 << 40)][skip:skip + n]
             assert len(sel) == n, f"{pool}: only {len(sel)} contradiction rows < {n}"
             ids, msk = [], []
             mm = {}
