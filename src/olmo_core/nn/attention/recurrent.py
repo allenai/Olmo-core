@@ -25,7 +25,7 @@ from olmo_core.nn.attention.ring import (
     UlyssesContextParallelStyle,
 )
 from olmo_core.nn.buffer_cache import BufferCache
-from olmo_core.nn.convolution import CausalConv1d
+from olmo_core.nn.convolution import CausalConv1d, int32_safe_tokens
 from olmo_core.nn.feed_forward import ActivationFunction
 
 if TYPE_CHECKING:
@@ -584,7 +584,33 @@ class GatedDeltaNet(SequenceMixer):
                 cache.recurrent_state if (continue_prefill and cache is not None) else None
             )
             seg = int(getattr(self, "_gdn_segment_tokens", 0))
-            if (seg > 0 and self.training and torch.is_grad_enabled() and cu_doc_lens is None
+            # Long-sequence guard (``enable_int32_safe_long_seq``, default off): fla 0.4.1's
+            # chunk_gated_delta_rule goes wrong from position 2^30 / (H * D) on (measured on A100:
+            # outputs past token 262,144 for Qwen3.5-4B's 32 x 128 value heads, past 524,288 for
+            # 0.8B's 16 x 128, and from token 64 on once seq_len * H * D >= 2^31: a 32-bit offset
+            # overflow). Segments below that bound carrying the recurrent state give the same
+            # result (chunk boundaries are unchanged when the segment is a multiple of 64), in
+            # training and in eval. See research/token_routing/dense_longctx/README.md.
+            safe_seg = 0
+            if getattr(self, "_int32_safe", False) and cu_doc_lens is None:
+                width = max(q.shape[2] * q.shape[3], v.shape[2] * v.shape[3])
+                s_safe = int32_safe_tokens(width, limit=getattr(self, "_int32_safe_limit", 2**30))
+                if q.size(1) > s_safe:
+                    safe_seg = s_safe if seg <= 0 else min(seg, s_safe)
+            if safe_seg > 0:
+                outs, st = [], initial_state
+                Tq = q.size(1)
+                for s0 in range(0, Tq, safe_seg):
+                    sl = slice(s0, min(s0 + safe_seg, Tq))
+                    last = s0 + safe_seg >= Tq
+                    o_s, st = dispatch_chunk_gated_delta_rule(
+                        q=q[:, sl], k=k[:, sl], v=v[:, sl], g=g[:, sl], beta=beta[:, sl],
+                        initial_state=st, output_final_state=(not last) or cache is not None,
+                        use_qk_l2norm_in_kernel=True,
+                    )
+                    outs.append(o_s)
+                o, new_state = torch.cat(outs, dim=1), st
+            elif (seg > 0 and self.training and torch.is_grad_enabled() and cu_doc_lens is None
                     and cache is None and initial_state is None and q.size(1) > seg):
                 # sequence-segmented training forward (--gdn-segment-tokens, 2026-10-25): the kernel saves only
                 # its inputs and rebuilds the per-64-token chunk states h (T/64 x H x K x V) in backward, which
@@ -625,6 +651,23 @@ class GatedDeltaNet(SequenceMixer):
             o = all_to_all_single_hp2cp(o, self._cp_group)
 
         out_gate = self.w_g(x).view(B, T, -1, self.head_v_dim)
+
+        if getattr(self, "_int32_safe", False):
+            # fla's gated RMSNorm indexes rows of head_v_dim with 32-bit offsets (see above).
+            # (Under CP ``o`` is [B, T/CP, H, D] while ``out_gate`` was viewed with the full T;
+            # both are re-viewed on this rank's T_og tokens so the slices line up.)
+            o4 = o.reshape(B, T_og, -1, self.head_v_dim)
+            g4 = out_gate.reshape(B, T_og, -1, self.head_v_dim)
+            s_safe = int32_safe_tokens(o4.shape[2] * o4.shape[3])
+            if T_og > s_safe:
+                normed = torch.cat(
+                    [
+                        self.o_norm(o4[:, s0 : s0 + s_safe], g4[:, s0 : s0 + s_safe])
+                        for s0 in range(0, T_og, s_safe)
+                    ],
+                    dim=1,
+                )
+                return self.w_out(normed.view(B, T_og, -1))
 
         # shape: (batch_size, seq_len, d_model)
         return self.w_out(self.o_norm(o, out_gate).view(B, T_og, -1))
