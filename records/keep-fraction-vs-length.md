@@ -1,14 +1,14 @@
 ---
 title: Does the recipe's best keep fraction fall as context grows? (keep 70%..1.25% at 2k-64k, dense held-out-loss proxy)
 date: 2026-11-17
-updated: 2026-11-18
+updated: 2026-11-19
 experiment: tokdrop_lr
 area: token_routing
 kind: result
-status: current (11-18: + 16k gold-drop ablation / more-data runs; w0 r05to50 3.2x held, not run)
+status: current (11-19: + outlier label validity, label-valid drop and the short-row baseline at 16k; 11-18: 16k gold-drop ablation / more-data runs)
 superseded_by: 
 artifact: 
-summary: No. On single-length pools at 2k-64k scored by the early dense held-out-loss proxy (one epoch, eval_size 144 per length), the best router keep is 20-40% at every length the proxy resolves and does not fall with length (8k 40% tied with 20%; 16k 20-40% tie; 32k 40% beats the 20%/7% recipe at matched FLOPs by 0.01-0.02 CE on both seeds, 70% ties; 64k 20%, 40% +0.015 on both seeds). Low keeps break harder the longer the rows (10%/3.5%: +0.003 CE vs the recipe at 8k, +0.08 at 64k; 2.5% and 1.25% collapse at 32k/64k), so constant fraction fits and a constant kept-token count is rejected; 2k/4k saturate. Gold-aware keep grJ has the biggest mean speedups at 32k/64k (6-8x vs dense full FT) but stalls on outlier at every length, and at 8k never reaches dense's mid-epoch loss on the mean (2 seeds); grJc is outlier-safe at 32k, not at 64k.
+summary: No. On single-length pools at 2k-64k scored by the early dense held-out-loss proxy (one epoch, eval_size 144 per length), the best router keep is 20-40% at every length the proxy resolves and does not fall with length (8k 40% tied with 20%; 16k 20-40% tie; 32k 40% beats the 20%/7% recipe at matched FLOPs by 0.01-0.02 CE on both seeds, 70% ties; 64k 20%, 40% +0.015 on both seeds). Low keeps break harder the longer the rows (10%/3.5%: +0.003 CE vs the recipe at 8k, +0.08 at 64k; 2.5% and 1.25% collapse at 32k/64k), so constant fraction fits and a constant kept-token count is rejected; 2k/4k saturate. Gold-aware keep grJ has the biggest mean speedups at 32k/64k (6-8x vs dense full FT) but stalls on outlier at every length, and at 8k never reaches dense's mid-epoch loss on the mean (2 seeds); grJc is outlier-safe at 32k, not at 64k. 16k follow-up (11-19): random gold drop breaks the outlier label (0% of dropped outlier rows keep a valid answer), so every earlier gold-drop number here (grJ, grJc, the 16k w*/r* arms) is for training on broken outlier labels; dropping whole majority topics keeps the label valid and fixes outlier (-0.030 ± 0.006 mean CE, outlier -0.082 ± 0.013, vs random drop at matched FLOPs, 2 seeds, eval_size 144), but the plain recipe trained on natively shorter rows at the same FLOPs is as good (-0.004 ± 0.005 vs label-valid drop).
 ---
 # Does the recipe's best keep fraction fall as context grows? (keepfrac_len)
 
@@ -68,6 +68,12 @@ keeps break harder the longer the rows.** Constant fraction fits; constant kept-
     +0.038), so its mean advantage is per-step cheapness, and contradiction is its weak task. At 64k `grJc` is 4.10x
     on the mean but contradiction (0.191 vs dft 0.086) and outlier do not reach dft's mid-epoch level: **outlier-
     safe at 32k, not at 64k** (one seed).
+- **Every gold-drop number above uses random distractor drop, which breaks the outlier label** (11-19, section
+  "Outlier label validity and the short-row baseline (16k)"). An outlier row's answer is the uniquely smallest topic
+  (3 passages vs 23 majority topics of >= 4); dropping random passages leaves 0% of rows with a valid answer. So the
+  `grJ` / `grJc` outlier stall and the 16k `w*` / `r*` arms measure training on wrong outlier labels. With a
+  label-valid drop (whole majority topics) outlier is fixed at 16k, and gold drop then matches, but does not beat,
+  the plain recipe trained on natively shorter rows at the same FLOPs.
 
 The proxy understates gains relative to generation evals (recipe 1.9-2.2x on the proxy vs 3.3x on generation evals,
 `records/early-dense-loss-proxy.md`) and cannot resolve final gaps below about 0.03-0.05 CE: use these numbers to
@@ -164,6 +170,13 @@ Per task at matched FLOPs (contradiction / outlier / qdmatch_nq):
 - At 333 PF: 2.4x w15 0.041 / 0.204 / 0.095; recipe 0.067 / 0.207 / 0.106 and 0.061 / 0.211 / 0.089; dft
   0.167 / 0.242 / 0.248.
 
+**Without the router (`gdnr`, 11-19 write-up of Prasann's runs).** Three arms ran gold drop with
+`--st-otr-dense-every 1`, i.e. every training step dense after the drop, so they cut FLOPs only by removing documents
+(sneetches slurm 5204584, 8 x H200, code b379a1dd4; numbers re-read from the JSONs). At matched FLOPs each is far
+behind its router counterpart: `gdnr w5 r05to50` ends at 0.134 at 372 PF and is at 0.203 at 138 PF, against 0.1515 at
+116 PF for `w5 r05to50` with the router; at 59 PF `gdnr w0 r05to20` is at 0.346 against 0.272 for its router version
+(which ends there), and it ends at 0.264 after 171 PF. The router is still worth its cost on the kept documents.
+
 Not run: w0 r05to50 on the 3.2x pool (slurm 5204547). Prasann put it on hold, and it was still held when this was
 written. The skewed `p0.5` arm of 5204565 has no result (that job was cancelled).
 
@@ -188,6 +201,9 @@ than 2% less than that budget). Per-task values use per-task running minima.
 | `w5 r05to50 p3` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.054 | 84 | 0.1703 | 0.108 / 0.263 / 0.140 | 0.1825 | - | - | 5.71 | 1.94 |
 | `w5 r05to50` | kl16k (1x) | sneetches 8 x H200 | 225 | 0.075 | 116 | 0.1515 | 0.076 / 0.269 / 0.110 | 0.1901 | - | - | 5.16 | 1.60 |
 | `w50 r05to50` | kl16k (1x) | Lambda 2 x A100 | 225 | 0.140 | 218 | 0.1257 | 0.055 / 0.210 / 0.113 | 0.2181 | 0.1508 | - | 6.45 | 1.57 |
+| `gdnr w5 r05to50` (no router: dense every step) | kl16k (1x) | sneetches 8 x H200 | 225 | 0.239 | 372 | 0.1344 | 0.059 / 0.249 / 0.096 | 0.2772 | 0.2026 | 0.1404 | 2.65 | 0.73 |
+| `gdnr w5 r05to20` (no router) | kl16k (1x) | sneetches 8 x H200 | 225 | 0.141 | 220 | 0.1685 | 0.104 / 0.266 / 0.136 | 0.3048 | 0.2239 | - | 2.20 | 0.75 |
+| `gdnr w0 r05to20` (no router) | kl16k (1x) | sneetches 8 x H200 | 225 | 0.110 | 171 | 0.2636 | 0.162 / 0.437 / 0.192 | 0.3463 | 0.2780 | - | 1.05 | 0.36 |
 | `w0 r05to20` ⚠ CANCELLED at step 600 of 1,350 (partial, LR not annealed) | kl16k_x6 (6x) | sneetches 8 x H200 | 600 | 0.038 | 157 | 0.2200 | 0.135 / 0.364 / 0.161 | 0.2879 | 0.2211 | - | 2.20 | 0.57 |
 | `w15 r05to50` | kl16k_x2p4 (2.4x) | sneetches 8 x H200 | 540 | 0.089 | 334 | 0.1143 | 0.041 / 0.205 / 0.096 | 0.2074 | 0.1666 | 0.1141 | 5.73 | 1.31 |
 
@@ -209,6 +225,156 @@ Runs: tag kl16kx, sneetches 8 x H200, `code_e5c1dfe30` (the code of the 1x ablat
 schedule runs over each run's own length. Probes at 10, 25, 50, 75 and then every 75 steps. Results:
 `sneetches:/data/prasann/early_loss_proxy/results/kl16kx/`. Scored by `keepfrac_len/ablation_16k.py` into
 `keepfrac_len/ablation_16k.json`.
+
+## Outlier label validity and the short-row baseline (16k, 11-18 / 11-19)
+
+Question (Prasann): is gold drop weak on outlier because dropping distractors invalidates the label, and once the label
+is kept valid, is gold drop better than simply training on shorter rows? Proxy as everywhere in this record: dense
+held-out answer CE, ⚠ eval_size 144 (48 per task) unless marked, one epoch, 16 rows per step.
+
+**Verdict.**
+- **Random distractor drop breaks every outlier label.** A label-valid drop (keep whole majority topics) fixes outlier:
+  against random drop at the same rows, steps and FLOPs it is -0.030 ± 0.006 lower in mean CE and -0.082 ± 0.013 on
+  outlier (two seeds, paired, final probe at ~333 PF).
+- **But at matched FLOPs, gold drop is about equal to the plain recipe trained on natively shorter rows** (arm E):
+  E - A = -0.004 ± 0.005 (two seeds). Label-valid drop and the short-row mix both reach dense full FT's final CE at
+  about 8-9x fewer FLOPs and the recipe's at 1.8-1.9x fewer; random drop 5.2x / 1.15x.
+- **0% whole rows and keep 2-50% do not help** (one seed each): at 300 PF, 0% whole 0.104 and keep 2-50% 0.099 vs
+  0.095 for the label-valid 5%-whole / 5-50% arm.
+
+### Why random drop breaks the outlier label
+
+A 16k outlier row (`ctc/src/ctc/tasks/outlier/sources/wiki100w.py`, mode "mixed") has 96 passages: 3 outlier passages
+from one Wikipedia article plus 93 passages in 23 majority topics of >= 4 passages each. The outlier is defined only as
+the uniquely smallest topic group (3 vs >= 4). The drop keeps every gold passage and a random share of the others, so
+the majority topics shrink and the answer stops being the smallest group. Monte Carlo over the 1,188 mapped kl16k
+outlier rows (`keepfrac_len/sim_outlier_label.py`, 20 draws per row):
+
+| keep share r of distractors | label still valid (outlier uniquely smallest) | outlier topic strictly the LARGEST | largest incl. ties |
+|---|---|---|---|
+| U(0.05, 0.50) (the `w* r05to50` arms) | 0.0% | 33.8% | 76.4% |
+| U(0.05, 0.20) | 0.0% | 82.7% | 99.1% |
+| U(0.25, 0.75) | 0.0% | 2.1% | 30.6% |
+
+Fix: `--st-gdd-groups <sidecar>` (`src/olmo_core/nn/gold_doc_drop.py`, branch `claude/elp-lambda-kl`, commits
+38e4a1346 and 13bf548f4; `--st-gdd-keep-power` is b379a1dd4). A dropped outlier row keeps all gold passages plus a
+share r ~ U(lo, hi) of the majority TOPICS (at least 2) with all their passages, so every kept majority topic still has
+>= 4 passages. Sidecar = `{row fingerprint: [topic id per document]}`; a `null` entry passes the row through whole;
+rows absent from the sidecar (contradiction, qdmatch_nq) get the ordinary drop unchanged; no sidecar = old behaviour.
+The topic of each passage comes from matching its text to the article titles in `outlier.seed.jsonl.gz`
+(`outlier_topic_map_text.py` for kl16k from the generator jsonl; `outlier_topic_keys.py` + `outlier_topic_map.py` from
+the decoded pool rows for kl16k_x3p2, whose generator jsonl no longer exists). Mapped: 1,188 / 1,200 kl16k rows with
+the first map (its 12 rejects are all valid under the second); 3,835 / 3,840 kl16k_x3p2 rows (3,436 / 3,440 in the
+slice used below), and the two maps agree on 1,187 / 1,188 rows. Unmapped rows pass through whole.
+
+### Outlier-only training (does the label fix help outlier alone?)
+
+Pool `kl16k_outlier` (kl16k's 1,200 outlier rows), one epoch = 75 steps, 2 x H200 on sneetches, recipe router on
+every arm, seed 0. ⚠ eval_size 48 only (the kl16k outlier held-out rows; SE about ±0.008-0.018 at step 75).
+"random" = old per-passage drop, "topic" = label-valid drop.
+
+| arm | FLOPs/step vs dense | epoch PF | outlier CE at step 0 / 10 / 25 / 50 / 75 | slurm |
+|---|---|---|---|---|
+| recipe (k20) | 0.208 | 104.6 | 1.233 / 0.271 / 0.274 / 0.243 / 0.229 | 5207278 |
+| random, 15% whole, keep 5-50% | 0.086 | 43.3 | 1.233 / 0.298 / 0.262 / 0.250 / 0.240 | 5207279 |
+| random, 5% whole, keep 5-50% | 0.074 | 36.9 | 1.233 / 0.281 / 0.283 / 0.243 / 0.243 | 5207424 |
+| random, 0% whole, keep 5-50% | 0.065 | 32.4 | 1.233 / 0.445 / 0.336 / 0.232 / 0.238 | 5207280 |
+| topic, 15% whole, keep 5-50% | 0.087 | 43.4 | 1.233 / 0.276 / 0.237 / 0.232 / 0.227 | 5207403 |
+| topic, 5% whole, keep 5-50% | 0.073 | 36.7 | 1.233 / 0.306 / 0.272 / 0.256 / 0.235 | 5207411 |
+| topic, 5% whole, keep 2-50% | 0.071 | 35.6 | 1.233 / 0.271 / 0.247 / 0.258 / 0.223 | 5207412 |
+| topic, 0% whole, keep 5-50% | 0.066 | 33.2 | 1.233 / 0.250 / 0.268 / 0.231 / 0.239 | 5207375 |
+
+Read: with every row's label broken (random, 0% whole) learning starts slower (0.445 vs 0.250 at step 10), but after one
+epoch every arm sits at 0.223-0.243, inside the noise of eval_size 48. Outlier-only training at 16k does not show the
+stall seen at 32k/64k; the difference appears in the three-task, larger-budget runs below.
+
+### Three-task 16k at the recipe's FLOPs: label-valid drop, random drop, and the short-row baseline
+
+Rows: 645 steps x 16 = 10,320 rows, 3,440 per task. Arms A-D train on `kl16k_x3p2_n3440` (the first 3,440 rows per
+task of `kl16k_x3p2`, `slice_prefix_pool.py`), so the LR schedule covers exactly 645 steps; the same rows and order for
+A-D at a given seed. Router 20%/7% on every arm. Code 13bf548f4. 4 x H200 per arm (seed 0 of A and B on sneetches,
+everything else on cubbins). Probes at 0, 25, 50, 100, 150, 225, 300, 375, 450, 525, 600, 645.
+- **A**: label-valid drop on outlier rows + ordinary drop on contradiction / qdmatch_nq, 5% whole, keep 5-50%.
+- **B**: ordinary random drop on all three tasks, same flags (the control).
+- **C**: as A with 0% whole. **D**: as A with keep 2-50%. One seed each; cheaper per step, so they end below 333 PF.
+- **E**: no gold drop: the plain recipe on a LENGTH MIX of native rows with A's FLOPs (below).
+
+**E pool** (`kl16k_lenmixE_172_1138_1200_930`, `build_lenmix_pool.py`): per task 172 rows at 16k (5%, from the x3p2
+slice), 1,138 at 2k, 1,200 at 4k, 930 at 8k (from the single-length pools kl2k / kl4k / kl8k: the same seed-42 generator
+examples at shorter lengths, so E sees the same questions with fewer distractors); 10,320 rows, mean 5,137 tokens per
+row, shuffled within each task part (the loader also shuffles across parts). Mean row length (contradiction / outlier /
+qdmatch_nq): 2k 2,587 / 2,202 / 1,860; 4k 4,149 / 4,311 / 3,817; 8k 8,366 / 8,634 / 7,740; 16k 14,486 / 14,458 /
+15,828. FLOP calibration: a first mix (968 / 1,200 / 1,100 rows at 2k / 4k / 8k, 5,435 tokens per row) measured
+0.549 PF per step, 6% above A, and was cancelled at step 89 (slurm 5208182); the final mix measured 0.521 PF per step
+(A 0.516). 4k is used whole (1,200 rows per task), so the short-row mix is 35 / 37 / 28% (2k / 4k / 8k) rather than
+the 30 / 40 / 30% a uniform 5-50% keep would suggest; no rows were generated. Rows are EOS-padded to 16,384; the
+router trims the right padding to the longest real row of each 2-row micro-batch, so GPU compute pads to that
+length, while the FLOP meter charges each example at its own real length with padding excluded (`--flop-per-example`
+default), the same accounting as the gold-drop arms.
+
+Mean held-out CE (contradiction / outlier / qdmatch_nq at the final probe). Two-seed rows average the two seeds' curves
+probe by probe. Speedups = FLOPs the reference needs to reach the arm's lowest CE / the arm's FLOPs (the reference's
+best when the arm gets below it); "recipe" = the two-seed mean curve of the 1x recipe (0.1234 at 333 PF), dft = dense
+full FT (0.1230 at 1,531 PF). CE at matched PF from the running-minimum curve. ⚠ eval_size 144 (48 per task); the
+paired SE of a final-CE difference is 0.005-0.009.
+
+| arm | seed | slurm | PF/step (dense 16k step = 6.80) | PF total | final CE | final CE contra / outlier / qdmatch | CE @ 138 / 200 / 300 / 333 PF | x vs dft | x vs recipe |
+|---|---|---|---|---|---|---|---|---|---|
+| A label-valid, 5% whole, keep 5-50% | 0 | 5207720 | 0.517 | 333.2 | 0.0885 | 0.042 / 0.138 / 0.086 | 0.140 / 0.122 / 0.094 / 0.0875 | 8.09 | 1.82 |
+| A | 1 | 5207985 | 0.515 | 332.0 | 0.0900 | 0.038 / 0.135 / 0.098 | 0.148 / 0.119 / 0.096 / 0.090 | 8.14 | 1.78 |
+| **A, two-seed mean** | | | | | **0.0892** | 0.040 / 0.136 / 0.092 | 0.144 / 0.120 / 0.095 / 0.089 | **8.1** | **1.78** |
+| B random, 5% whole, keep 5-50% | 0 | 5207674 | 0.513 | 330.8 | 0.1200 | 0.043 / 0.221 / 0.096 | 0.164 / 0.143 / 0.124 / 0.120 | 5.00 | 1.10 |
+| B | 1 | 5207986 | 0.515 | 332.0 | 0.1186 | 0.043 / 0.215 / 0.098 | 0.153 / 0.139 / 0.121 / 0.119 | 5.73 | 1.25 |
+| **B, two-seed mean** | | | | | **0.1193** | 0.043 / 0.218 / 0.097 | 0.158 / 0.142 / 0.122 / 0.119 | **5.2** | **1.15** |
+| E recipe on length mix | 0 | 5208228 | 0.521 | 336.1 | 0.0870 | 0.042 / 0.123 / 0.097 | 0.141 / 0.111 / 0.093 / 0.087 | 9.06 | 1.98 |
+| E | 1 | 5208321 | 0.521 | 335.9 | 0.0827 | 0.046 / 0.098 / 0.104 | 0.139 / 0.120 / 0.095 / 0.084 | 8.05 | 1.76 |
+| **E, two-seed mean** | | | | | **0.0849** | 0.044 / 0.110 / 0.101 | 0.141 / 0.116 / 0.095 / 0.086 | **8.6** | **1.89** |
+| C label-valid, 0% whole, keep 5-50% | 0 | 5208183 | 0.465 | 299.8 | 0.1044 | 0.041 / 0.163 / 0.109 | 0.147 / 0.128 / 0.104 / - | 6.04 | 1.32 |
+| D label-valid, 5% whole, keep 2-50% | 0 | 5208304 | 0.499 | 321.7 | 0.0968 | 0.040 / 0.156 / 0.095 | 0.151 / 0.128 / 0.099 / - | 6.74 | 1.48 |
+| ref: recipe 1x (kl16k, 225 steps), two-seed mean | | | 1.48 | 333.3 | 0.1234 | | 0.176 / 0.148 / 0.127 / 0.123 | 4.5 | 1.00 |
+| ref: `w15 r05to50` random drop on kl16k_x2p4 | 0 | 5204546 | 0.618 | 334 | 0.1143 | 0.041 / 0.205 / 0.096 | 0.167 / 0.134 / 0.117 / 0.114 | 5.73 | 1.25 |
+
+Paired differences at the final probe (mean over the 144 rows; per task over 48):
+
+| comparison | mean | contradiction | outlier | qdmatch_nq |
+|---|---|---|---|---|
+| A - B, seed 0 | -0.032 ± 0.007 | -0.002 ± 0.005 | -0.083 ± 0.018 | -0.010 ± 0.007 |
+| A - B, seed 1 | -0.029 ± 0.007 | -0.005 ± 0.007 | -0.080 ± 0.017 | 0.000 ± 0.008 |
+| A - B, two-seed mean | **-0.030 ± 0.006** | -0.004 ± 0.005 | **-0.082 ± 0.013** | -0.005 ± 0.005 |
+| E - A, two-seed mean | **-0.004 ± 0.005** | +0.004 ± 0.006 | -0.026 ± 0.013 | +0.009 ± 0.007 |
+| E - B, two-seed mean | -0.034 ± 0.007 | +0.001 ± 0.008 | -0.108 ± 0.014 | +0.003 ± 0.008 |
+| D - A, seed 0 (D at 322 PF) | +0.008 ± 0.007 | -0.002 ± 0.010 | +0.018 ± 0.018 | +0.009 ± 0.009 |
+
+What was dropped (`[gold-doc-drop]`, rank 0's cumulative counts over 2,562 rows): A seed 0: 137 whole, 2,423 dropped, 849
+outlier rows grouped, 2 unmapped passed whole, doc-token keep 0.337; A seed 1: 877 grouped, 0 unmapped, keep 0.331; B:
+keep 0.331 / 0.334; C: 0 whole, 2,560 dropped, keep 0.301; D: keep 0.324. Contradiction and qdmatch_nq rows took the
+ordinary drop path in A, C and D (full 0, not-selected 0, as in B).
+
+Read:
+- The label is the outlier problem. Holding everything else fixed (rows, steps, FLOPs, drop rate), keeping the outlier
+  answer valid removes 0.08 CE of outlier loss on both seeds; contradiction and qdmatch_nq move by less than their SE.
+  The earlier "gold drop stalls on outlier" findings (`grJ` at 8k / 32k / 64k, the 16k `w*` arms) are a property of
+  training on wrong answers, not of gold drop itself.
+- Gold drop is not better than shorter data. The recipe trained on a length mix of native rows with the same FLOPs (E)
+  ties label-valid drop on the mean (-0.004 ± 0.005) and is, if anything, ahead on outlier (-0.026 ± 0.013, two SE).
+  What gold drop buys at this budget is what cheaper, shorter rows buy: more rows per FLOP.
+- Dropping more does not help: 0% whole (C) and keep 2-50% (D) trail A at matched FLOPs (at 300 PF 0.104 and 0.099
+  vs 0.095).
+
+Limits: 16k only (the 32k / 64k `grJ` arms were not rerun with a label-valid drop); proxy CE, not generation evals;
+⚠ eval_size 144 (48 per task), and 48 for the outlier-only table; two seeds for A, B, E, one for C and D; E's FLOPs are
+1% above A's (336 vs 333 PF); the topic map is recovered from article titles, not recorded by the generator.
+
+Files: results `results/kl16kol/` (sneetches) and `results/kl16kx/elp-kl16kx-{tpA,gdB,tpC,tpD,E2_lenmix_k20}*` (seed 0
+of A and B on sneetches, the rest on cubbins), all under `/data/prasann/early_loss_proxy/`. Pools on both nodes:
+`shards/kl16k_outlier` (+ `gdd_groups.json`), `shards/kl16k_x3p2_n3440` (+ `gdd_groups.json`),
+`shards/kl16k_lenmixE_172_1138_1200_930`; held-out `heldout_kl16k_outlier.npz` (sneetches). Scripts in
+`keepfrac_len/`: `sim_outlier_label.py`, `outlier_topic_map_text.py`, `outlier_topic_keys.py`, `outlier_topic_map.py`,
+`make_outlier_only_pool.py`, `slice_prefix_pool.py`, `build_lenmix_pool.py`, `outlier_only_summary.py`,
+`curves_lib.py` + `ab_compare.py` (curves, speedups, paired differences), `check_gdd_groups.py` (CPU check of the
+groups path), `launch_outlier_only.sh`, `launch_x3p2n.sh`. Recorded with `ops result add --check` (experiment
+`tokdrop_lr`, metric `heldout_ce_dense_final`, run ids `elp-kl16kol-<arm>-sd0-probe` and `elp-kl16kx-<arm>-sd<seed>-probe`;
+only eval_size warnings).
 
 ## Setup
 
@@ -349,7 +515,7 @@ difference between two arms on the same rows is 0.003-0.006 at the end of the ep
 
 ## Still running
 
-Nothing of mine is running. slurm 5204547 (w0 r05to50 on `kl16k_x3p2`, 720 steps) is on user hold by Prasann and has not
+Nothing is running. Label-validity / short-row runs (11-19) are all finished. slurm 5204547 (w0 r05to50 on `kl16k_x3p2`, 720 steps) is on user hold by Prasann and has not
 run. Re-score from scratch: `bash research/token_routing/early_loss_proxy/keepfrac_len/finalize.sh`, `gold_table.py`,
 `ablation_16k.py --root <dir with kl16k, kl16kabl, kl16kx>`.
 
@@ -379,7 +545,11 @@ run. Re-score from scratch: `bash research/token_routing/early_loss_proxy/keepfr
   (`../fetch_beaker_results.sh kl<L>`); quick reads on mooney `/data/prasann/early_loss_proxy/results/q{32,64}k/`.
 - Pools / held-out: mooney `/data/prasann/early_loss_proxy/shards/kl*`, `heldout_kl{,s}.npz`; weka copies under
   `.../prasanns/early_loss_proxy/` (staged by Beaker `elp-stage-weka-b47e`, 01M7NW1V51Y38BC14Q2KXR6MXX).
+- 16k gold-drop ablation, outlier label validity and the short-row baseline: see those sections (scripts
+  `ablation_16k.py` -> `ablation_16k.json`, now including the three `gdnr` arms; `ab_compare.py`, `curves_lib.py`,
+  `sim_outlier_label.py`, the topic-map and pool builders).
 - Numbers recorded with `ops result add --check` (experiment `tokdrop_lr`, metrics `heldout_ce_dense_final`,
   `flop_x_vs_dft_at_mid_ce`, `flop_x_vs_dft_at_mid_ce_worst_task`; run ids `elp-kl<L>-<arm>-sd<seed>-probe`). `--check` warnings, all investigated: every row has eval_size 48
   / 144 (flagged above); the "deviation vs prior pass" warnings on q32k / q64k rows are two different arms that ran
-  back to back in one slurm job (e.g. 5201920 = 40% then 2.5%), which ops reads as two passes of one training run.
+  back to back in one slurm job (e.g. 5201920 = 40% then 2.5%), which ops reads as two passes of one training run. The
+  same holds for the three `gdnr` arms (one slurm job, 5204584).

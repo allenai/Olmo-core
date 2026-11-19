@@ -587,6 +587,132 @@
   "done": true,
   "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gd-w50-r05to50-sd0.json"
  },
+ "kl16kabl-gdnr-w0-r05to20-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.10999070546776107,
+  "pf": 171.44486612195735,
+  "final_ce": 0.26359982264047077,
+  "final_by_task": {
+   "contradiction": 0.16205067727908803,
+   "outlier": 0.4365615928545594,
+   "qdmatch_nq": 0.1921871977877648
+  },
+  "min_ce": 0.26359982264047077,
+  "ce_at_pf": {
+   "59": 0.3462593885076844,
+   "138": 0.27796179510834107,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.3425910701559158,
+    "outlier": 0.3998263166286051,
+    "qdmatch_nq": 0.2658253005859511
+   },
+   "138": {
+    "contradiction": 0.18559386875134778,
+    "outlier": 0.3998263166286051,
+    "qdmatch_nq": 0.18051743573353937
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 1.054142653869886,
+  "x_vs_rec_at_min": 0.36398901482839424,
+  "level_dft": 0.26359982264047077,
+  "level_rec": 0.26359982264047077,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gdnr-w0-r05to20-sd0.json"
+ },
+ "kl16kabl-gdnr-w5-r05to20-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.14095732395609462,
+  "pf": 219.71319696322277,
+  "final_ce": 0.16845844455140954,
+  "final_by_task": {
+   "contradiction": 0.10382539238586712,
+   "outlier": 0.26581133405367535,
+   "qdmatch_nq": 0.13573860721468614
+  },
+  "min_ce": 0.16845844455140954,
+  "ce_at_pf": {
+   "59": 0.30480370793527367,
+   "138": 0.22391474707810505,
+   "333": null
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.27681015575412266,
+    "outlier": 0.31853207528461636,
+    "qdmatch_nq": 0.2902804698696013
+   },
+   "138": {
+    "contradiction": 0.19343473792655919,
+    "outlier": 0.3086995802198847,
+    "qdmatch_nq": 0.1647440849323175
+   },
+   "333": {
+    "contradiction": null,
+    "outlier": null,
+    "qdmatch_nq": null
+   }
+  },
+  "x_vs_dft_at_min": 2.1998801523416387,
+  "x_vs_rec_at_min": 0.7504875166529034,
+  "level_dft": 0.16845844455140954,
+  "level_rec": 0.16845844455140954,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gdnr-w5-r05to20-sd0.json"
+ },
+ "kl16kabl-gdnr-w5-r05to50-sd0": {
+  "steps": 225,
+  "x_dense_step": 0.23871397853262447,
+  "pf": 372.0885861847785,
+  "final_ce": 0.13439146185474884,
+  "final_by_task": {
+   "contradiction": 0.05877497278076286,
+   "outlier": 0.24871305158982673,
+   "qdmatch_nq": 0.09568636119365692
+  },
+  "min_ce": 0.13439146185474884,
+  "ce_at_pf": {
+   "59": 0.27720494041400173,
+   "138": 0.20262845730360443,
+   "333": 0.14036066392368327
+  },
+  "task_ce_at_pf": {
+   "59": {
+    "contradiction": 0.29713528894180485,
+    "outlier": 0.2745197324280258,
+    "qdmatch_nq": 0.25995979987217466
+   },
+   "138": {
+    "contradiction": 0.1465879951227718,
+    "outlier": 0.2652001317988553,
+    "qdmatch_nq": 0.18273837339249466
+   },
+   "333": {
+    "contradiction": 0.0713457908211505,
+    "outlier": 0.24856424207488695,
+    "qdmatch_nq": 0.09813510563777289
+   }
+  },
+  "x_vs_dft_at_min": 2.653748061954692,
+  "x_vs_rec_at_min": 0.7279876834259565,
+  "level_dft": 0.13439146185474884,
+  "level_rec": 0.13439146185474884,
+  "node": "sneetches",
+  "eval_size": 144,
+  "done": true,
+  "path": "/tmp/claude-3018/keepfrac_len_results/kl16kabl/elp-kl16kabl-gdnr-w5-r05to50-sd0.json"
+ },
  "kl16kx-gd_w0_r05to20_x6-sd0": {
   "steps": 600,
   "x_dense_step": 0.03778682903456594,
