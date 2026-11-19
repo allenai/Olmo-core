@@ -313,6 +313,28 @@
    "x_dense_ft_lower_bound": false
   },
   {
+   "run": "sb-sb-r-x16-b1980-sd0",
+   "arm": "sb-r-x16-b1980",
+   "kind": "drop",
+   "pool": "mtb16kx16",
+   "steps": 2027,
+   "pf": 2025.1915535776282,
+   "ce": 0.08043621054184769,
+   "seeds": 1,
+   "ce_seeds": [
+    0.0804
+   ],
+   "base_pf": 3965.8070279146173,
+   "x_base": 1.95823798539391,
+   "x_base_exact": true,
+   "x_base_lower_bound": false,
+   "x_base_upper_bound": false,
+   "dense_ft_pf": 4086.272844357716,
+   "x_dense_ft": 2.0177216506453717,
+   "x_dense_ft_exact": true,
+   "x_dense_ft_lower_bound": false
+  },
+  {
    "run": "x4-ft-r50to20-x4-sd0",
    "arm": "ft-r50to20-x4",
    "kind": "drop",

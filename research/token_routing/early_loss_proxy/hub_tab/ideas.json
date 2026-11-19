@@ -252,7 +252,7 @@
   "family": "dynamic drop (11-18 rules)",
   "title": "Skip the backward pass on rows already fitted",
   "what": "By 1,980 PF contradiction and outlier rows are at 0.01-0.03 loss while reorder carries most of what is left, so a growing share of the backward FLOPs goes to rows with almost no gradient. Every row still gets the cheap dropped forward; the backward runs only on rows whose training loss is above a running quantile (or sampled in proportion to loss), and the saved FLOPs buy more rows. Unlike the other step-cost cuts, the saving should grow with the budget. Budget-matched at 991 and 1,980 PF on top of the 50% / 20% / 7% token drop.",
-  "status": "running",
-  "result": "Interim at 991 PF, one seed (16k CE on 320 rows; plain token drop 0.100, 2.2x): skipping the backward on the easier half of the rows hurts: quantile rule 0.108 (1.8x), loss-proportional sampling 0.106 (1.9x); keeping only a quarter 0.119 (1.5x). A schedule from all rows to 30% over training is level with the plain arm: 0.097 (2.4x). The agent is running the schedule variant at 1,980 PF, where more rows are easy."
+  "status": "dropped",
+  "result": "Negative (one seed, 16k CE on 320 rows; branch loop/selbp @ 569f3bb6a). On top of the 50% / 20% / 7% token drop, skipping the backward on the easier rows (decided per micro-step of 4 rows, so real compute is saved): at 991 PF keeping the harder half 0.108 (1.8x) or half sampled by loss 0.106 (1.9x), a quarter 0.119 (1.5x), against 0.100 (2.2x) without skipping; a schedule from all rows down to 30% 0.097 (2.4x), level. At 2025 PF on the 16x pool the schedule ends at 0.080 (2.0x) against 0.074 (2.4x) without skipping, so the hoped-for growth with budget does not appear (that run also used 4 GPUs and 8-row groups). The selector behaves as intended (reorder rows kept most, contradiction and outlier least), but the rows it skips still carried useful gradient."
  }
 ]

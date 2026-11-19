@@ -13,6 +13,10 @@
  ],
  "log": [
   {
+   "t": "11-18 23:45",
+   "text": "Selective-backward agent's final report: neutral at best at 991 PF (schedule variant 0.097 against 0.100), worse with fixed keep shares (0.106-0.119), and worse at 2,025 PF (0.080 against 0.074). Closed."
+  },
+  {
    "t": "11-18 21:00",
    "text": "Per-task split A on seed 1: two-seed mean 0.095 (0.093 / 0.097), 2.59x against 2.2x for the uniform arm: a gain of about 0.005, inside the noise. Two agent jobs (a selective-backward run at 1,980 PF and a per-task run) were preempted on Beaker."
   },

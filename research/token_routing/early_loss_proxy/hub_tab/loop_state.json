@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-18 22:36 PT",
+ "updated": "2026-11-18 23:58 PT",
  "status": "RUNNING again since 00:20 on 11-18 (Prasann) under new rules: LoRA and fixed data re-mixes count as the dense baseline, so only dynamic FLOP dropping during training is a method; the reference is dense full fine-tuning; a method counts only at the deepest loss the dense baseline reaches; the search starts from drop settings that track dense per step at a higher step cost and lowers the step cost from there. Dense full fine-tune reference: 16k CE 0.114 / 0.119 on two seeds after one epoch (1,982 PF). Qualifying result so far: the keep ramp (one cut after block 7, keep share 20% to 90% over training, full fine-tune) matches dense on both seeds (0.113 / 0.119) at 0.64x the step cost, 1.57-1.59x fewer FLOPs at the dense final loss. Constant budgets do not reach the dense final loss in one epoch: LoRA with 50% / 20% / 7% over three cuts holds dense LoRA's loss at 0.29x per step and reaches dense full fine-tune's step-350 level at about 3x. Diagnosis: the loss gap of aggressive drops is the missing gradient of dropped tokens, not the truncated context. Headline (finished runs with complete schedules, 16k CE on 320 rows; two seeds at 495, 991 and 1,980 PF, one seed at 3,975 PF): token dropping with LoRA and a 50% / 20% / 7% keep over three cuts needs 2.3x, 2.1x and 2.4x fewer FLOPs than the dense frontier (dense full fine-tune and dense LoRA at every budget up to 7,934 PF) at 495, 991 and 1,980 PF, and 1.9-2.0x at 3,975 PF on the 16x pool; the gain does not shrink with data over an 8-fold range of budgets. That is far from the 10-20x target. Everything tried to go below about 0.3x dense per step lost per FLOP or faded with data: smaller keep shares, an earlier first cut, more stages, keep schedules, gradient compensation, frozen early blocks, mixture-of-depths, sparse backward, and skipping the backward on easy rows. Two additions give small gains at small budgets only: dropping distractor documents on 16k rows (2.7-2.9x at 465-990 PF, level by 1,970 PF) and per-task keep budgets (2.6x on two seeds at 991 PF, about 0.005 better than the uniform arm). In flight: the 1,980 PF runs of the per-task and selective-backward agents.",
  "setup": [
   "Each method trains with its own forward, optimiser and real LR schedule on the same first batches of the pool (16 rows/step, 2 GPUs).",
@@ -13,6 +13,10 @@
   "From 11-18 the held-out set is heldout_v3: 320 rows at 16k (gen16k + rung16k) plus 64 rows at 4k / 8k; the 16k mean is the primary number (eval_size 320, below 500)."
  ],
  "log": [
+  {
+   "t": "11-18 23:45",
+   "text": "Selective-backward agent's final report: neutral at best at 991 PF (schedule variant 0.097 against 0.100), worse with fixed keep shares (0.106-0.119), and worse at 2,025 PF (0.080 against 0.074). Closed."
+  },
   {
    "t": "11-18 21:00",
    "text": "Per-task split A on seed 1: two-seed mean 0.095 (0.093 / 0.097), 2.59x against 2.2x for the uniform arm: a gain of about 0.005, inside the noise. Two agent jobs (a selective-backward run at 1,980 PF and a per-task run) were preempted on Beaker."
@@ -528,8 +532,8 @@
    "family": "dynamic drop (11-18 rules)",
    "title": "Skip the backward pass on rows already fitted",
    "what": "By 1,980 PF contradiction and outlier rows are at 0.01-0.03 loss while reorder carries most of what is left, so a growing share of the backward FLOPs goes to rows with almost no gradient. Every row still gets the cheap dropped forward; the backward runs only on rows whose training loss is above a running quantile (or sampled in proportion to loss), and the saved FLOPs buy more rows. Unlike the other step-cost cuts, the saving should grow with the budget. Budget-matched at 991 and 1,980 PF on top of the 50% / 20% / 7% token drop.",
-   "status": "running",
-   "result": "Interim at 991 PF, one seed (16k CE on 320 rows; plain token drop 0.100, 2.2x): skipping the backward on the easier half of the rows hurts: quantile rule 0.108 (1.8x), loss-proportional sampling 0.106 (1.9x); keeping only a quarter 0.119 (1.5x). A schedule from all rows to 30% over training is level with the plain arm: 0.097 (2.4x). The agent is running the schedule variant at 1,980 PF, where more rows are easy."
+   "status": "dropped",
+   "result": "Negative (one seed, 16k CE on 320 rows; branch loop/selbp @ 569f3bb6a). On top of the 50% / 20% / 7% token drop, skipping the backward on the easier rows (decided per micro-step of 4 rows, so real compute is saved): at 991 PF keeping the harder half 0.108 (1.8x) or half sampled by loss 0.106 (1.9x), a quarter 0.119 (1.5x), against 0.100 (2.2x) without skipping; a schedule from all rows down to 30% 0.097 (2.4x), level. At 2025 PF on the 16x pool the schedule ends at 0.080 (2.0x) against 0.074 (2.4x) without skipping, so the hoped-for growth with budget does not appear (that run also used 4 GPUs and 8-row groups). The selector behaves as intended (reorder rows kept most, contradiction and outlier least), but the rows it skips still carried useful gradient."
   }
  ],
  "best_by_hour": [

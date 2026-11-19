@@ -42,6 +42,8 @@
   LAUNCHED 02:58: x4/ft-c7ramp-x4 (762 steps), x4/dense-x4 (976 steps = dense curve to 3,964 PF), w3/ft-c3ramp, w3/ft-c7ramp10to60, w3/ft-c7ramp-tail10.
   Agent keepsched (adb93081e36fd6262, branch loop/keepsched, Beaker tag ks): piecewise keep schedule for ALL stages; hold-then-ramp shapes at <=0.45x.
   x4 schedule check passed (lr 9.63e-6 at step 100 of 1,525).
+- 23:45 selbp agent FINAL (loop/selbp @ 569f3bb6a): b991 sb-r 0.097 (level), q50 0.108, s50 0.106, q25 0.119; sb-r at 2,025 PF (x16, 4 GPUs) 0.080 vs plain 0.074 -> CLOSED negative.
+  Only the taskbudget agent's 1,980 PF run remains in flight. IDEA QUEUE IS EMPTY: next heartbeat should brainstorm (see "REMAINING IDEAS" lines) or summarise for Prasann.
 - 21:00 tb-A two-seed mean 0.095 (0.093 / 0.097) x2.59 vs uniform x2.2: gain ~0.005 (inside noise). Beaker PREEMPTED two agent jobs (sb 1,980 PF, one tb); agents
   should relaunch; if their reports say "unfinished", relaunch from their branches or drop.
 - 19:30 sb (selective backward) b991: sb-q50 0.108 (1.8x), sb-s50 0.106 (1.9x), sb-q25 0.119 (1.5x) = WORSE; sb-r (1 -> 0.3 schedule) 0.097 (2.4x) = level.
