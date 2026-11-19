@@ -18,9 +18,10 @@ import math
 import os
 import re
 
-PAIRS = {"256k": ("dense256b", "gdd256"), "1m": ("dense1m", "gdd1m")}
+PAIRS = {"256k": ("dense256b", "gdd256"), "1m": ("dense1m", "gdd1m"), "1m-mix": ("dense1m_mix", "gdd1m")}
 RUNS = {"dense256b": "lcA-dense256/dense256b.json", "gdd256": "lcA-gdd256/gdd256.json",
-        "dense1m": "lcA-dense1m/dense1m.json", "gdd1m": "lcA-gdd1m/gdd1m.json"}
+        "dense1m": "lcA-dense1m/dense1m.json", "gdd1m": "lcA-gdd1m/gdd1m.json",
+        "dense1m_mix": "lcA-dense1mmix/dense1m_mix.json"}
 
 
 def step_pf(res, arm):

@@ -15,7 +15,7 @@ import subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPS = "/accounts/projects/berkeleynlp/prasann/bin/ops"
 TRAIN = {"dense256b": "lc-lcA-dense256-bkM7SXW87S", "gdd256": "lc-lcA-gdd256-bk83V6HYW0",
-         "dense1m": "lc-lcA-dense1m-bkV24B68AB", "gdd1m": "lc-lcA-gdd1m-bkTDZEJEEA", "base": "q35-4b-base-markerfix"}
+         "dense1m": "lc-lcA-dense1m-bkV24B68AB", "dense1m_mix": "lc-lcA-dense1mmix-bkD47QXQVS", "gdd1m": "lc-lcA-gdd1m-bkTDZEJEEA", "base": "q35-4b-base-markerfix"}
 W = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/runs_lc"
 
 
@@ -27,7 +27,7 @@ def main():
     ledger = os.path.join(HERE, "record_lc_done.txt")
     done = set(open(ledger).read().split()) if os.path.exists(ledger) else set()
     for f in sorted(glob.glob(os.path.join(a.res, "lcS-*", "score*-s*.json"))):
-        m = re.search(r"/(score1m8|score1m|score)-([a-z0-9]+)-s(\d+)\.json$", f)
+        m = re.search(r"/(score1m8|score1m|score)-([a-z0-9_]+)-s(\d+)\.json$", f)
         if not m or m.group(1) == "score1m" and m.group(2) == "base":
             continue
         kind, arm, step = m.group(1), m.group(2), int(m.group(3))
