@@ -42,6 +42,8 @@ def main():
     ap.add_argument("--minutes", type=int, required=True, help="expected job minutes (minRuntime = min(4h, 1.3x))")
     ap.add_argument("--cluster", default="ai2/jupiter-cirrascale-2,ai2/ceres-cirrascale")
     ap.add_argument("--presync", default="", help="space-separated paths under early_loss_proxy/ to copy S3 -> weka first")
+    ap.add_argument("--save-root", default="", help="real arms: weka save root (no wipe; resumes; keeps stepN checkpoints)")
+    ap.add_argument("--keep-ckpt", action="store_true", help="drop --no-final-checkpoint and keep every --save-interval checkpoint")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     lines = []
@@ -70,6 +72,10 @@ def main():
     cfg.step_soft_timeout = None
     cfg.env_vars += [BeakerEnvVar(name="TAG", value=a.tag),
                      BeakerEnvVar(name="SPEC_B64", value=base64.b64encode(spec.encode()).decode())]
+    if a.save_root:
+        cfg.env_vars.append(BeakerEnvVar(name="SAVE_ROOT", value=a.save_root))
+    if a.keep_ckpt:
+        cfg.env_vars.append(BeakerEnvVar(name="KEEPCKPT", value="1"))
     if a.presync:
         cfg.env_vars.append(BeakerEnvVar(name="PRESYNC", value=a.presync))
     print(f"[lc-smoke] {len(lines)} runs: {', '.join(l.split(chr(9))[0] for l in lines)}; commit {head[:9]} ({branch}) "

@@ -28,13 +28,20 @@ done
 echo "$SPEC_B64" | base64 -d > "$OUT/spec_${JID}.tsv"
 while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLAGS; do
   [ -z "$NAME" ] && continue
-  SAVE=$LOC/runs/$NAME; rm -rf "$SAVE"; mkdir -p "$SAVE"
+  if [ -n "${SAVE_ROOT:-}" ]; then
+    # real arms: save folder on weka, never wiped, so a preempted / restarted job auto-resumes from the newest
+    # (ephemeral) checkpoint and the permanent stepN checkpoints stay for checkpoint-then-score
+    SAVE=$SAVE_ROOT/$NAME; mkdir -p "$SAVE"
+  else
+    SAVE=$LOC/runs/$NAME; rm -rf "$SAVE"; mkdir -p "$SAVE"
+  fi
   echo "=== $NAME mode=$MODE ngpu=$NGPU variant=$VARIANT data=$DATA seq=$SEQLEN gb=$GB steps=$STEPS flags=$FLAGS start $(date +%T)"
   T0=$(date +%s)
+  if [ -n "${KEEPCKPT:-}" ]; then CKPTFL="--max-checkpoints 0"; else CKPTFL="--no-final-checkpoint"; fi
   TRAIN=(--task mt4 --variant "$VARIANT" --model-family qwen3_5 --model-scale 4b --run-name "$NAME"
          --base-checkpoint "$BASE" --data "$ROOT/shards/$DATA" --work-dir "$LOC/work_$NAME" --save-folder "$SAVE"
          --seq-len "$SEQLEN" --epochs 1 --lr "$LR" --global-batch "$GB" --micro-batch-instances 1 --seed 0
-         --no-compile --no-wandb --no-final-checkpoint --max-steps "$STEPS")
+         --no-compile --no-wandb $CKPTFL --max-steps "$STEPS")
   # --probe-* words in FLAGS go to dense_probe (before the --), the rest to the trainer
   PFL=(); TFL=(); set -f; W=($FLAGS); set +f; i=0
   while [ $i -lt ${#W[@]} ]; do
@@ -74,7 +81,8 @@ while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLA
   [ $RC -ne 0 ] && tail -n 40 "$LOC/$NAME.log"
   echo "{\"name\": \"$NAME\", \"rc\": $RC, \"wall_s\": $((T1 - T0)), \"host\": \"$(hostname)\"}" > "$OUT/$NAME.rc.json"
   for f in "$OUT/$NAME".*; do sync_out "$f" "$S3/results/$TAG"; done
-  rm -rf "$SAVE" "$LOC/work_$NAME"
+  [ -z "${SAVE_ROOT:-}" ] && rm -rf "$SAVE"
+  rm -rf "$LOC/work_$NAME"
   echo "=== $NAME end $(date +%T) rc=$RC wall $((T1 - T0))s"
 done < "$OUT/spec_${JID}.tsv"
 rm -rf "$LOC"
