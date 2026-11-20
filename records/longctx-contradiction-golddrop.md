@@ -7,7 +7,7 @@ area: token_routing
 kind: result
 status: current
 superseded_by: 
-artifact: 
+artifact: https://claude.ai/artifact/5TcD7ho7SMhChK7jeJgi6M
 summary: At matched training FLOPs the recipe + gold-document drop beats dense LoRA on held-out contradiction CE at both lengths. 256k (15.2k PF, eval_size 160): 0.029 vs 0.092 at gold drop's final 14.4k PF (-0.063 +- 0.011 paired), dense's final CE reached at ~7.6k PF (2.0x; 2.2-4.1x at intermediate levels). 1M (13.6k PF): 1M-held-out CE 0.239 vs 1.393 for dense LoRA on 84 1M rows (>=5.2x FLOPs-to-match) and vs 1.397 for dense LoRA on the same data mix as gold drop. Dense LoRA on 1M rows alone gets worse at 256k/16k. eval_size 64-160 per set (below 500).
 ---
 # Gold-document drop vs dense LoRA on contradiction at 256k and 1M
