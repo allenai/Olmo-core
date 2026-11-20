@@ -768,3 +768,73 @@ def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
     epoch0, epoch0_again, epoch1 = captured
     assert epoch0 == epoch0_again  # a given epoch is deterministic ...
     assert epoch0 != epoch1  # ... and the same annotations get a different style mix in epoch 1
+
+
+def test_points_v1_getitem_follows_the_epoch_set_by_the_loader(monkeypatch):
+    """The non-continuous loader calls ``set_epoch`` and then ``dataset[index]``. A source whose
+    ``__getitem__`` answers epoch 0 forever repeats the same augmentation each epoch."""
+    from olmo_core.data.multimodal import pixmo_points
+    from olmo_core.data.multimodal.pixmo_points import (
+        PixMoPointsDataset,
+        PixMoPointsDatasetConfig,
+    )
+
+    captured: list = []
+    monkeypatch.setattr(pixmo_points, "_open_image", lambda image: image)
+
+    def capture(tokenizer, image, branches, **kwargs):
+        captured.append(branches(kwargs["rng"]) if callable(branches) else branches)
+        return {}
+
+    monkeypatch.setattr(pixmo_points, "_build_example", capture)
+    n = 24
+    row = {
+        "label": [f"thing{i}" for i in range(n)],
+        "points": [[[10.0, 20.0]]] * n,
+        "image": object(),
+    }
+    ds = _bare_dataset(PixMoPointsDataset, PixMoPointsDatasetConfig(counting="both", seed=7), row)
+
+    ds[0]  # epoch 0
+    ds.set_epoch(1)
+    ds[0]
+    ds.get(0, 1)
+    epoch0, via_getitem, via_get = captured
+    assert via_getitem == via_get  # __getitem__ is get() at the epoch the loader set
+    assert via_getitem != epoch0  # and it is not epoch 0's draw
+
+
+def test_every_source_with_an_epoch_aware_get_can_be_advanced_by_the_loader():
+    """The default loader advances sources through ``set_epoch``; only the continuous-stream one
+    calls ``get(index, epoch)``. A source that takes an epoch in ``get`` but has no ``set_epoch``
+    would repeat its augmentation every epoch in the default loader."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import olmo_core.data.multimodal as package
+
+    # Built only by the alignment and mid-training recipes, which always use
+    # ``continuous_stream=True``: that loader calls ``get(index, epoch)`` itself, so these sources
+    # never need ``set_epoch``.
+    continuous_stream_only = {"pretraining_replay", "vision_alignment_perception"}
+    missing = []
+    seen = 0
+    for info in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+        if info.name.rsplit(".", 1)[-1] in continuous_stream_only:
+            continue
+        try:
+            module = importlib.import_module(info.name)
+        except Exception:  # noqa: BLE001 - optional dependencies of unrelated modules
+            continue
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__ != module.__name__ or not hasattr(cls, "__getitem__"):
+                continue
+            get = cls.__dict__.get("get")
+            if get is None or "epoch" not in inspect.signature(get).parameters:
+                continue
+            seen += 1
+            if not callable(getattr(cls, "set_epoch", None)):
+                missing.append(f"{cls.__module__.rsplit('.', 1)[-1]}.{cls.__name__}")
+    assert seen >= 4, "the scan should find the stage-1 sources"
+    assert not missing, f"get(index, epoch) without set_epoch: {sorted(missing)}"
