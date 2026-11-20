@@ -241,6 +241,9 @@ held-out answer CE, ⚠ eval_size 144 (48 per task) unless marked, one epoch, 16
   about 8-9x fewer FLOPs and the recipe's at 1.8-1.9x fewer; random drop 5.2x / 1.15x.
 - **0% whole rows and keep 2-50% do not help** (one seed each): at 300 PF, 0% whole 0.104 and keep 2-50% 0.099 vs
   0.095 for the label-valid 5%-whole / 5-50% arm.
+- **Dense training on the same short-row mix is far worse at matched FLOPs** (11-19, two seeds): with its LR schedule
+  sized to ~333 PF, dense full FT ends at 0.145 and dense LoRA at 0.140, against 0.086 for the recipe on the same rows
+  (E) and 0.089 for label-valid drop (A). The short rows help the routed recipe; dense spends ~4x the FLOPs per row.
 
 ### Why random drop breaks the outlier label
 
@@ -361,9 +364,68 @@ Read:
 - Dropping more does not help: 0% whole (C) and keep 2-50% (D) trail A at matched FLOPs (at 300 PF 0.104 and 0.099
   vs 0.095).
 
+### Dense on the short-row mix (F, G) and budget-matched dense (Fb, Gb), 11-19
+
+Prasann: does DENSE training on arm E's short-row pool compare with gold drop? Same pool as E
+(`kl16k_lenmixE_172_1138_1200_930`), same held-out set and probes, same row order per seed (loader seed 34521 + seed),
+code 13bf548f4, mooney 4 x H200 (G seed 0 first ran on 2 GPUs, hit the slurm time limit at step 599, slurm 5233749,
+and was rerun as 5233902; the partial run is not used).
+- **F** (`F_dft`): dense full FT with the kl16k dft settings (lr 5e-6), one epoch = 645 steps, 2.22 PF per step,
+  1,429 PF in total.
+- **G** (`G_ref`): dense LoRA r64 with the kl16k ref settings (lr 1e-5), 645 steps, 1.68 PF per step, 1,083 PF.
+- At 333 PF F and G are only ~23% / ~31% through their LR schedules, so their matched-FLOP reads are mid-epoch reads
+  (the same convention as dft-on-16k's 0.224 at 333 PF). For a dense run that is *budgeted* to 333 PF:
+- **Fb** (`Fb_dft`): F's settings on the first 816 rows per task of the same pool (`slice_prefix_pool.py`, pool `_n816`,
+  2,448 rows = 153 steps, about 4% 16k rows and 5.0k tokens per row like E), so the full LR schedule ends at 332 PF.
+- **Gb** (`Gb_ref`): G's settings on the first 1,072 rows per task (`_n1072`, 201 steps), ending at 334 PF.
+
+⚠ eval_size 144 (48 per task). "CE @ 333 PF" = running-minimum curve as in the table above (Fb at 332 PF);
+per-task values and paired differences use per-row CE interpolated between the two probes bracketing 333 PF.
+
+| arm | seeds (slurm) | PF/step | PF total | CE @ 333 PF, two-seed mean | contra / outlier / qdmatch @ 333 PF | final CE (two-seed) | x vs dft-on-16k |
+|---|---|---|---|---|---|---|---|
+| F dense full FT, full epoch | 5233748, 5233840 | 2.22 | 1,429 | 0.173 (mid-schedule) | 0.129 / 0.226 / 0.166 | 0.0782 at 1,429 PF (0.0705 / 0.0859) | 1.72 (1.79 / 1.67) |
+| G dense LoRA, full epoch | 5233902, 5233843 | 1.68 | 1,083 | 0.158 (mid-schedule; 0.167 at the probe-200 bump) | 0.099 / 0.251 / 0.151 | 0.0876 at 1,083 PF (0.0905 / 0.0846) | 2.43 (2.43 / 2.41) |
+| **Fb dense full FT, budget 332 PF** | 5233925, 5233926 | 2.17 | 332 | **0.145** (0.1425 / 0.1467) | 0.081 / 0.222 / 0.131 | = left | 2.59 (2.67 / 2.00) |
+| **Gb dense LoRA, budget 334 PF** | 5233927, 5233928 | 1.66 | 334 | **0.140** (0.1384 / 0.1425) | 0.072 / 0.236 / 0.114 | = left | 2.73 (2.80 / 3.19) |
+| E recipe on the same mix | 5208228, 5208321 | 0.521 | 336 | 0.086 | 0.044 / 0.112 / 0.101 | 0.0849 | 8.6 |
+| A label-valid drop (x3p2 slice) | 5207720, 5207985 | 0.516 | 333 | 0.089 | 0.040 / 0.136 / 0.092 | 0.0892 | 8.1 |
+| B random drop (x3p2 slice) | 5207674, 5207986 | 0.514 | 331 | 0.119 | 0.043 / 0.218 / 0.097 | 0.1193 | 5.2 |
+| ref: recipe on 16k rows (1x) | Beaker | 1.48 | 333 | 0.123 | | 0.1234 | 4.5 |
+| ref: dft on 16k rows (1x) | Beaker | 6.80 | 1,531 | 0.224 (mid-schedule) | | 0.1230 | 1.00 |
+
+"x vs dft-on-16k" = FLOPs dft-on-16k needs to reach the arm's lowest CE (or its own best, 0.123, when the arm gets
+below it), divided by the arm's FLOPs to get there; for the two-seed rows, on the seed-mean curve.
+
+Paired differences at 333 PF (two-seed means of per-row CE):
+
+| comparison | mean | contradiction | outlier | qdmatch_nq |
+|---|---|---|---|---|
+| Fb - E (budget-matched dense full FT vs recipe, same rows) | +0.059 ± 0.007 | +0.037 ± 0.009 | +0.111 ± 0.014 | +0.030 ± 0.011 |
+| Gb - E (budget-matched dense LoRA vs recipe) | +0.055 ± 0.009 | +0.028 ± 0.009 | +0.124 ± 0.017 | +0.013 ± 0.013 |
+| Fb - A (vs label-valid drop) | +0.055 ± 0.007 | +0.041 ± 0.007 | +0.086 ± 0.017 | +0.039 ± 0.009 |
+| Gb - A | +0.051 ± 0.009 | +0.033 ± 0.009 | +0.099 ± 0.021 | +0.022 ± 0.010 |
+| F - E (mid-schedule read) | +0.088 ± 0.008 | +0.085 ± 0.010 | +0.115 ± 0.015 | +0.065 ± 0.013 |
+| G - E (mid-schedule read) | +0.082 ± 0.008 | +0.055 ± 0.012 | +0.140 ± 0.014 | +0.050 ± 0.013 |
+
+Per seed, Fb - E is +0.055 ± 0.008 / +0.063 ± 0.010 and Gb - E +0.052 ± 0.009 / +0.059 ± 0.010.
+
+Read:
+- At the recipe's budget (~333 PF) dense training on the short-row mix is 0.05-0.06 CE worse than the recipe on the
+  same rows and than label-valid drop, on every task and both seeds, even with its schedule sized to that budget. The
+  short-row mix is not a dense-friendly shortcut: E's gain comes from the router plus short rows together.
+- Budget-matched dense on short rows (0.140-0.145) still beats dense on 16k rows at the same FLOPs by a wide margin
+  (dft-on-16k needs 860-910 PF to reach those levels: 2.6-2.7x). Dense full FT on the full mix reaches random drop's
+  0.119 only at about 930 PF (2.8x B's FLOPs). So short native rows do help dense too, just much less than they help
+  the recipe.
+- With 4x the FLOPs (full epoch), dense full FT on the mix ends lowest of all arms (0.078 at 1,429 PF) and reaches
+  dft-on-16k's final CE 1.7x sooner; dense LoRA reaches it 2.4x sooner and ends at 0.088 at 1,083 PF.
+
 Limits: 16k only (the 32k / 64k `grJ` arms were not rerun with a label-valid drop); proxy CE, not generation evals;
 ⚠ eval_size 144 (48 per task), and 48 for the outlier-only table; two seeds for A, B, E, one for C and D; E's FLOPs are
-1% above A's (336 vs 333 PF); the topic map is recovered from article titles, not recorded by the generator.
+1% above A's (336 vs 333 PF); the topic map is recovered from article titles, not recorded by the generator; the
+dense F / G matched-FLOP reads are mid-schedule (use Fb / Gb for a budget-matched dense number); Fb / Gb train on a
+prefix of E's pool (2,448 / 3,216 rows), not on E's full 10,320 rows.
 
 Files: results `results/kl16kol/` (sneetches) and `results/kl16kx/elp-kl16kx-{tpA,gdB,tpC,tpD,E2_lenmix_k20}*` (seed 0
 of A and B on sneetches, the rest on cubbins), all under `/data/prasann/early_loss_proxy/`. Pools on both nodes:
@@ -371,10 +433,13 @@ of A and B on sneetches, the rest on cubbins), all under `/data/prasann/early_lo
 `shards/kl16k_lenmixE_172_1138_1200_930`; held-out `heldout_kl16k_outlier.npz` (sneetches). Scripts in
 `keepfrac_len/`: `sim_outlier_label.py`, `outlier_topic_map_text.py`, `outlier_topic_keys.py`, `outlier_topic_map.py`,
 `make_outlier_only_pool.py`, `slice_prefix_pool.py`, `build_lenmix_pool.py`, `outlier_only_summary.py`,
-`curves_lib.py` + `ab_compare.py` (curves, speedups, paired differences), `check_gdd_groups.py` (CPU check of the
-groups path), `launch_outlier_only.sh`, `launch_x3p2n.sh`. Recorded with `ops result add --check` (experiment
+`curves_lib.py` + `ab_compare.py` (curves, speedups, paired differences, `--pairpf` for matched-FLOP pairs),
+`check_gdd_groups.py` (CPU check of the groups path), `launch_outlier_only.sh`, `launch_x3p2n.sh`,
+`launch_dense_lenmix.sh` (F / G / Fb / Gb). Dense-arm results: mooney `/data/prasann/early_loss_proxy/results/kl16kx/
+elp-kl16kx-{F_dft,G_ref,Fb_dft,Gb_ref}-sd{0,1}.json`; prefix pools on mooney `shards/kl16k_lenmixE_172_1138_1200_930_n816`
+and `_n1072`. Recorded with `ops result add --check` (experiment
 `tokdrop_lr`, metric `heldout_ce_dense_final`, run ids `elp-kl16kol-<arm>-sd0-probe` and `elp-kl16kx-<arm>-sd<seed>-probe`;
-only eval_size warnings).
+only eval_size warnings; dense arms add `heldout_ce_dense_at_333pf`).
 
 ## Setup
 

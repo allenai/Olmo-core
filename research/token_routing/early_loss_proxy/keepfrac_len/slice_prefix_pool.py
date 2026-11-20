@@ -1,9 +1,12 @@
 """First N rows (row order) of each part of kl16k_x3p2 -> kl16k_x3p2_n<N> (N=3440: 645 steps x 16 rows, so the LR schedule
-covers exactly the run). Sidecars filtered. Run on sneetches."""
+covers exactly the run). Sidecars filtered. Run on the node holding the pool.
+    $PY slice_prefix_pool.py [SRC] [N]   # defaults: /data/prasann/early_loss_proxy/shards/kl16k_x3p2 3440
+"""
 # first N rows (row order) of each part of kl16k_x3p2 -> kl16k_x3p2_n<N>; same sidecars, filtered
-import json, os, collections, numpy as np
-N = 3440
-src = "/data/prasann/early_loss_proxy/shards/kl16k_x3p2"; out = f"{src}_n{N}"; tmp = out + "_tmp"
+import json, os, sys, collections, numpy as np
+src = sys.argv[1] if len(sys.argv) > 1 else "/data/prasann/early_loss_proxy/shards/kl16k_x3p2"
+N = int(sys.argv[2]) if len(sys.argv) > 2 else 3440
+out = f"{src}_n{N}"; tmp = out + "_tmp"
 os.makedirs(tmp, exist_ok=True)
 meta = json.load(open(f"{src}/metadata.json"))
 info = [json.loads(x) for x in open(f"{src}/row_info.jsonl")]
@@ -17,7 +20,7 @@ for pt in sorted({x["part"] for x in info}):
     e = off[N]
     ids[:e].tofile(f"{tmp}/token_ids_part_t{pt}_000.npy"); mk[:e].tofile(f"{tmp}/labels_mask_t{pt}_000.npy")
     tot += int(e); loss += int(mk[:e].sum())
-    print(pt, collections.Counter(x.get("from_pool") for x in rows[:N]))
+    print(pt, collections.Counter(x.get("from_pool") or x.get("len_pool") for x in rows[:N]))
     for x in rows[:N]:
         new.append(x); lens.append(x["len"]); fp = x["fingerprint"]; g2[fp] = gold[fp]
         if fp in pairs: p2[fp] = pairs[fp]

@@ -25,7 +25,24 @@ def show(name, c):
     for b in (59, 138, 200, 250, 300, 333):
         v = ce_at(c, b)
         print(f"  CE@{b}PF arm {'-' if v is None else f'{v:.4f}'}  recipe-mean {ce_at(rec, b):.4f}  dft {ce_at(dft, b):.4f}")
+def rows_at(f, pf):
+    """per-row CE linearly interpolated between the two probes bracketing pf (no running min); seed-averaged if f has commas"""
+    out = []
+    for g in f.split(","):
+        d = json.load(open(g)); P = [(q["flops"]["actual_pf"], np.array(q["ce"])) for q in d["probes"]]
+        if pf > P[-1][0] * 1.02: return None, d["rows"]
+        for i in range(1, len(P)):
+            if P[i][0] >= pf or i == len(P) - 1:
+                (p0, c0), (p1, c1) = P[i - 1], P[i]; w = min(1.0, (pf - p0) / (p1 - p0)); out.append(c0 + w * (c1 - c0)); break
+    return np.mean(out, axis=0), d["rows"]
 for a in sys.argv[1:]:
+    if a.startswith("--pairpf="):  # --pairpf=PF:a1.json[,a2.json]:b1.json[,b2.json]
+        pf, x, y = a[9:].split(":"); pf = float(pf)
+        (u, r), (v, _) = rows_at(x, pf), rows_at(y, pf)
+        d = u - v; o = f"paired @ {pf:g} PF {x.rsplit('/',1)[-1]} - {y.rsplit('/',1)[-1]}: mean {d.mean():+.4f}±{d.std(ddof=1) / np.sqrt(len(d)):.4f}"
+        for t in T:
+            m = np.array([q["task"] == t for q in r]); o += f" | {t} {d[m].mean():+.4f}±{d[m].std(ddof=1) / np.sqrt(m.sum()):.4f}"
+        print(o); continue
     if a.startswith("--pair="):
         x, y = a[7:].split(":")
         A, B = json.load(open(x)), json.load(open(y))
