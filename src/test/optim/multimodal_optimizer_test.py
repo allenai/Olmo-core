@@ -12,7 +12,9 @@ import torch
 from torch.distributed.tensor import Replicate
 
 from olmo_core.config import Config
+from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.optim import OLMoDDPOptimizerConfig
+from olmo_core.optim.adamw import foreach_adamw_step
 from olmo_core.optim.multimodal_optimizer import (
     MultimodalOLMoDDPOptimizer,
     MultimodalOLMoDDPOptimizerConfig,
@@ -27,6 +29,7 @@ def _stub_optimizer(*, by_group: bool, grads: dict, groups: list) -> MultimodalO
     optim.max_grad_norm = 1.0
     optim.check_nan_inf_grad = False
     optim.clip_grad_norm_by_scheduler_group = by_group
+    optim.skip_nonfinite_grad_steps = False
     optim.latest_component_grad_norms = {}
     optim.latest_clip_group_grad_norms = {}
     optim.latest_clip_group_coefficients = {}
@@ -103,6 +106,78 @@ def test_component_grad_norms_are_reported_without_changing_clipping():
         optim._compute_component_grad_norms()
     with pytest.raises(ValueError, match="non-empty"):
         optim.set_component_grad_norm_patterns({"": ("lm.*",)})
+
+
+def _history(optim, n=80):
+    optim.rolling_interval_length = 128
+    optim.sigma_factor = 6
+    optim._losses = [torch.tensor(1.0 + 0.01 * (i % 3)) for i in range(n)]
+    optim._grad_norms = [torch.tensor(0.1 + 0.001 * (i % 3)) for i in range(n)]
+
+
+def test_nonfinite_grad_norm_skips_the_step_instead_of_aborting():
+    params, grads = _params_and_grads()
+    grads["lm.a"] = torch.tensor([float("inf"), 1.0])
+    optim = _stub_optimizer(by_group=True, grads=grads, groups=_groups(params))
+    optim.check_nan_inf_grad = True  # the loss check stays; the grad-norm assert must not fire
+    optim.skip_nonfinite_grad_steps = True
+    total = optim._clip_grad()
+    assert not torch.isfinite(total)
+    # The bad group is zeroed (no inf * 0 = NaN); the connector keeps its unclipped gradient.
+    torch.testing.assert_close(grads["lm.a"], torch.zeros(2))
+    torch.testing.assert_close(grads["lm.b"], torch.zeros(2))
+    torch.testing.assert_close(grads["connector.w"], torch.tensor([0.3, 0.4]))
+
+    _history(optim)
+    optim._losses.append(torch.tensor(1.0))
+    optim._grad_norms.append(total)
+    assert optim.get_step_factor().item() == 0.0
+    # The skipped step's norm no longer poisons the statistics the next step is compared against.
+    assert all(bool(torch.isfinite(g)) for g in optim._grad_norms)
+    optim._losses.append(torch.tensor(1.01))
+    optim._grad_norms.append(torch.tensor(0.1))
+    assert optim.get_step_factor().item() == 1.0
+
+
+def test_skipped_step_leaves_weights_and_moments_unchanged():
+    param, grad = torch.ones(3), torch.zeros(3)  # zeroed by the skip path
+    exp_avg, exp_avg_sq, step = torch.full((3,), 0.5), torch.full((3,), 0.25), torch.tensor(7.0)
+    foreach_adamw_step(
+        [param],
+        [grad],
+        [exp_avg],
+        [exp_avg_sq],
+        [step],
+        lr=1e-3,
+        betas=(0.9, 0.95),
+        eps=1e-8,
+        weight_decay=0.1,
+        step_factor=torch.tensor(0.0),
+        step_increment_bugfix=True,
+    )
+    torch.testing.assert_close(param, torch.ones(3))
+    torch.testing.assert_close(exp_avg, torch.full((3,), 0.5))
+    torch.testing.assert_close(exp_avg_sq, torch.full((3,), 0.25))
+    assert step.item() == 7.0
+
+
+def test_finite_steps_are_unchanged_by_the_skip_option():
+    params, grads = _params_and_grads()
+    optim = _stub_optimizer(by_group=True, grads=grads, groups=_groups(params))
+    optim.skip_nonfinite_grad_steps = True
+    torch.testing.assert_close(optim._clip_grad(), torch.tensor((5.0**2 + 0.5**2) ** 0.5))
+    torch.testing.assert_close(grads["lm.a"], torch.tensor([3.0, 0.0]) / (5.0 + 1e-6))
+    _history(optim)
+    optim._losses.append(torch.tensor(5.0))  # a loss spike is still skipped by the parent rule
+    optim._grad_norms.append(torch.tensor(0.1))
+    assert optim.get_step_factor().item() == 0.0
+    assert optim._losses[-1].item() == 5.0
+
+
+def test_skip_nonfinite_requires_scheduler_group_clipping():
+    with patch.object(MultimodalOLMoDDPOptimizer.__mro__[1], "__init__", return_value=None):
+        with pytest.raises(OLMoConfigurationError, match="requires clip_grad_norm_by_scheduler"):
+            MultimodalOLMoDDPOptimizer(skip_nonfinite_grad_steps=True)
 
 
 def test_global_clipping_path_is_the_parent_one():

@@ -44,6 +44,7 @@ from .mmfinereason import (
     MMFineReasonDatasetConfig,
     extract_answer_text,
 )
+from .nemotron_image import NemotronImageDataset, NemotronImageDatasetConfig
 from .ocr_caption_tars import (
     OcrCaptionTarsDataset,
     OcrCaptionTarsDatasetConfig,
@@ -78,7 +79,12 @@ from .pixmo_points_v2 import (
     PixMoPointsV2Dataset,
     PixMoPointsV2DatasetConfig,
 )
-from .pretraining_replay import PretrainingReplayConfig, PretrainingReplayDataset
+from .pretraining_replay import (
+    ComposableTextReplayConfig,
+    ComposableTextReplayDataset,
+    PretrainingReplayConfig,
+    PretrainingReplayDataset,
+)
 from .sequence_builder import (
     ATTEND_ALL_SUBSEGMENT_ID,
     build_branched_sequence,
@@ -105,6 +111,8 @@ __all__ = [
     "MultimodalDatasetMixture",
     "MultimodalMixtureConfig",
     "MultimodalSourceConfig",
+    "ComposableTextReplayConfig",
+    "ComposableTextReplayDataset",
     "PretrainingReplayConfig",
     "PretrainingReplayDataset",
     "VISION_ALIGNMENT_OCR_SOURCES",
@@ -144,6 +152,8 @@ __all__ = [
     "NvidiaSynthOcrDatasetConfig",
     "SyntheticReceiptsDataset",
     "SyntheticReceiptsDatasetConfig",
+    "NemotronImageDataset",
+    "NemotronImageDatasetConfig",
     "TarShardIndex",
     "Tulu4Dataset",
     "Tulu4DatasetConfig",

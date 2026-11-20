@@ -70,21 +70,21 @@ def validate_tokenizer_backend(tokenizer, reference):
                 raise ValueError(f"Tokenizer decode mismatch for {text!r}")
 
 
-def load_tokenizer_losslessly(source, *, revision=None):
+def load_tokenizer_losslessly(source, *, revision=None, cache_dir=None):
     """Load the serialized backend with the generic fast class, preserving chat metadata.
 
     A tokenizer.json is required. Slow-tokenizer reconstruction and model-specific regex
     rewriting are intentionally not allowed in checkpoint conversion.
     """
     source = str(source)
-    path = cached_file(source, "tokenizer.json", revision=revision)
+    path = cached_file(source, "tokenizer.json", revision=revision, cache_dir=cache_dir)
     if path is None:
         raise ValueError(f"No serialized tokenizer.json at {source}")
     reference = Tokenizer.from_file(path)
     # Do not dispatch via AutoTokenizer here: model-specific classes can replace the
     # pre-tokenizer even when loading an existing tokenizer.json.
     tokenizer = PreTrainedTokenizerFast.from_pretrained(
-        source, revision=revision, clean_up_tokenization_spaces=False
+        source, revision=revision, cache_dir=cache_dir, clean_up_tokenization_spaces=False
     )
     validate_tokenizer_backend(tokenizer, reference)
     return tokenizer, reference, path

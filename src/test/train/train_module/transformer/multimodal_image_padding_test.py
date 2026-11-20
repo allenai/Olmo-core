@@ -102,7 +102,9 @@ def test_real_vision_connector_forward_and_gradient_oracle(crop_counts):
         handle.remove()
         outputs.append(output)
         crop_work.append(sum(observed))
-    assert crop_work == [len(crop_counts) * 9, len(crop_counts) * max(max(crop_counts), 1)]
+    # The encoder sees only the real crops (one zero crop for an all-text batch) in both
+    # layouts; trimming reduces what is copied to the device, not what the encoder computes.
+    assert crop_work == [max(sum(crop_counts), 1)] * 2
     torch.testing.assert_close(outputs[0], outputs[1], rtol=1e-5, atol=1e-6)
     for (name, first), (other_name, second) in zip(
         original.named_parameters(), trimmed.named_parameters()
