@@ -102,3 +102,5 @@ score1m-dense1m_mix-s24:lc1m
 score1m-dense1m_mix-s48:lc1m
 score1m-dense1m_mix-s72:lc1m
 score1m-dense1m_mix-s93:lc1m
+score-dense256_cp8chk-s75:lc256k
+score-dense256_cp8chk-s75:lc16k

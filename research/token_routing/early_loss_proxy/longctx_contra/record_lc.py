@@ -15,7 +15,7 @@ import subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 OPS = "/accounts/projects/berkeleynlp/prasann/bin/ops"
 TRAIN = {"dense256b": "lc-lcA-dense256-bkM7SXW87S", "gdd256": "lc-lcA-gdd256-bk83V6HYW0",
-         "dense1m": "lc-lcA-dense1m-bkV24B68AB", "dense1m_mix": "lc-lcA-dense1mmix-bkD47QXQVS", "gdd1m": "lc-lcA-gdd1m-bkTDZEJEEA", "base": "q35-4b-base-markerfix"}
+         "dense1m": "lc-lcA-dense1m-bkV24B68AB", "dense1m_mix": "lc-lcA-dense1mmix-bkD47QXQVS", "dense256_cp8chk": "lc-lcA-cp8check-bkDVXR7RBS", "gdd1m": "lc-lcA-gdd1m-bkTDZEJEEA", "base": "q35-4b-base-markerfix"}
 W = "/weka/oe-training-default/ai2-llm/checkpoints/prasanns/early_loss_proxy/runs_lc"
 
 

@@ -40,11 +40,16 @@ Code and launch commands: `research/token_routing/early_loss_proxy/longctx_contr
     lc1m 1.699 -> **1.397** at 13,620 PF (gold drop at matched PF 0.239, paired -1.159 +- 0.031; >= 5.2x), and again no
     gain at 256k (1.512) and a loss at 16k (1.290) despite ~1,350 effective short rows. The short rows do not rescue
     dense LoRA at 1M.
-  - Open question, not verified: why dense LoRA trained at 1M damages 16k/256k while dense LoRA at 256k does not. Either
-    genuine (84 steps of LoRA at 1M-token positions past the native 262k RoPE range) or a defect of the CP8 training path
-    (CP8 exceeds the 4 KV heads, so Ulysses must split/replicate GQA heads; the CP8 *forward* is verified against CP4 /
-    1-GPU, the CP8 *training* gradient is not). Worth one check before leaning on the 1M dense numbers: train dense LoRA
-    on 256k rows under CP8 and compare with dense256b (CP4).
+  - Why dense LoRA trained at 1M damages 16k/256k (while dense LoRA at 256k does not) - **the CP8 training path is ruled
+    out** (2026-11-20): step-1 LoRA gradients from dense256b's step-75 adapter agree between CP4 and CP8, with and without
+    the 1M memory flags (int32 guard, GDN segments 131k, 16k FFN chunks): global cosine 0.99993 / 0.99992 on a 256k row,
+    0.99994 on a packed short window, every block >= 0.9998, relative norm difference 1.1-1.3% (bf16), identical losses;
+    and 75 steps of dense256b's exact config under CP8 + those flags score lc256k 0.428 / lc16k 0.170 vs dense256b's
+    0.507 / 0.197 at the same 1,827.5 PF (paired -0.080 +- 0.013 / -0.027 +- 0.011: CP8 is not worse). Scoring and adapter
+    loading are identical for all arms (1139 keys loaded), and the LR schedule only under-trains (6x lower cumulative LR
+    at matched PF, 84-93 optimizer steps). What remains is the training data itself: 84-93 single-row steps on
+    1M-token rows whose positions run far past the native 262k RoPE range (no YaRN), which plausibly degrades shorter
+    contexts; not tested further (a YaRN or 512k dense run would).
 
 ## Setup
 
