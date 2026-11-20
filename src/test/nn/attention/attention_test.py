@@ -1523,13 +1523,20 @@ def _run_context_parallel_attention_ulysses(
 
 @requires_multi_gpu
 @pytest.mark.parametrize(
-    "attn_backend",
+    "attn_backend,scalable_softmax",
     [
-        pytest.param(AttentionBackendName.torch, id="torch-SDPA"),
-        pytest.param(AttentionBackendName.flash_2, id="flash-attn-2", marks=FLASH_2_MARKS),
-        pytest.param(AttentionBackendName.flash_3, id="flash-attn-3", marks=FLASH_3_MARKS),
+        pytest.param(AttentionBackendName.torch, False, id="torch-SDPA"),
+        pytest.param(AttentionBackendName.flash_2, False, id="flash-attn-2", marks=FLASH_2_MARKS),
+        pytest.param(
+            AttentionBackendName.flash_2,
+            True,
+            id="flash-attn-2-scalable-softmax",
+            marks=FLASH_2_MARKS,
+        ),
+        pytest.param(AttentionBackendName.flash_3, False, id="flash-attn-3", marks=FLASH_3_MARKS),
         pytest.param(
             AttentionBackendName.te,
+            False,
             id="te-attn",
             marks=(
                 *TE_MARKS,
@@ -1543,7 +1550,9 @@ def _run_context_parallel_attention_ulysses(
         ),
     ],
 )
-def test_context_parallel_attention_ulysses(tmp_path, attn_backend: AttentionBackendName):
+def test_context_parallel_attention_ulysses(
+    tmp_path, attn_backend: AttentionBackendName, scalable_softmax: bool
+):
     """
     Test Ulysses-style context parallelism.
 
@@ -1561,7 +1570,12 @@ def test_context_parallel_attention_ulysses(tmp_path, attn_backend: AttentionBac
         pytest.skip("TransformerEngine fused attention requires Hopper (sm_90+)")
 
     # n_heads must be divisible by CP degree (world_size).
-    attn_kwargs: Dict[str, Any] = {"d_model": 128, "n_heads": 8, "backend": attn_backend}
+    attn_kwargs: Dict[str, Any] = {
+        "d_model": 128,
+        "n_heads": 8,
+        "backend": attn_backend,
+        "scalable_softmax": scalable_softmax,
+    }
     attn = Attention(init_device=device.type, **attn_kwargs)
     if device.type == "cpu":
         attn = attn.to(dtype=torch.bfloat16)
