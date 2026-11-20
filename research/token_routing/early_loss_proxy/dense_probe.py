@@ -327,7 +327,7 @@ def build_callback(cfg: Dict[str, str]):
                     dist.barrier()
                 os._exit(0)
 
-        def pre_optim_step(self):
+        def _dump_grads(self):
             # --probe-grads PATH: dump the step-1 gradients of every trainable parameter (full tensors, rank 0) for the
             # CP training-path check (longctx_contra, 2026-11-20)
             gpath = cfg.get("grads", "")
@@ -398,6 +398,7 @@ def build_callback(cfg: Dict[str, str]):
                   ["all", "pre", "post"] + [f"b{i}" for i in range(40) if f"b{i}" in cos]), flush=True)
 
         def pre_optim_step(self):
+            self._dump_grads()
             if grad_ref and int(self.step) == 1:
                 self._grad_ref()
             # forward + backward peak, read BEFORE post_step: GPUMemoryMonitorCallback.post_step (and the online
