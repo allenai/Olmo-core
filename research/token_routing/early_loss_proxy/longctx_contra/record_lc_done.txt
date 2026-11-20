@@ -90,3 +90,15 @@ score-gdd256-s7250:lc256k
 score-gdd256-s7250:lc16k
 score-gdd256-s8700:lc256k
 score-gdd256-s8700:lc16k
+score-dense1m_mix-s24:lc256k
+score-dense1m_mix-s24:lc16k
+score-dense1m_mix-s48:lc256k
+score-dense1m_mix-s48:lc16k
+score-dense1m_mix-s72:lc256k
+score-dense1m_mix-s72:lc16k
+score-dense1m_mix-s93:lc256k
+score-dense1m_mix-s93:lc16k
+score1m-dense1m_mix-s24:lc1m
+score1m-dense1m_mix-s48:lc1m
+score1m-dense1m_mix-s72:lc1m
+score1m-dense1m_mix-s93:lc1m
