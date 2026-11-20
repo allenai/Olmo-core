@@ -343,6 +343,7 @@ def build_callback(cfg: Dict[str, str]):
                 if self._rank() == 0:
                     out[n] = g.detach().float().cpu()
             if self._rank() == 0:
+                os.makedirs(os.path.dirname(gpath) or ".", exist_ok=True)
                 torch.save(out, gpath)
                 print(f"[dense-probe] dumped {len(out)} grads to {gpath}", flush=True)
 
