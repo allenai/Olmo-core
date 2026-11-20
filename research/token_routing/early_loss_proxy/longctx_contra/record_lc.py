@@ -23,8 +23,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--res", default="/tmp/claude-3018/elp_beaker_results")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--provenance", action="store_true",
+                    help="re-add every row with git commit + eval job id from score_provenance.json (score_provenance.py); "
+                    "own ledger record_lc_prov_done.txt; the later row supersedes the provenance-less one")
     a = ap.parse_args()
-    ledger = os.path.join(HERE, "record_lc_done.txt")
+    ledger = os.path.join(HERE, "record_lc_prov_done.txt" if a.provenance else "record_lc_done.txt")
+    prov = json.load(open(os.path.join(HERE, "score_provenance.json"))) if a.provenance else {}
     done = set(open(ledger).read().split()) if os.path.exists(ledger) else set()
     for f in sorted(glob.glob(os.path.join(a.res, "lcS-*", "score*-s*.json"))):
         m = re.search(r"/(score1m8|score1m|score)-([a-z0-9_]+)-s(\d+)\.json$", f)
@@ -48,6 +52,12 @@ def main():
                    "--metric", "heldout_answer_ce", "--value", f"{sum(v) / len(v):.5f}", "--eval-size", str(len(v)),
                    "--cot-label", "no-cot", "--eval-backend", backend,
                    "--ckpt-path", "base" if arm == "base" else f"{W}/{arm}/step{step}"]
+            pv = [x for x in prov.get(os.path.basename(f)[:-5], []) if x.get("exit") == 0]
+            if a.provenance:
+                if not pv:
+                    print(key, "no provenance (skipped)")
+                    continue
+                cmd += ["--git-commit", pv[-1]["commit"], "--eval-job-id", pv[-1]["job"]]
             if a.dry_run:
                 print(" ".join(cmd))
                 continue
