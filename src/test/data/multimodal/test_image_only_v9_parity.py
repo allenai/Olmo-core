@@ -108,3 +108,31 @@ def test_stage2_full_mixture_names_match_the_mixture_without_opening_sources(mon
     names = stage2._full_image_only_v9_names()
     assert names == [d.name for d in datasets]
     assert opened == []
+
+
+@pytest.mark.parametrize("mixture", ["debug"])
+def test_stage2_filtered_names_follow_the_order_of_the_returned_datasets(monkeypatch, mixture):
+    """The builder returns datasets in registry order whatever order the filter lists them in, so
+    the script's names must be in that order too, or each source is labelled with another's
+    name in diagnostics and data-error reports."""
+    import importlib.util
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    mod, sizes, opened = _fake_sources(monkeypatch)
+    path = Path(__file__).resolve().parents[3] / "scripts" / "train" / "Molmo2-Stage2.py"
+    spec = importlib.util.spec_from_file_location("molmo2_stage2_names_under_test", path)
+    assert spec is not None and spec.loader is not None
+    stage2 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(stage2)
+
+    filter_names = list(stage2.VALIDATION_MIXTURES[mixture])
+    assert filter_names != sorted(
+        filter_names, key=lambda n: list(sizes).index(n)
+    ), "the fixture should list its sources out of registry order"
+    config = SimpleNamespace(
+        mixture=mixture, data_seed=0, finevision_rate=0.0, mmfinereason_rate=0.0
+    )
+    datasets, weights, names = stage2._build_mixture(None, config)
+    assert names == [dataset.name for dataset in datasets]
+    assert sorted(names) == sorted(filter_names)

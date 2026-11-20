@@ -38,6 +38,7 @@ from .message_sequence import encode_sft_example
 from .qwen3_layout import branch_context_ids, image_prefix_ids
 from .sequence_builder import build_branched_sequence
 from .sft_common import (
+    EpochSeededExamples,
     SftMessageFormat,
     heldout_ids,
     sft_example_rng,
@@ -658,7 +659,7 @@ class PixMoPointsDatasetConfig(Config):
         return PixMoPointsDataset(self, tokenizer)
 
 
-class PixMoPointsDataset:
+class PixMoPointsDataset(EpochSeededExamples):
     """Map-style PixMo points adapter with audited annotations and stable identity."""
 
     content_fingerprint_version = _CONTENT_FINGERPRINT_VERSION
@@ -760,7 +761,7 @@ class PixMoPointsDataset:
         return size
 
     def __getitem__(self, i: int) -> dict[str, np.ndarray]:
-        return self.get(i, 0)
+        return self.get(i, self._epoch)
 
     def raw_image_references(self, index: int) -> tuple[Any, ...]:
         """Return the source image reference for one expanded logical example."""
@@ -956,7 +957,7 @@ class PixMoCountDatasetConfig(Config):
         return PixMoCountDataset(self, tokenizer)
 
 
-class PixMoCountDataset:
+class PixMoCountDataset(EpochSeededExamples):
     """Map-style PixMo Count adapter with an explicit scalar-count mode."""
 
     content_fingerprint_version = _CONTENT_FINGERPRINT_VERSION
@@ -1021,7 +1022,7 @@ class PixMoCountDataset:
         return self._n * 2 if self.config.counting == "both" else self._n
 
     def __getitem__(self, i: int) -> dict[str, np.ndarray]:
-        return self.get(i, 0)
+        return self.get(i, self._epoch)
 
     def raw_image_references(self, index: int) -> tuple[Any, ...]:
         """Return the source image reference for one scalar or grounded logical example."""
@@ -1199,7 +1200,7 @@ class CoSynPointDatasetConfig(Config):
         return CoSynPointDataset(self, tokenizer)
 
 
-class CoSynPointDataset:
+class CoSynPointDataset(EpochSeededExamples):
     """Map-style CoSyn pointing adapter with audited percent-coordinate geometry."""
 
     content_fingerprint_version = _CONTENT_FINGERPRINT_VERSION
@@ -1243,7 +1244,7 @@ class CoSynPointDataset:
         return len(self._data)
 
     def __getitem__(self, i: int) -> dict[str, np.ndarray]:
-        return self.get(i, 0)
+        return self.get(i, self._epoch)
 
     def raw_image_references(self, index: int) -> tuple[Any, ...]:
         """Return the source image reference for one CoSyn logical example."""

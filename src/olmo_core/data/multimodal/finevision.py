@@ -58,6 +58,7 @@ from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
 from .fs_cache import maybe_cache_env
 from .message_sequence import encode_sft_example
 from .sft_common import (
+    EpochSeededExamples,
     SftMessageFormat,
     count_image_placeholders,
     decode_pil_image,
@@ -291,7 +292,7 @@ class VisualWebInstructDatasetConfig(FineVisionDatasetConfig):
     config_name: str = "visualwebinstruct(filtered)"
 
 
-class FineVisionDataset:
+class FineVisionDataset(EpochSeededExamples):
     """Map-style dataset yielding packed FineVision instruction examples."""
 
     content_fingerprint_version = "finevision-runtime-v1"
@@ -545,7 +546,7 @@ class FineVisionDataset:
 
         See :func:`~olmo_core.data.multimodal.sft_common.get_example_with_skip`.
         """
-        return self.get(index, 0)
+        return self.get(index, self._epoch)
 
     def get(self, index: int, epoch: int = 0) -> Dict[str, np.ndarray]:
         """Build one example with epoch-aware augmentation and deterministic bad-row skips."""

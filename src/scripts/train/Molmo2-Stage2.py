@@ -384,7 +384,11 @@ def _build_mixture(tokenizer, config: ExperimentConfig):
         dataset_names=names_filter,
         max_sequence_length=SEQUENCE_LENGTH,
     )
-    names = _full_image_only_v9_names() if names_filter is None else list(names_filter)
+    # The builder returns its datasets in registry order, whatever order the filter lists them in,
+    # so the names must follow the same order or every source is labelled with another's name.
+    full_names = _full_image_only_v9_names()
+    wanted = None if names_filter is None else set(names_filter)
+    names = [name for name in full_names if wanted is None or name in wanted]
     datasets, weights, names = _append_extra_sft_sources(
         config, tokenizer, datasets, weights, names
     )
