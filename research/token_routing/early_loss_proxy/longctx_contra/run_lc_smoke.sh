@@ -62,7 +62,11 @@ while IFS=$'\t' read -r NAME MODE NGPU VARIANT LR DATA SEQLEN GB STEPS PSETS FLA
     if [[ ${W[$i]} == --probe-* ]]; then PFL+=("${W[$i]}" "${W[$((i+1))]}"); i=$((i+2)); else TFL+=("${W[$i]}"); i=$((i+1)); fi
   done
   FLAGS="${TFL[*]}"
-  if [ "$MODE" = resume ]; then
+  if [ "$MODE" = script ]; then
+    # MODE=script: FLAGS = a python script + args (e.g. compare_grads.py over earlier runs' dumps)
+    # shellcheck disable=SC2086
+    "$PY" $FLAGS > "$LOC/$NAME.log" 2>&1
+  elif [ "$MODE" = resume ]; then
     # resume check: stop at STEPS/2 (an ephemeral checkpoint must exist by then), rerun the same run name / save
     # folder to STEPS; the second log must show the trainer loading the checkpoint and continuing past it
     H=$((STEPS / 2))

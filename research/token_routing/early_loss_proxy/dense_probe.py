@@ -327,6 +327,25 @@ def build_callback(cfg: Dict[str, str]):
                     dist.barrier()
                 os._exit(0)
 
+        def pre_optim_step(self):
+            # --probe-grads PATH: dump the step-1 gradients of every trainable parameter (full tensors, rank 0) for the
+            # CP training-path check (longctx_contra, 2026-11-20)
+            gpath = cfg.get("grads", "")
+            if not gpath or getattr(self, "_grads_done", False):
+                return
+            self._grads_done = True
+            out = {}
+            for n, p in self.trainer.train_module.model.named_parameters():
+                if p.grad is None:
+                    continue
+                g = p.grad
+                g = g.full_tensor() if hasattr(g, "full_tensor") else g
+                if self._rank() == 0:
+                    out[n] = g.detach().float().cpu()
+            if self._rank() == 0:
+                torch.save(out, gpath)
+                print(f"[dense-probe] dumped {len(out)} grads to {gpath}", flush=True)
+
         def pre_step(self, batch: Dict[str, Any]):
             torch.cuda.synchronize()
             self._t_step = time.time()
