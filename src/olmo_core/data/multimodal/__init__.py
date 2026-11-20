@@ -1,5 +1,5 @@
 """
-Multimodal (vision-language) training data: datasets and collation for Molmo2.
+Multimodal (vision-language) training data: datasets, replay, packing and collation.
 
 This subpackage provides a standalone, ``mm_olmo``-free pipeline for Molmo2 "stage 1"
 caption pretraining:
@@ -20,6 +20,11 @@ from .academic_dataset import (
     AcademicDatasetConfig,
     Stage1AcademicDataset,
     Stage1AcademicDatasetConfig,
+)
+from .alignment import (
+    MultimodalDatasetMixture,
+    MultimodalMixtureConfig,
+    MultimodalSourceConfig,
 )
 from .collator import MultimodalCollator, MultimodalCollatorConfig
 from .data_loader import MultimodalDataLoader
@@ -89,6 +94,9 @@ from .text_rich_caption import TextRichCaptionDataset, TextRichCaptionDatasetCon
 from .tulu import Tulu4Dataset, Tulu4DatasetConfig
 
 __all__ = [
+    "MultimodalDatasetMixture",
+    "MultimodalMixtureConfig",
+    "MultimodalSourceConfig",
     "FineVisionDataset",
     "FineVisionDatasetConfig",
     "VisualWebInstructDataset",
