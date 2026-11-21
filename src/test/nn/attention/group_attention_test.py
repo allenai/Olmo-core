@@ -107,7 +107,10 @@ def test_groups_equal_masked_reference(groups):
     print(f"G={groups} vs masked fp32 ref: out {d_out:.3e} (flash full vs fp32 full {base:.3e}) grads {d_g} "
           f"(flash full vs fp32 full {gbase})")
     assert d_out < 3 * base + 1e-3
-    assert all(d < 3 * b + 1e-2 for d, b in zip(d_g, gbase))
+    # bf16 gradients: compare relative to the reference gradient scale (1 bf16 ulp at |g| ~ 8 is 0.0625)
+    rel = [d / max(1e-6, r.abs().max().item()) for d, r in zip(d_g, gr)]
+    print(f"  relative grad diffs {rel}")
+    assert max(rel) < 2e-2
     # and the grouping actually changes the output (not silently full attention)
     o_full = flash_attn_func(q, k, v, causal=True)
     assert (o_g.float() - o_full.float())[real].abs().max().item() > 0.05
