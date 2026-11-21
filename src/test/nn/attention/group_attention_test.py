@@ -102,9 +102,12 @@ def test_groups_equal_masked_reference(groups):
     from flash_attn import flash_attn_func
 
     base = (flash_attn_func(q, k, v, causal=True).float() - o_fr)[real].abs().max().item()
-    print(f"G={groups} vs masked fp32 ref: out {d_out:.3e} (flash full vs fp32 full {base:.3e}) grads {d_g}")
+    gbase = [(a.float() - b.float()).abs().max().item() for a, b in
+             zip(_grads(flash_attn_func(q, k, v, causal=True), real, q, k, v, w), _grads(o_fr, real, q, k, v, w))]
+    print(f"G={groups} vs masked fp32 ref: out {d_out:.3e} (flash full vs fp32 full {base:.3e}) grads {d_g} "
+          f"(flash full vs fp32 full {gbase})")
     assert d_out < 3 * base + 1e-3
-    assert max(d_g) < 5e-2
+    assert all(d < 3 * b + 1e-2 for d, b in zip(d_g, gbase))
     # and the grouping actually changes the output (not silently full attention)
     o_full = flash_attn_func(q, k, v, causal=True)
     assert (o_g.float() - o_full.float())[real].abs().max().item() > 0.05
