@@ -1954,6 +1954,7 @@ class Attention(SequenceMixer):
         causal_example: Optional[torch.Tensor] = None,
         token_weight: Optional[torch.Tensor] = None,
         prefix_state: Optional[Any] = None,
+        attn_group_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Apply attention to the input.
@@ -2011,6 +2012,9 @@ class Attention(SequenceMixer):
             ``w_j`` identical copies of itself, i.e. the additive logit bias ``log w_j`` for every query, on top of
             the causal mask (exact: ``w`` copies of a key multiply its softmax mass by ``w``). Runs the masked-SDPA
             path (flash-attn has no additive bias). All-ones weights leave the layer on its normal path.
+        :param attn_group_ids: Optional ``(B, T)`` int group ids (:mod:`.group_attention`, ``--st-attn-groups``):
+            group-partitioned attention (hubs / groups / strip) computed as gathered shorter flash calls.
+            ``None`` (default) leaves the layer untouched.
 
         :returns: The output of attention with shape ``(batch_size, seq_len, d_model)``.
         """
@@ -2134,7 +2138,21 @@ class Attention(SequenceMixer):
 
         with qkv_save_context:
             kv_route = getattr(self, "_kv_route", None)
-            if (
+            if attn_group_ids is not None:
+                # group-partitioned attention (group_attention.py): gathered per-group flash calls
+                if (attn_bias is not None or cu_doc_lens is not None or self.window_size is not None
+                        or self.sinks is not None or self.cp_enabled or self.kv_cache_manager is not None
+                        or (kv_route is not None and kv_route["holder"].enabled) or block_keep is not None
+                        or kv_route_p is not None):
+                    raise NotImplementedError("attn_group_ids: plain causal full attention only")
+                pkv = self.__dict__.get("_prefix_kv")
+                if pkv is not None:
+                    att = pkv.attend(self, q, k, v, grouped=True)
+                else:
+                    from .group_attention import group_attention
+
+                    att = group_attention(q, k, v, attn_group_ids, q_start=0, scale=self.backend.scale)
+            elif (
                 (kv_route is not None and kv_route["holder"].enabled)
                 or block_keep is not None
                 or kv_route_p is not None

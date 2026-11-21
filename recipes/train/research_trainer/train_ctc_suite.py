@@ -2131,6 +2131,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--st-gdd-groups", default="",
                     help="gold doc drop: JSON {row fingerprint: [group id per document]}; drop whole non-gold groups "
                     "(keep share r of the groups, >= 2) instead of single distractors; rows not listed pass through whole")
+    ap.add_argument("--st-attn-groups", type=int, default=0,
+                    help="group-partitioned attention in the attention layers (olmo_core.nn.attention.group_attention): "
+                    "hubs (gold + decoy documents + preamble) and G random groups of the other documents; a group token "
+                    "attends to its group + hubs, hub tokens to hubs, question/answer to everything. 0 = off")
+    ap.add_argument("--st-attn-group-decoys", type=int, default=-1,
+                    help="group attention: decoy distractor documents added to the hubs (-1 = number of gold documents)")
+    ap.add_argument("--st-attn-group-full-frac", type=float, default=0.1,
+                    help="group attention: share of rows that keep ordinary full attention")
     ap.add_argument("--st-otr-target", choices=["gnorm", "gxh", "dh", "mix"], default="gnorm",
                     help="online router target: gnorm log ||dL/dh_t||; gxh log |<dL/dh_t, h_t>|; dh log ||h_t^L - h_t^0|| "
                     "(residual change through the first L blocks, mid-stack only); mix = average of the gnorm and dh ranks")

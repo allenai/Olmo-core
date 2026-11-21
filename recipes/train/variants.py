@@ -334,6 +334,9 @@ class SoftTokenOptions(VariantOptions):
     st_gdd_thin_keep_first: int = 8
     st_gdd_only_fps: str = ""
     st_gdd_groups: str = ""
+    st_attn_groups: int = 0
+    st_attn_group_decoys: int = -1
+    st_attn_group_full_frac: float = 0.1
     st_otr_target: str = "gnorm"
     st_otr_ridge: float = 0.1
     st_otr_decay: float = 0.9
@@ -1427,6 +1430,17 @@ class SoftToken(Variant):
             model._gold_doc_drop = GoldDocDrop(gcfg, router=model._online_token_router, doc_start_id=ctx.ids.doc_start,
                                                doc_end_id=ctx.ids.doc_end, eos_id=ctx.ids.eos, rank=ctx.rank)
             print(f"[variants] gold doc drop before block 0: {gcfg}", flush=True)
+        if online and o.st_attn_groups > 0:
+            from olmo_core.nn.attention.group_attention import AttnGroupBuilder, AttnGroupConfig
+
+            acfg = AttnGroupConfig(groups=o.st_attn_groups, decoys=o.st_attn_group_decoys,
+                                   full_frac=o.st_attn_group_full_frac, seed=ctx.seed)
+            model._attn_group_builder = AttnGroupBuilder(acfg, router=model._online_token_router,
+                                                         doc_start_id=ctx.ids.doc_start, doc_end_id=ctx.ids.doc_end,
+                                                         eos_id=ctx.ids.eos, rank=ctx.rank)
+            print(f"[variants] group-partitioned attention (attention layers only): {acfg}", flush=True)
+        elif o.st_attn_groups > 0:
+            raise ValueError("--st-attn-groups needs the online token router (--st-keep-token-rule online)")
         if online and o.st_otr_early_lora > 0:
             from olmo_core.nn.early_lora import install_early_lora
 

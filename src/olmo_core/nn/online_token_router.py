@@ -1543,6 +1543,19 @@ class OnlineTokenRouter:
                 tw = tw.clamp(max=math.exp(float(self.wts["clip"])))
             if self.wts["weights"] != "none" and bool((tw != 1.0).any()):
                 kw["token_weight"] = tw
+        gid = block_kwargs.get("attn_group_ids")
+        if gid is not None:
+            # group-partitioned attention: carry the group ids to the kept columns and re-charge the attention layers
+            # from this block on at the kept rows (olmo_core.nn.attention.group_attention)
+            from .attention.group_attention import PAD, charge_attn_groups
+
+            if self.mod_layers or n_extra:
+                raise NotImplementedError("attn_group_ids with mod_layers / merge_dropped")
+            g_new = torch.where(valid, torch.gather(gid.to(order.device), 1, order),
+                                torch.full_like(order, PAD).to(gid.dtype))
+            kw["attn_group_ids"] = g_new.to(gid.dtype)
+            charge_attn_groups(model, gid, self.cfg.drop_layer, sign=-1.0)
+            charge_attn_groups(model, kw["attn_group_ids"], self.cfg.drop_layer, sign=1.0)
         if self.mod_layers:
             return self._mod_begin(model, h, block_kwargs, entry, real, counts, order, valid, kw["position_ids"])
         self._mid_gather = (order, valid, n_extra)
@@ -1653,6 +1666,8 @@ class OnlineTokenRouter:
         if pid is None:
             pid = (torch.arange(h.shape[1], device=dev)[None, :])
         pos_new = pid[:, kidx]
+        if block_kwargs.get("attn_group_ids") is not None:
+            raise NotImplementedError("attn_group_ids on packed rows")
         cu = block_kwargs["cu_doc_lens"]
         dl = counts.to(cu.dtype)
         if tail:

@@ -38,11 +38,12 @@ def prefix_chunk_size() -> int:
 class _PrefixKV:
     """One attention layer's view for one chunk: the shared row-length K/V buffer and the chunk start."""
 
-    def __init__(self, store: Dict[str, Any], s: int):
+    def __init__(self, store: Dict[str, Any], s: int, run: Optional[Dict[str, Any]] = None):
         self.store = store
         self.s = s
+        self.run = run
 
-    def attend(self, mod, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    def attend(self, mod, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, grouped: bool = False) -> torch.Tensor:
         from flash_attn import flash_attn_func
 
         st, s = self.store, self.s
@@ -56,6 +57,15 @@ class _PrefixKV:
         if s > 0:
             k = torch.cat([st["k"][:, :s], k], dim=1)
             v = torch.cat([st["v"][:, :s], v], dim=1)
+        if grouped:
+            # group-partitioned attention (olmo_core.nn.attention.group_attention): this chunk's queries are the key
+            # tail [s, s + Tq) of the row-level group ids
+            from .attention.group_attention import group_attention
+
+            gid = self.run.get("gid") if self.run is not None else None
+            if gid is None:
+                raise RuntimeError("prefix_chunk: attn_group_ids given to a block but not to run_prefix_chunked")
+            return group_attention(q, k, v, gid[:, :s + Tq], q_start=s, scale=mod.backend.scale)
         # causal with Tk > Tq: flash-attn aligns the mask bottom-right (query i sees keys <= s + i)
         return flash_attn_func(q, k, v, causal=True, softmax_scale=mod.backend.scale)
 
@@ -91,7 +101,7 @@ class PrefixState:
         if getattr(mod, "window_size", None) is not None:
             raise NotImplementedError("prefix_chunk: sliding-window attention in the prefix")
         store = self.run["kv"].setdefault(id(mod), {"T": self.run["T"]})
-        return _PrefixKV(store, self.s)
+        return _PrefixKV(store, self.s, self.run)
 
 
 def _slice_kwargs(kw: Dict[str, Any], B: int, T: int, s: int, e: int) -> Dict[str, Any]:
@@ -128,7 +138,7 @@ def run_prefix_chunked(
     cuts = [i * T // n for i in range(n + 1)]
     bounds = [(cuts[i], cuts[i + 1]) for i in range(n)]
     run: Dict[str, Any] = {"B": B, "T": T, "device": h.device, "dtype": h.dtype, "gdn": {}, "kv": {},
-                           "n_chunks": len(bounds)}
+                           "n_chunks": len(bounds), "gid": kw.get("attn_group_ids")}
     blocks = [model.blocks[str(i)] for i in range(n_prefix)]
     offload = bool(os.environ.get("OLMO_OTR_PREFIX_OFFLOAD"))
     outs = []

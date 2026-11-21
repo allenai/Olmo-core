@@ -2342,6 +2342,8 @@ class Transformer(nn.Module):
             all_block_kwargs["attn_bias"] = move_to_device(attn_bias, self.device)
         if (aux_capture := kwargs.pop("aux_capture", None)) is not None:
             all_block_kwargs["aux_capture"] = aux_capture
+        if (attn_group_ids := kwargs.pop("attn_group_ids", None)) is not None:
+            all_block_kwargs["attn_group_ids"] = attn_group_ids
         if (kv_grad_mask := kwargs.pop("kv_grad_mask", None)) is not None:
             all_block_kwargs["kv_grad_mask"] = move_to_device(kv_grad_mask, self.device)
         if (soft_keep := kwargs.pop("soft_keep", None)) is not None:
@@ -2954,6 +2956,16 @@ class Transformer(nn.Module):
                         scale=pst.get("len_bias_scale", 1.0),
                         extra=pst.get("len_bias_extra", 0.0),
                     )
+        agb = getattr(self, "_attn_group_builder", None)
+        if (agb is not None and self.training and not input_ids.is_floating_point()
+                and kwargs.get("doc_lens") is None and input_embeddings is None):
+            # group-partitioned attention (olmo_core.nn.attention.group_attention): group ids from the final
+            # (post gold-drop) rows; the FLOP difference of every attention layer is charged here, once per forward
+            # (the online router's mid-stack drop re-gathers the ids and re-charges the blocks after it)
+            from ..attention.group_attention import charge_attn_groups
+
+            kwargs["attn_group_ids"] = agb.build(input_ids)
+            charge_attn_groups(self, kwargs["attn_group_ids"], 0)
         # Role-gated FFN: gate mask from the FINAL token stream (post-compaction when the
         # soft-token path rewrote input_ids), so kept-doc tokens are gated in compacted rows too.
         if self._role_gated_ffn is not None:
