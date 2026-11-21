@@ -2,7 +2,7 @@
 # The three long-context contradiction arms (Prasann, 2026-11-19). One 8-GPU Beaker job each via launch_lc_smoke.py
 # (payload run_lc_smoke.sh, dense_probe wrapper: --probe-max-pf stops at the FLOP budget). Checkpoints on weka
 # (runs_lc/<arm>/stepN) for checkpoint-then-score (score_ckpts.sh): every arm is scored through the same 1-GPU dense
-# forward. Usage: bash launch_arms.sh gdd256 | dense256 | gdd1m   [DRY=1]
+# forward. Usage: bash launch_arms.sh gdd256 | dense256 | gdd1m | gddag (G= SI= NAME= FF=)   [DRY=1]
 #        bash launch_arms.sh score <arm> <step>[,<step>...]   (checkpoint-then-score: 1-GPU dense forward path, rows split
 #        over 8 data-parallel GPUs; lc256k 160 + lc16k 160 rows; the 1M arm also gets lc1m 64 rows under CP4)
 set -e
@@ -20,6 +20,14 @@ case $ARM in
   gdd256)  # 18,000 distinct + 1,980 reused-gold 256k rows (tail) + 71,993 short rows; 8 rows/step, bucketed steps
     python3 $L --tag lcA-gdd256 --minutes 720 "${COMMON[@]}" --presync "shards/lc256kmix_gdd heldout_lc.npz" \
       --run "gdd256|probe|8|softtoken|1e-5|lc256kmix_gdd|262144|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 0.05 --prefix-chunk 4096 --no-data-shuffle --ephemeral-save-interval 100 --save-interval 1450 --probe-max-pf $BUDGET --probe-pf-points 3800,7600,11400"
+    ;;
+  gddag)  # gdd256 + group-partitioned attention (attention layers only; 2026-11-20): gdd256's exact config and data
+    # order plus --st-attn-groups G (default 4), decoys = number of gold docs, full_frac 0.1; to ~5,600 PF (FLOP-matched:
+    # it consumes more rows than gdd256 at the same PF). SI = save interval in steps (gdd256: 1450 = ~1,821 PF), chosen
+    # from the screen's per-step PF ratio so checkpoints land near 1.8k / 3.7k / 5.6k PF. NAME must be new (no leftover ckpts).
+    G=${G:-4}; SI=${SI:-1450}; NAME=${NAME:-gddag$G}
+    python3 $L --tag lcA-$NAME --minutes ${MIN:-330} "${COMMON[@]}" --presync "shards/lc256kmix_gdd heldout_lc.npz" \
+      --run "$NAME|probe|8|softtoken|1e-5|lc256kmix_gdd|262144|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 0.05 --prefix-chunk 4096 --no-data-shuffle --st-attn-groups $G --st-attn-group-decoys -1 --st-attn-group-full-frac ${FF:-0.1} --ephemeral-save-interval 100 --save-interval $SI --probe-max-pf ${MAXPF:-5650} --probe-pf-points 1821,3765,5583"
     ;;
   dense256)  # 1,091 256k rows + 4,800 short rows packed into 262,144-token windows; 2 windows/step (CP4 x DP2)
     python3 $L --tag lcA-dense256 --minutes 300 "${COMMON[@]}" --presync "shards/lc256kmix_dense heldout_lc.npz" \
