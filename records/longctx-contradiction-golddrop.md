@@ -163,3 +163,54 @@ Code / launchers / analysis: `research/token_routing/early_loss_proxy/longctx_co
 and weka `.../prasanns/early_loss_proxy/shards/` (`lc256kmix_dense`, `lc256kmix_gdd`, `lc1mdense84`, `lc1mmixdense`,
 `lc1mmix_gdd`, `heldout_lc.npz`). Checkpoints: weka `.../early_loss_proxy/runs_lc/<arm>/stepN`. Score and run JSONs:
 S3 `early_loss_proxy/results/lcA-*` and `lcS-*`.
+
+## Group-partitioned attention on top of gold drop (2026-11-20/21, branch `claude/attn-groups-256k`)
+
+Prasann asked for this. In the attention layers only (GDN layers and FFNs keep the full post-drop row), each training row's
+documents are split every forward into **hubs** (the 6 gold claims + 6 random decoy distractors + the preamble) and
+**G = 4 random groups** of the rest. A group token attends to its group + hubs, a hub token to hubs only, and the
+question/answer strip to everything. A share `full_frac` of rows keeps full attention. Every set runs as its own
+gathered flash-attn varlen sequence (a real compute saving, also inside `--prefix-chunk` and after the router's
+mid-stack drops). The FLOP meter charges every pair actually computed. Scoring is unchanged (full attention, same
+scorer and rows). Code: `src/olmo_core/nn/attention/group_attention.py`, flags `--st-attn-groups /
+--st-attn-group-decoys / --st-attn-group-full-frac / --st-attn-group-symmetric`, runner and analysis in
+`research/token_routing/early_loss_proxy/longctx_contra/attn_groups/` (README there), arms `launch_arms.sh gddag`.
+
+**Verdict: group attention hurts held-out CE badly at a modest saving; not worth continuing in this form.**
+- At G = 4 with full_frac 0.1, lc256k CE at ~1.82k PF is **0.531 vs gdd256's 0.199** (paired +0.332 +- 0.020,
+  eval_size 160 ⚠). That is no better than dense LoRA (0.513). Training CE on the same rows is *lower* than gdd256's
+  (0.025 vs 0.039, steps 1174-1574): the model fits the grouped task, and that does not carry over to full attention.
+  We stopped the arm at ~1.9k PF.
+- The symmetric-hub fix (hub documents also join a random group, so every document sees "own group + hubs") recovers
+  only part of the gap: **0.435** (+0.238 +- 0.017 vs gdd256). The small-context hub cue explains some of the gap; the
+  rest is the grouped-vs-full mismatch itself.
+- With full_frac 0.5 the gap shrinks to **0.251** (+0.055 +- 0.013, inside the 0.08 run-to-run noise), but the
+  per-step saving is then only 9%.
+- Per-step saving vs gdd256, measured on Beaker 8xH100 over identical batches (batch hashes match on every step):
+  PF ratio 0.830 / time ratio 0.822 (G = 4, full_frac 0.1, either hub mode); 0.912 / 0.918 at full_frac 0.5. Peak
+  memory 37.0 vs 35.8 GiB (no saving: the peak is not in attention).
+
+| arm (first checkpoint) | PF | lc256k CE ⚠160 | vs gdd256 (paired) | vs dense256b | lc16k CE ⚠160 | vs gdd256 | train CE 1174-1574 |
+|---|---|---|---|---|---|---|---|
+| gdd256 (reference, interpolated) | ~1,820 | 0.199 | | | 0.042 | | 0.039 |
+| dense256b (reference, interpolated) | ~1,820 | 0.513 | | | 0.201 | | |
+| `gddag4` G4, ff 0.1 (step 1690) | 1,818 | 0.531 | +0.332 +- 0.020 | +0.018 +- 0.021 | 0.185 | +0.143 +- 0.014 | 0.025 |
+| `gddag4sym` symmetric hubs (step 1690) | 1,820 | 0.435 | +0.238 +- 0.017 | -0.077 +- 0.021 | 0.101 | +0.060 +- 0.010 | 0.033 |
+| `gddag4ff05` ff 0.5 (step 1574) | 1,828 | 0.251 | +0.055 +- 0.013 | -0.257 +- 0.015 | 0.056 | +0.016 +- 0.008 | 0.038 |
+
+Matched rows (the same optimizer step as gdd256, so the same rows seen): +0.345 / +0.249 / +0.060 on lc256k, i.e. the
+gap is a per-row loss, not a FLOP-matching artefact. None of the arms reaches gdd256's CE at its first checkpoint.
+
+Screen (1 H200, 12 single-row steps on real lc256kmix_gdd 256k rows, full_frac 0, paired vs attention off): on
+gold-dropped rows G = 2/4/8 cut per-step PF to 0.886 / 0.828 / 0.800 of off, and wall-clock to 0.97 / 0.96 / 0.95.
+On whole 256k rows PF falls to 0.771 / 0.656 / 0.599 and wall-clock to 0.777 / 0.654 / 0.598. Peak memory is
+unchanged. G = 1 costs the same as off.
+
+Tests (`src/test/nn/attention/group_attention_test.py`, GPU): G = 1 with no hubs matches full flash attention (max
+abs output diff 3.9e-3 in bf16; exactly 0 through the Attention module). For G = 2/4/8, both hub modes, outputs match
+an fp32 masked-SDPA reference to the same 7-9e-3 error as flash full attention; relative grad error is at most 1.1%.
+Chunked-prefix vs whole row: 0. Meter pair counts match hand counts.
+
+Beaker: gddag4 01M7XSSH3PHNMYBB4P9819XK9E (stopped), gddag4ff05 01M7XZZ3MCYAYZ3KSGCPJ53BEF, gddag4sym
+01M7Y02KN9AHQK7JEK6DHHKANH; scores 01M7XZ70Z942VJWSKNF9MH5413 / 01M7Y5FA4NM2AWQ2VEN99FV195 /
+01M7Y5GFEAC30YFMHV156W73XF. Checkpoints: weka `runs_lc/gddag4{,ff05,sym}/stepN`. About 44 GPU-h in total.
