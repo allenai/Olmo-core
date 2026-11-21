@@ -2139,6 +2139,9 @@ def parse_args() -> argparse.Namespace:
                     help="group attention: decoy distractor documents added to the hubs (-1 = number of gold documents)")
     ap.add_argument("--st-attn-group-full-frac", type=float, default=0.1,
                     help="group attention: share of rows that keep ordinary full attention")
+    ap.add_argument("--st-attn-group-symmetric", action="store_true",
+                    help="group attention: every hub document also joins one random group and attends to hubs + that "
+                    "group (same key-set shape as non-hub documents; removes the small-context hub cue)")
     ap.add_argument("--st-otr-target", choices=["gnorm", "gxh", "dh", "mix"], default="gnorm",
                     help="online router target: gnorm log ||dL/dh_t||; gxh log |<dL/dh_t, h_t>|; dh log ||h_t^L - h_t^0|| "
                     "(residual change through the first L blocks, mid-stack only); mix = average of the gnorm and dh ranks")

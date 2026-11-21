@@ -5,6 +5,7 @@ import torch
 
 from olmo_core.nn.attention.group_attention import (
     HUB,
+    HUB_G0,
     PAD,
     STRIP,
     group_attention,
@@ -16,7 +17,7 @@ gpu = pytest.mark.gpu
 DEV = "cuda"
 
 
-def _toy_gid(B, T, n_docs, doc_len, groups, hubs_per_row, pre=5, pad=7, full_row=None, seed=0):
+def _toy_gid(B, T, n_docs, doc_len, groups, hubs_per_row, pre=5, pad=7, full_row=None, seed=0, symmetric=False):
     """Rows: preamble (HUB) + n_docs docs of doc_len tokens + strip + pad; docs assigned to hubs / groups."""
     g = torch.Generator().manual_seed(seed)
     gid = torch.full((B, T), PAD, dtype=torch.int32)
@@ -29,9 +30,11 @@ def _toy_gid(B, T, n_docs, doc_len, groups, hubs_per_row, pre=5, pad=7, full_row
         cls = {}
         for i, d in enumerate(rest):
             cls[d] = 1 + i % groups
+        for i, d in enumerate(perm[:hubs_per_row]):
+            cls[d] = (HUB_G0 - (1 + i % groups)) if symmetric else HUB
         for d in range(n_docs):
             s = pre + d * doc_len
-            gid[b, s:s + doc_len] = HUB if d in hubs else cls[d]
+            gid[b, s:s + doc_len] = cls[d]
         gid[b, pre + n_docs * doc_len:L] = STRIP
         if full_row is not None and b == full_row:
             gid[b, :L] = STRIP
@@ -83,11 +86,12 @@ def test_g1_all_docs_one_group_equals_full_attention():
 
 
 @gpu
-@pytest.mark.parametrize("groups", [2, 4, 8])
-def test_groups_equal_masked_reference(groups):
+@pytest.mark.parametrize("groups,symmetric", [(2, False), (4, False), (8, False), (2, True), (4, True), (8, True)])
+def test_groups_equal_masked_reference(groups, symmetric):
     B, n_docs, doc_len = 3, 40, 23
     T = 5 + n_docs * doc_len + 30 + 7
-    gid = _toy_gid(B, T, n_docs, doc_len, groups=groups, hubs_per_row=6, full_row=2, seed=groups).to(DEV)
+    gid = _toy_gid(B, T, n_docs, doc_len, groups=groups, hubs_per_row=6, full_row=2, seed=groups,
+                   symmetric=symmetric).to(DEV)
     q, k, v = _qkv(B, T, seed=groups)
     real = gid != PAD
     w = torch.randn(B, T, 4, 64, device=DEV)
@@ -104,7 +108,7 @@ def test_groups_equal_masked_reference(groups):
     base = (flash_attn_func(q, k, v, causal=True).float() - o_fr)[real].abs().max().item()
     gbase = [(a.float() - b.float()).abs().max().item() for a, b in
              zip(_grads(flash_attn_func(q, k, v, causal=True), real, q, k, v, w), _grads(o_fr, real, q, k, v, w))]
-    print(f"G={groups} vs masked fp32 ref: out {d_out:.3e} (flash full vs fp32 full {base:.3e}) grads {d_g} "
+    print(f"G={groups} sym={symmetric} vs masked fp32 ref: out {d_out:.3e} (flash full vs fp32 full {base:.3e}) grads {d_g} "
           f"(flash full vs fp32 full {gbase})")
     assert d_out < 3 * base + 1e-3
     # bf16 gradients: compare relative to the reference gradient scale (1 bf16 ulp at |g| ~ 8 is 0.0625)
@@ -117,10 +121,11 @@ def test_groups_equal_masked_reference(groups):
 
 
 @gpu
-def test_chunked_prefix_tail_queries_match_whole_row():
+@pytest.mark.parametrize("symmetric", [False, True])
+def test_chunked_prefix_tail_queries_match_whole_row(symmetric):
     B, n_docs, doc_len = 2, 30, 19
     T = 5 + n_docs * doc_len + 25 + 7
-    gid = _toy_gid(B, T, n_docs, doc_len, groups=4, hubs_per_row=4, seed=3).to(DEV)
+    gid = _toy_gid(B, T, n_docs, doc_len, groups=4, hubs_per_row=4, seed=3, symmetric=symmetric).to(DEV)
     q, k, v = _qkv(B, T, seed=3)
     real = gid != PAD
     whole = group_attention(q, k, v, gid)
@@ -196,3 +201,12 @@ def test_charge_attn_groups_hand():
     assert tot == 2 * per_layer and m._flop_extra_actual == 2 * per_layer
     # from block 2 on: one attention layer
     assert charge_attn_groups(m, gid, 2, sign=-1.0) == -per_layer
+
+
+def test_pair_count_symmetric_hand():
+    # preamble 2 (HUB), hub doc 3 in group 1, group1 doc 4, hub doc 2 in group 2, group2 doc 2, strip 3, pad 1
+    g = [HUB] * 2 + [HUB_G0 - 1] * 3 + [1] * 4 + [HUB_G0 - 2] * 2 + [2] * 2 + [STRIP] * 3 + [PAD]
+    actual, charged = group_attention_pairs(torch.tensor([g], dtype=torch.int32))
+    n_hub = 7
+    hand = n_hub * 8 / 2 + (n_hub + 4) * 12 / 2 + (n_hub + 2) * 10 / 2 + (3 * 16 - 3)  # 28 + 66 + 45 + 45
+    assert charged == 16 * 17 / 2 and actual == hand == 184

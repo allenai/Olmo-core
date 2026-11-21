@@ -27,7 +27,7 @@ case $ARM in
     # from the screen's per-step PF ratio so checkpoints land near 1.8k / 3.7k / 5.6k PF. NAME must be new (no leftover ckpts).
     G=${G:-4}; SI=${SI:-1450}; NAME=${NAME:-gddag$G}
     python3 $L --tag lcA-$NAME --minutes ${MIN:-330} "${COMMON[@]}" --presync "shards/lc256kmix_gdd heldout_lc.npz" \
-      --run "$NAME|probe|8|softtoken|1e-5|lc256kmix_gdd|262144|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 0.05 --prefix-chunk 4096 --no-data-shuffle --st-attn-groups $G --st-attn-group-decoys -1 --st-attn-group-full-frac ${FF:-0.1} --ephemeral-save-interval 100 --save-interval $SI --probe-max-pf ${MAXPF:-5650} --probe-pf-points 1821,3765,5583"
+      --run "$NAME|probe|8|softtoken|1e-5|lc256kmix_gdd|262144|8|999999|lc16k:16|$R --st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 0.05 --prefix-chunk 4096 --no-data-shuffle --st-attn-groups $G --st-attn-group-decoys -1 --st-attn-group-full-frac ${FF:-0.1} ${SYM:+--st-attn-group-symmetric} --ephemeral-save-interval 100 --save-interval $SI --probe-max-pf ${MAXPF:-5650} --probe-pf-points 1821,3765,5583"
     ;;
   dense256)  # 1,091 256k rows + 4,800 short rows packed into 262,144-token windows; 2 windows/step (CP4 x DP2)
     python3 $L --tag lcA-dense256 --minutes 300 "${COMMON[@]}" --presync "shards/lc256kmix_dense heldout_lc.npz" \

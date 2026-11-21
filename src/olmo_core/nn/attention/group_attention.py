@@ -37,6 +37,17 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 
 HUB, STRIP, PAD = 0, -1, -2
+#: symmetric mode: a hub document that also belongs to group g carries id ``HUB_G0 - g`` (<= -11)
+HUB_G0 = -10
+
+
+def _grp(g: torch.Tensor) -> torch.Tensor:
+    """Group of each id: g for group tokens, g for symmetric hubs (HUB_G0 - g), 0 otherwise."""
+    return torch.where(g > 0, g, torch.where(g <= HUB_G0 - 1, HUB_G0 - g, torch.zeros_like(g)))
+
+
+def _is_hub(g: torch.Tensor) -> torch.Tensor:
+    return (g == HUB) | (g <= HUB_G0 - 1)
 
 __all__ = ["HUB", "STRIP", "PAD", "AttnGroupConfig", "AttnGroupBuilder", "group_attention", "group_attention_pairs",
            "charge_attn_groups", "group_mask_reference"]
@@ -48,6 +59,9 @@ class AttnGroupConfig:
     #: decoy distractor documents added to the hubs; -1 = as many as the row has gold documents
     decoys: int = -1
     full_frac: float = 0.1
+    #: symmetric hubs (2026-11-20 fix for the hub shortcut): every hub document is also assigned to one of the G groups
+    #: and attends to hubs + its own group, so hub and non-hub documents see the same kind of key set
+    symmetric: bool = False
     seed: int = 0
     log_every: int = 20
 
@@ -116,6 +130,11 @@ class AttnGroupBuilder:
             cls = [HUB] * nd
             for i, d in enumerate(rest):
                 cls[d] = 1 + (i % c.groups)
+            if c.symmetric:
+                hl = sorted(hubs)
+                self.rng.shuffle(hl)
+                for i, d in enumerate(hl):
+                    cls[d] = HUB_G0 - (1 + (i % c.groups))
             # token -> document index: every token from a document's start marker up to the next start marker
             doc_of = torch.cumsum((r == self.ds).to(torch.int64), 0) - 1  # -1 before the first document
             cls_t = torch.tensor([HUB] + cls, dtype=torch.int32, device=dev)  # index 0 = preamble
@@ -173,16 +192,17 @@ def group_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, gid_k: to
         gk = gid_k[b]
         gq = gk[q_start:]
         present = torch.unique(gq).tolist()
-        hub_k = gk == HUB
-        for g in present:
-            if g < 0:
-                continue
+        groups_present = sorted({int(x) for x in torch.unique(_grp(gq[(gq > 0) | (gq <= HUB_G0 - 1)])).tolist()})
+        hub_k = _is_hub(gk)
+        gk_grp = _grp(gk)
+        seqs = ([HUB] if HUB in present else []) + groups_present
+        for g in seqs:
             kmask = hub_k if g == HUB else (hub_k | (gk == g))
             kpos = torch.nonzero(kmask).flatten()
             qpos = kpos[kpos >= q_start]
             qi.append(b * Tq + qpos - q_start)
             ki.append(b * Tk + kpos)
-            keep.append(gk[qpos] == g)
+            keep.append(gk[qpos] == HUB if g == HUB else gk_grp[qpos] == g)
             lq.append(int(qpos.numel()))
             lk.append(int(kpos.numel()))
         if STRIP in present:
@@ -216,14 +236,16 @@ def group_attention_pairs(gid: torch.Tensor) -> Tuple[float, float]:
         g = gid[b]
         L = int((g != PAD).sum())
         charged += L * (L + 1) / 2
-        n_hub = int((g == HUB).sum())
+        n_hub = int(_is_hub(g).sum())
         cnt = torch.bincount((g[g > 0]).long()).tolist() if bool((g > 0).any()) else []
-        if n_hub:
+        gr = _grp(g)
+        grps = set(int(x) for x in torch.unique(gr[gr > 0]).tolist())
+        if bool((g == HUB).any()):
             actual += n_hub * (n_hub + 1) / 2
-        for c in cnt:
-            if c:
-                n = n_hub + c
-                actual += n * (n + 1) / 2
+        for gi in grps:
+            c = cnt[gi] if gi < len(cnt) else 0
+            n = n_hub + c
+            actual += n * (n + 1) / 2
         for a, e in _strip_runs(torch.nonzero(g == STRIP).flatten()):
             nq = e - a
             actual += nq * e - nq * (nq - 1) / 2
@@ -265,7 +287,9 @@ def group_mask_reference(gid: torch.Tensor) -> torch.Tensor:
     qg = gid[:, :, None]
     kg = gid[:, None, :]
     causal = torch.ones(T, T, dtype=torch.bool, device=gid.device).tril()[None]
-    allowed = (qg == STRIP) | ((qg == HUB) & (kg == HUB)) | ((qg > 0) & ((kg == HUB) | (kg == qg)))
+    qgrp = _grp(gid)[:, :, None]
+    khub = _is_hub(gid)[:, None, :]
+    allowed = (qg == STRIP) | ((qg == HUB) & khub) | ((qgrp > 0) & (khub | (kg == qgrp)))
     eye = torch.eye(T, dtype=torch.bool, device=gid.device)[None]
     allowed = torch.where(qg == PAD, eye, allowed)
     return allowed & causal

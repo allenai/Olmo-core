@@ -337,6 +337,7 @@ class SoftTokenOptions(VariantOptions):
     st_attn_groups: int = 0
     st_attn_group_decoys: int = -1
     st_attn_group_full_frac: float = 0.1
+    st_attn_group_symmetric: bool = False
     st_otr_target: str = "gnorm"
     st_otr_ridge: float = 0.1
     st_otr_decay: float = 0.9
@@ -1434,7 +1435,8 @@ class SoftToken(Variant):
             from olmo_core.nn.attention.group_attention import AttnGroupBuilder, AttnGroupConfig
 
             acfg = AttnGroupConfig(groups=o.st_attn_groups, decoys=o.st_attn_group_decoys,
-                                   full_frac=o.st_attn_group_full_frac, seed=ctx.seed)
+                                   full_frac=o.st_attn_group_full_frac,
+                                   symmetric=o.st_attn_group_symmetric, seed=ctx.seed)
             model._attn_group_builder = AttnGroupBuilder(acfg, router=model._online_token_router,
                                                          doc_start_id=ctx.ids.doc_start, doc_end_id=ctx.ids.doc_end,
                                                          eos_id=ctx.ids.eos, rank=ctx.rank)
