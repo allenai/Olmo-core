@@ -18,7 +18,7 @@ for cfg in $1; do
   mode=${cfg%_*}; g=${cfg#*_}
   if [ "$mode" = drop ]; then GD="--st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 0.05"; else GD="--st-gdd-keep-range 0.05,0.5 --st-gdd-whole-frac 1.0"; fi
   if [ "$g" = off ]; then AG=""; else AG="--st-attn-groups ${g#g} --st-attn-group-full-frac 0"; fi
-  L=/data/prasann/attn_groups/run_$cfg_$$; L=/data/prasann/attn_groups/run_${cfg}_$$
+  L=/data/prasann/attn_groups/run_${cfg}_$$
   mkdir -p "$L/tmp"
   ( cd "$D" && CUDA_VISIBLE_DEVICES=$gpu TMPDIR=$L/tmp TRITON_CACHE_DIR=$L/triton HF_HOME=$L/hf HOME=$L \
     "$PY" -m torch.distributed.run --nproc_per_node=1 --master_port=$((29100 + gpu)) \
