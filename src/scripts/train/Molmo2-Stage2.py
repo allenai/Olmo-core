@@ -11,7 +11,7 @@ Quick local smoke test (1 GPU, debug mixture, 5 steps)::
     torchrun --nproc-per-node=1 src/scripts/train/Molmo2-Stage2.py train smoke \\
         --trainer.max_duration.value=5 --trainer.max_duration.unit=steps \\
         --global_batch_size=16384 --train_module.rank_microbatch_size=16384 \\
-        --train_module.compile_model=false
+        --train_module.compile_model=true
 
 Resume weights from an OLMo-core stage-1 checkpoint (model only, fresh optimizer)::
 
@@ -526,7 +526,7 @@ Print the config:
 1-GPU debug smoke (5 steps, batch=1×16k):
 › torchrun --nproc-per-node=1 {sys.argv[0]} train smoke \\
       --trainer.max_duration.value=5 --global_batch_size=16384 \\
-      --train_module.rank_microbatch_size=16384 --train_module.compile_model=false
+      --train_module.rank_microbatch_size=16384 --train_module.compile_model=true
 
 Full image-only-v9 mixture:
 › torchrun --nproc-per-node=8 {sys.argv[0]} train my-sft-run --mixture=image-only-v9
