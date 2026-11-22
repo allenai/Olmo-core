@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed in-loop LM (perplexity) evals under-reporting CE loss and PPL. `EvaluatorCallback` selected per-token losses with the unshifted `label_mask`, so every instance also averaged in the zero loss at its last real token (where the next-token label is ignored), and custom label masks were off by one.
 - The extra token rows of `SplitVocabEmbedding` (`TransformerConfig.n_extra_vocab > 0`) are now initialized by the model's init method like the base rows, instead of always with `init_std`, so they start at the same scale under `nanochat`, `llama`, `llama_depth`, `fan_in` and `normalized` init. The `normal` init is unchanged. muP and CompletedP now classify both rows as embeddings instead of raising.
 - Fixed int32 pointer-offset overflow in the valid-prefix SwiGLU Triton kernels (forward, dynamic-row forward, and backward). Row and column indices are widened to int64 before stride multiplication, so no-gradient MoE activation buffers with 2^31 or more elements (for example 1,048,576 rows by 2,048 BF16 columns) no longer read or write wrapped addresses.
 - Activation checkpointing now preserves the RNG state across recomputation whenever dropout is active (including `ResidualStream.masked_dropout`), so the recomputed forward replays the same dropout masks as the original forward instead of drawing new ones. Previously this was done only for EMO routing.
