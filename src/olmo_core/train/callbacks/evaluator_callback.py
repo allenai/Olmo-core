@@ -150,6 +150,10 @@ class EvaluatorCallback(Callback):
                 with torch.no_grad():
                     # Run forward pass, get logits and un-reduced CE loss.
                     labels = get_labels(batch)
+                    if "label_mask" in batch:
+                        # ce_loss[:, i] is the loss for predicting token i + 1, so the mask
+                        # used to select loss values must be shifted the same way as the labels.
+                        batch["label_mask"] = labels != -100
                     output = self.trainer.train_module.eval_batch(batch, labels=labels)
                     assert isinstance(output, LMOutputWithLoss)
                     logits, _, ce_loss, _ = output
