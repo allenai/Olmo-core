@@ -1,0 +1,34 @@
+name: Stacked PR Checks
+
+on:
+  pull_request:
+    branches:
+      - '**'
+      - '!main'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu_checks:
+    name: Lint, types, and CPU attention tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ./src/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+          cache-prefix: v1
+      - name: Lint
+        run: make lint-check
+      - name: Type check
+        run: make type-check
+      - name: CPU attention tests
+        run: pytest -v --color=yes --durations=3 -m 'not gpu' -k 'not tensor_parallel' src/test/nn/attention/
