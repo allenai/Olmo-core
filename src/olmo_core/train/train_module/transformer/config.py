@@ -338,6 +338,21 @@ class TransformerTrainModuleConfig(TrainModuleConfig):
     mutually exclusive with the historical ``cpt_loss_scaler`` method.
     """
 
+    additive_leaky_sft_alpha: Optional[float] = None
+    """AdditiveLeakySFT: mean SFT + alpha * mean CPT; finite alpha >= 0.
+
+    Uses rank-local optimizer-batch means, then DP averaging. Mutually exclusive
+    with historical and normalized LeakySFT. Alpha=1 does NOT reduce to CPT.
+    """
+    cpt_claim_boundary_tokenizer: Optional[str] = None
+    """Opt into claim-boundary masking for normalized/additive LeakySFT.
+
+    A fast Hugging Face tokenizer ID/path matching the tokenized contradiction
+    corpus. Only CPT targets at the first token of line-start ``Claim N:`` headers
+    are removed, including Claim 1. SFT and attention are unchanged. Requires
+    whole examples and an exact tokenization round trip; failures raise errors.
+    """
+
     def build(
         self,
         model: Transformer,
@@ -352,7 +367,7 @@ class TransformerTrainModuleConfig(TrainModuleConfig):
         from .pipeline_train_module import TransformerPipelineTrainModule
         from .train_module import TransformerTrainModule
 
-        if (self.cpt_loss_scaler is not None or self.normalized_leaky_sft_alpha is not None) and self.pp_config is not None:
+        if (self.cpt_loss_scaler is not None or self.normalized_leaky_sft_alpha is not None or self.additive_leaky_sft_alpha is not None) and self.pp_config is not None:
             raise NotImplementedError("LeakySFT pipeline parallel training is not implemented")
 
         kwargs = self.as_dict(exclude_none=True, recurse=False)

@@ -180,3 +180,31 @@ objective selection and W&B group differ in scientific configs; data order,
 unchanged. The prior prep is reused because neither data nor packing changed.
 All launches use the audited Liger 0.6.4 and the shared kernel/numerical fixes.
 Two GPUs per run, Jupiter, urgent, min-runtime=1h. No alpha=1 arm is included.
+
+## Additional variants (2026-11-23)
+
+**BoundaryMaskedNormalizedLeakySFT** sets `normalized_leaky_sft_alpha=alpha` and
+`cpt_claim_boundary_tokenizer="Qwen/Qwen3.5-0.8B"`. The objective is
+`(1-alpha)*mean_SFT + alpha*mean_CPT_without_claim_start_targets`.
+The first token of each line-start `Claim N:` heading (including Claim 1) is
+excluded from the CPT numerator and denominator. Headers belong to their claims;
+separator newlines belong to the preceding segment. All other targets, attention,
+and SFT weighting are unchanged. This masks only a single cross-boundary prediction,
+not the heading text, claim content, or attention to preceding claims. Tokenization
+must round-trip exactly; missing headings or misaligned offsets raise an error.
+The tokenizer is cached per rank, but text decoding and offset mapping add CPU work.
+
+**AdditiveLeakySFT** sets `additive_leaky_sft_alpha=alpha`, with both other alpha
+fields unset. Its objective is `mean_SFT + alpha*mean_CPT`, where CPT includes all
+valid output and non-output targets. Alpha is finite and nonnegative; alpha=1 is
+SFT+CPT, not pure CPT. Unlike interpolation, it never decreases the SFT coefficient.
+Both means are over each rank's full optimizer batch, followed by DP averaging.
+Changing alpha changes total objective/gradient scale; this is intentional.
+Boundary masking is also composable with the additive method, but these two
+requested experiments use boundary-masked interpolation and unmasked addition.
+
+These variants reuse the tested fused CE implementation and its numerical fixes.
+`variants_test.py` was committed before implementation and checks independent
+loss/gradient references, token alignment, SFT preservation, and empty/missing
+metadata errors. `audit_distributed.py` adds `AUDIT_ADDITIVE=1` or
+`AUDIT_CLAIM_MASK=1` alongside `AUDIT_NORMALIZED=1` for two-GPU gradient checks.

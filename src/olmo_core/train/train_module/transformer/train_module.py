@@ -125,15 +125,24 @@ class TransformerTrainModule(TrainModule):
         label_ignore_index: int = -100,
         cpt_loss_scaler: Optional[float] = None,
         normalized_leaky_sft_alpha: Optional[float] = None,
+        additive_leaky_sft_alpha: Optional[float] = None,
+        cpt_claim_boundary_tokenizer: Optional[str] = None,
     ):
         super().__init__()
 
-        if cpt_loss_scaler is not None and normalized_leaky_sft_alpha is not None:
-            raise ValueError("cpt_loss_scaler and normalized_leaky_sft_alpha are mutually exclusive")
+        methods = (cpt_loss_scaler, normalized_leaky_sft_alpha, additive_leaky_sft_alpha)
+        if sum(value is not None for value in methods) > 1:
+            raise ValueError("LeakySFT methods are mutually exclusive")
+        if additive_leaky_sft_alpha is not None:
+            if not math.isfinite(additive_leaky_sft_alpha) or additive_leaky_sft_alpha < 0:
+                raise ValueError("additive_leaky_sft_alpha must be finite and >= 0")
+        if cpt_claim_boundary_tokenizer is not None:
+            if normalized_leaky_sft_alpha is None and additive_leaky_sft_alpha is None:
+                raise ValueError("claim boundary masking requires normalized or additive LeakySFT")
         if normalized_leaky_sft_alpha is not None:
             if not math.isfinite(normalized_leaky_sft_alpha) or not 0 <= normalized_leaky_sft_alpha <= 1:
                 raise ValueError("normalized_leaky_sft_alpha must be finite and in [0, 1]")
-        if cpt_loss_scaler is not None or normalized_leaky_sft_alpha is not None:
+        if any(value is not None for value in methods):
             if cpt_loss_scaler is not None:
                 validate_cpt_loss_scaler(cpt_loss_scaler)
             if tp_config is not None:
@@ -146,6 +155,8 @@ class TransformerTrainModule(TrainModule):
                 raise NotImplementedError("LeakySFT requires the standard LM head")
         self.cpt_loss_scaler = cpt_loss_scaler
         self.normalized_leaky_sft_alpha = normalized_leaky_sft_alpha
+        self.additive_leaky_sft_alpha = additive_leaky_sft_alpha
+        self.cpt_claim_boundary_tokenizer = cpt_claim_boundary_tokenizer
 
         # Validate some options.
         if rank_microbatch_size % max_sequence_length != 0:
@@ -366,7 +377,7 @@ class TransformerTrainModule(TrainModule):
             gc_cuda()
 
     def train_batch(self, batch: Dict[str, Any], dry_run: bool = False):
-        if self.cpt_loss_scaler is not None or self.normalized_leaky_sft_alpha is not None:
+        if any(value is not None for value in (self.cpt_loss_scaler, self.normalized_leaky_sft_alpha, self.additive_leaky_sft_alpha)):
             return self._train_leaky_batch(batch, dry_run=dry_run)
         # Set model to train mode if it isn't already.
         self._set_model_mode("train")
@@ -492,6 +503,25 @@ class TransformerTrainModule(TrainModule):
                 namespace="train",
             )
 
+    @cached_property
+    def _cpt_claim_tokenizer(self):
+        from transformers import AutoTokenizer
+
+        return AutoTokenizer.from_pretrained(self.cpt_claim_boundary_tokenizer, use_fast=True)
+
+    def _claim_boundary_mask(self, batch):
+        from olmo_core.data.contradiction import claim_boundary_mask
+
+        valid = batch["loss_valid_mask"].bool().clone()
+        if (attention := batch.get("attention_mask")) is not None:
+            valid &= attention.bool()
+        if (instances := batch.get("instance_mask")) is not None:
+            valid &= instances.unsqueeze(-1)
+        return claim_boundary_mask(
+            batch["input_ids"], batch.get("label_mask", torch.ones_like(valid)),
+            valid, self._cpt_claim_tokenizer,
+        )
+
     def _train_leaky_batch(self, batch: Dict[str, Any], dry_run: bool = False):
         """Train with historical LeakySFT or NormalizedLeakySFT.
 
@@ -499,14 +529,22 @@ class TransformerTrainModule(TrainModule):
         token mean; NormalizedLeakySFT interpolates rank-local SFT/CPT means,
         matching legacy DP normalization. The head retains its CP correction.
         """
-        normalized = self.normalized_leaky_sft_alpha is not None
-        alpha = self.normalized_leaky_sft_alpha if normalized else self.cpt_loss_scaler
+        additive = self.additive_leaky_sft_alpha is not None
+        normalized = self.normalized_leaky_sft_alpha is not None or additive
+        alpha = self.additive_leaky_sft_alpha if additive else (
+            self.normalized_leaky_sft_alpha if normalized else self.cpt_loss_scaler
+        )
         assert alpha is not None
         self._set_model_mode("train")
         if "labels" in batch:
             raise ValueError("LeakySFT builds labels from input_ids and explicit masks")
         batch = dict(batch)
         labels, output_mask = get_leaky_labels(batch, self.label_ignore_index)
+        if self.cpt_claim_boundary_tokenizer is not None:
+            boundaries = self._claim_boundary_mask(batch).to(labels.device)
+            shifted = torch.cat([boundaries[:, 1:], torch.zeros_like(boundaries[:, :1])], dim=1)
+            # Boundary exclusions affect CPT only, never remove an SFT target.
+            labels = labels.masked_fill(shifted & ~output_mask, self.label_ignore_index)
         batch["labels"], batch["output_mask"] = labels, output_mask
         valid = labels != self.label_ignore_index
         counts = torch.stack([(valid & output_mask).sum(), (valid & ~output_mask).sum()])
@@ -520,7 +558,7 @@ class TransformerTrainModule(TrainModule):
                 excluded = (~instance_mask).sum().to(self.device) * batch["input_ids"].shape[1]
             answer_count = (counts[0] + excluded).clamp_min(1)
             all_count = (counts.sum() + excluded).clamp_min(1)
-            output_coefficient = (1 - alpha) / answer_count + alpha / all_count
+            output_coefficient = (1.0 if additive else 1 - alpha) / answer_count + alpha / all_count
             context_coefficient = alpha / all_count
             # Reuse disjoint fused CE sums: (S_out + ratio*S_ctx)/denom.
             # This is exactly the interpolation, without changing historical LeakySFT.
@@ -589,7 +627,7 @@ class TransformerTrainModule(TrainModule):
             / weighted.clamp_min(torch.finfo(torch.float32).tiny),
         }.items():
             if normalized:
-                name = name.replace("leaky/", "normalized_leaky/")
+                name = name.replace("leaky/", "additive_leaky/" if additive else "normalized_leaky/")
             self.record_metric(name, value.float(), namespace="train")
         for name, (value, reduction) in self.model.compute_auxiliary_metrics(reset=True).items():
             self.record_metric(name, value, reduction, namespace="train")
