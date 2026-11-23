@@ -11,6 +11,7 @@ from olmo_core.nn.attention.ring import (
     RingContextParallelStyle,
     UlyssesContextParallelStyle,
 )
+from olmo_core.nn.rope import RoPEConfig
 
 
 @pytest.mark.parametrize("cp", [2, 4])
@@ -83,3 +84,27 @@ def test_scalable_softmax_rejects_ring_when_backend_also_has_ulysses():
 
     with pytest.raises(NotImplementedError, match="requires Ulysses"):
         attention._apply_scalable_softmax(torch.ones(1, 4, 2, 4), None)
+
+
+def test_scalable_softmax_rejects_packed_ulysses_with_rope():
+    attention = Attention(
+        d_model=8,
+        n_heads=2,
+        scalable_softmax=True,
+        backend=AttentionBackendName.torch,
+        rope=RoPEConfig(),
+    )
+    mesh = SimpleNamespace(get_group=lambda: None, get_local_rank=lambda: 1, size=lambda: 2)
+    attention.apply_cp(mesh, uly=UlyssesContextParallelStyle())
+    assert attention.rope is not None
+    buffers = attention.rope.get_buffers(8, torch.device("cpu"))
+    assert buffers.pos_sin is not None and buffers.pos_cos is not None
+
+    with pytest.raises(NotImplementedError, match="packed Ulysses attention with RoPE"):
+        attention(
+            torch.randn(1, 4, 8),
+            cu_doc_lens=torch.tensor([0, 3, 8], dtype=torch.int32),
+            max_doc_len=5,
+            pos_sin=buffers.pos_sin[4:],
+            pos_cos=buffers.pos_cos[4:],
+        )

@@ -959,6 +959,10 @@ class Attention(SequenceMixer):
                     "Intra-document RoPE (cu_doc_lens) is only supported by RotaryEmbedding; "
                     f"got {type(self.rope).__name__}"
                 )
+            if self.scalable_softmax and self.cp_enabled:
+                raise NotImplementedError(
+                    "Scalable-Softmax does not support packed Ulysses attention with RoPE"
+                )
             rope_kwargs["cu_doc_lens"] = cu_doc_lens
         if position_ids is not None:
             if not isinstance(self.rope, RotaryEmbedding):
@@ -1246,9 +1250,8 @@ class Attention(SequenceMixer):
         positions for the contiguous query shards. Ring layouts remain unsupported.
 
         .. warning::
-            Packed Ulysses attention with the standard rotary embedding uses incorrect
-            document-relative rotary positions. Scalable-Softmax layers without RoPE
-            can use packed Ulysses attention.
+            Scalable-Softmax rejects packed Ulysses attention with the standard rotary
+            embedding because packed RoPE needs document-relative positions across shards.
 
         .. important::
             This requires a backend that supports CP, such as "flash_2" or "te".
