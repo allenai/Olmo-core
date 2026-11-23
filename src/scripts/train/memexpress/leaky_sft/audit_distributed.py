@@ -17,6 +17,9 @@ init_distributed()
 rank=dist.get_rank(); device=torch.device('cuda',int(os.environ['LOCAL_RANK']))
 bf16=os.environ.get("AUDIT_BF16")=="1"
 normalized=os.environ.get("AUDIT_NORMALIZED")=="1"
+additive=os.environ.get("AUDIT_ADDITIVE")=="1"
+boundary_masked=os.environ.get("AUDIT_CLAIM_MASK")=="1"
+assert not (additive or boundary_masked) or normalized
 results=[]
 legacy_grad=None
 for alpha in [None,0.,.1,.3,.5,.7,1.]:
@@ -32,7 +35,9 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     else:
         module.optim.zero_grad(set_to_none=True)
         if normalized:
-            module.normalized_leaky_sft_alpha=alpha
+            if additive:module.additive_leaky_sft_alpha=alpha
+            else:module.normalized_leaky_sft_alpha=alpha
+            if boundary_masked:module.cpt_claim_boundary_tokenizer="audit"
         else:
             module.cpt_loss_scaler=alpha
     cfg.lm_head.loss_implementation=LMLossImplementation.default
@@ -56,8 +61,13 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
         answer_sums=(ce.view_as(mask)*mask).reshape(2,-1).sum(1)
         answer_counts=mask.reshape(2,-1).sum(1)
         sft=(answer_sums/answer_counts).mean()
-        cpt=ce.sum()/(labels!=-100).sum()
-        loss=sft if alpha is None else (1-alpha)*sft+alpha*cpt
+        cpt_valid=labels!=-100
+        if boundary_masked:
+            boundary=torch.zeros_like(output);boundary[:,3]=True
+            cpt_valid &= ~F.pad(boundary[:,1:],(0,1),value=False)
+            module._claim_boundary_mask=lambda batch: boundary[:len(batch['input_ids'])]
+        cpt=((ce.view_as(mask)*cpt_valid).reshape(2,-1).sum(1)/cpt_valid.reshape(2,-1).sum(1)).mean()
+        loss=sft if alpha is None else (1 if additive else 1-alpha)*sft+alpha*cpt
     elif alpha is None:
         loss=((ce.view_as(mask)*mask).sum(1)/mask.sum(1)).mean()
     else:
@@ -97,5 +107,5 @@ for alpha in [None,0.,.1,.3,.5,.7,1.]:
     torch.cuda.empty_cache()
 if rank==0:
     print(json.dumps(results,indent=2))
-    open('/results/distributed-audit'+('-normalized' if normalized else '')+('-bf16' if bf16 else '-fp32')+'.json','w').write(json.dumps(results,indent=2))
+    open('/results/distributed-audit'+('-additive' if additive else '-normalized' if normalized else '')+('-boundary' if boundary_masked else '')+('-bf16' if bf16 else '-fp32')+'.json','w').write(json.dumps(results,indent=2))
 dist.destroy_process_group()
