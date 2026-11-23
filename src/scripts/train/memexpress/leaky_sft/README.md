@@ -208,3 +208,16 @@ These variants reuse the tested fused CE implementation and its numerical fixes.
 loss/gradient references, token alignment, SFT preservation, and empty/missing
 metadata errors. `audit_distributed.py` adds `AUDIT_ADDITIVE=1` or
 `AUDIT_CLAIM_MASK=1` alongside `AUDIT_NORMALIZED=1` for two-GPU gradient checks.
+
+### Requested two-variant sweeps
+
+| Method | New arms | Shared control |
+| --- | --- | --- |
+| BoundaryMaskedNormalizedLeakySFT | a01 / a03 / a05 / a07 | NormalizedLeakySFT a00, step2493, 2026-11-19 |
+| AdditiveLeakySFT | a01 / a03 / a05 / a07 | Same alpha=0 control |
+
+`launch_variants.py --ref PUSHED_SHA --prefix FRESH_PREFIX --output-dir NEW_DIR --submit`
+queues these eight jobs. Each uses two GPUs on Jupiter, urgent priority,
+min-runtime=1h, and the unchanged one-epoch 4,986-window / 2,493-step recipe.
+Both variants share the previous builder; CLI overrides are disabled to preserve
+the comparison. The unchanged data/packing cache and measured prep are reused.
