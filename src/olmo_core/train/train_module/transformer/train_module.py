@@ -448,6 +448,19 @@ class TransformerTrainModule(TrainModule):
             # for the loss so that each rank contributes to the loss calculation fairly.
             batch_num_tokens_for_loss += (~instance_mask).sum() * batch_num_tokens_per_instance
 
+        # Normalize by the global number of loss tokens rather than the local one, so that the
+        # objective is the mean over all loss tokens in the global batch regardless of how they're
+        # distributed across DP ranks. Since gradients get averaged over DP ranks, we divide the
+        # global count by the DP world size. NOTE: CP/TP ranks see the same (unsharded) labels here,
+        # so they're not part of the DP process group sum and the LM head already accounts for them.
+        if is_distributed() and self.dp_config is not None:
+            dist.all_reduce(batch_num_tokens_for_loss, group=self.dp_process_group)
+            batch_num_tokens_for_loss = batch_num_tokens_for_loss.clamp_min(1) / get_world_size(
+                self.dp_process_group
+            )
+        else:
+            batch_num_tokens_for_loss = batch_num_tokens_for_loss.clamp_min(1)
+
         # Batch losses to record.
         ce_batch_loss = move_to_device(torch.tensor(0.0), self.device)
         z_batch_loss: Optional[torch.Tensor] = None
