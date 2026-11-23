@@ -901,8 +901,11 @@ class Attention(SequenceMixer):
     ) -> torch.Tensor:
         if not self.scalable_softmax:
             return q
-        if self.cp_enabled and getattr(self.backend, "uly", None) is None:
-            raise NotImplementedError("Scalable-Softmax is not supported with context parallelism")
+        if self.cp_enabled and (
+            getattr(self.backend, "ring", None) is not None
+            or getattr(self.backend, "uly", None) is None
+        ):
+            raise NotImplementedError("Scalable-Softmax context parallelism requires Ulysses")
         if self.kv_cache_manager is not None:
             raise NotImplementedError("Scalable-Softmax is not supported with KV caching")
 
@@ -1241,6 +1244,11 @@ class Attention(SequenceMixer):
 
         Scalable-Softmax supports Ulysses, using original sequence/document
         positions for the contiguous query shards. Ring layouts remain unsupported.
+
+        .. warning::
+            Packed Ulysses attention with the standard rotary embedding uses incorrect
+            document-relative rotary positions. Scalable-Softmax layers without RoPE
+            can use packed Ulysses attention.
 
         .. important::
             This requires a backend that supports CP, such as "flash_2" or "te".

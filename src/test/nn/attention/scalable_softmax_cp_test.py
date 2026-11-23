@@ -7,7 +7,10 @@ import torch
 
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.attention import Attention, AttentionBackendName
-from olmo_core.nn.attention.ring import UlyssesContextParallelStyle
+from olmo_core.nn.attention.ring import (
+    RingContextParallelStyle,
+    UlyssesContextParallelStyle,
+)
 
 
 @pytest.mark.parametrize("cp", [2, 4])
@@ -69,4 +72,14 @@ def test_ulysses_scaling_and_gradients_match_full_sequence(cp, packed, dtype, mo
 def test_scalable_softmax_still_rejects_ring_cp():
     attention = Attention(d_model=8, n_heads=2, scalable_softmax=True)
     with pytest.raises(OLMoConfigurationError, match="requires Ulysses"):
-        attention.apply_cp(None, ring=object())
+        attention.apply_cp(None, ring=RingContextParallelStyle())
+
+
+def test_scalable_softmax_rejects_ring_when_backend_also_has_ulysses():
+    attention = Attention(d_model=8, n_heads=2, scalable_softmax=True)
+    attention.backend.cp_enabled = True
+    attention.backend.ring = RingContextParallelStyle()
+    attention.backend.uly = UlyssesContextParallelStyle()
+
+    with pytest.raises(NotImplementedError, match="requires Ulysses"):
+        attention._apply_scalable_softmax(torch.ones(1, 4, 2, 4), None)
