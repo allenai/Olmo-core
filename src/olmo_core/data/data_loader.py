@@ -449,12 +449,29 @@ class NumpyDataLoaderBase(TextDataLoaderBase):
         }
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
-        if state_dict["dataset_fingerprint_version"] != self.dataset.fingerprint_version:
+        saved_version = state_dict["dataset_fingerprint_version"]
+        saved_fingerprint = state_dict["dataset_fingerprint"]
+        version_mismatch = saved_version != self.dataset.fingerprint_version
+        if version_mismatch:
             log.warning(
                 "Dataset fingerprint version does not match the version in the checkpoint, "
                 "this could mean the data has changed"
             )
-        elif state_dict["dataset_fingerprint"] != self.dataset.fingerprint:
+
+        accepted_legacy = (
+            self.dataset.accepted_legacy_fingerprints(saved_version) if version_mismatch else None
+        )
+        # None: historical behavior — skip comparison when versions differ.
+        # A tuple: the checkpoint must match the current fingerprint or a verified
+        # legacy encoding (used by packed datasets for the v2.0 -> v2.1 migration).
+        if accepted_legacy is None and version_mismatch:
+            fingerprint_ok = True
+        else:
+            fingerprint_ok = saved_fingerprint == self.dataset.fingerprint or (
+                accepted_legacy is not None and saved_fingerprint in accepted_legacy
+            )
+
+        if not fingerprint_ok:
             if not self.ignore_fingerprint_mismatch:
                 raise RuntimeError(
                     "Dataset fingerprint does not match the fingerprint in the checkpoint, "
