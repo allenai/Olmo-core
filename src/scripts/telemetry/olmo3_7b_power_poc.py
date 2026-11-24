@@ -354,6 +354,8 @@ def finalize_config(config: ExperimentConfig):
         return
     config.launch.priority = "urgent"
     config.launch.budget = "ai2/oe-other"
+    # The cluster may be full; keep following the job while it waits in the queue.
+    config.launch.launch_timeout = None
     dolma = BeakerWekaBucket("dolma-3p5", "/weka/dolma-3p5")
     if dolma not in config.launch.weka_buckets:
         config.launch.weka_buckets.append(dolma)
