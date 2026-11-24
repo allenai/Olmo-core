@@ -364,6 +364,9 @@ def finalize_config(config: ExperimentConfig):
         return
     config.launch.priority = "urgent"
     config.launch.budget = "ai2/oe-other"
+    # Without a minimum runtime the job is unallocated and can be preempted at any time; cover
+    # the whole run (~40 min) plus a buffer.
+    config.launch.min_runtime = "1h"
     # The cluster may be full; keep following the job while it waits in the queue.
     config.launch.launch_timeout = None
     # The internal launcher expects '<USER>_*' secrets; this workspace stores them as '<user>_*'.
