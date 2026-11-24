@@ -130,7 +130,7 @@ class PowerTimelineCallback(Callback):
     stop file and waits for the sampler to finish its cool-down so the container stays up for it.
     """
 
-    # Run before the checkpointer (priority 1) so a step's end marker precedes its save.
+    # Run before the checkpointer (priority 1) so 'train_batch_end' precedes any save in that step.
     priority: ClassVar[int] = 10
 
     flush_interval: int = 20
@@ -220,6 +220,11 @@ class PowerTimelineCallback(Callback):
 
     def pre_optim_step(self):
         self._mark("optim_start", cuda_event=True)
+
+    def post_train_batch(self):
+        # The checkpointer saves in post_train_batch (after this callback), so this marks the start
+        # of any checkpoint save in this step.
+        self._mark("train_batch_end", cuda_event=True)
 
     def post_step(self):
         self._mark("step_end", cuda_event=True)
