@@ -16,7 +16,9 @@ Sampling loops (NVML calls block per GPU, so the GPU loops run one process per G
   utilization, and GPM metrics (SM/tensor/DRAM activity, NVLink/PCIe throughput) at
   ``--slow-hz``.
 * ``host``: ``/proc/stat``, ``/proc/meminfo``, ``/proc/net/dev``, ``/proc/diskstats``,
-  InfiniBand port counters, and RAPL energy counters (if readable) at ``--host-hz``.
+  InfiniBand port counters, and RAPL energy counters (if readable) at ``--host-hz``; summed
+  ``/proc/<pid>/io`` of the training processes at a quarter of that rate; hwmon temperatures at
+  1 Hz.
 
 Every row carries ``t_mono_ns`` (``CLOCK_MONOTONIC``, shared with the training processes on
 the same host) and ``t_wall_ns``. Rows are flushed to Parquet chunks every ``--flush-s``
@@ -33,6 +35,7 @@ import multiprocessing as mp
 import os
 import platform
 import resource
+import shutil
 import signal
 import subprocess
 import time
@@ -269,30 +272,131 @@ def slow_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
 # ----------------------------------------------------------------------------------------------
 
 
+def _readable(path: str) -> bool:
+    try:
+        with open(path) as f:
+            f.read()
+        return True
+    except OSError:
+        return False
+
+
 def _host_sources() -> dict[str, str]:
+    """Counters sampled every host tick: InfiniBand port data and RAPL energy, when visible."""
     sources = {}
     for p in sorted(glob.glob("/sys/class/infiniband/*/ports/*/counters/port_*_data")):
         parts = p.split("/")
         sources[f"ib:{parts[4]}:{parts[6]}:{parts[-1]}"] = p
     for p in sorted(glob.glob("/sys/class/powercap/*/energy_uj")):
-        try:
-            with open(p) as f:
-                f.read()
+        if _readable(p):
             sources[f"rapl:{p.split('/')[-2]}"] = p
-        except OSError:
-            pass
     return sources
+
+
+def _temp_sources() -> dict[str, str]:
+    """hwmon temperature sensors (CPU packages/cores, NICs, NVMe), in millidegrees C."""
+    sources = {}
+    for d in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
+        try:
+            with open(f"{d}/name") as f:
+                name = f.read().strip()
+        except OSError:
+            continue
+        for p in sorted(glob.glob(f"{d}/temp*_input")):
+            label_path = p.replace("_input", "_label")
+            label = p.split("/")[-1].replace("_input", "")
+            try:
+                with open(label_path) as f:
+                    label = f.read().strip().replace(" ", "_")
+            except OSError:
+                pass
+            if _readable(p):
+                sources[f"temp:{d.split('/')[-1]}:{name}:{label}"] = p
+    return sources
+
+
+def _workload_pids() -> list[int]:
+    """All processes in the container except this sampler (training ranks, data workers, ...)."""
+    pids = []
+    for d in glob.glob("/proc/[0-9]*"):
+        try:
+            with open(f"{d}/cmdline", "rb") as f:
+                cmd = f.read()
+        except OSError:
+            continue
+        if cmd and b"power_sampler.py" not in cmd:
+            pids.append(int(d.split("/")[-1]))
+    return pids
+
+
+def host_inventory() -> dict:
+    """One-time record of which host-side sources are visible, to diagnose gaps."""
+    ib_ports = {}
+    for d in sorted(glob.glob("/sys/class/infiniband/*/ports/*")):
+        try:
+            ib_ports[d] = sorted(os.listdir(d))
+        except OSError as e:
+            ib_ports[d] = f"ERROR: {e}"
+    return {
+        "host_sources": sorted(_host_sources()),
+        "temp_sources": sorted(_temp_sources()),
+        "powercap_entries": sorted(glob.glob("/sys/class/powercap/*")),
+        "ib_port_entries": ib_ports,
+        "ipmi_devices": sorted(glob.glob("/dev/ipmi*")),
+        "perfquery": shutil.which("perfquery"),
+        "perfquery_output": _run_cmd(["perfquery"]) if shutil.which("perfquery") else None,
+        "proc_io_readable": _readable(f"/proc/{os.getppid()}/io"),
+        "mounts_masking_sys": _masked_sys_mounts(),
+    }
+
+
+def _masked_sys_mounts() -> list[str]:
+    """tmpfs mounts over parts of /sys, which is how container runtimes hide e.g. RAPL."""
+    with open("/proc/mounts") as f:
+        return [line.strip() for line in f if " /sys/" in line and "tmpfs" in line]
 
 
 def host_loop(hz: float, out_dir: str, flush_s: float, stop):
     mem_keys = {"MemTotal", "MemAvailable", "Cached", "Dirty", "Writeback", "Shmem"}
+    io_keys = ("rchar", "wchar", "read_bytes", "write_bytes")
+    # Lower rates for slower-changing sources, in host ticks (20 Hz by default).
+    temp_every, io_every, pid_refresh_every = int(hz), max(1, int(hz) // 4), 2 * int(hz)
 
     def setup():
-        return {"sysfs": _host_sources()}
+        return {"sysfs": _host_sources(), "temps": _temp_sources(), "pids": [], "tick": 0}
 
     def sample(state, writer, t_mono, t_wall):
         def add(key, value):
             writer.add({"t_mono_ns": t_mono, "t_wall_ns": t_wall, "key": key, "value": int(value)})
+
+        tick = state["tick"]
+        state["tick"] += 1
+        if tick % temp_every == 0:
+            for key, path in state["temps"].items():
+                try:
+                    with open(path) as f:
+                        add(key, f.read().strip())
+                except (OSError, ValueError):
+                    pass
+        if tick % pid_refresh_every == 0:
+            state["pids"] = _workload_pids()
+        if tick % io_every == 0:
+            # Cumulative I/O of the training processes, including checkpoint writes to network
+            # filesystems that the container's net/disk counters don't see. Processes that exit
+            # drop out of the sum; take per-interval deltas with that in mind.
+            totals = dict.fromkeys(io_keys, 0)
+            for pid in state["pids"]:
+                try:
+                    with open(f"/proc/{pid}/io") as f:
+                        for line in f:
+                            k, v = line.split(":", 1)
+                            if k in totals:
+                                totals[k] += int(v)
+                except (OSError, ValueError):
+                    pass
+            for k, v in totals.items():
+                add(f"procio:{k}", v)
+            add("procio:num_pids", len(state["pids"]))
 
         with open("/proc/stat") as f:
             fields = f.readline().split()[1:9]
@@ -376,6 +480,9 @@ def write_metadata(out_dir: Path, args: argparse.Namespace):
         gpus.append(g)
     meta = {
         "hostname": platform.node(),
+        "node": os.environ.get("BEAKER_NODE_HOSTNAME"),
+        "replica_rank": os.environ.get("BEAKER_REPLICA_RANK"),
+        "host_inventory": host_inventory(),
         "start_mono_ns": time.monotonic_ns(),
         "start_wall_ns": time.time_ns(),
         "driver": N.nvmlSystemGetDriverVersion(),

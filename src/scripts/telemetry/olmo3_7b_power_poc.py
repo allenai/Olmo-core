@@ -21,6 +21,7 @@ Set ``POWER_POC_SIDECAR=0`` in the launching environment to run without the samp
 import json
 import os
 import socket
+import threading
 import time
 from dataclasses import dataclass
 from functools import partial
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import ClassVar, List, Optional, Tuple
 
 import torch
+import torch.distributed as dist
 
 from olmo_core.config import DType
 from olmo_core.data import (
@@ -64,9 +66,19 @@ from olmo_core.train.train_module import (
     TransformerTrainModuleConfig,
 )
 
+TELEMETRY_DIR_ENV = "POWER_TELEMETRY_DIR"
+SIDECAR_ENV = "POWER_POC_SIDECAR"
+NUM_NODES_ENV = "POWER_POC_NUM_NODES"
+SAVE_ASYNC_ENV = "POWER_POC_SAVE_ASYNC"
+
+# Set in the launching environment and forwarded to the job (see finalize_config).
+NUM_NODES = int(os.environ.get(NUM_NODES_ENV, "1"))
+SAVE_ASYNC = os.environ.get(SAVE_ASYNC_ENV, "0") == "1"
+
 SEQUENCE_LENGTH = 8192
-# 128 sequences (~1M tokens): 16 sequences per GPU per step on one 8-GPU node.
-GLOBAL_BATCH_SIZE = 128 * SEQUENCE_LENGTH
+# 16 sequences per GPU per step (128 sequences, ~1M tokens, per 8-GPU node), so per-GPU work stays
+# the same as the node count changes.
+GLOBAL_BATCH_SIZE = 128 * NUM_NODES * SEQUENCE_LENGTH
 # 4 sequences per microbatch -> 4 microbatches per step. Comfortably within B300 memory.
 RANK_MICROBATCH_SEQUENCES = 4
 MAX_STEPS = 220
@@ -86,9 +98,6 @@ DATA_SEED = 928_543_231
 DOLMA_3P5_ROOT = "/weka/dolma-3p5/ai2-llm"
 BEAKER_IMAGE = "akshitab/olmo-core-tch2130cu130-fa4-rma-2026-09-11"
 WORKSPACE = "ai2/olmo3p5-training"
-
-TELEMETRY_DIR_ENV = "POWER_TELEMETRY_DIR"
-SIDECAR_ENV = "POWER_POC_SIDECAR"
 
 
 class Dolma3p5Mix(DataMixBase):
@@ -115,6 +124,11 @@ class Dolma3p5Mix(DataMixBase):
         return paths, labels
 
 
+def _node_name() -> str:
+    """The physical node's name (the container hostname is a random ID on Beaker)."""
+    return os.environ.get("BEAKER_NODE_HOSTNAME") or socket.gethostname()
+
+
 @dataclass
 class PowerTimelineCallback(Callback):
     """
@@ -124,7 +138,8 @@ class PowerTimelineCallback(Callback):
     Each marker stores the host ``CLOCK_MONOTONIC`` time when the hook ran. Step start, optimizer
     start, and step end also record a CUDA event, which is resolved later (without blocking) into
     the time the GPU actually reached that point, on the same monotonic clock. Rows are appended
-    to ``<telemetry_dir>/<hostname>/timeline/rank<N>.jsonl``.
+    to ``<telemetry_dir>/<node>/timeline/rank<N>.jsonl``. Before and after training, all ranks also
+    record timestamps right after a shared all-reduce (``clock_sync``) to align clocks across nodes.
 
     When the trainer shuts down (after the final checkpoint), local rank 0 writes the sampler's
     stop file and waits for the sampler to finish its cool-down so the container stays up for it.
@@ -142,10 +157,12 @@ class PowerTimelineCallback(Callback):
     _anchor = None
     _anchor_mono_ns = 0
     _path = None
+    # post_checkpoint_saved runs on a background thread for async checkpoints.
+    _lock = None
 
     def _host_dir(self) -> Optional[Path]:
         base = os.environ.get(TELEMETRY_DIR_ENV)
-        return None if not base else Path(base) / socket.gethostname()
+        return None if not base else Path(base) / _node_name()
 
     def _mark(self, event: str, cuda_event: bool = False, **extra):
         if self._rows is None or self._pending is None:
@@ -157,11 +174,12 @@ class PowerTimelineCallback(Callback):
             "host_wall_ns": time.time_ns(),
             **extra,
         }
-        if cuda_event and self._anchor is not None:
-            ev = torch.cuda.Event(enable_timing=True)
-            ev.record()
-            self._pending.append((row, ev))
-        self._rows.append(row)
+        with self._lock:
+            if cuda_event and self._anchor is not None:
+                ev = torch.cuda.Event(enable_timing=True)
+                ev.record()
+                self._pending.append((row, ev))
+            self._rows.append(row)
 
     def _resolve(self, block: bool = False):
         assert self._pending is not None
@@ -182,14 +200,29 @@ class PowerTimelineCallback(Callback):
             self._rows = []
             return
         # Only write rows whose CUDA events are resolved; keep the rest for the next flush.
-        pending_ids = {id(row) for row, _ in self._pending}
-        done = [r for r in self._rows if id(r) not in pending_ids]
-        self._rows = [r for r in self._rows if id(r) in pending_ids]
+        with self._lock:
+            pending_ids = {id(row) for row, _ in self._pending}
+            done = [r for r in self._rows if id(r) not in pending_ids]
+            self._rows = [r for r in self._rows if id(r) in pending_ids]
         with open(self._path, "a") as f:
             for r in done:
                 f.write(json.dumps(r) + "\n")
 
+    def _clock_sync(self, label: str, rounds: int = 5):
+        """
+        Record matching host timestamps on every rank right after a CPU (gloo) all-reduce, so
+        clock offsets between nodes can be estimated (keep the round with the smallest spread).
+        Only called before and after training, never during steps.
+        """
+        if not (dist.is_available() and dist.is_initialized()) or dist.get_world_size() < 2:
+            return
+        token = torch.zeros(1)  # a CPU tensor, so this runs on the CPU backend
+        for i in range(rounds):
+            dist.all_reduce(token)
+            self._mark("clock_sync", label=label, round=i)
+
     def pre_train(self):
+        self._lock = threading.Lock()
         self._rows, self._pending = [], []
         self._anchor = None
         self._path = None
@@ -210,8 +243,18 @@ class PowerTimelineCallback(Callback):
             rank=get_rank(),
             local_rank=get_local_rank(),
             global_batch_tokens=GLOBAL_BATCH_SIZE,
-            hostname=socket.gethostname(),
+            num_nodes=NUM_NODES,
+            save_async=SAVE_ASYNC,
+            node=_node_name(),
+            replica_rank=os.environ.get("BEAKER_REPLICA_RANK"),
+            container_hostname=socket.gethostname(),
+            gpu_uuid=(
+                str(torch.cuda.get_device_properties(torch.cuda.current_device()).uuid)
+                if torch.cuda.is_available()
+                else None
+            ),
         )
+        self._clock_sync("train_start")
 
     def pre_step(self, batch):
         del batch
@@ -235,6 +278,7 @@ class PowerTimelineCallback(Callback):
         self._mark("checkpoint_saved", path=str(path))
 
     def post_train(self):
+        self._clock_sync("train_end")
         self._mark("train_end")
 
     def close(self):
@@ -332,7 +376,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             CheckpointerCallback(
                 save_interval=SAVE_INTERVAL,
                 ephemeral_save_interval=None,
-                save_async=False,
+                save_async=SAVE_ASYNC,
                 pre_train_checkpoint=False,
             ),
         )
@@ -360,7 +404,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
 
 
 def _sampler_post_setup(telemetry_dir: str) -> str:
-    host_dir = f"{telemetry_dir}/$(hostname)"
+    host_dir = f"{telemetry_dir}/${{BEAKER_NODE_HOSTNAME:-$(hostname)}}"
     return (
         "pip install -q -U nvidia-ml-py && "
         f'mkdir -p "{host_dir}" && '
@@ -403,6 +447,8 @@ def finalize_config(config: ExperimentConfig):
     env = {e.name: e for e in config.launch.env_vars}
     env[TELEMETRY_DIR_ENV] = BeakerEnvVar(name=TELEMETRY_DIR_ENV, value=telemetry_dir)
     env[SIDECAR_ENV] = BeakerEnvVar(name=SIDECAR_ENV, value="1" if sidecar else "0")
+    env[NUM_NODES_ENV] = BeakerEnvVar(name=NUM_NODES_ENV, value=str(NUM_NODES))
+    env[SAVE_ASYNC_ENV] = BeakerEnvVar(name=SAVE_ASYNC_ENV, value="1" if SAVE_ASYNC else "0")
     config.launch.env_vars = list(env.values())
     if sidecar:
         config.launch.post_setup = _sampler_post_setup(telemetry_dir)
@@ -420,6 +466,7 @@ if __name__ == "__main__":
         finalize_config=finalize_config,
         beaker_image=BEAKER_IMAGE,
         beaker_workspace=WORKSPACE,
+        num_nodes=NUM_NODES,
         include_default_evals=False,
     )
     main(config_builder=config_builder)
