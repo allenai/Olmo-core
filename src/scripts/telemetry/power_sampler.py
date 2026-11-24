@@ -182,11 +182,15 @@ def fast_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
         for gpu, h in state["handles"].items():
             t = time.monotonic_ns()
             fvs = N.nvmlDeviceGetFieldValues(h, ids)
+            # Under training load a call can take tens of ms; the values were read somewhere
+            # between t and t_end, so record both to bracket each sensor update.
+            t_end = time.monotonic_ns()
             vals = tuple(U.decode(fv) for fv in fvs)
             if vals != state["last"][gpu]:
                 writer.add(
                     {
                         "t_mono_ns": t,
+                        "t_call_end_mono_ns": t_end,
                         "t_wall_ns": t_wall + (t - t_mono),
                         "t_prev_poll_mono_ns": state["prev_t"][gpu],
                         "gpu": gpu,
