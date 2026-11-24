@@ -391,12 +391,13 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
                 cancel_check_interval=cancel_check_interval,
             ),
         )
-        # Kernel-level timeline for two steps near the end of the run (rank 0 only). The
-        # profiler only records inside this window; those steps are excluded from analysis.
+        # Kernel-level timeline on every rank for two steps near the end of the run (~5 MB per
+        # rank). The profiler only records inside this window; those steps are excluded from
+        # analysis.
         .with_callback(
             "profiler",
             ProfilerCallback(
-                skip_first=MAX_STEPS - 16, wait=1, warmup=1, active=2, with_stack=False
+                skip_first=MAX_STEPS - 16, wait=1, warmup=1, active=2, with_stack=False, ranks="all"
             ),
         )
         .with_callback("power_timeline", PowerTimelineCallback())

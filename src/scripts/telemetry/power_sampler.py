@@ -7,18 +7,20 @@ It runs as separate, low-priority processes pinned to a few CPUs (started from t
 
     python src/scripts/telemetry/power_sampler.py --out-dir /weka/.../<run>/telemetry/<hostname>
 
-Sampling loops (NVML calls block per GPU, so the GPU loops run one process per GPU):
+Sampling loops, each in its own process (NVML calls block per GPU, so GPU loops are per GPU):
 
-* ``fast-g<N>``: instantaneous power, 1 s average power, and the energy counter, polled at
-  ``--fast-hz``. A row is stored only when a value changes, together with the time of the
-  previous poll, so each sensor update is localized to one polling interval.
-* ``slow-g<N>``: throttle-time counters, clocks, clock-event reasons, temperatures, memory,
-  utilization, and GPM metrics (SM/tensor/DRAM activity, NVLink/PCIe throughput) at
-  ``--slow-hz``.
-* ``host``: ``/proc/stat``, ``/proc/meminfo``, ``/proc/net/dev``, ``/proc/diskstats``,
-  InfiniBand port counters, and RAPL energy counters (if readable) at ``--host-hz``; summed
-  ``/proc/<pid>/io`` of the training processes at a quarter of that rate; hwmon temperatures at
-  1 Hz.
+* ``fast-g<N>`` (``--fast-hz``): instantaneous power, 1 s average power, and the energy counter.
+  A row is stored only when a value changes, with the previous poll time and the call's end
+  time, so each sensor update is bracketed.
+* ``mid-g<N>`` (``--mid-hz``): power/thermal/board-limit/reliability throttle-time counters, SM
+  clock, and clock-event reasons.
+* ``slow-g<N>`` (``--slow-hz``): GPM metrics (SM/tensor/DRAM activity, NVLink/PCIe throughput),
+  utilization, memory, temperatures, PCIe/NVLink byte counters, other throttle counters, and the
+  time spent in each group of NVML calls.
+* ``host`` (``--host-hz``): InfiniBand/RAPL sysfs counters (when visible), ``/proc/stat``,
+  ``/proc/meminfo``, ``/proc/net/dev``, ``/proc/diskstats``.
+* ``host_slow`` (``--host-slow-hz``): summed ``/proc/<pid>/io`` of the training processes, and
+  hwmon temperatures at 1 Hz.
 
 Every row carries ``t_mono_ns`` (``CLOCK_MONOTONIC``, shared with the training processes on
 the same host) and ``t_wall_ns``. Rows are flushed to Parquet chunks every ``--flush-s``
@@ -42,6 +44,10 @@ import time
 from pathlib import Path
 
 import nvml_util as U
+
+# Version of the output layout described in the telemetry data dictionary. 1: single slow GPU
+# loop and single host loop; 2: GPU loops split into fast/mid/slow and host into host/host_slow.
+SCHEMA_VERSION = 2
 
 
 def log(msg: str):
@@ -210,15 +216,60 @@ def fast_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
 
 
 # ----------------------------------------------------------------------------------------------
-# slow loop: throttling, clocks, temps, memory, utilization, GPM
+# mid loop: throttle-time counters and clocks
+# ----------------------------------------------------------------------------------------------
+
+# Throttle counters that matter for power/thermal analysis are read at the mid rate; the rest
+# (sync boost, low utilization, app/base clock policies) at the slow rate.
+_MID_THROTTLE = {
+    "throttle_power_ns",
+    "throttle_thermal_ns",
+    "throttle_board_limit_ns",
+    "throttle_reliability_ns",
+}
+MID_FIELDS = [f for f in U.THROTTLE_FIELDS if f[0] in _MID_THROTTLE]
+SLOW_FIELDS = [f for f in U.THROTTLE_FIELDS if f[0] not in _MID_THROTTLE] + U.SLOW_FIELDS
+
+
+def _safe(N, fn, *args):
+    try:
+        return fn(*args)
+    except N.NVMLError:
+        return None
+
+
+def mid_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
+    import pynvml as N
+
+    ids = U.field_ids(MID_FIELDS)
+
+    def setup():
+        N.nvmlInit()
+        return {"handles": {g: N.nvmlDeviceGetHandleByIndex(g) for g in gpus}}
+
+    def sample(state, writer, t_mono, t_wall):
+        for gpu, h in state["handles"].items():
+            t = time.monotonic_ns()
+            row = {"t_mono_ns": t, "t_wall_ns": t_wall + (t - t_mono), "gpu": gpu}
+            for (name, _, _), fv in zip(MID_FIELDS, N.nvmlDeviceGetFieldValues(h, ids)):
+                row[name] = U.decode(fv)
+            row["sm_clock_mhz"] = _safe(N, N.nvmlDeviceGetClockInfo, h, N.NVML_CLOCK_SM)
+            row["clock_event_reasons"] = _safe(N, N.nvmlDeviceGetCurrentClocksEventReasons, h)
+            row["t_call_end_mono_ns"] = time.monotonic_ns()
+            writer.add(row)
+
+    _run_loop(_loop_name("mid", gpus), hz, Path(out_dir), flush_s, stop, setup, sample)
+
+
+# ----------------------------------------------------------------------------------------------
+# slow loop: GPM activity, utilization, memory, temperatures, byte counters, other throttling
 # ----------------------------------------------------------------------------------------------
 
 
 def slow_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
     import pynvml as N
 
-    fields = U.THROTTLE_FIELDS + U.SLOW_FIELDS
-    ids = U.field_ids(fields)
+    ids = U.field_ids(SLOW_FIELDS)
 
     def setup():
         N.nvmlInit()
@@ -232,27 +283,23 @@ def slow_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
                 gpm[g] = None
         return {"handles": handles, "gpm": gpm}
 
-    def _safe(fn, *args):
-        try:
-            return fn(*args)
-        except N.NVMLError:
-            return None
-
     def sample(state, writer, t_mono, t_wall):
         for gpu, h in state["handles"].items():
             t = time.monotonic_ns()
             row = {"t_mono_ns": t, "t_wall_ns": t_wall + (t - t_mono), "gpu": gpu}
-            for (name, _, _), fv in zip(fields, N.nvmlDeviceGetFieldValues(h, ids)):
+            # Per-group call durations, to see which NVML queries are slow under load.
+            t0 = time.monotonic_ns()
+            for (name, _, _), fv in zip(SLOW_FIELDS, N.nvmlDeviceGetFieldValues(h, ids)):
                 row[name] = U.decode(fv)
-            row["sm_clock_mhz"] = _safe(N.nvmlDeviceGetClockInfo, h, N.NVML_CLOCK_SM)
-            row["mem_clock_mhz"] = _safe(N.nvmlDeviceGetClockInfo, h, N.NVML_CLOCK_MEM)
-            row["clock_event_reasons"] = _safe(N.nvmlDeviceGetCurrentClocksEventReasons, h)
-            row["gpu_temp_c"] = _safe(N.nvmlDeviceGetTemperature, h, N.NVML_TEMPERATURE_GPU)
-            mem = _safe(N.nvmlDeviceGetMemoryInfo, h)
+            t1 = time.monotonic_ns()
+            row["mem_clock_mhz"] = _safe(N, N.nvmlDeviceGetClockInfo, h, N.NVML_CLOCK_MEM)
+            row["gpu_temp_c"] = _safe(N, N.nvmlDeviceGetTemperature, h, N.NVML_TEMPERATURE_GPU)
+            mem = _safe(N, N.nvmlDeviceGetMemoryInfo, h)
             row["mem_used_bytes"] = None if mem is None else mem.used
-            util = _safe(N.nvmlDeviceGetUtilizationRates, h)
+            util = _safe(N, N.nvmlDeviceGetUtilizationRates, h)
             row["util_gpu_pct"] = None if util is None else util.gpu
             row["util_mem_pct"] = None if util is None else util.memory
+            t2 = time.monotonic_ns()
             reader = state["gpm"][gpu]
             vals = None
             if reader is not None:
@@ -262,6 +309,10 @@ def slow_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
                     vals = None
             for i, (name, _) in enumerate(U.GPM_METRICS):
                 row[name] = None if vals is None else vals[i]
+            t3 = time.monotonic_ns()
+            row["fields_call_ms"] = (t1 - t0) / 1e6
+            row["device_calls_ms"] = (t2 - t1) / 1e6
+            row["gpm_calls_ms"] = (t3 - t2) / 1e6
             writer.add(row)
 
     _run_loop(_loop_name("slow", gpus), hz, Path(out_dir), flush_s, stop, setup, sample)
@@ -357,47 +408,33 @@ def _masked_sys_mounts() -> list[str]:
 
 
 def host_loop(hz: float, out_dir: str, flush_s: float, stop):
+    """
+    Fast host counters: InfiniBand/RAPL sysfs counters (read first), CPU jiffies, memory,
+    network and disk. Each row carries its own read time (``t_read_mono_ns``) for computing rates.
+    """
     mem_keys = {"MemTotal", "MemAvailable", "Cached", "Dirty", "Writeback", "Shmem"}
-    io_keys = ("rchar", "wchar", "read_bytes", "write_bytes")
-    # Lower rates for slower-changing sources, in host ticks (20 Hz by default).
-    temp_every, io_every, pid_refresh_every = int(hz), max(1, int(hz) // 4), 2 * int(hz)
 
     def setup():
-        return {"sysfs": _host_sources(), "temps": _temp_sources(), "pids": [], "tick": 0}
+        return {"sysfs": _host_sources()}
 
     def sample(state, writer, t_mono, t_wall):
         def add(key, value):
-            writer.add({"t_mono_ns": t_mono, "t_wall_ns": t_wall, "key": key, "value": int(value)})
+            writer.add(
+                {
+                    "t_mono_ns": t_mono,
+                    "t_wall_ns": t_wall,
+                    "t_read_mono_ns": time.monotonic_ns(),
+                    "key": key,
+                    "value": int(value),
+                }
+            )
 
-        tick = state["tick"]
-        state["tick"] += 1
-        if tick % temp_every == 0:
-            for key, path in state["temps"].items():
-                try:
-                    with open(path) as f:
-                        add(key, f.read().strip())
-                except (OSError, ValueError):
-                    pass
-        if tick % pid_refresh_every == 0:
-            state["pids"] = _workload_pids()
-        if tick % io_every == 0:
-            # Cumulative I/O of the training processes, including checkpoint writes to network
-            # filesystems that the container's net/disk counters don't see. Processes that exit
-            # drop out of the sum; take per-interval deltas with that in mind.
-            totals = dict.fromkeys(io_keys, 0)
-            for pid in state["pids"]:
-                try:
-                    with open(f"/proc/{pid}/io") as f:
-                        for line in f:
-                            k, v = line.split(":", 1)
-                            if k in totals:
-                                totals[k] += int(v)
-                except (OSError, ValueError):
-                    pass
-            for k, v in totals.items():
-                add(f"procio:{k}", v)
-            add("procio:num_pids", len(state["pids"]))
-
+        for key, path in state["sysfs"].items():
+            try:
+                with open(path) as f:
+                    add(key, f.read().strip())
+            except (OSError, ValueError):
+                pass
         with open("/proc/stat") as f:
             fields = f.readline().split()[1:9]
         for name, v in zip(
@@ -428,14 +465,63 @@ def host_loop(hz: float, out_dir: str, flush_s: float, stop):
                     continue
                 add(f"disk:{dev}:sectors_read", cols[5])
                 add(f"disk:{dev}:sectors_written", cols[9])
-        for key, path in state["sysfs"].items():
-            try:
-                with open(path) as f:
-                    add(key, f.read().strip())
-            except (OSError, ValueError):
-                pass
 
     _run_loop("host", hz, Path(out_dir), flush_s, stop, setup, sample)
+
+
+def host_slow_loop(hz: float, out_dir: str, flush_s: float, stop):
+    """
+    Slower host sources, kept out of the fast loop so they can't delay it: summed
+    ``/proc/<pid>/io`` of the training processes (every tick) and hwmon temperatures (every
+    ``hz`` ticks, i.e. 1 Hz).
+    """
+    io_keys = ("rchar", "wchar", "read_bytes", "write_bytes")
+    temp_every, pid_refresh_every = max(1, int(hz)), max(1, 2 * int(hz))
+
+    def setup():
+        return {"temps": _temp_sources(), "pids": [], "tick": 0}
+
+    def sample(state, writer, t_mono, t_wall):
+        def add(key, value):
+            writer.add(
+                {
+                    "t_mono_ns": t_mono,
+                    "t_wall_ns": t_wall,
+                    "t_read_mono_ns": time.monotonic_ns(),
+                    "key": key,
+                    "value": int(value),
+                }
+            )
+
+        tick = state["tick"]
+        state["tick"] += 1
+        if tick % pid_refresh_every == 0:
+            state["pids"] = _workload_pids()
+        # Cumulative I/O of the training processes, including checkpoint writes to network
+        # filesystems that the container's net/disk counters don't see. Processes that exit drop
+        # out of the sum; take per-interval deltas with that in mind.
+        totals = dict.fromkeys(io_keys, 0)
+        for pid in state["pids"]:
+            try:
+                with open(f"/proc/{pid}/io") as f:
+                    for line in f:
+                        k, v = line.split(":", 1)
+                        if k in totals:
+                            totals[k] += int(v)
+            except (OSError, ValueError):
+                pass
+        for k, v in totals.items():
+            add(f"procio:{k}", v)
+        add("procio:num_pids", len(state["pids"]))
+        if tick % temp_every == 0:
+            for key, path in state["temps"].items():
+                try:
+                    with open(path) as f:
+                        add(key, f.read().strip())
+                except (OSError, ValueError):
+                    pass
+
+    _run_loop("host_slow", hz, Path(out_dir), flush_s, stop, setup, sample)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -479,6 +565,7 @@ def write_metadata(out_dir: Path, args: argparse.Namespace):
             g["power_smoothing_enabled"] = f"ERROR: {e}"
         gpus.append(g)
     meta = {
+        "schema_version": SCHEMA_VERSION,
         "hostname": platform.node(),
         "node": os.environ.get("BEAKER_NODE_HOSTNAME"),
         "replica_rank": os.environ.get("BEAKER_REPLICA_RANK"),
@@ -505,12 +592,14 @@ def main():
     # process per GPU. The power/energy sensors refresh every ~100 ms; 50 Hz localizes each
     # refresh to within 20 ms.
     parser.add_argument("--fast-hz", type=float, default=50.0)
-    parser.add_argument("--slow-hz", type=float, default=10.0)
+    parser.add_argument("--mid-hz", type=float, default=10.0)
+    parser.add_argument("--slow-hz", type=float, default=2.0)
     parser.add_argument("--host-hz", type=float, default=20.0)
+    parser.add_argument("--host-slow-hz", type=float, default=4.0)
     parser.add_argument("--flush-s", type=float, default=10.0)
     parser.add_argument("--cooldown-s", type=float, default=30.0)
     parser.add_argument("--max-hours", type=float, default=8.0)
-    parser.add_argument("--num-cpus", type=int, default=4, help="Pin to the last N allowed CPUs.")
+    parser.add_argument("--num-cpus", type=int, default=8, help="Pin to the last N allowed CPUs.")
     args = parser.parse_args()
 
     out_dir: Path = args.out_dir
@@ -532,18 +621,21 @@ def main():
     N.nvmlInit()
     num_gpus = N.nvmlDeviceGetCount()
     N.nvmlShutdown()
-    procs = [ctx.Process(target=host_loop, args=(args.host_hz, str(out_dir), args.flush_s, stop))]
+    procs = [
+        ctx.Process(target=host_loop, args=(args.host_hz, str(out_dir), args.flush_s, stop)),
+        ctx.Process(
+            target=host_slow_loop, args=(args.host_slow_hz, str(out_dir), args.flush_s, stop)
+        ),
+    ]
     for g in range(num_gpus):
-        procs.append(
-            ctx.Process(
-                target=fast_loop, args=([g], args.fast_hz, str(out_dir), args.flush_s, stop)
+        for target, hz in (
+            (fast_loop, args.fast_hz),
+            (mid_loop, args.mid_hz),
+            (slow_loop, args.slow_hz),
+        ):
+            procs.append(
+                ctx.Process(target=target, args=([g], hz, str(out_dir), args.flush_s, stop))
             )
-        )
-        procs.append(
-            ctx.Process(
-                target=slow_loop, args=([g], args.slow_hz, str(out_dir), args.flush_s, stop)
-            )
-        )
     for p in procs:
         p.start()
 
