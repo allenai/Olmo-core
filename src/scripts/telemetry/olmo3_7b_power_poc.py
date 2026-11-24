@@ -51,7 +51,7 @@ from olmo_core.launch.beaker import BeakerEnvVar, BeakerWekaBucket
 from olmo_core.nn.attention import AttentionBackendName
 from olmo_core.nn.transformer import TransformerConfig
 from olmo_core.optim import ConstantWithWarmup, OptimGroupOverride, SkipStepAdamWConfig
-from olmo_core.train import Duration, TrainerConfig
+from olmo_core.train import Duration, LoadStrategy, TrainerConfig
 from olmo_core.train.callbacks import (
     Callback,
     CheckpointerCallback,
@@ -76,7 +76,8 @@ LR = 1e-4
 WARMUP_STEPS = 50
 
 PROJECT_DIR = "/weka/oe-training-default/jacobm/olmo-energy-data"
-LOAD_PATH = f"{PROJECT_DIR}/checkpoints/olmo-core/Olmo-3-1025-7B-stage1-step1000000"
+# Model-only checkpoint converted from HF; the trainer loads it from the 'model_and_optim' dir.
+LOAD_PATH = f"{PROJECT_DIR}/checkpoints/olmo-core/Olmo-3-1025-7B-stage1-step1000000/model_and_optim"
 # Run outputs (checkpoints, telemetry) go to a bucket with free space; oe-training-default was full.
 OUTPUT_ROOT = "/weka/oe-adapt-default/jacobm/olmo-energy-data"
 # Same seed as the mainline scaling ladder, whose global data-order indices for this exact
@@ -309,6 +310,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             save_folder=f"{run_dir}/checkpoints",
             save_overwrite=True,
             load_path=LOAD_PATH,
+            load_strategy=LoadStrategy.always,
             load_trainer_state=False,
             load_optim_state=False,
             metrics_collect_interval=10,
