@@ -70,12 +70,18 @@ GLOBAL_BATCH_SIZE = 128 * SEQUENCE_LENGTH
 # 4 sequences per microbatch -> 4 microbatches per step. Comfortably within B300 memory.
 RANK_MICROBATCH_SEQUENCES = 4
 MAX_STEPS = 220
-SAVE_INTERVAL = 60
+# Two checkpoint saves during the run (steps 75 and 150), none at step 0.
+SAVE_INTERVAL = 75
 LR = 1e-4
 WARMUP_STEPS = 50
 
 PROJECT_DIR = "/weka/oe-training-default/jacobm/olmo-energy-data"
 LOAD_PATH = f"{PROJECT_DIR}/checkpoints/olmo-core/Olmo-3-1025-7B-stage1-step1000000"
+# Run outputs (checkpoints, telemetry) go to a bucket with free space; oe-training-default was full.
+OUTPUT_ROOT = "/weka/oe-adapt-default/jacobm/olmo-energy-data"
+# Same seed as the mainline scaling ladder, whose global data-order indices for this exact
+# dataset are already cached, so no 6.8 GB index file has to be written at startup.
+DATA_SEED = 928_543_231
 DOLMA_3P5_ROOT = "/weka/dolma-3p5/ai2-llm"
 BEAKER_IMAGE = "akshitab/olmo-core-tch2130cu130-fa4-rma-2026-09-11"
 WORKSPACE = "ai2/olmo3p5-training"
@@ -290,14 +296,14 @@ def build_data_components(common: CommonComponents) -> DataComponents:
         max_target_sequence_length=common.max_sequence_length,
     )
     data_loader_config = NumpyDataLoaderConfig(
-        global_batch_size=common.global_batch_size, seed=34521, num_workers=8
+        global_batch_size=common.global_batch_size, seed=DATA_SEED, num_workers=8
     )
     return DataComponents(dataset=dataset_config, data_loader=data_loader_config)
 
 
 def build_trainer_config(common: CommonComponents) -> TrainerConfig:
     cancel_check_interval = 10
-    run_dir = f"{PROJECT_DIR}/runs/{common.run_name}"
+    run_dir = f"{OUTPUT_ROOT}/runs/{common.run_name}"
     return (
         TrainerConfig(
             save_folder=f"{run_dir}/checkpoints",
@@ -312,7 +318,10 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         .with_callback(
             "checkpointer",
             CheckpointerCallback(
-                save_interval=SAVE_INTERVAL, ephemeral_save_interval=None, save_async=False
+                save_interval=SAVE_INTERVAL,
+                ephemeral_save_interval=None,
+                save_async=False,
+                pre_train_checkpoint=False,
             ),
         )
         .with_callback(
@@ -350,7 +359,7 @@ def _sampler_post_setup(telemetry_dir: str) -> str:
 
 
 def finalize_config(config: ExperimentConfig):
-    telemetry_dir = f"{PROJECT_DIR}/runs/{config.run_name}/telemetry"
+    telemetry_dir = f"{OUTPUT_ROOT}/runs/{config.run_name}/telemetry"
     if config.launch is None:
         return
     config.launch.priority = "urgent"
@@ -371,9 +380,10 @@ def finalize_config(config: ExperimentConfig):
     dolma = BeakerWekaBucket("dolma-3p5", "/weka/dolma-3p5")
     if dolma not in config.launch.weka_buckets:
         config.launch.weka_buckets.append(dolma)
-    training_bucket = BeakerWekaBucket("oe-training-default", "/weka/oe-training-default")
-    if training_bucket not in config.launch.weka_buckets:
-        config.launch.weka_buckets.append(training_bucket)
+    for name in ("oe-training-default", "oe-adapt-default"):
+        bucket = BeakerWekaBucket(name, f"/weka/{name}")
+        if bucket not in config.launch.weka_buckets:
+            config.launch.weka_buckets.append(bucket)
     sidecar = os.environ.get(SIDECAR_ENV, "1") != "0"
     env = {e.name: e for e in config.launch.env_vars}
     env[TELEMETRY_DIR_ENV] = BeakerEnvVar(name=TELEMETRY_DIR_ENV, value=telemetry_dir)
