@@ -30,10 +30,11 @@ def test_lm_head_builder_config():
 
 
 @requires_gpu
+@pytest.mark.parametrize("z_loss_multiplier", [None, 1e-3])
 def test_lm_head_fused_linear_loss(
+    z_loss_multiplier: Optional[float],
     d_model: int = 256,
     vocab_size: int = 1024,
-    z_loss_multiplier: float = 1e-3,
     loss_reduction: str = "sum",
 ):
     seed_all(42)
