@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Preserve the requested index dtype when expanding shuffled chunks, preventing `SamplingInstanceSource` from duplicating and dropping training samples when `sequence_length` is shorter than `max_sequence_length`.
+
 ### Added
 
 - Added `UnshardedModelExportCallback` and `load_unsharded_model_state()`, which write an unsharded `model.safetensors` (plus the config) into every permanent checkpoint so evaluation can read one file instead of the sharded state.

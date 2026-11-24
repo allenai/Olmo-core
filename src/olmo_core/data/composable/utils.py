@@ -261,7 +261,9 @@ def build_global_indices(
         return chunk_indices
 
     indices = np.repeat(chunk_indices * chunk_size, chunk_size)
-    indices = indices.reshape((-1, chunk_size)) + np.arange(0, chunk_size).reshape((1, -1))
+    indices = indices.reshape((-1, chunk_size)) + np.arange(0, chunk_size, dtype=dtype).reshape(
+        (1, -1)
+    )
     indices = indices.reshape(-1)
     return indices
 

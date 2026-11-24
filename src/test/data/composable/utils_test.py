@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from olmo_core.data.composable.utils import (
     SEED_NOT_SET,
@@ -45,7 +46,8 @@ def test_calculate_sample_sizes():
     ).tolist() == [8, 8]
 
 
-def test_build_global_indices(seed: int = 42):
+@pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.uint32, np.uint64])
+def test_build_global_indices(dtype, seed: int = 42):
     total_tokens = 24
     max_sequence_length = 8
 
@@ -55,7 +57,9 @@ def test_build_global_indices(seed: int = 42):
         sequence_length=sequence_length,
         max_sequence_length=max_sequence_length,
         seed=seed,
+        dtype=dtype,
     )
+    assert indices1.dtype == dtype
     assert indices1.size == 6
     assert indices1[0:2].tolist() in [[0, 1], [2, 3], [4, 5]]
     assert indices1[2:4].tolist() in [[0, 1], [2, 3], [4, 5]]
@@ -67,7 +71,9 @@ def test_build_global_indices(seed: int = 42):
         sequence_length=sequence_length,
         max_sequence_length=max_sequence_length,
         seed=seed,
+        dtype=dtype,
     )
+    assert indices2.dtype == dtype
     assert (np.repeat(indices2, 2) == indices1 // 2).all()
 
 
