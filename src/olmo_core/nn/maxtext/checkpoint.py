@@ -1,6 +1,6 @@
 """
-Reading and writing OLMo Core (torch DCP) and MaxText (Orbax) weights, and converting between
-MaxText's scanned and unscanned parameter layouts.
+Reading and writing OLMo Core (torch DCP) and MaxText (Orbax) weights and AdamW optimizer state,
+and converting between MaxText's scanned and unscanned parameter layouts.
 
 The OLMo Core side only needs torch. The MaxText side imports JAX, Orbax and MaxText lazily, so it
 only needs them installed when it's used: install a MaxText checkout that has the model's decoder
@@ -12,7 +12,8 @@ import logging
 import os
 import sys
 import tempfile
-from typing import Any, Dict, Mapping
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
 import numpy as np
 import torch
@@ -31,13 +32,18 @@ from .convert import normalize_olmo_core_key, olmo_core_shapes, split_layer_key
 log = logging.getLogger(__name__)
 
 __all__ = [
+    "AdamState",
     "read_json",
     "write_json",
     "load_olmo_core_config",
     "load_olmo_core_weights",
+    "load_olmo_core_optim_state",
     "save_olmo_core_weights",
     "load_maxtext_params",
+    "load_maxtext_checkpoint",
     "save_maxtext_params",
+    "save_maxtext_checkpoint",
+    "maxtext_checkpoint_items",
     "initialize_maxtext_config",
     "scan_params",
     "unscan_params",
@@ -70,6 +76,87 @@ def load_olmo_core_config(checkpoint_dir: PathOrStr) -> Dict[str, Any]:
     return config
 
 
+@dataclass
+class AdamState:
+    """
+    Unsharded fp32 AdamW optimizer state: each parameter's first and second moments, keyed like
+    the weights they belong to, and the number of optimizer steps taken.
+
+    OLMo Core's AdamW and optax's ``adamw`` (MaxText's default ``opt_type``) keep the same moments
+    (``m = b1 * m + (1 - b1) * g`` and ``v = b2 * v + (1 - b2) * g**2``), count steps the same way,
+    and bias-correct from that count the same way, so this state carries over between them as is.
+    Every mapping between the two weight layouts is a pure re-layout, so the moments convert with
+    the same mappings as the weights.
+    """
+
+    step: int
+    exp_avg: Dict[str, torch.Tensor]
+    exp_avg_sq: Dict[str, torch.Tensor]
+
+    def moments(self) -> Dict[str, Dict[str, torch.Tensor]]:
+        return {"exp_avg": self.exp_avg, "exp_avg_sq": self.exp_avg_sq}
+
+
+#: The prefix the flattened optimizer state of the FSDP train module puts before parameter names.
+_FSDP_OPTIM_STATE_PREFIX = "optim.state."
+
+#: Per-parameter optimizer state that isn't AdamW's.
+_NON_ADAM_SUFFIXES = (".muon_momentum",)
+
+
+def _olmo_core_keys(metadata_keys: Iterable[str], suffix: str) -> Dict[str, str]:
+    """
+    Parameter name -> checkpoint key, for the keys that end in ``.<suffix>``. Covers the OLMoDDP
+    train module's flat ``module.<name>.<suffix>`` entries and the FSDP train module's flattened
+    ``optim.state.<name>.<suffix>`` entries.
+    """
+    out = {}
+    for key in metadata_keys:
+        if not key.endswith(f".{suffix}"):
+            continue
+        name = key[: -len(suffix) - 1].removeprefix(_FSDP_OPTIM_STATE_PREFIX)
+        out[normalize_olmo_core_key(name)] = key
+    return out
+
+
+def _load_olmo_core_tensors(
+    model_and_optim: str,
+    metadata: Mapping[str, Any],
+    keys: Mapping[str, str],
+    shapes: Mapping[str, Tuple[int, ...]],
+    what: str,
+) -> Dict[str, torch.Tensor]:
+    """
+    Load ``keys`` (parameter name -> checkpoint key) as fp32 tensors at their full ``shapes``. Each
+    key may be stored at full shape or flattened, as OLMoDDP stores its state.
+    """
+    missing = sorted(set(shapes) - set(keys))
+    if missing:
+        raise KeyError(f"{model_and_optim} is missing {what} for: {missing[:10]}")
+    extra = sorted(set(keys) - set(shapes))
+    if extra:
+        raise KeyError(
+            f"{model_and_optim} has {what} for parameters the config doesn't: {extra[:10]}"
+        )
+    for name, shape in shapes.items():
+        stored_shape = tuple(metadata[keys[name]].size)
+        if stored_shape not in (shape, (int(np.prod(shape)),)):
+            raise ValueError(f"{keys[name]}: stored shape {stored_shape} doesn't fit {shape}")
+
+    log.info(f"Loading {what} of {len(shapes)} parameters from '{model_and_optim}'")
+    tensors = load_keys(model_and_optim, [keys[name] for name in shapes])
+    out = {}
+    upcast = set()
+    for (name, shape), tensor in zip(shapes.items(), tensors):
+        if tensor.dtype != torch.float32:
+            upcast.add(str(tensor.dtype))
+            tensor = tensor.float()
+        out[name] = tensor.reshape(shape)
+    if upcast:
+        log.warning(f"Some {what} are stored as {sorted(upcast)}; upcasting them to float32")
+    return out
+
+
 def load_olmo_core_weights(
     checkpoint_dir: PathOrStr, config: MaxTextModelConfig
 ) -> Dict[str, torch.Tensor]:
@@ -83,34 +170,71 @@ def load_olmo_core_weights(
     """
     model_and_optim = join_path(checkpoint_dir, "model_and_optim")
     metadata = get_checkpoint_metadata(model_and_optim).state_dict_metadata
-    shapes = olmo_core_shapes(config)
 
     # Prefer the model weights; fall back to the fp32 master copies.
     model_keys = {normalize_olmo_core_key(k): k for k in metadata if k.startswith("model.")}
-    main_keys = {normalize_olmo_core_key(k): k for k in metadata if k.endswith(".main")}
-    keys = model_keys or main_keys
+    keys = model_keys or _olmo_core_keys(metadata, "main")
     if not keys:
         raise RuntimeError(f"{model_and_optim} has neither model.* nor .main entries")
-    missing = sorted(set(shapes) - set(keys))
-    if missing:
-        raise KeyError(f"{model_and_optim} is missing parameters: {missing[:10]}")
-    extra = sorted(set(keys) - set(shapes))
-    if extra:
-        raise KeyError(f"{model_and_optim} has parameters the config doesn't: {extra[:10]}")
-    for name, shape in shapes.items():
-        stored_shape = tuple(metadata[keys[name]].size)  # type: ignore[union-attr]
-        if stored_shape not in (shape, (int(np.prod(shape)),)):
-            raise ValueError(f"{keys[name]}: stored shape {stored_shape} doesn't fit {shape}")
+    return _load_olmo_core_tensors(
+        model_and_optim, metadata, keys, olmo_core_shapes(config), "parameters"
+    )
 
-    log.info(f"Loading {len(shapes)} parameters from '{model_and_optim}'")
-    tensors = load_keys(model_and_optim, [keys[name] for name in shapes])
-    out = {}
-    for (name, shape), tensor in zip(shapes.items(), tensors):
-        if tensor.dtype != torch.float32:
-            log.warning(f"{name} is stored as {tensor.dtype}; upcasting to float32")
-            tensor = tensor.float()
-        out[name] = tensor.reshape(shape)
-    return out
+
+def load_olmo_core_optim_state(
+    checkpoint_dir: PathOrStr, config: MaxTextModelConfig
+) -> Optional[AdamState]:
+    """
+    Load the AdamW state from an OLMo Core checkpoint's ``model_and_optim/`` directory, or return
+    ``None`` if it has no optimizer moments (e.g. a weights-only checkpoint).
+
+    Handles the OLMoDDP train module's flat ``module.<name>.{exp_avg,exp_avg_sq,step}`` entries and
+    the FSDP train module's flattened ``optim.state.<name>.{exp_avg,exp_avg_sq,step}`` entries.
+
+    :raises ValueError: If the state isn't AdamW's or the parameters' step counts differ.
+    :raises NotImplementedError: If the optimizer state was saved unflattened.
+    """
+    model_and_optim = join_path(checkpoint_dir, "model_and_optim")
+    metadata = get_checkpoint_metadata(model_and_optim).state_dict_metadata
+    if (
+        f"{_FSDP_OPTIM_STATE_PREFIX}0.exp_avg" in metadata
+        or "optim.param_groups.0.params" in metadata
+    ):
+        raise NotImplementedError(
+            f"{model_and_optim} has an unflattened optimizer state (keyed by parameter index); "
+            "only flattened optimizer state can be converted"
+        )
+    non_adam = sorted(k for k in metadata if k.endswith(_NON_ADAM_SUFFIXES))
+    if non_adam:
+        raise ValueError(f"{model_and_optim} has non-AdamW optimizer state, e.g. {non_adam[0]}")
+    exp_avg_keys = _olmo_core_keys(metadata, "exp_avg")
+    if not exp_avg_keys:
+        return None
+
+    shapes = olmo_core_shapes(config)
+    step_keys = _olmo_core_keys(metadata, "step")
+    missing = sorted(set(shapes) - set(step_keys))
+    if missing:
+        raise KeyError(f"{model_and_optim} is missing optimizer steps for: {missing[:10]}")
+    steps = {int(t.item()) for t in load_keys(model_and_optim, [step_keys[n] for n in shapes])}
+    if len(steps) != 1:
+        raise ValueError(
+            f"{model_and_optim}: parameters have taken different numbers of optimizer steps "
+            f"({sorted(steps)}), but MaxText keeps a single step count"
+        )
+    return AdamState(
+        step=steps.pop(),
+        exp_avg=_load_olmo_core_tensors(
+            model_and_optim, metadata, exp_avg_keys, shapes, "first moments"
+        ),
+        exp_avg_sq=_load_olmo_core_tensors(
+            model_and_optim,
+            metadata,
+            _olmo_core_keys(metadata, "exp_avg_sq"),
+            shapes,
+            "second moments",
+        ),
+    )
 
 
 def save_olmo_core_weights(
@@ -118,30 +242,60 @@ def save_olmo_core_weights(
     state: Mapping[str, torch.Tensor],
     experiment_config: Mapping[str, Any],
     *,
+    optim: Optional[AdamState] = None,
+    optim_key_prefix: str = "module.",
     save_overwrite: bool = False,
 ) -> None:
     """
-    Write a weights-only OLMo Core checkpoint: ``model_and_optim/`` with ``model.<name>`` entries
-    at full shape, plus ``config.json``. This is the layout the Hugging Face importer writes.
-    Without optimizer moments the OLMoDDP train module rebuilds its fp32 master copies from
-    these weights and starts the optimizer fresh.
+    Write an OLMo Core checkpoint: ``model_and_optim/`` with ``model.<name>`` entries at full
+    shape, plus ``config.json``. This is the layout the Hugging Face importer writes.
+
+    Without ``optim`` the checkpoint is weights only: the OLMoDDP train module rebuilds its fp32
+    master copies from these weights and starts the optimizer fresh.
+
+    With ``optim``, it also holds the OLMoDDP train module's flat optimizer entries
+    ``<optim_key_prefix><name>.{main,exp_avg,exp_avg_sq,step}``, so that train module resumes
+    with the optimizer state. The FSDP train module doesn't read these; it loads the weights and
+    starts its optimizer fresh.
+
+    :param optim_key_prefix: What the OLMoDDP train module puts before parameter names in its
+        optimizer state: ``module.`` for a DDP-wrapped model, which is the usual case.
     """
     model_and_optim = join_path(output_dir, "model_and_optim")
-    log.info(f"Saving {len(state)} parameters to '{model_and_optim}'")
-    save_state_dict(model_and_optim, {"model": dict(state)}, save_overwrite=save_overwrite)
+    to_save: Dict[str, Any] = {"model": dict(state)}
+    if optim is not None:
+        moments = optim.moments()
+        for name, weight in state.items():
+            key = f"{optim_key_prefix}{name}"
+            to_save[f"{key}.main"] = weight.reshape(-1)
+            for suffix, values in moments.items():
+                to_save[f"{key}.{suffix}"] = values[name].reshape(-1)
+            to_save[f"{key}.step"] = torch.tensor(float(optim.step), dtype=torch.float32)
+    log.info(
+        f"Saving {len(state)} parameters{'' if optim is None else ' and their AdamW state'} "
+        f"to '{model_and_optim}'"
+    )
+    save_state_dict(model_and_optim, to_save, save_overwrite=save_overwrite)
     write_json(
         join_path(output_dir, "config.json"), experiment_config, save_overwrite=save_overwrite
     )
 
 
-def _flatten(tree: Mapping[str, Any], prefix: str = "") -> Dict[str, Any]:
+def _flatten(tree: Any, prefix: str = "") -> Dict[str, Any]:
+    """
+    Flatten nested mappings and sequences (e.g. an optax chain's states) to ``/``-joined paths,
+    indexing sequences by position. ``None`` entries (empty optax states) are dropped.
+    """
+    if isinstance(tree, Mapping):
+        items: Iterable[Tuple[Any, Any]] = tree.items()
+    elif isinstance(tree, (list, tuple)):
+        items = enumerate(tree)
+    else:
+        return {prefix: tree}
     out = {}
-    for k, v in tree.items():
-        path = f"{prefix}/{k}" if prefix else str(k)
-        if isinstance(v, Mapping):
-            out.update(_flatten(v, path))
-        else:
-            out[path] = v
+    for k, v in items:
+        if v is not None:
+            out.update(_flatten(v, f"{prefix}/{k}" if prefix else str(k)))
     return out
 
 
@@ -162,7 +316,24 @@ def load_maxtext_params(items_dir: str) -> Dict[str, torch.Tensor]:
     ``items_dir`` is a checkpoint step's ``items`` directory, e.g. ``.../checkpoints/50/items``.
     Optimizer state, if present, is skipped.
     """
+    return load_maxtext_checkpoint(items_dir, optim=False)[0]
+
+
+def load_maxtext_checkpoint(
+    items_dir: str, *, optim: bool = True
+) -> Tuple[Dict[str, torch.Tensor], Optional[AdamState]]:
+    """
+    Load a MaxText checkpoint's parameters as a flat ``/``-joined dict of fp32 tensors and, if
+    ``optim`` is set, its AdamW state, keyed the same way. The state is ``None`` if the checkpoint
+    has none (e.g. a parameters-only checkpoint).
+
+    ``items_dir`` is a checkpoint step's ``items`` directory, e.g. ``.../checkpoints/50/items``.
+
+    :raises ValueError: If the optimizer state isn't optax's ``adamw`` (MaxText's
+        ``opt_type=adamw``). ``adam_pax``, for one, stores bias-corrected moments.
+    """
     import jax  # type: ignore
+    import jax.numpy as jnp  # type: ignore
     import orbax.checkpoint as ocp  # type: ignore
     from etils import epath  # type: ignore
 
@@ -171,12 +342,17 @@ def load_maxtext_params(items_dir: str) -> Dict[str, torch.Tensor]:
     tree = ckptr.metadata(path).item_metadata.tree
     if "params" not in tree:
         raise KeyError(f"{items_dir} has no params; found {sorted(tree)}")
-    tree = {"params": tree["params"]}
+    has_optim = optim and bool(tree.get("opt_state"))
+    tree = {k: tree[k] for k in (("params", "opt_state") if has_optim else ("params",))}
     # Restore to host memory: on an accelerator this would be a second copy of the model.
     mesh = jax.sharding.Mesh(np.array(jax.devices("cpu")[:1]), ("x",))
     sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
     restore_args = jax.tree_util.tree_map(
-        lambda x: ocp.ArrayRestoreArgs(sharding=sharding, dtype=np.float32),
+        lambda x: ocp.ArrayRestoreArgs(
+            sharding=sharding,
+            # Leave the step counts and flags as they are.
+            dtype=np.float32 if jnp.issubdtype(x.dtype, jnp.floating) else None,
+        ),
         tree,
         is_leaf=lambda x: hasattr(x, "shape"),
     )
@@ -185,8 +361,96 @@ def load_maxtext_params(items_dir: str) -> Dict[str, torch.Tensor]:
         args=ocp.args.PyTreeRestore(item=tree, restore_args=restore_args, partial_restore=True),
     )
     # On disk: params/params/<tree> (the item key, then Flax's params collection).
-    params = restored["params"]["params"]
-    return {k: torch.from_numpy(np.array(v)) for k, v in _flatten(params).items()}
+    params = {
+        k: torch.from_numpy(np.array(v)) for k, v in _flatten(restored["params"]["params"]).items()
+    }
+    if not has_optim:
+        if optim:
+            log.warning(f"{items_dir} has no optimizer state")
+        return params, None
+    return params, _maxtext_adam_state(_flatten(restored["opt_state"]), items_dir)
+
+
+def _maxtext_adam_state(opt_state: Mapping[str, Any], where: str) -> AdamState:
+    """
+    Find the AdamW state in a flattened MaxText ``opt_state``. On disk, optax's ``adamw`` is a
+    chain whose first state holds ``count`` and the moments ``mu`` and ``nu``, each wrapped in
+    Flax's ``params`` collection: ``0/mu/params/<param path>``. Wrappers such as
+    ``skip_step_on_spikes`` (``inner_state/0/mu/...``) are looked through.
+    """
+    # The path to the state holding the moments -> "mu"/"nu" -> param path -> value.
+    found: Dict[str, Dict[str, Dict[str, torch.Tensor]]] = {}
+    for path, value in opt_state.items():
+        parts = path.split("/")
+        i = next((i for i, p in enumerate(parts) if p in ("mu", "nu")), None)
+        if i is None:
+            continue
+        rest = parts[i + 1 :]
+        if rest[:1] == ["params"]:
+            rest = rest[1:]
+        moments = found.setdefault("/".join(parts[:i]), {})
+        moments.setdefault(parts[i], {})["/".join(rest)] = torch.from_numpy(np.array(value))
+    if len(found) != 1:
+        raise ValueError(
+            f"{where}: expected one AdamW state in opt_state, found {len(found)} "
+            f"({sorted(found) or 'no mu/nu entries'}); only opt_type=adamw is supported"
+        )
+    prefix, moments = found.popitem()
+    if set(moments) != {"mu", "nu"}:
+        raise ValueError(f"{where}: opt_state has {sorted(moments)} but no second moments")
+    if not prefix.rpartition("/")[2].isdigit():
+        # optax.adamw is a chain, so its Adam state sits at an index. adam_pax's doesn't, and its
+        # moments are bias-corrected, so they would need rescaling.
+        raise ValueError(
+            f"{where}: the Adam state at '{prefix or '<root>'}' isn't in an optax chain; only "
+            "opt_type=adamw is supported"
+        )
+    count_key = f"{prefix}/count"
+    if count_key not in opt_state:
+        raise KeyError(f"{where}: opt_state has no {count_key}")
+    return AdamState(
+        step=int(np.array(opt_state[count_key])),
+        exp_avg={k: v.float() for k, v in moments["mu"].items()},
+        exp_avg_sq={k: v.float() for k, v in moments["nu"].items()},
+    )
+
+
+def maxtext_checkpoint_items(
+    params: Mapping[str, torch.Tensor], optim: Optional[AdamState] = None
+) -> Dict[str, Any]:
+    """
+    The ``items`` tree of a MaxText checkpoint in MaxText's (Linen) on-disk layout, as numpy
+    arrays, from flat ``/``-joined parameters and, optionally, their AdamW state keyed the same way.
+
+    Without ``optim`` this holds only the parameters, for ``load_parameters_path``. With it, it's a
+    full training state for ``load_full_state_path``: ``step`` and ``opt_state`` as optax's
+    ``adamw`` lays it out, ``[ScaleByAdamState(count, mu, nu), <weight decay: empty>,
+    ScaleByScheduleState(count)]``. Both counts are the step, so MaxText's learning rate schedule
+    resumes from it.
+    """
+
+    def tree(flat: Mapping[str, torch.Tensor]) -> Dict[str, Any]:
+        return _unflatten({k: v.numpy() for k, v in flat.items()})
+
+    items: Dict[str, Any] = {"params": {"params": tree(params)}}
+    if optim is None:
+        return items
+    for what, moments in (("first", optim.exp_avg), ("second", optim.exp_avg_sq)):
+        if set(moments) != set(params):
+            diff = sorted(set(moments) ^ set(params))
+            raise KeyError(f"{what} moments and parameters have different keys: {diff[:10]}")
+    count = np.asarray(optim.step, dtype=np.int32)
+    items["step"] = count
+    items["opt_state"] = [
+        {
+            "count": count,
+            "mu": {"params": tree(optim.exp_avg)},
+            "nu": {"params": tree(optim.exp_avg_sq)},
+        },
+        None,
+        {"count": count},
+    ]
+    return items
 
 
 def save_maxtext_params(output_dir: str, params: Mapping[str, torch.Tensor]) -> None:
@@ -195,18 +459,53 @@ def save_maxtext_params(output_dir: str, params: Mapping[str, torch.Tensor]) -> 
     loadable with ``load_parameters_path=<output_dir>/0/items``. Uses MaxText's own checkpoint
     writer so the on-disk layout is exactly what MaxText expects.
     """
-    import jax  # type: ignore
-    from maxtext.checkpoint_conversion.utils.utils import (  # type: ignore
-        save_weights_to_checkpoint,
-    )
+    save_maxtext_checkpoint(output_dir, params)
 
-    save_weights_to_checkpoint(
+
+def save_maxtext_checkpoint(
+    output_dir: str, params: Mapping[str, torch.Tensor], optim: Optional[AdamState] = None
+) -> None:
+    """
+    Write a MaxText checkpoint at ``<output_dir>/0/items`` from flat ``/``-joined parameters and,
+    optionally, their AdamW state keyed the same way (see :func:`maxtext_checkpoint_items`).
+
+    Without ``optim``, load it with ``load_parameters_path=<output_dir>/0/items``. With it, load it
+    with ``load_full_state_path=<output_dir>/0/items`` to resume from ``optim.step``.
+    """
+    if optim is None:
+        import jax  # type: ignore
+        from maxtext.checkpoint_conversion.utils.utils import (  # type: ignore
+            save_weights_to_checkpoint,
+        )
+
+        save_weights_to_checkpoint(
+            output_dir,
+            _unflatten({k: v.numpy() for k, v in params.items()}),
+            device_count=jax.device_count(),
+            use_ocdbt=True,
+            use_zarr3=True,
+        )
+        return
+
+    from maxtext.common import checkpointing  # type: ignore
+
+    items = maxtext_checkpoint_items(params, optim)
+    # Saved from host memory, unsharded: Orbax writes numpy arrays directly.
+    manager = checkpointing.create_orbax_checkpoint_manager(
         output_dir,
-        _unflatten({k: v.numpy() for k, v in params.items()}),
-        device_count=jax.device_count(),
+        True,  # enable_checkpointing
+        False,  # async_checkpointing
+        1,  # save_interval_steps
         use_ocdbt=True,
         use_zarr3=True,
+        enable_continuous_checkpointing=True,
     )
+    if manager is None:
+        raise RuntimeError("Failed to create an Orbax checkpoint manager")
+    # Saved as step 0 like a parameters-only checkpoint; the training step is items["step"].
+    if not checkpointing.save_checkpoint(manager, 0, items):
+        raise RuntimeError(f"MaxText didn't save a checkpoint to {output_dir}")
+    checkpointing.wait_until_finished(manager)
 
 
 def initialize_maxtext_config(
