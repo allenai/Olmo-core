@@ -39,6 +39,7 @@ from olmo_core.data import (
 from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.distributed.utils import get_local_rank, get_rank
 from olmo_core.float8 import Float8Config
+from olmo_core.internal.common import get_beaker_username
 from olmo_core.internal.experiment import (
     CommonComponents,
     DataComponents,
@@ -356,6 +357,17 @@ def finalize_config(config: ExperimentConfig):
     config.launch.budget = "ai2/oe-other"
     # The cluster may be full; keep following the job while it waits in the queue.
     config.launch.launch_timeout = None
+    # The internal launcher expects '<USER>_*' secrets; this workspace stores them as '<user>_*'.
+    user = get_beaker_username()
+    if user is not None:
+        upper, lower = f"{user.upper()}_", f"{user.lower()}_"
+        for secret in config.launch.env_secrets:
+            if secret.secret.startswith(upper):
+                secret.secret = lower + secret.secret[len(upper) :]
+        for attr in ("aws_config_secret", "aws_credentials_secret"):
+            name = getattr(config.launch, attr)
+            if name is not None and name.startswith(upper):
+                setattr(config.launch, attr, lower + name[len(upper) :])
     dolma = BeakerWekaBucket("dolma-3p5", "/weka/dolma-3p5")
     if dolma not in config.launch.weka_buckets:
         config.launch.weka_buckets.append(dolma)
