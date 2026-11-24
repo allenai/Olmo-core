@@ -113,7 +113,8 @@ class BeakerCallback(Callback):
             # Try to get W&B/Comet URL of experiment.
             for callback in self.trainer.callbacks.values():
                 if isinstance(callback, WandBCallback) and callback.enabled:
-                    if (url := callback.run.get_url()) is not None:
+                    # 'Run.get_url()' was removed in newer wandb versions; 'url' works in all.
+                    if (url := getattr(callback.run, "url", None)) is not None:
                         self._url = url
                     break
                 elif isinstance(callback, CometCallback) and callback.enabled:
