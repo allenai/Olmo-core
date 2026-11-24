@@ -2,17 +2,17 @@
 Per-node telemetry sidecar: samples GPU power, energy, clocks, throttling, GPM activity, and
 host CPU/memory/network/disk counters at sub-second rates while a training job runs.
 
-It runs as a separate, low-priority process pinned to a couple of CPUs (started from the Beaker
+It runs as separate, low-priority processes pinned to a few CPUs (started from the Beaker
 ``post_setup`` hook before ``torchrun``), so it never runs inside the training processes::
 
     python src/scripts/telemetry/power_sampler.py --out-dir /weka/.../<run>/telemetry/<hostname>
 
-Three sampling loops run in their own processes:
+Sampling loops (NVML calls block per GPU, so the GPU loops run one process per GPU):
 
-* ``fast``: instantaneous power, 1 s average power, and the energy counter for every GPU,
-  polled at ``--fast-hz``. A row is stored only when a value changes, together with the time
-  of the previous poll, so each sensor update is localized to one polling interval.
-* ``slow``: throttle-time counters, clocks, clock-event reasons, temperatures, memory,
+* ``fast-g<N>``: instantaneous power, 1 s average power, and the energy counter, polled at
+  ``--fast-hz``. A row is stored only when a value changes, together with the time of the
+  previous poll, so each sensor update is localized to one polling interval.
+* ``slow-g<N>``: throttle-time counters, clocks, clock-event reasons, temperatures, memory,
   utilization, and GPM metrics (SM/tensor/DRAM activity, NVLink/PCIe throughput) at
   ``--slow-hz``.
 * ``host``: ``/proc/stat``, ``/proc/meminfo``, ``/proc/net/dev``, ``/proc/diskstats``,
@@ -123,6 +123,10 @@ class LoopStats:
         return row
 
 
+def _loop_name(kind: str, gpus: list[int]) -> str:
+    return f"{kind}-g{gpus[0]}" if len(gpus) == 1 else kind
+
+
 def _run_loop(name: str, hz: float, out_dir: Path, flush_s: float, stop, setup, sample):
     """Generic fixed-rate loop: ``sample(state, writer, t_mono, t_wall)`` is called each tick."""
     period_ns = int(1e9 / hz)
@@ -163,7 +167,7 @@ def _run_loop(name: str, hz: float, out_dir: Path, flush_s: float, stop, setup, 
 # ----------------------------------------------------------------------------------------------
 
 
-def fast_loop(hz: float, out_dir: str, flush_s: float, stop):
+def fast_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
     import pynvml as N
 
     fields = [U.FIELD_POWER_INSTANT, U.FIELD_POWER_AVERAGE, U.FIELD_ENERGY]
@@ -171,11 +175,11 @@ def fast_loop(hz: float, out_dir: str, flush_s: float, stop):
 
     def setup():
         N.nvmlInit()
-        handles = [N.nvmlDeviceGetHandleByIndex(i) for i in range(N.nvmlDeviceGetCount())]
-        return {"handles": handles, "last": [None] * len(handles), "prev_t": [0] * len(handles)}
+        handles = {g: N.nvmlDeviceGetHandleByIndex(g) for g in gpus}
+        return {"handles": handles, "last": dict.fromkeys(gpus), "prev_t": dict.fromkeys(gpus, 0)}
 
     def sample(state, writer, t_mono, t_wall):
-        for gpu, h in enumerate(state["handles"]):
+        for gpu, h in state["handles"].items():
             t = time.monotonic_ns()
             fvs = N.nvmlDeviceGetFieldValues(h, ids)
             vals = tuple(U.decode(fv) for fv in fvs)
@@ -195,7 +199,7 @@ def fast_loop(hz: float, out_dir: str, flush_s: float, stop):
                 state["last"][gpu] = vals
             state["prev_t"][gpu] = t
 
-    _run_loop("fast", hz, Path(out_dir), flush_s, stop, setup, sample)
+    _run_loop(_loop_name("fast", gpus), hz, Path(out_dir), flush_s, stop, setup, sample)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -203,7 +207,7 @@ def fast_loop(hz: float, out_dir: str, flush_s: float, stop):
 # ----------------------------------------------------------------------------------------------
 
 
-def slow_loop(hz: float, out_dir: str, flush_s: float, stop):
+def slow_loop(gpus: list[int], hz: float, out_dir: str, flush_s: float, stop):
     import pynvml as N
 
     fields = U.THROTTLE_FIELDS + U.SLOW_FIELDS
@@ -211,14 +215,14 @@ def slow_loop(hz: float, out_dir: str, flush_s: float, stop):
 
     def setup():
         N.nvmlInit()
-        handles = [N.nvmlDeviceGetHandleByIndex(i) for i in range(N.nvmlDeviceGetCount())]
-        gpm = []
-        for h in handles:
+        handles = {g: N.nvmlDeviceGetHandleByIndex(g) for g in gpus}
+        gpm = {}
+        for g, h in handles.items():
             try:
-                gpm.append(U.GpmReader(h))
+                gpm[g] = U.GpmReader(h)
             except N.NVMLError as e:
-                log(f"slow: GPM unavailable: {e}")
-                gpm.append(None)
+                log(f"slow: GPM unavailable on GPU {g}: {e}")
+                gpm[g] = None
         return {"handles": handles, "gpm": gpm}
 
     def _safe(fn, *args):
@@ -228,7 +232,7 @@ def slow_loop(hz: float, out_dir: str, flush_s: float, stop):
             return None
 
     def sample(state, writer, t_mono, t_wall):
-        for gpu, h in enumerate(state["handles"]):
+        for gpu, h in state["handles"].items():
             t = time.monotonic_ns()
             row = {"t_mono_ns": t, "t_wall_ns": t_wall + (t - t_mono), "gpu": gpu}
             for (name, _, _), fv in zip(fields, N.nvmlDeviceGetFieldValues(h, ids)):
@@ -253,7 +257,7 @@ def slow_loop(hz: float, out_dir: str, flush_s: float, stop):
                 row[name] = None if vals is None else vals[i]
             writer.add(row)
 
-    _run_loop("slow", hz, Path(out_dir), flush_s, stop, setup, sample)
+    _run_loop(_loop_name("slow", gpus), hz, Path(out_dir), flush_s, stop, setup, sample)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -386,13 +390,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--stop-file", type=Path, default=None)
-    parser.add_argument("--fast-hz", type=float, default=200.0)
+    # NVML calls on B300 cost ~3-5 ms of CPU each and block per GPU, so GPU loops run in one
+    # process per GPU. The power/energy sensors refresh every ~100 ms; 50 Hz localizes each
+    # refresh to within 20 ms.
+    parser.add_argument("--fast-hz", type=float, default=50.0)
     parser.add_argument("--slow-hz", type=float, default=10.0)
     parser.add_argument("--host-hz", type=float, default=20.0)
     parser.add_argument("--flush-s", type=float, default=10.0)
     parser.add_argument("--cooldown-s", type=float, default=30.0)
     parser.add_argument("--max-hours", type=float, default=8.0)
-    parser.add_argument("--num-cpus", type=int, default=2, help="Pin to the last N allowed CPUs.")
+    parser.add_argument("--num-cpus", type=int, default=4, help="Pin to the last N allowed CPUs.")
     args = parser.parse_args()
 
     out_dir: Path = args.out_dir
@@ -409,11 +416,23 @@ def main():
 
     ctx = mp.get_context("spawn")
     stop = ctx.Event()
-    procs = [
-        ctx.Process(target=fast_loop, args=(args.fast_hz, str(out_dir), args.flush_s, stop)),
-        ctx.Process(target=slow_loop, args=(args.slow_hz, str(out_dir), args.flush_s, stop)),
-        ctx.Process(target=host_loop, args=(args.host_hz, str(out_dir), args.flush_s, stop)),
-    ]
+    import pynvml as N
+
+    N.nvmlInit()
+    num_gpus = N.nvmlDeviceGetCount()
+    N.nvmlShutdown()
+    procs = [ctx.Process(target=host_loop, args=(args.host_hz, str(out_dir), args.flush_s, stop))]
+    for g in range(num_gpus):
+        procs.append(
+            ctx.Process(
+                target=fast_loop, args=([g], args.fast_hz, str(out_dir), args.flush_s, stop)
+            )
+        )
+        procs.append(
+            ctx.Process(
+                target=slow_loop, args=([g], args.slow_hz, str(out_dir), args.flush_s, stop)
+            )
+        )
     for p in procs:
         p.start()
 
