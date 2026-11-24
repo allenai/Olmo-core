@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from tokenizers import Regex, Tokenizer, models, pre_tokenizers, trainers
+from tokenizers import AddedToken, Regex, Tokenizer, models, pre_tokenizers, trainers
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
@@ -16,7 +16,7 @@ from transformers import (
 
 from olmo_core.data.tokenizer import TokenizerConfig
 from olmo_core.nn.attention import AttentionBackendName
-from olmo_core.nn.hf.checkpoint import save_hf_model
+from olmo_core.nn.hf.checkpoint import chat_stop_token_ids, save_hf_model
 from olmo_core.nn.hf.convert_checkpoint import convert_checkpoint_to_hf
 from olmo_core.nn.hf.tokenizer import (
     PROBES,
@@ -212,10 +212,16 @@ def test_export_preserves_resolved_eos_and_padding(tmp_path, entry_point, source
         assert generated.tolist() == [[3, expected[0]]]
 
 
-def test_export_preserves_known_chat_stop_without_unknown_token_fallback(tmp_path):
+@pytest.mark.parametrize("registration", ["additional_special", "added_special"])
+def test_export_preserves_known_chat_stop_without_unknown_token_fallback(tmp_path, registration):
     src, output = tmp_path / "source", tmp_path / "hf"
     tokenizer, _ = source(src)
-    tokenizer.add_special_tokens({"additional_special_tokens": ["<|im_end|>"]})
+    if registration == "additional_special":
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|im_end|>"]})
+    else:
+        # As the Olmo 3.5 tokenizer has it: an added token flagged special, which transformers v5
+        # does not list in all_special_tokens.
+        tokenizer.add_tokens([AddedToken("<|im_end|>", special=True)])
     tokenizer.save_pretrained(src)
     config = TokenizerConfig(
         identifier=str(src), vocab_size=len(tokenizer), eos_token_id=1, pad_token_id=2
@@ -246,3 +252,12 @@ def test_wrong_vocab_fails_closed(tmp_path):
     cfg = SimpleNamespace(identifier=str(tmp_path / "source"), vocab_size=100278)
     with pytest.raises(ValueError, match="vocabulary size"):
         export_checkpoint_tokenizer(None, tmp_path / "dest", cfg)
+
+
+def test_chat_stop_token_ids_skips_absent_and_split_tokens(tmp_path):
+    tokenizer, _ = source(tmp_path / "source")
+    # Neither chat token exists: only EOS, never the unknown-token id.
+    assert chat_stop_token_ids(tokenizer) == [tokenizer.eos_token_id]
+    tokenizer.add_tokens([AddedToken("<|im_end|>", special=True)])
+    im_end = tokenizer.convert_tokens_to_ids("<|im_end|>")
+    assert chat_stop_token_ids(tokenizer) == [tokenizer.eos_token_id, im_end]

@@ -40,6 +40,36 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
+CHAT_STOP_TOKENS = ("<|im_end|>", "<|endoftext|>")
+
+
+def chat_stop_token_ids(tokenizer: Any) -> list[int]:
+    """
+    The generation stop ids for an HF export: the tokenizer's EOS, then each of
+    :data:`CHAT_STOP_TOKENS` the tokenizer encodes as one token of its own.
+
+    ChatML templates end a tool-call turn with ``<|im_end|>`` rather than EOS, so a
+    server that stops only on EOS keeps generating after every tool call. Membership
+    in ``all_special_tokens`` is not a reliable test: with transformers v5 it lists only
+    the named special tokens (``eos``, ``pad``, ...), not added tokens such as
+    ``<|im_end|>``. A token counts when encoding its text gives exactly one id that maps
+    back to it, which never mistakes an absent token for the unknown-token id.
+    """
+    eos = tokenizer.eos_token_id
+    if eos is None:
+        return []
+    stop_ids = [eos]
+    for token in CHAT_STOP_TOKENS:
+        ids = tokenizer.encode(token, add_special_tokens=False)
+        if (
+            len(ids) == 1
+            and tokenizer.convert_ids_to_tokens(ids[0]) == token
+            and ids[0] not in stop_ids
+        ):
+            stop_ids.append(ids[0])
+    return stop_ids
+
+
 @beta_feature
 def load_hf_model(
     model_name_or_path: PathOrStr,
@@ -223,17 +253,9 @@ def save_hf_model(
             value = getattr(huggingface_tokenizer, name)
             setattr(hf_model.config, name, value)
             setattr(hf_model.generation_config, name, value)
-        # Preserve recognized chat stopping tokens, but never turn an absent
-        # token into an accidental stop at the tokenizer's unknown-token ID.
-        if huggingface_tokenizer.eos_token_id is not None:
-            stop_ids = [huggingface_tokenizer.eos_token_id]
-            for token in ("<|im_end|>", "<|endoftext|>"):
-                if token in huggingface_tokenizer.all_special_tokens:
-                    token_id = huggingface_tokenizer.convert_tokens_to_ids(token)
-                    if token_id not in stop_ids:
-                        stop_ids.append(token_id)
-            if len(stop_ids) > 1:
-                hf_model.generation_config.eos_token_id = stop_ids
+        stop_ids = chat_stop_token_ids(huggingface_tokenizer)
+        if len(stop_ids) > 1:
+            hf_model.generation_config.eos_token_id = stop_ids
 
     if get_fs_local_rank(process_group) == 0:
         if is_url(save_dir):

@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, List, Optional
 
 import numpy as np
 from cached_path import cached_path
@@ -191,6 +191,13 @@ class MultimodalMixtureConfig(Config):
     (``".\\n\\n"`` becomes three tokens instead of one, ``" 2024"`` becomes ``" 20" "24"`` instead
     of ``" 202" "4"``). Use ``False`` only to resume or reproduce such a run. Evaluation follows
     the value saved in a checkpoint's config, and a saved config without it means ``False``."""
+    reserved_slot_tokens: Optional[List[str]] = None
+    """Strings made single tokens by renaming unused ``<|extra_id_N|>`` slots in place, as
+    open-instruct's ``--reserved_slot_tokens`` does (#1911): the current Olmo 3.5 text SFT recipe
+    promotes ``["<think>", "</think>"]``, and its image rows must use the same ids
+    (:func:`~olmo_core.data.multimodal.olmo35_layout.promote_tokens_into_reserved_slots`). The
+    vocabulary size does not change. Requires :attr:`tokenizer_json_split`. ``None`` leaves the
+    tokenizer as loaded."""
 
     def validate(self):
         """Validate source names and loss targets without opening datasets."""
@@ -222,6 +229,12 @@ class MultimodalMixtureConfig(Config):
             )
         else:
             tokenizer = self._legacy_auto_tokenizer()
+        if self.reserved_slot_tokens:
+            if not self.tokenizer_json_split:
+                raise ValueError("reserved_slot_tokens requires tokenizer_json_split")
+            from .olmo35_layout import promote_tokens_into_reserved_slots
+
+            promote_tokens_into_reserved_slots(tokenizer, self.reserved_slot_tokens)
         for name in ("eos_token_id", "pad_token_id"):
             if getattr(tokenizer, name) != getattr(self.tokenizer, name):
                 raise ValueError(f"Loaded tokenizer {name} differs from the configured tokenizer")

@@ -36,6 +36,7 @@ import torch.distributed as dist
 import torch.distributed.checkpoint as dist_cp
 import torch.distributed.checkpoint.state_dict as dist_cp_sd
 from torch.distributed.checkpoint.metadata import Metadata
+from torch.distributed.tensor import DTensor
 from torch.optim import Optimizer
 
 from olmo_core.aliases import PathOrStr
@@ -108,6 +109,32 @@ def _matched_component_grad_norm_patterns(
         for component, patterns in component_patterns.items()
         if any(fnmatch(name, pattern) for name in trainable_names for pattern in patterns)
     }
+
+
+def _scale_source_losses(batch: Dict[str, Any], scales: Dict[str, float]) -> Dict[str, Any]:
+    """Multiply the loss weights of every packed example from a source in ``scales`` by its scale.
+
+    The sampled data are unchanged; only each token's weight in the token-weighted loss moves
+    (and with it the loss divisor, the summed weights). The source of each position comes from
+    ``pack_source_names`` and ``example_ids``, as the per-source telemetry reads it.
+    """
+    packed_sources = batch.get("pack_source_names")
+    example_ids = batch.get("example_ids")
+    loss_masks = batch.get("loss_masks")
+    if packed_sources is None or example_ids is None or loss_masks is None:
+        raise OLMoConfigurationError(
+            "source_loss_scales requires pack_source_names, example_ids and loss_masks"
+        )
+    scaled = loss_masks.clone().float() if not loss_masks.is_floating_point() else loss_masks.clone()
+    for row, source_names in enumerate(packed_sources):
+        for example_id, source_name in enumerate(source_names):
+            scale = scales.get(source_name)
+            if scale is not None and scale != 1.0:
+                positions = example_ids[row] == example_id
+                scaled[row][positions] = scaled[row][positions] * scale
+    out = dict(batch)
+    out["loss_masks"] = scaled
+    return out
 
 
 def _validate_loss_group_weights(weights: Optional[Dict[str, float]]) -> Dict[str, float]:
@@ -860,8 +887,18 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         trim_microbatch_image_padding: bool = False,
         padding_input_token_id: Optional[int] = None,
         balance_vit_crops: bool = False,
+        router_loss_divisor: str = "valid_tokens",
+        source_loss_scales: Optional[Dict[str, float]] = None,
         **kwargs,
     ):
+        if source_loss_scales and any(
+            not math.isfinite(v) or v <= 0 for v in source_loss_scales.values()
+        ):
+            raise OLMoConfigurationError("source_loss_scales must be positive and finite")
+        self.source_loss_scales = dict(source_loss_scales or {})
+        if router_loss_divisor not in ("valid_tokens", "loss_tokens"):
+            raise OLMoConfigurationError(f"Unknown router_loss_divisor {router_loss_divisor!r}")
+        self.router_loss_divisor = router_loss_divisor
         from olmo_core.nn.vision import MultimodalOLMoDDPModel
 
         if not isinstance(model, MultimodalOLMoDDPModel):
@@ -1085,12 +1122,20 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
             valid_tokens = token_mask.sum(dtype=torch.long)
         else:
             valid_tokens = torch.tensor(batch["input_ids"].numel(), dtype=torch.long)
-        kwargs = {"router_loss_div_factor": self._global_batch_divisor(valid_tokens)}
+        kwargs = {}
         if (loss_masks := batch.get("loss_masks")) is not None:
             loss_masks = loss_masks.float()
             kwargs["loss_weight_div_factor"] = self._global_batch_divisor(
                 (loss_masks * (loss_masks > 0)).sum()
             )
+        if (
+            getattr(self, "router_loss_divisor", "valid_tokens") == "loss_tokens"
+            and "loss_weight_div_factor" in kwargs
+        ):
+            kwargs["router_loss_div_factor"] = kwargs["loss_weight_div_factor"]
+        else:
+            # Valid tokens, also for batches without loss weights (the trainer's dry-run batch).
+            kwargs["router_loss_div_factor"] = self._global_batch_divisor(valid_tokens)
         return kwargs
 
     def _global_batch_divisor(self, local_value: torch.Tensor) -> torch.Tensor:
@@ -1288,6 +1333,9 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         )
 
     def train_batch(self, batch: Dict[str, Any], dry_run: bool = False):
+        if getattr(self, "source_loss_scales", None) and batch.get("pack_source_names") is not None:
+            # The trainer's dry-run batch carries no source metadata; real batches always do.
+            batch = _scale_source_losses(batch, self.source_loss_scales)
         original_batch = batch
         if self.loss_group_weights:
             batch, global_mass = _normalize_loss_groups(
@@ -1649,6 +1697,69 @@ class MultimodalOLMoDDPTrainModule(OLMoDDPTrainModule):
         }
         optim._copy_model_param_rows_to_main_params(reset_params, token_ids)
 
+    @torch.no_grad()
+    def seed_token_rows_from_pieces(self, rows: Sequence[Tuple[int, Sequence[int]]]) -> List[str]:
+        """Set each target row to the mean of its source rows, in the input embedding and the
+        untied LM head, and copy those rows into the optimizer's FP32 masters.
+
+        This is open-instruct's ``initialize_promoted_token_embeddings`` (#1911) for the
+        multimodal model: a token promoted into a reserved vocabulary slot (``<think>``,
+        ``</think>``) starts at the mean of the rows of the pieces it used to tokenize into. All
+        sources are read before any target is written.
+
+        :param rows: ``(target_id, source_ids)`` pairs.
+        :returns: The optimizer parameter names that were written.
+        """
+        if not rows:
+            return []
+        lm = self.multimodal_model.lm
+        if lm.embeddings is None or lm.lm_head is None:
+            raise RuntimeError("Row seeding requires LM embeddings and an LM head")
+        targets = [int(target) for target, _ in rows]
+        if len(set(targets)) != len(targets):
+            raise ValueError("Each promoted row may be seeded once")
+        matrices = [lm.embeddings.weight]
+        if lm.lm_head.w_out.weight is not lm.embeddings.weight:
+            matrices.append(lm.lm_head.w_out.weight)
+        for weight in matrices:
+            data = weight.data
+            if isinstance(data, DTensor):
+                raise NotImplementedError("Row seeding expects replicated (DDP) LM weights")
+            for target, sources in rows:
+                ids = [int(target), *map(int, sources)]
+                if not sources or max(ids) >= data.shape[0] or min(ids) < 0:
+                    raise ValueError(
+                        f"Row {target} from {list(sources)} is outside {data.shape[0]} rows"
+                    )
+            means = {
+                int(target): data[[int(i) for i in sources]].to(torch.float32).mean(dim=0)
+                for target, sources in rows
+            }
+            for target, mean in means.items():
+                data[target] = mean.to(data.dtype)
+
+        optim = self._require_multimodal_optimizer()
+        names = {
+            name
+            for group in optim.param_groups
+            for name, param in group["named_params"].items()
+            if any(param is weight for weight in matrices)
+        }
+        if len(names) != len(matrices):
+            raise RuntimeError(
+                f"Expected {len(matrices)} optimizer parameters, found {sorted(names)}"
+            )
+        optim._copy_model_param_rows_to_main_params(names, targets)
+        for group in optim.param_groups:
+            for name, param in group["named_params"].items():
+                if name not in names:
+                    continue
+                main = optim.states[f"{name}.main"].full_tensor().reshape(param.shape)
+                for target in targets:
+                    if not torch.equal(main[target], param.data[target].float()):
+                        raise RuntimeError(f"{name} row {target}: optimizer master not synced")
+        return sorted(names)
+
     # -- checkpoints --------------------------------------------------------------------------
 
     def _frozen_model_param_state_dict(self) -> Dict[str, torch.Tensor]:
@@ -1977,6 +2088,19 @@ class MultimodalOLMoDDPTrainModuleConfig(OLMoDDPTrainModuleConfig):
     without this every rank waits for the one holding the most crops. Features and summed
     gradients are unchanged up to floating-point rounding. Requires zero vision dropout: a crop
     encoded on another rank would draw that rank's dropout randomness."""
+
+    source_loss_scales: Optional[Dict[str, float]] = None
+    """Multiply the loss weight of every token from these mixture sources by the given scale
+    (see :func:`_scale_source_losses`), so a source's share of the token-weighted loss rises or
+    falls with the same sampled data. Multimodal SFT uses it to give the images a larger share of
+    the loss without changing the examples drawn."""
+
+    router_loss_divisor: str = "valid_tokens"
+    """What the router auxiliary losses (load balancing, router z-loss) are divided by:
+    ``valid_tokens`` (every non-padding token, mixed mid-training's convention) or
+    ``loss_tokens`` (the CE's divisor, the global sum of positive ``loss_masks``), the text
+    train module's convention (``OLMoDDPTrainModule`` divides them by its label-token count),
+    which multimodal SFT uses so its text steps match the text SFT trainer's."""
 
     def _build_train_module(self, **kwargs) -> MultimodalOLMoDDPTrainModule:
         return MultimodalOLMoDDPTrainModule(**kwargs)

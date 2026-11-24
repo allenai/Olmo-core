@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed HF exports writing only EOS as a generation stop for tokenizers where `<|im_end|>` is an added special token but not a named one (the Olmo 3.5 tokenizer under transformers v5). `save_hf_model` now finds chat stop tokens by encoding them (`chat_stop_token_ids()`), so `generation_config.json` lists `[eos, <|im_end|>]` and servers stop after a tool-call turn.
 - Preserve OLMoDDP inference rounding in newly exported HF models, including packed dense/shared projections, packed SwiGLU, and architecture-specific BF16 TransformerEngine index-map combination; serialize the mode and retain legacy HF configs' existing numerics. CUDA inference without Triton uses the Torch activation fallback.
 - Allow experiment workloads to configure the distributed timeout for long rank-zero dataset preparation while preserving the 15-minute default.
 - Preserve 16-byte parameter alignment in OLMoDDP flat model buffers so compiled kernels remain valid after small BF16 parameters are packed.

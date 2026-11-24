@@ -49,8 +49,11 @@ from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID
 from .message_weight import ATTEND_ALL_SUBSEGMENT_ID
 from .sequence_builder import example_rng
 
-SftMessageFormat = Literal["qwen3", "document"]
-SFT_MESSAGE_FORMATS: Tuple[SftMessageFormat, ...] = ("qwen3", "document")
+SftMessageFormat = Literal["qwen3", "document", "olmo35"]
+"""``qwen3``: the released Molmo2 chat layout. ``document``: plain pretraining documents (stage-1
+mid-training). ``olmo35``: the Olmo 3.5 chat template of the text SFT recipe, think tags promoted
+(:mod:`~olmo_core.data.multimodal.olmo35_layout`)."""
+SFT_MESSAGE_FORMATS: Tuple[SftMessageFormat, ...] = ("qwen3", "document", "olmo35")
 
 __all__ = [
     "heldout_ids",
@@ -199,7 +202,7 @@ def sft_example_rng(
     from .rng import make_random_state
     from .sequence_builder import example_rng
 
-    if message_format == "document":
+    if message_format in ("document", "olmo35"):
         return make_random_state(seed + index, epoch)
     return example_rng(seed, index)
 
@@ -324,7 +327,7 @@ def truncate_for_format(
     :param seq: A built example.
     :param max_len: Maximum token count; ``None`` leaves the example unchanged.
     :param token_ids: The source's image token IDs.
-    :param message_format: ``"qwen3"`` or ``"document"``.
+    :param message_format: ``"qwen3"``, ``"document"`` or ``"olmo35"``.
     """
     if max_len is None:
         return seq
@@ -332,7 +335,9 @@ def truncate_for_format(
         seq,
         max_len,
         image_patch_token_id=token_ids.im_patch_id,
-        image_token_ids=token_ids.image_token_ids if message_format == "document" else None,
+        image_token_ids=(
+            token_ids.image_token_ids if message_format in ("document", "olmo35") else None
+        ),
     )
 
 
