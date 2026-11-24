@@ -126,8 +126,8 @@ class PowerTimelineCallback(Callback):
     the time the GPU actually reached that point, on the same monotonic clock. Rows are appended
     to ``<telemetry_dir>/<hostname>/timeline/rank<N>.jsonl``.
 
-    When training ends, local rank 0 writes the sampler's stop file and waits for the sampler to
-    finish its cool-down so the container stays up for it.
+    When the trainer shuts down (after the final checkpoint), local rank 0 writes the sampler's
+    stop file and waits for the sampler to finish its cool-down so the container stays up for it.
     """
 
     # Run before the checkpointer (priority 1) so a step's end marker precedes its save.
@@ -148,7 +148,8 @@ class PowerTimelineCallback(Callback):
         return None if not base else Path(base) / socket.gethostname()
 
     def _mark(self, event: str, cuda_event: bool = False, **extra):
-        assert self._rows is not None and self._pending is not None
+        if self._rows is None or self._pending is None:
+            return  # not started yet, or already finished
         row = {
             "step": self.step,
             "event": event,
@@ -230,6 +231,10 @@ class PowerTimelineCallback(Callback):
 
     def post_train(self):
         self._mark("train_end")
+
+    def close(self):
+        # Runs after every callback's post_train (including the final checkpoint save), so the
+        # sampler keeps recording until training has fully wrapped up.
         self._finish(wait_for_sampler=True)
 
     def on_error(self, exc: BaseException):
