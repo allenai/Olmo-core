@@ -58,7 +58,13 @@ class _SelectedDataset:
             fingerprint = fingerprint()
         if fingerprint is not None and (not isinstance(fingerprint, str) or not fingerprint):
             raise ValueError("Base dataset fingerprint must be a nonempty string")
-        # The resume identity covers source configuration and row selection, not Python files.
+        # The resume identity covers source configuration, the base content identity and the row
+        # selection, not Python files. A base that pins nothing (no fingerprint) gives this
+        # wrapper nothing to pin either: a digest of only the config and the indices would look
+        # content-validated while accepting a checkpoint after the corpus changed in place, so
+        # the selection is left unpinned, as the base source is.
+        if fingerprint is None:
+            return
         digest = hashlib.sha256(
             json.dumps(
                 {"config": dataset_config.as_config_dict(), "fingerprint": fingerprint},

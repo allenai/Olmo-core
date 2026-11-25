@@ -194,3 +194,48 @@ def test_selected_dataset_forwards_the_epoch_to_a_base_that_tracks_its_own():
     selected = _selected(_EpochOnlyDataset(ExampleDatasetConfig()))
     selected.set_epoch(3)
     assert selected[0] == {"row": 3, "epoch": 3}
+
+
+class _UnpinnedDataset(ExampleDataset):
+    """A source whose content is not pinned: it advertises no fingerprint."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        del self.content_fingerprint
+
+
+def test_selected_dataset_fingerprint_follows_the_base_and_the_selection():
+    import numpy as np
+
+    from olmo_core.data.multimodal.alignment import _SelectedDataset
+
+    config = ExampleDatasetConfig()
+
+    def fingerprint(base_fingerprint, indices):
+        base = ExampleDataset(config)
+        base.content_fingerprint = base_fingerprint
+        return _SelectedDataset(base, np.array(indices), config).content_fingerprint
+
+    reference = fingerprint("corpus-v1", [3, 5, 7])
+    assert reference == fingerprint("corpus-v1", [3, 5, 7])
+    assert reference != fingerprint("corpus-v2", [3, 5, 7])  # the corpus changed in place
+    assert reference != fingerprint("corpus-v1", [3, 5, 8])  # the selection changed
+
+
+def test_selected_dataset_over_an_unpinned_base_does_not_advertise_a_fingerprint():
+    """A digest of only the config and the indices would look content-validated while accepting a
+    checkpoint after the corpus changed in place; the loader must see the selection as unpinned,
+    like the base."""
+    import numpy as np
+
+    from olmo_core.data.multimodal.alignment import _SelectedDataset
+    from olmo_core.data.multimodal.mixture_data_loader import MixtureDataLoader
+
+    config = ExampleDatasetConfig()
+    base = _UnpinnedDataset(config)
+    selected = _SelectedDataset(base, np.array([3, 5, 7]), config)
+    assert getattr(selected, "content_fingerprint", None) is None
+    assert MixtureDataLoader._dataset_fingerprint(base, "base") is None
+    assert MixtureDataLoader._dataset_fingerprint(selected, "selected") is None
+    # Still a working selection.
+    assert selected[1] == {"row": 5, "epoch": 0}
