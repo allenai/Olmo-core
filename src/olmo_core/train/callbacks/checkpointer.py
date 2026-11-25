@@ -2,10 +2,12 @@ import logging
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import timedelta
+from pathlib import Path
 from typing import ClassVar, List, Optional, Tuple
 
 import torch.distributed as dist
 
+from olmo_core.aliases import PathOrStr
 from olmo_core.config import StrEnum
 from olmo_core.distributed.utils import (
     backend_supports_cpu,
@@ -15,7 +17,7 @@ from olmo_core.distributed.utils import (
     is_distributed,
 )
 from olmo_core.exceptions import OLMoConfigurationError
-from olmo_core.io import clear_directory, is_url, join_path, remove_file
+from olmo_core.io import clear_directory, is_url, join_path, normalize_path, remove_file
 from olmo_core.utils import wait_for
 
 from ..checkpoint import Checkpointer
@@ -213,6 +215,24 @@ class CheckpointerCallback(Callback):
             while len(self._checkpoints) > self.max_checkpoints:
                 oldest_path = self._checkpoints.pop(0)
                 self._schedule_for_removal(oldest_path)
+
+    def _checkpoint_is_in_save_folder(self, path: PathOrStr) -> bool:
+        path_str = normalize_path(path)
+        save_folder = normalize_path(self.save_folder)
+        if is_url(path_str) or is_url(save_folder):
+            return path_str.rsplit("/", 1)[0] == save_folder
+        return Path(path_str).resolve().parent == Path(save_folder).resolve()
+
+    def post_checkpoint_loaded(self, path: PathOrStr):
+        if not self.enabled:
+            return
+
+        # A checkpoint loaded from the save folder is a resume, so count it as the latest saved
+        # checkpoint. Otherwise, when the resumed run had already finished, `post_train` would save
+        # the step it just loaded again: a `FileExistsError`, or with `save_overwrite=True` a
+        # rewrite of the committed final checkpoint that loses it if the rewrite crashes.
+        if self._checkpoint_is_in_save_folder(path):
+            self._latest_checkpoint_step = self.step
 
     def pre_train(self):
         if not self.enabled:
