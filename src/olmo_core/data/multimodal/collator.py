@@ -16,6 +16,8 @@ import torch
 from olmo_core.config import Config
 from olmo_core.nn.vision.molmo2_tokens import IM_PATCH_ID
 
+from .packing import _PackedImageParts
+
 __all__ = ["MultimodalCollator", "MultimodalCollatorConfig"]
 
 
@@ -34,11 +36,21 @@ class MultimodalCollatorConfig(Config):
     per-batch max. Use this to give every batch a constant token count (required by
     the token-based :class:`~olmo_core.train.Trainer` batching)."""
 
+    batch_metadata: bool = False
+    """Also emit ``router_token_mask``, ``image_crop_counts`` and ``pooled_token_counts``
+    (consumed by the OLMoDDP multimodal train module); off by default."""
+
+    image_patch_token_id: int = IM_PATCH_ID
+    """``<im_patch>`` id that truncation must never cut. Set it from the tokenizer's
+    :class:`~olmo_core.nn.vision.molmo2_tokens.Molmo2TokenIds` when it is not the released one."""
+
     def build(self) -> "MultimodalCollator":
         return MultimodalCollator(
             pad_token_id=self.pad_token_id,
             label_ignore_index=self.label_ignore_index,
             pad_sequence_length=self.pad_sequence_length,
+            batch_metadata=self.batch_metadata,
+            image_patch_token_id=self.image_patch_token_id,
         )
 
 
@@ -47,11 +59,17 @@ class MultimodalCollator:
 
     Each example is a dict of ``np.ndarray`` with (at least) ``input_ids``,
     ``labels``, ``loss_masks``, ``position_ids``, ``token_type_ids``, ``images``,
-    ``pooled_patches_idx`` and optionally ``subsegment_ids``.
+    ``pooled_patches_idx`` and optionally ``subsegment_ids``. Packed examples may retain
+    their original float32 image parts for direct assembly into the final batch.
 
     Token fields are right-padded to the batch's max sequence length; ``images`` is
     padded along the crop axis and ``pooled_patches_idx`` along the pooled-token axis
     (with ``-1``, which the connector treats as padding).
+
+    :param batch_metadata: Also emit a boolean ``router_token_mask`` (real, non-padding token
+        slots) and per-row ``image_crop_counts`` / ``pooled_token_counts``. Off by default,
+        so the batch keys match the Molmo2 training scripts.
+    :param image_patch_token_id: The ``<im_patch>`` id that a fixed-length cut must not drop.
     """
 
     def __init__(
@@ -59,10 +77,14 @@ class MultimodalCollator:
         pad_token_id: int,
         label_ignore_index: int = -100,
         pad_sequence_length: Optional[int] = None,
+        batch_metadata: bool = False,
+        image_patch_token_id: int = IM_PATCH_ID,
     ):
         self.pad_token_id = pad_token_id
         self.label_ignore_index = label_ignore_index
         self.pad_sequence_length = pad_sequence_length
+        self.batch_metadata = batch_metadata
+        self.image_patch_token_id = image_patch_token_id
 
     def _pad_1d(self, arrays: List[np.ndarray], value, max_len: int, dtype) -> torch.Tensor:
         out = np.full((len(arrays), max_len), value, dtype=dtype)
@@ -79,7 +101,7 @@ class MultimodalCollator:
             # pooled features than image tokens, which the model rejects, so refuse early.
             max_len = self.pad_sequence_length
             for ex in examples:
-                if np.any(ex["input_ids"][max_len:] == IM_PATCH_ID):
+                if np.any(ex["input_ids"][max_len:] == self.image_patch_token_id):
                     raise ValueError(
                         f"pad_sequence_length={max_len} would truncate <im_patch> tokens "
                         "(the image block must fit entirely within the sequence)"
@@ -107,6 +129,25 @@ class MultimodalCollator:
                 [ex["token_type_ids"] for ex in examples], 0, max_len, np.int64
             ),
         }
+        if self.batch_metadata:
+            # Padding is attention-isolated below, but MoE routing needs the same boundary
+            # explicitly so padded tensor slots do not consume routed-expert capacity or
+            # contribute to router losses. Over-long examples are valid through the retained
+            # (tail-truncated) prefix.
+            batch["router_token_mask"] = self._pad_1d(
+                [np.ones(min(len(ex["input_ids"]), max_len), dtype=np.bool_) for ex in examples],
+                False,
+                max_len,
+                np.bool_,
+            )
+            # Diagnostic-only metadata. The train module records these before removing them
+            # from model kwargs, so they cannot change the forward signature.
+            batch["image_crop_counts"] = torch.tensor(
+                [ex["images"].shape[0] for ex in examples], dtype=torch.int64
+            )
+            batch["pooled_token_counts"] = torch.tensor(
+                [ex["pooled_patches_idx"].shape[0] for ex in examples], dtype=torch.int64
+            )
 
         # Images. Text-only examples contribute 0 real crops / 0 pooled rows. We *always*
         # emit an images tensor (never None): a fully text-only batch gets a single dummy
@@ -123,7 +164,13 @@ class MultimodalCollator:
         pooled = np.full((len(examples), max(max_pool, 1), pool_size), -1, dtype=np.int64)
         for i, ex in enumerate(examples):
             im = ex["images"]
-            if im.shape[0]:
+            if isinstance(im, _PackedImageParts):
+                offset = 0
+                for part in im.parts:
+                    end = offset + part.shape[0]
+                    images[i, offset:end] = part
+                    offset = end
+            elif im.shape[0]:
                 images[i, : im.shape[0]] = im
             pp = ex["pooled_patches_idx"]
             if pp.shape[0]:

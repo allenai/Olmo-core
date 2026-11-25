@@ -12,7 +12,11 @@ from olmo_core.data.multimodal.qwen3_layout import (
     user_turn_ids,
     user_turn_suffix_ids,
 )
-from olmo_core.nn.vision.molmo2_tokens import IM_END_ID, LOW_RES_IM_START_ID
+from olmo_core.nn.vision.molmo2_tokens import (
+    IM_END_ID,
+    LOW_RES_IM_START_ID,
+    Molmo2TokenIds,
+)
 
 
 @pytest.fixture(scope="module")
@@ -45,6 +49,26 @@ def test_image_prefix_has_no_bos(tokenizer):
     assert prefix[: len(user_header_ids(tokenizer))] == user_header_ids(tokenizer)
     assert LOW_RES_IM_START_ID in prefix
     assert prefix[-1] == IM_END_ID
+
+
+def test_image_prefix_honors_s002_token_ids(tokenizer):
+    token_ids = Molmo2TokenIds(
+        im_start_id=100278,
+        im_end_id=100279,
+        im_patch_id=100280,
+        im_col_id=100281,
+        low_res_im_start_id=100282,
+        image_placeholder_id=100283,
+        im_end_turn_id=100265,
+    )
+    prefix = image_prefix_ids(
+        tokenizer,
+        np.array([1, 1, 1, 1], dtype=np.int64),
+        token_ids=token_ids,
+    )
+    image_tokens = prefix[len(user_header_ids(tokenizer)) :]
+    assert image_tokens == [100282, 100280, 100279, 100278, 100280, 100281, 100279]
+    assert max(image_tokens) < 100352
 
 
 def test_single_branch_uses_suffix(tokenizer):

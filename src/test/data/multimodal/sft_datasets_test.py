@@ -29,6 +29,7 @@ from olmo_core.nn.vision.molmo2_tokens import (
     LOW_RES_IM_START_ID,
     N_PATCHES_SQ,
     PATCH_DIM,
+    Molmo2TokenIds,
 )
 
 # ---------------------------------------------------------------------------
@@ -139,6 +140,11 @@ def test_truncate_example_refuses_to_cut_image_tokens():
     with pytest.raises(ValueError, match="im_patch"):
         truncate_example(seq, 2)
 
+    token_ids = Molmo2TokenIds()
+    seq["input_ids"] = np.array([1, 2, token_ids.im_end_id, 3], dtype=np.int64)
+    with pytest.raises(ValueError, match="image-structural"):
+        truncate_example(seq, 2, image_token_ids=token_ids.image_token_ids)
+
 
 def test_truncate_example_refuses_to_drop_all_loss():
     seq = {
@@ -184,8 +190,10 @@ class _FlakyDataset:
 
     def __init__(self, size: int, bad):
         self.size, self.bad, self._warned = size, set(bad), 0
+        self.epochs: List[int] = []
 
-    def _build(self, i: int):
+    def _build(self, i: int, epoch: int = 0):
+        self.epochs.append(epoch)
         if i in self.bad:
             raise ValueError(f"row {i} is broken")
         return {"input_ids": np.array([i], dtype=np.int64)}
@@ -193,7 +201,8 @@ class _FlakyDataset:
 
 def test_get_example_with_skip_advances_over_bad_rows():
     ds = _FlakyDataset(10, bad={3, 4})
-    assert get_example_with_skip(ds, 3, 10)["input_ids"].tolist() == [5]
+    assert get_example_with_skip(ds, 3, 10, epoch=7)["input_ids"].tolist() == [5]
+    assert ds.epochs == [7, 7, 7]
     assert get_example_with_skip(ds, 0, 10)["input_ids"].tolist() == [0]
 
 
@@ -671,6 +680,83 @@ def test_finevision_rejects_quality_filter_without_its_column(tmp_path):
     _write_parquet(str(d / "train-00000.parquet"), rows, ["images", "texts"])
     tok = _FakeTokenizer()
 
-    with pytest.raises(ValueError, match="no 'relevance_min' column"):
+    with pytest.raises(ValueError, match="relevance_min"):
         FineVisionDatasetConfig(dataset_path=str(d), min_relevance=4).build(tok)
     assert len(FineVisionDatasetConfig(dataset_path=str(d)).build(tok)) == 1
+
+
+def _finevision_dir(tmp_path, name, bad_second_row=False):
+    d = tmp_path / name
+    d.mkdir()
+    good = {
+        "images": [{"bytes": _png_bytes(0), "path": None}],
+        "texts": [{"user": "<image>q", "assistant": "a"}],
+        "relevance_min": 5,
+        "visual_dependency_min": 5,
+    }
+    second = dict(good, texts=[]) if bad_second_row else dict(good)
+    second["images"] = [{"bytes": _png_bytes(1), "path": None}]
+    cols = ["images", "texts", "relevance_min", "visual_dependency_min"]
+    _write_parquet(str(d / "train-00000.parquet"), [good, second], cols)
+    return str(d)
+
+
+def test_finevision_fingerprints_every_source_and_binds_it_to_its_inputs(tmp_path):
+    """The fingerprint is the resume identity, so a non-strict source needs one too, and it has
+    to change with the filter and with the token ids the examples are serialized with."""
+    from olmo_core.data.multimodal import FineVisionDatasetConfig
+    from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds
+
+    path = _finevision_dir(tmp_path, "fp")
+    tok = _FakeTokenizer()
+
+    def fingerprint(**kw):
+        return FineVisionDatasetConfig(dataset_path=path, **kw).build(tok).content_fingerprint
+
+    base = fingerprint()
+    assert isinstance(base, str) and base  # non-strict: used to have none
+    assert fingerprint() == base
+    assert fingerprint(min_relevance=5) != base
+    assert (
+        fingerprint(token_ids=Molmo2TokenIds(im_patch_id=Molmo2TokenIds().im_patch_id + 1)) != base
+    )
+
+
+def test_finevision_without_a_stable_arrow_fingerprint_stays_permissive_unless_strict(
+    tmp_path, monkeypatch
+):
+    from olmo_core.data.multimodal import FineVisionDatasetConfig
+    from olmo_core.data.multimodal.finevision import FineVisionDataset
+
+    path = _finevision_dir(tmp_path, "nofp")
+    monkeypatch.setattr(FineVisionDataset, "_arrow_fingerprint", lambda self: None)
+    permissive = FineVisionDatasetConfig(dataset_path=path).build(_FakeTokenizer())
+    assert not hasattr(permissive, "content_fingerprint")
+    with pytest.raises(ValueError, match="stable Arrow dataset fingerprint"):
+        FineVisionDatasetConfig(
+            dataset_path=path, strict_annotations=True, skip_bad_rows=False
+        ).build(_FakeTokenizer())
+
+
+def test_finevision_strict_annotations_never_skip_a_bad_row(tmp_path):
+    from olmo_core.data.multimodal import FineVisionDatasetConfig
+    from olmo_core.exceptions import OLMoConfigurationError
+
+    path = _finevision_dir(tmp_path, "strict", bad_second_row=True)
+    tok = _FakeTokenizer()
+    # Skipping would replace row 1 by a later row, which a fail-closed source must not do.
+    with pytest.raises(OLMoConfigurationError, match="skip_bad_rows"):
+        FineVisionDatasetConfig(dataset_path=path, strict_annotations=True).build(tok)
+
+    strict = FineVisionDatasetConfig(
+        dataset_path=path, strict_annotations=True, skip_bad_rows=False
+    ).build(tok)
+    assert len(strict[0]["input_ids"]) > 0
+    with pytest.raises(ValueError, match="no usable"):
+        strict[1]
+    with pytest.raises(ValueError, match="invalid selected rows"):
+        strict.validate_required_annotations()
+
+    # The permissive default still advances over the bad row.
+    permissive = FineVisionDatasetConfig(dataset_path=path).build(tok)
+    assert len(permissive[1]["input_ids"]) > 0

@@ -695,10 +695,9 @@ def test_stage1_rejects_empty_mixture_sources():
     assert "['0']" in str(e.value)
 
 
-def test_count_v1_drops_train_images_shared_with_heldout_splits(tmp_path, monkeypatch):
+def test_count_v1_drops_train_images_shared_with_heldout_splits(tmp_path):
     """PixMo-Count's real test split shares 15 images with its train split; v1 must not train on
     them (the v2 class already excludes them)."""
-    from olmo_core.data.multimodal import pixmo_points
     from olmo_core.data.multimodal.pixmo_points import PixMoCountDatasetConfig
 
     rows: dict[str, list] = {
@@ -715,13 +714,13 @@ def test_count_v1_drops_train_images_shared_with_heldout_splits(tmp_path, monkey
             "test": Dataset.from_dict({**rows, "image_sha256": ["s1", "x", "y"]}),
         }
     ).save_to_disk(str(root / "count"))
-    monkeypatch.setattr(pixmo_points, "PIXMO_DATASETS", str(root))
+    path = str(root / "count")
 
-    guarded = PixMoCountDatasetConfig(heldout_paths=(str(root / "count"),)).build(_FakeTok())
+    guarded = PixMoCountDatasetConfig(dataset_path=path, heldout_paths=(path,)).build(_FakeTok())
     assert [guarded._data[int(i)]["image_sha256"] for i in guarded._index] == ["s0", "s2"]
     assert guarded.n_heldout_dropped == 1
     assert len(guarded) == 4  # two rows, each as point_count and pointing
-    unguarded = PixMoCountDatasetConfig(heldout_paths=()).build(_FakeTok())
+    unguarded = PixMoCountDatasetConfig(dataset_path=path, heldout_paths=()).build(_FakeTok())
     assert len(unguarded) == 6 and unguarded.n_heldout_dropped == 0
 
 
@@ -743,13 +742,14 @@ def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
         PixMoPointsDataset,
         PixMoPointsDatasetConfig,
     )
-    from olmo_core.data.multimodal.sequence_builder import example_rng
 
     captured: list = []
     monkeypatch.setattr(pixmo_points, "_open_image", lambda image: image)
 
     def capture(tokenizer, image, branches, **kwargs):
-        captured.append(branches)
+        # The dataset hands over a closure that draws the branches from its RNG: evaluate it with
+        # that RNG, otherwise two calls compare as two different function objects.
+        captured.append(branches(kwargs["rng"]) if callable(branches) else branches)
         return {}
 
     monkeypatch.setattr(pixmo_points, "_build_example", capture)
@@ -761,14 +761,80 @@ def test_points_v1_style_choice_changes_with_the_epoch(monkeypatch):
     }
     config = PixMoPointsDatasetConfig(counting="both", seed=7)
     ds = _bare_dataset(PixMoPointsDataset, config, row)
-    assert issubclass(PixMoPointsDataset, pixmo_points.EpochSeededExamples)
 
-    ds[0]
+    ds.get(0, 0)
+    ds.get(0, 0)
+    ds.get(0, 1)
+    epoch0, epoch0_again, epoch1 = captured
+    assert epoch0 == epoch0_again  # a given epoch is deterministic ...
+    assert epoch0 != epoch1  # ... and the same annotations get a different style mix in epoch 1
+
+
+def test_points_v1_getitem_follows_the_epoch_set_by_the_loader(monkeypatch):
+    """The non-continuous loader calls ``set_epoch`` and then ``dataset[index]``. A source whose
+    ``__getitem__`` answers epoch 0 forever repeats the same augmentation each epoch."""
+    from olmo_core.data.multimodal import pixmo_points
+    from olmo_core.data.multimodal.pixmo_points import (
+        PixMoPointsDataset,
+        PixMoPointsDatasetConfig,
+    )
+
+    captured: list = []
+    monkeypatch.setattr(pixmo_points, "_open_image", lambda image: image)
+
+    def capture(tokenizer, image, branches, **kwargs):
+        captured.append(branches(kwargs["rng"]) if callable(branches) else branches)
+        return {}
+
+    monkeypatch.setattr(pixmo_points, "_build_example", capture)
+    n = 24
+    row = {
+        "label": [f"thing{i}" for i in range(n)],
+        "points": [[[10.0, 20.0]]] * n,
+        "image": object(),
+    }
+    ds = _bare_dataset(PixMoPointsDataset, PixMoPointsDatasetConfig(counting="both", seed=7), row)
+
+    ds[0]  # epoch 0
     ds.set_epoch(1)
     ds[0]
-    epoch0, epoch1 = captured
-    assert epoch0 != epoch1  # the same annotations get a different style mix in epoch 1
+    ds.get(0, 1)
+    epoch0, via_getitem, via_get = captured
+    assert via_getitem == via_get  # __getitem__ is get() at the epoch the loader set
+    assert via_getitem != epoch0  # and it is not epoch 0's draw
 
-    # Epoch 0 is the unchanged mm_olmo stream, so a run that never revisits a row is unaffected.
-    ds.set_epoch(0)
-    assert ds.epoch_rng(0).randint(1 << 30) == example_rng(7, 0).randint(1 << 30)
+
+def test_every_source_with_an_epoch_aware_get_can_be_advanced_by_the_loader():
+    """The default loader advances sources through ``set_epoch``; only the continuous-stream one
+    calls ``get(index, epoch)``. A source that takes an epoch in ``get`` but has no ``set_epoch``
+    would repeat its augmentation every epoch in the default loader."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import olmo_core.data.multimodal as package
+
+    # Built only by the alignment and mid-training recipes, which always use
+    # ``continuous_stream=True``: that loader calls ``get(index, epoch)`` itself, so these sources
+    # never need ``set_epoch``.
+    continuous_stream_only = {"pretraining_replay", "vision_alignment_perception"}
+    missing = []
+    seen = 0
+    for info in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+        if info.name.rsplit(".", 1)[-1] in continuous_stream_only:
+            continue
+        try:
+            module = importlib.import_module(info.name)
+        except Exception:  # noqa: BLE001 - optional dependencies of unrelated modules
+            continue
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__ != module.__name__ or not hasattr(cls, "__getitem__"):
+                continue
+            get = cls.__dict__.get("get")
+            if get is None or "epoch" not in inspect.signature(get).parameters:
+                continue
+            seen += 1
+            if not callable(getattr(cls, "set_epoch", None)):
+                missing.append(f"{cls.__module__.rsplit('.', 1)[-1]}.{cls.__name__}")
+    assert seen >= 4, "the scan should find the stage-1 sources"
+    assert not missing, f"get(index, epoch) without set_epoch: {sorted(missing)}"

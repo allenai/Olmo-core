@@ -246,3 +246,50 @@ def test_stage1_v2_pointing_group_includes_gui_syn():
     config.gui_pointing = False
     names = [name for name, _ in mod._v2_pointing_sources(config)]
     assert names == ["pixmo_points_v2", "pixmo_count_v2", "cosyn_point_v2"]
+
+
+def test_every_epoch_seeded_dataset_can_build_for_an_explicit_epoch():
+    """The continuous-stream loader calls ``get(index, epoch)`` on every source. The inherited
+    ``get`` needs ``_build(index, epoch)``; a source without it fails every row with an
+    AttributeError and the loader eventually gives up on it."""
+    import importlib
+    import inspect
+    import pkgutil
+
+    import olmo_core.data.multimodal as package
+    from olmo_core.data.multimodal.sft_common import EpochSeededExamples
+
+    classes = set()
+    for info in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+        try:
+            module = importlib.import_module(info.name)
+        except Exception:  # noqa: BLE001 - optional dependencies of unrelated modules
+            continue
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if issubclass(cls, EpochSeededExamples) and cls is not EpochSeededExamples:
+                classes.add(cls)
+    assert len(classes) >= 8, "the scan should find the stage-1 sources"
+    broken = [
+        cls.__name__
+        for cls in classes
+        if cls.get is EpochSeededExamples.get and not callable(getattr(cls, "_build", None))
+    ]
+    assert not broken, f"inherit get() but define no _build(index, epoch): {broken}"
+
+
+def test_gui_syn_get_builds_per_epoch_without_the_shared_epoch(tmp_path):
+    """``get(index, epoch)`` is what the continuous-stream loader calls: it must build the
+    example (not fail on a missing ``_build``), use the epoch it is given, and leave the shared
+    epoch alone so loader threads cannot race on it."""
+    ds = _cfg(_crowded_cache(tmp_path), max_elements=16, p_intent=0.0).build(_PromptTok())
+    ds.set_epoch(0)
+    by_epoch = [ds.get(0, epoch) for epoch in range(4)]
+    for ex in by_epoch:
+        assert len(ex["input_ids"]) == len(ex["loss_masks"]) and ex["loss_masks"].sum() > 0
+    assert ds._epoch == 0
+    # The element sample rotates with the epoch the caller passed ...
+    assert len({ex["input_ids"].tobytes() for ex in by_epoch}) > 1
+    # ... deterministically, and the shared-epoch path agrees with the explicit one.
+    np.testing.assert_array_equal(ds.get(0, 2)["input_ids"], by_epoch[2]["input_ids"])
+    ds.set_epoch(2)
+    np.testing.assert_array_equal(ds[0]["input_ids"], by_epoch[2]["input_ids"])

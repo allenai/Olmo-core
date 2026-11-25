@@ -8,11 +8,11 @@ single-branch examples keep the image and prompt in one user message (suffix onl
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
-from olmo_core.nn.vision.molmo2_tokens import build_image_token_ids
+from olmo_core.nn.vision.molmo2_tokens import Molmo2TokenIds, build_image_token_ids
 
 __all__ = [
     "branch_context_ids",
@@ -58,10 +58,17 @@ def user_turn_suffix_ids(tokenizer, question: str) -> List[int]:
     return full[len(header) :]
 
 
-def image_prefix_ids(tokenizer, image_grid: np.ndarray) -> List[int]:
+def image_prefix_ids(
+    tokenizer,
+    image_grid: np.ndarray,
+    *,
+    token_ids: Optional[Molmo2TokenIds] = None,
+) -> List[int]:
     """Shared qwen3 prefix: ``<|im_start|>user\\n`` + expanded image token block."""
     resized_h, resized_w, h, w = (int(image_grid[i]) for i in range(4))
-    return user_header_ids(tokenizer) + build_image_token_ids(resized_h, resized_w, h, w)
+    return user_header_ids(tokenizer) + build_image_token_ids(
+        resized_h, resized_w, h, w, token_ids=token_ids
+    )
 
 
 def multi_image_prefix_ids(tokenizer, image_grids: List[np.ndarray]) -> List[int]:
