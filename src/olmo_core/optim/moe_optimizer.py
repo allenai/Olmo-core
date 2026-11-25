@@ -623,14 +623,15 @@ class OLMoDDPOptimizer:
         # the optimizer through _copy_model_grads_to_main_grads().
         self._use_reduce_scatter_grads = False
         self.main_grad: Dict[str, torch.Tensor] = {}
-        self._flat_model_sync_groups: "OrderedDict[str, _FlatModelParamSyncGroup]" = OrderedDict()
+        self._flat_model_sync_groups: "OrderedDict[Tuple[str, torch.dtype], _FlatModelParamSyncGroup]" = (
+            OrderedDict()
+        )
 
         # check
         device = None
-        has_bf16_param = False
-        has_fp32_param = False
+        self.should_maintain_fp32_main_param = False
         for param_group in param_groups:
-            for i, (name, param) in enumerate(param_group["named_params"].items()):
+            for name, param in param_group["named_params"].items():
                 if not param.requires_grad:
                     continue
                 if device is None:
@@ -640,22 +641,10 @@ class OLMoDDPOptimizer:
                         f"Inconsistent device found for param '{name}': "
                         f"expected {device}, got {param.device}"
                     )
-                # float16 params:
-                if param.type() in ["torch.cuda.HalfTensor", "torch.cuda.BFloat16Tensor"]:
-                    has_bf16_param = True
-                elif param.type() in ["torch.cuda.FloatTensor"]:
-                    has_fp32_param = True
-
-        if has_bf16_param and has_fp32_param:
-            raise ValueError("Mixed bf16 and fp32 parameters are not supported in OLMoDDPOptimizer")
-
-        if has_bf16_param:
-            # The model only has bf16 params
-            # The optimizer has to decide whether to maintain fp32 main params
-            self.should_maintain_fp32_main_param = True
-        else:
-            # The model has its own copy of fp32 main params
-            self.should_maintain_fp32_main_param = False
+                if param.dtype in (torch.float16, torch.bfloat16):
+                    # Keep the same main-parameter sharding and checkpoint layout for
+                    # all parameters, including FP32 parameters in mixed-dtype models.
+                    self.should_maintain_fp32_main_param = True
 
         for param_group in param_groups:
             for _name, param in param_group["named_params"].items():
@@ -833,12 +822,13 @@ class OLMoDDPOptimizer:
         log.info(print_str)
 
     def _init_flat_model_param_buffers(self) -> None:
-        groups_by_tag: "OrderedDict[str, List[Tuple[str, torch.nn.Parameter]]]" = OrderedDict()
+        groups: "OrderedDict[Tuple[str, torch.dtype], List[Tuple[str, torch.nn.Parameter]]]" = (
+            OrderedDict()
+        )
         seen_param_ids: Set[int] = set()
 
         for param_group in self.param_groups:
             tag = param_group["pg"]
-            entries = groups_by_tag.setdefault(tag, [])
             for name, param in param_group["named_params"].items():
                 if _is_fp8_weight_store(param):
                     continue
@@ -848,18 +838,14 @@ class OLMoDDPOptimizer:
                         f"Parameter '{name}' appears multiple times in optimizer groups"
                     )
                 seen_param_ids.add(param_id)
-                entries.append((name, param))
+                groups.setdefault((tag, param.dtype), []).append((name, param))
 
         self._flat_model_sync_groups = OrderedDict()
 
-        for tag, named_params in groups_by_tag.items():
-            if not named_params:
-                continue
-
-            group_dtype = named_params[0][1].dtype
+        for (tag, group_dtype), named_params in groups.items():
             # Preserve the 16-byte alignment used by compiled kernels when
-            # they are reused across blocks. Small BF16 parameters (e.g. KDA
-            # gates) can otherwise misalign the next parameter in this buffer.
+            # they are reused across blocks. Small parameters can otherwise
+            # misalign the next parameter in this buffer.
             alignment_numel = 16 // named_params[0][1].element_size()
             total_numel = 0
             total_sharded_local_numel = 0
@@ -867,10 +853,6 @@ class OLMoDDPOptimizer:
                 if not param.data.is_contiguous():
                     raise RuntimeError(
                         f"Flat model param buffers require contiguous parameter storage, got '{name}'"
-                    )
-                if param.dtype != group_dtype:
-                    raise RuntimeError(
-                        f"Mixed dtypes are not supported in flat model buffer group '{tag}'"
                     )
                 total_numel += (
                     (param.numel() + alignment_numel - 1) // alignment_numel * alignment_numel
@@ -920,7 +902,7 @@ class OLMoDDPOptimizer:
 
                 global_offset += (numel + alignment_numel - 1) // alignment_numel * alignment_numel
 
-            self._flat_model_sync_groups[tag] = _FlatModelParamSyncGroup(
+            self._flat_model_sync_groups[tag, group_dtype] = _FlatModelParamSyncGroup(
                 tag=tag,
                 dtype=group_dtype,
                 flat_buffer=flat_buffer,

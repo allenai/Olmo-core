@@ -2960,8 +2960,7 @@ class OLMoDDPTrainModule(TrainModule):
 
         # now wrap with DDP (requires initialized params)
         if eval_only:
-            # apply_dp() currently performs the bf16 cast used for MoE forward kernels.
-            # Keep that cast in eval-only mode even though we intentionally skip DDP wrapping.
+            # Apply the same precision policy as apply_dp() when skipping DDP wrapping.
             self._cast_to_fwd_bwd_precision(model_parts)
             for m in model_parts:
                 m.refresh_rowwise_fp8_cache()
