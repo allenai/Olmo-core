@@ -48,6 +48,13 @@ SYNTH_RECEIPTS_OCR = os.environ.get(
     "SYNTH_RECEIPTS_OCR_DIR", "/weka/oe-training-default/jasonr/dataset/ocr/synthetic-receipts-ocr"
 )
 
+# HARDCODED personal dataset (jasonr's prepared subsets of nvidia/Nemotron-Image-Training-v3 and
+# -v3.5 with their upstream images, one ``save_to_disk`` directory per subset), read by
+# :mod:`.nemotron_image`. Override with the env var or per source (``dataset_path``).
+NEMOTRON_IMAGE = os.environ.get(
+    "NEMOTRON_IMAGE_DIR", "/weka/oe-training-default/jasonr/dataset/nemotron-image"
+)
+
 __all__ = [
     "MOLMO_DATA_DIR",
     "TORCH_DATASETS",
@@ -60,4 +67,5 @@ __all__ = [
     "TEXT_RICH_CAPTION",
     "NVIDIA_SYNTH_OCR",
     "SYNTH_RECEIPTS_OCR",
+    "NEMOTRON_IMAGE",
 ]

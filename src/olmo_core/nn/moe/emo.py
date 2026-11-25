@@ -13,6 +13,13 @@ class EmoRouterConfig(Config):
     min_document_expert_pool: int
     max_document_expert_pool: int
     eval_document_expert_pool: Optional[int] = None
+    causal_pool: bool = False
+    """
+    Choose each token's pool from its document's router scores up to and including that token,
+    instead of the whole document's. The pool then never depends on later tokens, as at
+    inference: a document's first token keeps its own top experts and the pool tightens as the
+    document goes on. The last token's pool equals the whole-document pool.
+    """
 
     def validate_for_router(self, *, num_experts: int, top_k: int) -> None:
         if not 0 < self.min_document_expert_pool <= self.max_document_expert_pool:
