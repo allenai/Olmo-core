@@ -24,8 +24,9 @@ Sampling loops, each in its own process (NVML calls block per GPU, so GPU loops 
 
 Every row carries ``t_mono_ns`` (``CLOCK_MONOTONIC``, shared with the training processes on
 the same host) and ``t_wall_ns``. Rows are flushed to Parquet chunks every ``--flush-s``
-seconds. Sampling stops ``--cooldown-s`` seconds after ``--stop-file`` appears (written by the
-training job when it finishes), or on SIGTERM, after which a ``DONE`` file is written.
+seconds by a background thread per writer, so slow storage delays files, not samples. Sampling
+stops ``--cooldown-s`` seconds after ``--stop-file`` appears (written by the training job when it
+finishes), or on SIGTERM, after which a ``DONE`` file is written.
 """
 
 from __future__ import annotations
@@ -36,18 +37,21 @@ import json
 import multiprocessing as mp
 import os
 import platform
+import queue
 import resource
 import shutil
 import signal
 import subprocess
+import threading
 import time
 from pathlib import Path
 
 import nvml_util as U
 
 # Version of the output layout described in the telemetry data dictionary. 1: single slow GPU
-# loop and single host loop; 2: GPU loops split into fast/mid/slow and host into host/host_slow.
-SCHEMA_VERSION = 2
+# loop and single host loop; 2: GPU loops split into fast/mid/slow and host into host/host_slow;
+# 3: chunk files written off the sampling loop, loop stats add write time and backlog.
+SCHEMA_VERSION = 3
 
 
 def log(msg: str):
@@ -55,7 +59,10 @@ def log(msg: str):
 
 
 class ChunkWriter:
-    """Accumulates rows as columns and writes them to numbered Parquet files."""
+    """
+    Accumulates rows as columns and writes them to numbered Parquet files on a background thread,
+    so a slow filesystem (e.g. network storage busy with a checkpoint write) never stalls sampling.
+    """
 
     def __init__(self, out_dir: Path, name: str, flush_s: float):
         self.out_dir = out_dir
@@ -65,6 +72,10 @@ class ChunkWriter:
         self.n_rows = 0
         self.chunk = 0
         self.last_flush = time.monotonic()
+        self.max_write_s = 0.0  # longest chunk write since the last stats row (writer thread)
+        self._queue: queue.Queue = queue.Queue()
+        self._thread = threading.Thread(target=self._drain, name=f"write-{name}", daemon=True)
+        self._thread.start()
 
     def add(self, row: dict):
         if not self.cols:
@@ -79,23 +90,47 @@ class ChunkWriter:
         self.last_flush = time.monotonic()
         if self.n_rows == 0:
             return
-        path = self.out_dir / f"{self.name}-{self.chunk:05d}.parquet"
+        self._queue.put(
+            (self.out_dir / f"{self.name}-{self.chunk:05d}.parquet", self.cols, self.n_rows)
+        )
+        self.chunk += 1
+        self.cols = {}
+        self.n_rows = 0
+
+    @property
+    def pending(self) -> int:
+        return self._queue.qsize()
+
+    def close(self):
+        """Queue the remaining rows and wait until every chunk is written."""
+        self.maybe_flush(force=True)
+        self._queue.put(None)
+        self._thread.join()
+
+    def _drain(self):
+        while (item := self._queue.get()) is not None:
+            t0 = time.monotonic()
+            try:
+                self._write(*item)
+            except Exception as e:  # noqa: BLE001
+                log(f"{self.name}: write error: {e!r}")
+            self.max_write_s = max(self.max_write_s, time.monotonic() - t0)
+
+    @staticmethod
+    def _write(path: Path, cols: dict[str, list], n_rows: int):
         tmp = path.with_suffix(".tmp")
         try:
             import pyarrow as pa
             import pyarrow.parquet as pq
 
-            pq.write_table(pa.table(self.cols), tmp, compression="zstd")
+            pq.write_table(pa.table(cols), tmp, compression="zstd")
         except ImportError:
             path = path.with_suffix(".jsonl")
             tmp = path.with_suffix(".tmp")
             with open(tmp, "w") as f:
-                for i in range(self.n_rows):
-                    f.write(json.dumps({k: v[i] for k, v in self.cols.items()}) + "\n")
+                for i in range(n_rows):
+                    f.write(json.dumps({k: v[i] for k, v in cols.items()}) + "\n")
         os.replace(tmp, path)
-        self.chunk += 1
-        self.cols = {}
-        self.n_rows = 0
 
 
 class LoopStats:
@@ -115,7 +150,7 @@ class LoopStats:
         if duration_ns > self.period_ns:
             self.overruns += 1
 
-    def row(self, name: str) -> dict:
+    def row(self, name: str, writer: ChunkWriter) -> dict:
         ru = resource.getrusage(resource.RUSAGE_SELF)
         row = {
             "t_mono_ns": time.monotonic_ns(),
@@ -127,8 +162,11 @@ class LoopStats:
             "mean_tick_us": self.sum_tick_ns / max(self.n, 1) / 1e3,
             "cpu_user_s": ru.ru_utime,
             "cpu_sys_s": ru.ru_stime,
+            "max_write_ms": writer.max_write_s * 1e3,
+            "pending_chunks": writer.pending,
         }
         self.n = self.overruns = self.max_tick_ns = self.sum_tick_ns = 0
+        writer.max_write_s = 0.0
         return row
 
 
@@ -155,7 +193,7 @@ def _run_loop(name: str, hz: float, out_dir: Path, flush_s: float, stop, setup, 
                 time.sleep(0.5)
             stats.tick(time.monotonic_ns() - t0)
             if time.monotonic() - last_stats >= flush_s:
-                stats_writer.add(stats.row(name))
+                stats_writer.add(stats.row(name, writer))
                 last_stats = time.monotonic()
             writer.maybe_flush()
             stats_writer.maybe_flush()
@@ -166,9 +204,9 @@ def _run_loop(name: str, hz: float, out_dir: Path, flush_s: float, stop, setup, 
             else:
                 next_t = time.monotonic_ns()  # fell behind; don't try to catch up
     finally:
-        stats_writer.add(stats.row(name))
-        writer.maybe_flush(force=True)
-        stats_writer.maybe_flush(force=True)
+        stats_writer.add(stats.row(name, writer))
+        writer.close()
+        stats_writer.close()
 
 
 # ----------------------------------------------------------------------------------------------
