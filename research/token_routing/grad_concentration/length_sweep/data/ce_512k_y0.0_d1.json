@@ -1,0 +1,72 @@
+{
+ "yarn": 0.0,
+ "devices": [
+  0
+ ],
+ "rung": "512k",
+ "rows": [
+  {
+   "task": "nq",
+   "T": 518182,
+   "ce": 4.7264404296875,
+   "n_answer": 6,
+   "first_nonfinite": []
+  },
+  {
+   "task": "oolong",
+   "T": 433124,
+   "ce": NaN,
+   "n_answer": 5,
+   "first_nonfinite": [
+    [
+     "block20",
+     [
+      "TransformerBlock",
+      154759680,
+      433124
+     ]
+    ],
+    [
+     "block20.attention",
+     [
+      "GatedDeltaNet",
+      154759680,
+      433124
+     ]
+    ],
+    [
+     "block20.attention.o_norm",
+     [
+      "FusedRMSNormGated",
+      16381441,
+      433124
+     ]
+    ],
+    [
+     "block20.attention.w_out",
+     [
+      "Linear",
+      154759680,
+      433124
+     ]
+    ],
+    [
+     "block20.attention_residual_stream",
+     [
+      "ResidualStream",
+      154759680,
+      433124
+     ]
+    ],
+    [
+     "block20.attention_residual_stream.dropout",
+     [
+      "Identity",
+      154759680,
+      433124
+     ]
+    ]
+   ]
+  }
+ ]
+}

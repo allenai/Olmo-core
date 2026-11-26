@@ -1,0 +1,33 @@
+{
+ "yarn": 2.0,
+ "devices": [
+  0
+ ],
+ "rung": "512k",
+ "rows": [
+  {
+   "task": "contradiction",
+   "T": 493723,
+   "ce": NaN,
+   "n_answer": 37
+  },
+  {
+   "task": "nq",
+   "T": 518182,
+   "ce": NaN,
+   "n_answer": 6
+  },
+  {
+   "task": "outlier",
+   "T": 465757,
+   "ce": NaN,
+   "n_answer": 22
+  },
+  {
+   "task": "oolong",
+   "T": 433124,
+   "ce": NaN,
+   "n_answer": 5
+  }
+ ]
+}

@@ -1,0 +1,258 @@
+[
+ {
+  "date": "2026-11-18",
+  "status": "done",
+  "track": "mechanism",
+  "who": "side session (grad-sparsity-vs-length)",
+  "title": "How gradient concentration scales with context length: global / per-row / per-document / random keep shares for cos 0.95 and 0.9, 2k-256k, mt11 dense f1 + mt4 f7808 + untrained base",
+  "result": "Row-level gradient sparsity does not scale like 1/T. Under the concentration table's protocol (frozen dense checkpoint, blocks 7-31 weight gradient, 16-row steps), the per-row quota share for cos 0.95 stays flat to rising from 2k to 256k on the mt11 dense f1 checkpoint (6.06% at 2k, 8.64% at 64k, 17.02% at 256k ⚠ eval_size 80): log-log slope 0.19 [0.15, 0.23], so kept tokens per row grow as about T^1.19 (124 -> 41,916). Constant token count (slope -1) is far outside the interval. Global oracle share rises faster (slope 0.47 [0.42, 0.51]: 0.64% -> 4.5%), per-document quota 0.17 [0.12, 0.21], random about flat (53-77%). Per row against its own gradient: the share of rows whose gradient is already carried by the always-kept non-body tokens (prompt, query, answer: 0 body tokens needed) falls from 74% at 2k to 5% at 256k, and among the other rows the geometric-mean share settles at 3.0-3.5% from 16k on (2.0% at 2k; row-level log-log slope -0.01 [-0.06, 0.05] over rows with k > 0, controlling for CE). The mean rises because of a tail: contradiction rises (0.7% -> 16.5% of body tokens), outlier jumps between 2k and 8k then stays at 6.8-11%, nq is the only task whose share falls (0.71% -> 0.41%; tokens ~T^0.76). The mt4 7,808 checkpoint (trained at 8k) shows the same rise from 8k to 64k (per-row 5.1% -> 9.1%), and it reproduces the published 8k table on its own rows (0.46/4.55/13.67/53.8%). Confound: answer CE also rises with length (0.034 -> 0.356) and share rises with CE. Max length: 256k rows on 1 H200 (110 GiB peak). On 8 H200s with the blocks spread over the GPUs, 524,288 tokens fits in memory (121 GiB peak per GPU) and 655,360 runs out, but the dense forward is numerically broken past ~262k tokens (CE 2-4 at 306-350k vs 0.002-0.7 at 256k; NaN from 368k, first non-finite in Gated DeltaNet), with or without YaRN, so the sweep stops at 256k. Base model (q35-4b-base-markerfix, no fine-tuning, same rows): the rise does not survive inside the context. Among rows that need any context tokens, the share against the row's own gradient falls with length (geometric mean 1.66% at 2k, 0.38% at 64k, 0.15% at 256k; row slope -0.49 [-0.56, -0.41], tokens ~T^0.51), vs +0.13 [0.08, 0.18] on mt11 and +0.28 on mt4. Its step-level shares are ~0 up to 8k (per-row 0.00-0.01%, rising to 1.6% at 64k and back to 0.27% at 256k) because its gradient sits in prompt/query/answer tokens (body 9-18% of the energy score, answer CE 1.6-2.0). Fine-tuning moves the gradient into the context (mt11 body share ~10% -> ~40%) and spreads it as rows grow, mostly on contradiction and outlier. Query-after vs query-both on the base at 8k: step shares a bit higher, row-level unchanged.",
+  "match": "probe.py / analyze.py protocol unchanged (block-7 split, blocks 7-31 weight gradient, energy ranking, TensorSketch 32768, 16-row steps of 4 tasks x 4 rows, body tokens only); fresh ctc rows seed 20261117 per length (contradiction, nq, outlier, oolong), query layout matched to each checkpoint's training (mt11: both; mt4: after); native RoPE (all rows <= 260,491 tokens)",
+  "record": "records/grad-sparsity-vs-length.md",
+  "branch": "claude/grad-sparsity-vs-length",
+  "tables": [
+   {
+    "title": "mt11 dense f1 (rows <= 64k): share of body tokens for cos 0.95 with the step's blocks 7-31 weight gradient (tokens per row in brackets)",
+    "cols": [
+     "rule",
+     "2k (eval_size 512)",
+     "4k (eval_size 512)",
+     "8k (eval_size 512)",
+     "16k (eval_size 512)",
+     "32k (eval_size 512)",
+     "64k (eval_size 512)",
+     "128k (eval_size 192 ⚠)",
+     "256k (eval_size 80 ⚠)"
+    ],
+    "rows": [
+     [
+      "global oracle (16-row step)",
+      "0.64% (13)",
+      "0.66% (26)",
+      "1.27% (102)",
+      "1.92% (313)",
+      "2.75% (897)",
+      "3.42% (2,221)",
+      "4.50% (5,853)",
+      "4.53% (11,165)"
+     ],
+     [
+      "per-row quota",
+      "6.06% (124)",
+      "5.67% (221)",
+      "8.70% (696)",
+      "9.10% (1,483)",
+      "9.75% (3,176)",
+      "8.64% (5,611)",
+      "11.64% (15,138)",
+      "17.02% (41,916)"
+     ],
+     [
+      "per-document quota",
+      "12.16% (248)",
+      "10.29% (402)",
+      "15.67% (1,253)",
+      "17.84% (2,904)",
+      "18.50% (6,025)",
+      "20.55% (13,359)",
+      "24.95% (32,450)",
+      "22.47% (55,335)"
+     ],
+     [
+      "random",
+      "53.01% (1,083)",
+      "61.34% (2,396)",
+      "70.13% (5,610)",
+      "74.37% (12,108)",
+      "77.33% (25,186)",
+      "74.42% (48,359)",
+      "73.25% (95,247)",
+      "74.19% (182,744)"
+     ],
+     [
+      "row vs its own gradient (mean)",
+      "1.17% (24)",
+      "1.78% (72)",
+      "3.98% (329)",
+      "4.70% (767)",
+      "5.02% (1,634)",
+      "5.31% (3,456)",
+      "6.00% (7,777)",
+      "6.96% (17,082)"
+     ],
+     [
+      "answer CE",
+      "0.034",
+      "0.046",
+      "0.052",
+      "0.093",
+      "0.125",
+      "0.192",
+      "0.258",
+      "0.356"
+     ]
+    ],
+    "note": "95% bootstrap intervals over steps in records/grad-sparsity-vs-length.md; 128k / 256k beyond the 64k training length and under eval_size 500."
+   },
+   {
+    "title": "mt4 dense 7,808 rows/task (trained at 8k), same rules, cos 0.95",
+    "cols": [
+     "rule",
+     "2k (eval_size 256 ⚠)",
+     "4k (eval_size 256 ⚠)",
+     "8k (eval_size 256 ⚠)",
+     "16k (eval_size 256 ⚠)",
+     "32k (eval_size 256 ⚠)",
+     "64k (eval_size 256 ⚠)"
+    ],
+    "rows": [
+     [
+      "global oracle (16-row step)",
+      "0.66%",
+      "0.25%",
+      "0.47%",
+      "1.31%",
+      "3.14%",
+      "3.93%"
+     ],
+     [
+      "per-row quota",
+      "6.14%",
+      "3.08%",
+      "5.08%",
+      "8.47%",
+      "8.65%",
+      "9.08%"
+     ],
+     [
+      "per-document quota",
+      "12.32%",
+      "9.97%",
+      "10.84%",
+      "18.59%",
+      "19.98%",
+      "18.18%"
+     ],
+     [
+      "random",
+      "58.29%",
+      "42.52%",
+      "53.51%",
+      "75.60%",
+      "75.67%",
+      "69.77%"
+     ]
+    ],
+    "note": "Original table rows (8k fresh pool, eval_size 512) reproduced: 0.46% / 4.55% / 13.67% / 53.84% vs published 0.47 / 4.6 / 13.7 / 53.7%."
+   },
+   {
+    "title": "Untrained base Qwen3.5-4B (same rows, query both), cos 0.95",
+    "cols": [
+     "rule",
+     "2k (eval_size 512)",
+     "4k (eval_size 512)",
+     "8k (eval_size 512)",
+     "16k (eval_size 512)",
+     "32k (eval_size 512)",
+     "64k (eval_size 512)",
+     "128k (eval_size 192 ⚠)",
+     "256k (eval_size 80 ⚠)"
+    ],
+    "rows": [
+     [
+      "global oracle",
+      "0.00%",
+      "0.00%",
+      "0.01%",
+      "0.14%",
+      "0.32%",
+      "0.71%",
+      "0.54%",
+      "0.15%"
+     ],
+     [
+      "per-row quota",
+      "0.00%",
+      "0.01%",
+      "0.01%",
+      "0.19%",
+      "0.49%",
+      "1.56%",
+      "1.45%",
+      "0.27%"
+     ],
+     [
+      "per-document quota",
+      "0.00%",
+      "0.04%",
+      "0.06%",
+      "0.53%",
+      "1.42%",
+      "2.90%",
+      "1.89%",
+      "0.12%"
+     ],
+     [
+      "random",
+      "0.00%",
+      "0.95%",
+      "2.51%",
+      "19.28%",
+      "29.34%",
+      "40.65%",
+      "28.69%",
+      "5.29%"
+     ],
+     [
+      "row vs own gradient, geometric mean over rows needing body tokens",
+      "1.66%",
+      "1.43%",
+      "1.10%",
+      "0.73%",
+      "0.44%",
+      "0.38%",
+      "0.25%",
+      "0.15%"
+     ],
+     [
+      "rows needing 0 body tokens",
+      "52%",
+      "45%",
+      "41%",
+      "32%",
+      "29%",
+      "27%",
+      "27%",
+      "29%"
+     ],
+     [
+      "body share of energy score",
+      "11%",
+      "12%",
+      "14%",
+      "17%",
+      "18%",
+      "18%",
+      "15%",
+      "9%"
+     ],
+     [
+      "answer CE",
+      "1.60",
+      "1.66",
+      "1.72",
+      "1.79",
+      "1.91",
+      "2.04",
+      "2.00",
+      "2.01"
+     ]
+    ],
+    "note": "mt11 on the same rows: geometric mean 2.01% -> 3.15%, rows needing 0 body tokens 74% -> 5%, body energy share 10% -> 39%."
+   }
+  ],
+  "figures": [
+   "research/token_routing/grad_concentration/length_sweep/grad_sparsity_vs_length.png",
+   "research/token_routing/grad_concentration/length_sweep/grad_sparsity_rowlevel.png"
+  ]
+ }
+]
