@@ -19,12 +19,12 @@ from olmo_core.optim import (
 )
 from olmo_core.optim.scheduler import (
     WSD,
-    SchedulerUnits,
     ComposableScheduler,
     ComposableSchedulerStage,
     ComposableSchedulerStageType,
     OverrideDecay,
     Scheduler,
+    SchedulerUnits,
 )
 
 

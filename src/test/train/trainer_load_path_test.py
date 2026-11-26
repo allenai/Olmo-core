@@ -119,7 +119,6 @@ def test_assert_optimizer_lrs_nonzero():
         assert_optimizer_lrs_nonzero(optimizer)
 
 
-
 def test_assert_optimizer_lrs_nonzero_skips_group_pinned_at_zero():
     model = torch.nn.Linear(2, 2)
     pinned = torch.nn.Linear(2, 2)
