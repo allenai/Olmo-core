@@ -1,5 +1,7 @@
 """Unit tests for ModelMergeCallback."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from olmo_core.exceptions import OLMoConfigurationError
@@ -248,3 +250,47 @@ def test_compute_merge_steps_from_decay_schedule_with_decay_fraction():
 def test_compute_merge_steps_from_decay_schedule_requires_decay():
     with pytest.raises(ValueError, match="Either decay or decay_fraction"):
         compute_merge_steps_from_decay_schedule(period_lengths=[10000], tokens_per_step=100)
+
+
+# ============================================================================
+# save_checkpoint
+# ============================================================================
+
+
+def test_save_checkpoint_defaults_to_true():
+    cb = ModelMergeCallback(merge_step=100, merge_last_n_steps=10, enabled=True)
+    assert cb.save_checkpoint
+
+
+def test_eval_only_merge_skips_the_save(monkeypatch, tmp_path):
+    """With ``save_checkpoint=False`` the averaged weights are swapped in, evaluated, and
+    restored, and nothing is written to disk."""
+    import torch
+
+    from olmo_core.train.callbacks import model_merger
+
+    model = torch.nn.Linear(2, 1, bias=False)
+    with torch.no_grad():
+        model.weight.fill_(4.0)
+
+    trainer = SimpleNamespace(
+        save_folder=str(tmp_path), callbacks={}, train_module=SimpleNamespace(model=model)
+    )
+    cb = ModelMergeCallback(
+        merge_step=10, merge_last_n_steps=2, enabled=True, save_checkpoint=False
+    )
+    cb._trainer = trainer  # type: ignore[assignment]
+    cb._accumulators[10] = {"weight": torch.full((1, 2), 2.0)}
+    cb._accumulator_counts[10] = 2
+
+    seen = []
+    monkeypatch.setattr(cb, "_evaluate_merged", lambda: seen.append(model.weight.detach().clone()))
+    monkeypatch.setattr(model_merger, "save_state_dict", lambda *a, **k: pytest.fail("saved"))
+    monkeypatch.setattr(model_merger, "barrier", lambda: None)
+
+    cb._save_merged_checkpoint(10)
+
+    assert seen and torch.equal(seen[0], torch.full((1, 2), 1.0))
+    assert torch.equal(model.weight.detach(), torch.full((1, 2), 4.0))
+    assert not list(tmp_path.iterdir())
+    assert 10 in cb._completed_merges

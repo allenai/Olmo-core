@@ -48,6 +48,11 @@ class ModelMergeCallback(Callback):
     output_suffix: str = "merged"
     """Suffix for merged checkpoint directory."""
 
+    save_checkpoint: bool = True
+    """Whether to write the averaged weights out as a checkpoint. With ``False`` they are only
+    swapped into the model for the merged-model evaluation (the ``eval/merged`` metrics), which
+    is what train modules without a model-only state dict (e.g. the OLMo DDP module) need."""
+
     enabled: bool = False
 
     # Internal state (not checkpointed)
@@ -245,7 +250,10 @@ class ModelMergeCallback(Callback):
             log.warning(f"No weights accumulated for merge step {merge_step}, cannot save")
             return
 
-        log.info(f"Saving merged checkpoint (average of {count} steps) at step {merge_step}")
+        log.info(
+            f"{'Saving' if self.save_checkpoint else 'Evaluating'} merged model "
+            f"(average of {count} steps) at step {merge_step}"
+        )
 
         averaged_state: Dict[str, torch.Tensor] = {
             key: acc_val / count for key, acc_val in accumulator.items()
@@ -253,7 +261,7 @@ class ModelMergeCallback(Callback):
 
         output_path = self._merged_checkpoint_path(merge_step)
 
-        if get_rank() == 0:
+        if self.save_checkpoint and get_rank() == 0:
             if not dir_is_empty(output_path):
                 clear_directory(output_path)
             if not is_url(output_path):
@@ -281,14 +289,15 @@ class ModelMergeCallback(Callback):
         barrier()
 
         try:
-            save_state_dict(
-                join_path(output_path, "model_and_optim"),
-                self.trainer.train_module.state_dict_to_save(optim=False),
-                process_group=self.trainer.checkpointer.process_group,
-            )
+            if self.save_checkpoint:
+                save_state_dict(
+                    join_path(output_path, "model_and_optim"),
+                    self.trainer.train_module.state_dict_to_save(optim=False),
+                    process_group=self.trainer.checkpointer.process_group,
+                )
 
-            barrier()
-            log.info(f"Merged checkpoint saved to: {output_path}")
+                barrier()
+                log.info(f"Merged checkpoint saved to: {output_path}")
 
             self._evaluate_merged()
         finally:
