@@ -70,6 +70,13 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
         if group.get(self.initial_lr_field) is None:
             group[self.initial_lr_field] = group[self.lr_field]
 
+        # A group pinned at zero LR by config (e.g. frozen MoE routers) has no schedule: the
+        # warmup / decay helpers assert a strictly positive initial LR.
+        initial_lr = group[self.initial_lr_field]
+        if not isinstance(initial_lr, torch.Tensor) and float(initial_lr) == 0.0:
+            group[self.lr_field] = 0.0
+            return 0.0
+
         # Set new LR.
         if self.units == SchedulerUnits.steps:
             if trainer.max_steps is None:
