@@ -18,6 +18,7 @@ from olmo_core.optim import (
     SequentialScheduler,
 )
 from olmo_core.optim.scheduler import (
+    WSD,
     SchedulerUnits,
     ComposableScheduler,
     ComposableSchedulerStage,
