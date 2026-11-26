@@ -117,3 +117,19 @@ def test_assert_optimizer_lrs_nonzero():
     optimizer.param_groups[0]["lr"] = 0.0
     with pytest.raises(OLMoConfigurationError, match="pre-decay checkpoint"):
         assert_optimizer_lrs_nonzero(optimizer)
+
+
+
+def test_assert_optimizer_lrs_nonzero_skips_group_pinned_at_zero():
+    model = torch.nn.Linear(2, 2)
+    pinned = torch.nn.Linear(2, 2)
+    optimizer = torch.optim.AdamW(
+        [
+            {"params": model.parameters(), "lr": 1e-3, "initial_lr": 1e-3},
+            {"params": pinned.parameters(), "lr": 0.0, "initial_lr": 0.0},
+        ]
+    )
+    assert_optimizer_lrs_nonzero(optimizer)  # the zero-LR group is pinned by config, not decayed
+    optimizer.param_groups[0]["lr"] = 0.0  # a decayed group still trips the check
+    with pytest.raises(OLMoConfigurationError):
+        assert_optimizer_lrs_nonzero(optimizer)

@@ -16,6 +16,7 @@ from olmo_core.data.utils import get_labels, split_batch
 from olmo_core.distributed.utils import get_local_tensor, get_world_size
 from olmo_core.exceptions import OLMoConfigurationError
 from olmo_core.nn.functional.cross_entropy_loss import cross_entropy_loss
+from olmo_core.optim.config import INITIAL_LR_FIELD
 from olmo_core.utils import move_to_device
 
 from ..common import MetricMergeStrategy, ReduceType, get_inputs_for_loss
@@ -28,9 +29,18 @@ def assert_optimizer_lrs_nonzero(optim: Optimizer) -> None:
     """
     Reject an optimizer checkpoint whose current LR has reached zero after decay.
 
+    A group whose *configured* LR (its ``initial_lr``) is zero is pinned on purpose, e.g. an
+    ablation that holds the MoE routers fixed, and is skipped: the check is for a decayed
+    checkpoint, which still carries its non-zero initial LR.
+
     :raises OLMoConfigurationError: If any parameter group has a zero or missing LR.
     """
     for group_idx, group in enumerate(optim.param_groups):
+        initial_lr = group.get(INITIAL_LR_FIELD)
+        if isinstance(initial_lr, torch.Tensor):
+            initial_lr = initial_lr.detach().item() if initial_lr.numel() == 1 else None
+        if initial_lr is not None and float(initial_lr) == 0.0:
+            continue
         lr = group.get("lr")
         if isinstance(lr, torch.Tensor):
             if lr.numel() != 1:
