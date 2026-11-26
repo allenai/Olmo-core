@@ -29,3 +29,8 @@ formats: A whole row, B after gold drop (gold + r ~ U(0.05, 0.5) of distractors)
 `OnlineTokenRouter.mid_compact` at blocks 7 / 16, fitted state from the checkpoint's trainer state). Checkpoints are
 LoRA-merged bf16 copies staged weka -> S3 by `stage_ckpts.sh` / `launch_stage.py` (`merge_lora_ckpt.py`); job
 `run_tokgrad.sbatch` (sneetches, jsteinhardt, 1 GPU); `analyze_tokgrad.py` -> summary JSON. Results: sneetches `/data/prasann/tokgrad/`.
+Result (job 5243947, 13 min on 1 H200; summary `golddrop/data/summary.json`, tables `golddrop/data/tables.md`, plot
+`golddrop/tokgrad_golddrop.png`): in every format the gradient mass is far more concentrated than the method's FLOP
+cut (C/A FLOPs 9.4% at 16k, 6.3% at 64k vs 90% of body mass on 0.05-0.3% of the original body tokens in C), yet gold drop
+keeps only 53-82% of the whole-row body mass and the router keeps 71-81% of the post-drop mass where an oracle with
+the same token count keeps >98%. gdd256 final rows are saturated (answer CE 4e-6 at 16k, 2e-5 at 64k).

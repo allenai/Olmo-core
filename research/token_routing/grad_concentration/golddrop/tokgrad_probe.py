@@ -266,7 +266,7 @@ def main():
             MA, ce, _, _ = run(ids, lm, False)
             sA = MA.sum(0)
             rec.update(ceA=ce, flopsA=flops_row(model, T))
-            store["A"] = MA.astype(np.float16)
+            store["A"] = MA.astype(np.float32)
             for d in range(a.draws):
                 kp, r = gold_drop(ids, row["gold"], rng)
                 dr = dict(r=r, L=len(kp))
@@ -274,12 +274,12 @@ def main():
                 dr.update(ceB=ceB, flopsB=flops_row(model, len(kp)))
                 MBo = np.zeros((MB.shape[0], T), np.float32)
                 MBo[:, kp] = MB
-                store[f"B{d}"] = MBo.astype(np.float16)
+                store[f"B{d}"] = MBo.astype(np.float32)
                 if "C" in fmts:
                     MC, ceC, nlost, lens = run(ids[kp], lm[kp], True)
                     MCo = np.zeros((MC.shape[0], T), np.float32)
                     MCo[:, kp] = MC
-                    store[f"C{d}"] = MCo.astype(np.float16)
+                    store[f"C{d}"] = MCo.astype(np.float32)
                     # router keep masks (original frame) at blocks 7 and 16: tokens with any energy there
                     k7 = np.zeros(T, bool)
                     k16 = np.zeros(T, bool)

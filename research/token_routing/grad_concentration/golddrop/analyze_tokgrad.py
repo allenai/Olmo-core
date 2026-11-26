@@ -37,7 +37,8 @@ def analyze(d):
 
     for rec in meta["rows"]:
         z = np.load(f"{d}/{rec['set']}_r{rec['row']:03d}.npz")
-        body, gold = z["body"], z["gold_tok"]
+        body = z["body"]
+        gold = z["gold_tok"] & body  # gold documents' body tokens (markers excluded)
         A = z["A"].astype(np.float64)
         sA = A.sum(0)
         nb = int(body.sum())
@@ -48,6 +49,7 @@ def analyze(d):
             put(f"A|all|n{q}", v)
         put("A|body_share", sA[body].sum() / sA.sum())
         put("A|gold_share", sA[gold].sum() / sA.sum())
+        put("A|gold_share_of_body", sA[gold].sum() / sA[body].sum())
         put("A|gold_tok_share_of_body", gold.sum() / nb)
         for b in range(A.shape[0]):
             for q, v in zip(FR, n_for(A[b][body])):
