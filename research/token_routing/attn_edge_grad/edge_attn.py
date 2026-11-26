@@ -101,38 +101,63 @@ class EdgeStats:
 
     QTY = ("logit", "value", "attn")
 
+    def _bounds(self, dev):
+        if not hasattr(self, "_st"):
+            T = self.seg.numel()
+            st = torch.zeros(self.nseg, dtype=torch.long, device=dev)
+            en = torch.zeros(self.nseg, dtype=torch.long, device=dev)
+            pos = torch.arange(T, device=dev)
+            st.scatter_reduce_(0, self.seg, pos, reduce="amin", include_self=False)
+            en.scatter_reduce_(0, self.seg, pos + 1, reduce="amax", include_self=False)
+            self._st, self._en = st, en
+        return self._st, self._en
+
     def add(self, layer: int, i0: int, i1: int, mats: Dict[str, torch.Tensor], causal: torch.Tensor,
-            dbin: torch.Tensor) -> None:
+            dbin=None) -> None:
+        """Key-side sums by one fp64 cumsum over keys per quantity: segment blocks = differences of the cumsum at
+        segment bounds, distance bins = differences at i - 2^b + 1 (segments are contiguous)."""
         H = next(iter(mats.values())).shape[0]
         dev = causal.device
-        sq, sk = self.seg[i0:i1], self.seg[:i1]
+        cq = i1 - i0
+        sq = self.seg[i0:i1]
+        st, en = self._bounds(dev)
+        kst, ken = st.clamp(max=i1), en.clamp(max=i1)  # (nseg,) into the padded cumsum
+        qi = torch.arange(i0, i1, device=dev)[:, None]
+        b = torch.arange(NDIST, device=dev)[None, :]
+        hi = qi - (2 ** b) + 1  # last key (inclusive) of bin b
+        lo = qi - (2 ** (b + 1)) + 2  # first key of bin b
+        lo = torch.where(b == NDIST - 1, torch.zeros_like(lo), lo)
+        hi_i = (hi + 1).clamp(0, i1)
+        lo_i = lo.clamp(0, i1)
+        lo_i = torch.minimum(lo_i, hi_i)
         if layer not in self.blocks:
             shape = (H, self.nseg, self.nseg) if self.per_head else (self.nseg, self.nseg)
             self.blocks[layer] = {q: torch.zeros(shape, device=dev, dtype=torch.float64) for q in self.QTY}
-            self.dist[layer] = {q: torch.zeros(H * NDIST, device=dev, dtype=torch.float64) for q in self.QTY}
+            self.dist[layer] = {q: torch.zeros(H, NDIST, device=dev, dtype=torch.float64) for q in self.QTY}
             if self.raw_hist:
                 nb = LOG_BINS.numel() + 1
                 self.hist[layer] = {q: torch.zeros(2, nb, device=dev, dtype=torch.float64) for q in self.QTY}
         if self.dist_cnt is None:
             self.dist_cnt = torch.zeros(NDIST, device=dev, dtype=torch.float64)
         if layer == min(self.blocks):
-            self.dist_cnt += torch.bincount(dbin[causal], minlength=NDIST).double()
-        hoff = (torch.arange(H, device=dev) * NDIST)[:, None, None]
+            self.dist_cnt += (hi_i - lo_i).sum(0).double()
         for q, X in mats.items():  # X: (H, Cq, i1) fp32, zero off the causal part
+            Cp = torch.nn.functional.pad(torch.cumsum(X, -1, dtype=torch.float64), (1, 0))  # (H, Cq, i1 + 1)
+            Y = Cp[:, :, ken] - Cp[:, :, kst]  # (H, Cq, nseg)
             if self.per_head:
-                Y = torch.zeros(H, i1 - i0, self.nseg, device=dev, dtype=torch.float32).index_add_(2, sk, X)
-                self.blocks[layer][q].index_add_(1, sq, Y.double())
+                self.blocks[layer][q].index_add_(1, sq, Y)
             else:
-                Y = torch.zeros(i1 - i0, self.nseg, device=dev, dtype=torch.float32).index_add_(1, sk, X.sum(0))
-                self.blocks[layer][q].index_add_(0, sq, Y.double())
-            idx = (dbin[None] + hoff).expand(H, -1, -1)[:, causal].flatten()
-            self.dist[layer][q] += torch.bincount(idx, weights=X[:, causal].flatten().double(), minlength=H * NDIST)
+                self.blocks[layer][q].index_add_(0, sq, Y.sum(0))
+            idx_hi = hi_i[None].expand(H, -1, -1)
+            idx_lo = lo_i[None].expand(H, -1, -1)
+            self.dist[layer][q] += (Cp.gather(2, idx_hi) - Cp.gather(2, idx_lo)).sum(1)
+            del Cp, Y
             if self.raw_hist:
                 v = X[:, causal].flatten()
-                b = torch.bucketize(torch.log10(v.clamp_min(1e-30)), LOG_BINS.to(dev))
+                bb = torch.bucketize(torch.log10(v.clamp_min(1e-30)), LOG_BINS.to(dev))
                 h = self.hist[layer][q]
-                h[0] += torch.bincount(b, minlength=h.shape[1]).double()
-                h[1] += torch.bincount(b, weights=v.double(), minlength=h.shape[1])
+                h[0] += torch.bincount(bb, minlength=h.shape[1]).double()
+                h[1] += torch.bincount(bb, weights=v.double(), minlength=h.shape[1])
 
 
 # ------------------------------------------------------------------------------------------------ state
@@ -153,13 +178,6 @@ class EdgeState:
 
 
 STATE = EdgeState()
-
-
-def _dist_bins(i0: int, i1: int, dev) -> torch.Tensor:
-    qi = torch.arange(i0, i1, device=dev)
-    kj = torch.arange(i1, device=dev)
-    d = (qi[:, None] - kj[None, :]).clamp_min(0)
-    return torch.floor(torch.log2(d.double() + 1.0)).long().clamp_max(NDIST - 1)
 
 
 class EdgeAttnFn(torch.autograd.Function):
@@ -235,7 +253,7 @@ class EdgeAttnFn(torch.autograd.Function):
             if stats is not None:
                 mats = {"logit": ds.abs().view(H, cq, i1), "value": (p * u.abs()).view(H, cq, i1),
                         "attn": p.view(H, cq, i1)}
-                stats.add(layer, i0, i1, mats, causal, _dist_bins(i0, i1, dev))
+                stats.add(layer, i0, i1, mats, causal)
                 del mats
             del u
             if bwd_pat is not None:

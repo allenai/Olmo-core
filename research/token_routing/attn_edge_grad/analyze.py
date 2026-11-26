@@ -138,7 +138,7 @@ def q2_tables(recs, cdir):
     # batch cosines from sketches
     sk_sum = {}
     for f in glob.glob(os.path.join(cdir, "row_*.pt")):
-        s = torch.load(f, map_location="cpu")["sketch"]
+        s = torch.load(f, map_location="cpu", weights_only=False)["sketch"]
         for k, v in s.items():
             sk_sum[k] = sk_sum.get(k, 0) + v.double()
     out = {}

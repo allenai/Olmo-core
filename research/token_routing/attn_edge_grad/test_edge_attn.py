@@ -91,11 +91,13 @@ def test_edge_quantities_match_autograd():
         assert torch.allclose(got, ref_blocks, rtol=1e-4, atol=1e-6), (name, (got - ref_blocks).abs().max())
         i = torch.arange(T, device=DEV)
         d = (i[:, None] - i[None, :]).clamp_min(0)
-        b = torch.floor(torch.log2(d.double() + 1)).long().clamp_max(E.NDIST - 1)
+        b = torch.floor(torch.log2(d.double() + 1) + 1e-9).long().clamp_max(E.NDIST - 1)  # exact at powers of 2
         causal = d.new_ones(T, T, dtype=torch.bool).tril()
         ref_d = torch.stack([torch.bincount(b[causal], weights=X[h][causal].double(), minlength=E.NDIST)
                              for h in range(H)]).flatten()
-        assert torch.allclose(stats.dist[3][name], ref_d, rtol=1e-4, atol=1e-6), name
+        assert torch.allclose(stats.dist[3][name].flatten(), ref_d, rtol=1e-4, atol=1e-6), name
+        if name == 'attn':
+            assert torch.equal(stats.dist_cnt, torch.bincount(b[causal], minlength=E.NDIST).double())
         tot = float(X.double().tril().sum())
         assert abs(float(stats.hist[3][name][1].sum()) - tot) < 1e-4 * max(1.0, tot), name
         assert int(stats.hist[3][name][0].sum()) == H * T * (T + 1) // 2

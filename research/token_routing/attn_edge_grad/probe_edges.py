@@ -346,7 +346,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--per-head-max-seg", type=int, default=1500, help="per-head block matrices when nseg <= this")
-    ap.add_argument("--raw-hist-max-T", type=int, default=70000)
+    ap.add_argument("--raw-hist-max-T", type=int, default=20000)
     ap.add_argument("--save-blocks-rows", type=int, default=2)
     ap.add_argument("--chunk-elems", type=int, default=2 ** 27)
     ap.add_argument("--selftest", action="store_true")
