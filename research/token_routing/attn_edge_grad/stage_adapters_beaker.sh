@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stage the trainable tensors (LoRA adapters + LM head + any key missing from the base) of the long-context
 # contradiction checkpoints from weka to S3, so the edge-gradient analysis can run on Berkeley slurm.
-#   ARMS="gdd256 dense256b" (default); for each arm: the earliest kept stepN and the last one.
+#   ARMS="gdd256 dense256b" (default); for each arm: the earliest kept stepN and the last one (or STEPS="1450 ...").
 # -> s3://ai2-llm/checkpoints/prasanns/_transfer/attn_edge_grad/<arm>_step<N>.pt  ({key: tensor}, plus "__meta__")
 # Then on the node: AWS_PROFILE=S3 aws s3 sync s3://ai2-llm/checkpoints/prasanns/_transfer/attn_edge_grad/ /data/prasann/attn_edge_grad/ckpt/
 set -uo pipefail
@@ -17,7 +17,8 @@ mkdir -p /tmp/xfer
 for ARM in $ARMS; do
   ls -d $W/early_loss_proxy/runs_lc/$ARM/step* 2>/dev/null | sed 's/.*step//' | sort -n > /tmp/steps_$ARM
   echo "--- $ARM steps: $(tr '\n' ' ' < /tmp/steps_$ARM)"
-  for ST in $(head -1 /tmp/steps_$ARM) $(tail -1 /tmp/steps_$ARM); do
+  SEL="${STEPS:-$(head -1 /tmp/steps_$ARM) $(tail -1 /tmp/steps_$ARM)}"
+  for ST in $SEL; do
     CK=$W/early_loss_proxy/runs_lc/$ARM/step$ST/model_and_optim
     OUT=/tmp/xfer/${ARM}_step$ST.pt
     [ -f $OUT ] && continue
@@ -47,4 +48,4 @@ gantry run --name "attnedge-stage-$(date +%m%d%H%M)" -w ai2/flex2 -b ai2/oe-othe
   --beaker-image tylerr/olmo-core-tch291cu128-2025-11-25 \
   --weka oe-training-default:/weka/oe-training-default \
   --env-secret AWS_CREDS=PRASANNS_AWS_CREDENTIALS --env-secret AWS_CFG=PRASANNS_AWS_CONFIG \
-  --env ARMS="$ARMS" --allow-dirty --timeout 0 --yes -- bash -c "$WORK" 2>&1 | grep -E "beaker.org/ex|rror|xperiment" | head -5
+  --env ARMS="$ARMS" --env STEPS="${STEPS:-}" --allow-dirty --timeout 0 --yes -- bash -c "$WORK" 2>&1 | grep -E "beaker.org/ex|rror|xperiment" | head -5

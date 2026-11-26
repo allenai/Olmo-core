@@ -194,7 +194,7 @@ class EdgeAttnFn(torch.autograd.Function):
         ctx.layer, ctx.scale, ctx.state = layer, scale, state
         ctx.mode, ctx.pat = mode, pat  # forward-time pattern (mask)
         state.calls += 1
-        return out.view(H, T, D).permute(1, 0, 2).unsqueeze(0).to(q.dtype)
+        return out.view(H, T, D).permute(1, 0, 2).unsqueeze(0).to(q.dtype).contiguous()
 
     @staticmethod
     def backward(ctx, g):
@@ -251,9 +251,9 @@ class EdgeAttnFn(torch.autograd.Function):
             dv[:, :i1] += torch.matmul(pk.view(Hk, rep * cq, i1).transpose(1, 2), gc)
             del ds, ds2, p, pk
         state.bwd_calls += 1
-        dq = dq.view(H, T, D).permute(1, 0, 2).unsqueeze(0).to(q.dtype)
-        dk = dk.permute(1, 0, 2).unsqueeze(0).to(k.dtype)
-        dv = dv.permute(1, 0, 2).unsqueeze(0).to(v.dtype)
+        dq = dq.view(H, T, D).permute(1, 0, 2).unsqueeze(0).to(q.dtype).contiguous()
+        dk = dk.permute(1, 0, 2).unsqueeze(0).to(k.dtype).contiguous()
+        dv = dv.permute(1, 0, 2).unsqueeze(0).to(v.dtype).contiguous()
         return dq, dk, dv, None, None, None
 
 

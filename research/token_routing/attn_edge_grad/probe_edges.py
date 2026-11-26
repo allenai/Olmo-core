@@ -60,6 +60,8 @@ def build_model(base: str, adapter: str, seed: int):
     from olmo_core.nn.lm_head import LMLossImplementation
     from olmo_core.nn.transformer import TransformerConfig
 
+    os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
+    os.environ.setdefault("MASTER_PORT", str(20000 + os.getpid() % 20000))
     if not dist.is_initialized():
         dist.init_process_group("gloo", rank=0, world_size=1)
     cfg = TransformerConfig.qwen3_5_4B(vocab_size=248320, attn_backend=AttentionBackendName("flash_2"))
