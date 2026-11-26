@@ -1,5 +1,6 @@
 import math
 import warnings
+from types import SimpleNamespace
 from typing import List, Tuple, Type
 
 import pytest
@@ -27,10 +28,6 @@ from olmo_core.optim.scheduler import (
 
 
 def test_set_lr_group_pinned_at_zero_has_no_schedule():
-    from types import SimpleNamespace
-
-    from olmo_core.optim.scheduler import WSD
-
     scheduler = WSD(units=SchedulerUnits.steps, warmup=10, decay_fraction=0.1)
     trainer = SimpleNamespace(max_steps=100, global_step=0, global_train_tokens_seen=0)
     pinned = {"params": [], "lr": 0.0, "initial_lr": 0.0}
