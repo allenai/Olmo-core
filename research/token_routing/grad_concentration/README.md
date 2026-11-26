@@ -28,4 +28,4 @@ e_t = |delta_t|^2 |x_t|^2, energy only, no sketch) on held-out contradiction row
 formats: A whole row, B after gold drop (gold + r ~ U(0.05, 0.5) of distractors), C = B + the recipe router (real
 `OnlineTokenRouter.mid_compact` at blocks 7 / 16, fitted state from the checkpoint's trainer state). Checkpoints are
 LoRA-merged bf16 copies staged weka -> S3 by `stage_ckpts.sh` / `launch_stage.py` (`merge_lora_ckpt.py`); job
-`run_tokgrad.sbatch` (horton, 1 GPU); `analyze_tokgrad.py` -> summary JSON. Results: horton `/data/prasann/tokgrad/`.
+`run_tokgrad.sbatch` (sneetches, jsteinhardt, 1 GPU); `analyze_tokgrad.py` -> summary JSON. Results: sneetches `/data/prasann/tokgrad/`.
