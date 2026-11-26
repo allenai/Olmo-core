@@ -21,3 +21,11 @@ here (gitignored) for `analyze.py`. Writeup: `records/grad-concentration.md`.
 Gradient maps (2026-11-04): `gradmap.py` (per-token x per-block weight-grad energy and ||dL/dh||, dense + the recipe's
 routed pass) → `gradmap_plot.py` (maps, zooms, routed pairs, summaries); `run_gradmap.sbatch`, `build_2k_rows.sbatch`
 (fresh 2k-rung rows), `run_gradmap_plot.sbatch` (all node-local on mooney). Figures + `findings.md` in `gradmaps/`.
+
+Gold-drop format (2026-11-25, branch `claude/tokgrad-golddrop`, sanity check, 1 GPU-hour cap): `golddrop/`.
+`tokgrad_probe.py` reuses `length_sweep/sweep_probe.py`'s model build and energy tap (blocks 7-31 nn.Linear,
+e_t = |delta_t|^2 |x_t|^2, energy only, no sketch) on held-out contradiction rows (`prep_rows.py`: lc16k, kl64k) in three
+formats: A whole row, B after gold drop (gold + r ~ U(0.05, 0.5) of distractors), C = B + the recipe router (real
+`OnlineTokenRouter.mid_compact` at blocks 7 / 16, fitted state from the checkpoint's trainer state). Checkpoints are
+LoRA-merged bf16 copies staged weka -> S3 by `stage_ckpts.sh` / `launch_stage.py` (`merge_lora_ckpt.py`); job
+`run_tokgrad.sbatch` (horton, 1 GPU); `analyze_tokgrad.py` -> summary JSON. Results: horton `/data/prasann/tokgrad/`.

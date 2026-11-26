@@ -22,12 +22,11 @@ run() {  # label ckpt sets n formats
   $PY $P --ckpt $D/ckpts/$1 --label $1 --rows $D/rows.npz --sets $2 --n $3 --formats $4 --draws 2 \
     --router-state $D/ckpts/$1/train_rank0.pt --out $D/results/$1-$2 2>&1 | grep -v Warning
 }
-for L in ${LABELS:-gdd256-s11496 gdd256-s5800 dense256b-s615}; do
+# SPECS: label:set:n in priority order (unsaturated conditions first; 16k late-stage rows are saturated, CE ~1e-5)
+for S in ${SPECS:-gdd256-s1450:lc16k:16 gdd256-s5800:kl64k:8 gdd256-s11496:kl64k:8 dense256b-s615:kl64k:8 gdd256-s5800:lc16k:8 gdd256-s11496:lc16k:8 dense256b-s615:lc16k:8}; do
+  IFS=: read -r L SET N <<< "$S"
   case $L in dense*) F=A,B;; *) F=A,B,C;; esac
-  run $L lc16k ${N16:-16} $F
-done
-for L in ${LABELS:-gdd256-s11496 gdd256-s5800 dense256b-s615}; do
-  case $L in dense*) F=A,B;; *) F=A,B,C;; esac
-  run $L kl64k ${N64:-8} $F
+  [ -f $D/results/$L-$SET/rows.json ] && continue
+  run $L $SET $N $F
 done
 echo ALL_DONE
