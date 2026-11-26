@@ -27,3 +27,7 @@ Ran one condition: `c16k_gddF` = 16 rows of `heldout_lc.npz` lc16k (contradictio
 staged at `/data/prasann/attn_edge_grad/ckpt/` on cubbins) or the base with a fresh LoRA is the informative next run.
 The distance bins of this run used an earlier binning that misplaced pairs at exact powers of 2 (fixed afterwards).
 No record was written. Compute: ~0.7 GPU-h on cubbins H200s.
+
+Follow-up (same day): the same 16 rows and patterns on gdd256's step-1450 adapter (~1,821 PF; answer CE 0.020 +- 0.007
+per token, not saturated), condition `c16k_gddE`, 2 H200s for 15 min (~0.5 GPU-h). `data/` now holds both conditions
+(`analyze.py --conds c16k_gddF,c16k_gddE`). `c16k_gddE` used the corrected distance bins.
