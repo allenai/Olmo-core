@@ -528,8 +528,9 @@ class SourceMixtureDatasetConfig(Config):
         Count the number of tokens for a set of source files in parallel.
 
         Args:
-            source_config: The source configuration.
-            dtype: The data type of the source tokens.
+            paths: The source files to count.
+            source: Name of the source, used only in the progress description.
+            npdtype: The numpy unsigned dtype to accumulate token counts in.
         """
 
         with ThreadPoolExecutor(max_workers=self.processes) as executor:
