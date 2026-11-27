@@ -145,6 +145,62 @@ def test_async_checkpointer_with_remote_gcs_dir(gcs_checkpoint_dir, tmp_path, ti
     )
 
 
+@pytest.mark.parametrize(
+    "components", [("train",), ("model_and_optim",), ("train", "model_and_optim")]
+)
+def test_prepare_dir_recovers_incomplete_checkpoint(tmp_path, components):
+    dir = tmp_path / Checkpointer.checkpoint_dirname(4)
+    for component in components:
+        component_dir = dir / component
+        component_dir.mkdir(parents=True)
+        (component_dir / "rank0.pt").write_bytes(b"partial")
+
+    checkpointer = Checkpointer(work_dir=tmp_path / "work_dir")
+    assert checkpointer._prepare_dir(dir) == normalize_path(dir)
+    assert dir_is_empty(dir)
+
+
+@pytest.mark.parametrize("unexpected_name", ["notes.txt", "unrelated"])
+def test_prepare_dir_preserves_unrecognized_checkpoint_contents(tmp_path, unexpected_name):
+    dir = tmp_path / Checkpointer.checkpoint_dirname(4)
+    (dir / "train").mkdir(parents=True)
+    (dir / "train" / "rank0.pt").write_bytes(b"partial")
+    unexpected_path = dir / unexpected_name
+    if unexpected_name == "unrelated":
+        unexpected_path.mkdir()
+    else:
+        unexpected_path.write_bytes(b"keep")
+
+    checkpointer = Checkpointer(work_dir=tmp_path / "work_dir")
+    with pytest.raises(FileExistsError):
+        checkpointer._prepare_dir(dir)
+    assert unexpected_path.exists()
+
+
+def test_prepare_dir_preserves_complete_checkpoint(tmp_path):
+    dir = tmp_path / Checkpointer.checkpoint_dirname(4)
+    (dir / "train").mkdir(parents=True)
+    (dir / "train" / "rank0.pt").write_bytes(b"train state")
+    (dir / "model_and_optim").mkdir()
+    (dir / "model_and_optim" / ".metadata").write_bytes(b"model metadata")
+    (dir / Checkpointer.METADATA_FNAME).write_text("{}")
+
+    checkpointer = Checkpointer(work_dir=tmp_path / "work_dir")
+    with pytest.raises(FileExistsError):
+        checkpointer._prepare_dir(dir)
+    assert checkpointer.dir_is_checkpoint(dir)
+
+
+def test_prepare_dir_overwrite_still_clears_unrecognized_contents(tmp_path):
+    dir = tmp_path / Checkpointer.checkpoint_dirname(4)
+    dir.mkdir()
+    (dir / "notes.txt").write_bytes(b"old")
+
+    checkpointer = Checkpointer(work_dir=tmp_path / "work_dir", save_overwrite=True)
+    checkpointer._prepare_dir(dir)
+    assert dir_is_empty(dir)
+
+
 class _RecordingDirectTrainModule:
     """Minimal stand-in exposing the direct-checkpoint API used by :class:`Checkpointer`."""
 

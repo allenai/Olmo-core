@@ -354,6 +354,25 @@ class Checkpointer:
         return True
 
     @classmethod
+    def _is_incomplete_checkpoint(cls, dir: PathOrStr) -> bool:
+        """
+        Check whether a local directory contains only components from an interrupted save.
+
+        Remote directories are left untouched because their object listings do not provide the
+        same directory-only guarantee as a local filesystem.
+        """
+        if is_url(dir) or cls.dir_is_checkpoint(dir):
+            return False
+        try:
+            return all(
+                Path(path).is_dir() and Path(path).name in {"train", "model_and_optim"}
+                for path in list_directory(dir)
+            )
+        except FileNotFoundError:
+            # Another local rank may have cleared the incomplete directory already.
+            return True
+
+    @classmethod
     def find_checkpoints(
         cls, dir: PathOrStr, ephemeral: Optional[bool] = None
     ) -> Generator[Tuple[int, str], None, None]:
@@ -442,16 +461,19 @@ class Checkpointer:
             if get_fs_local_rank() == 0:
                 clear_directory(dir)
         elif not dir_is_empty(dir):
-            raise FileExistsError(dir)
+            if not self._is_incomplete_checkpoint(dir):
+                raise FileExistsError(dir)
+            if get_fs_local_rank() == 0:
+                clear_directory(dir)
 
         # NOTE: We need a barrier here in both cases.
         # 1. If 'self.save_overwrite' then we clear the directory, and anytime we clear a directory in
         # preparation to use it we should have a barrier right after, otherwise one rank might get
         # ahead and write something to the directory prematurely, which then gets removed by the call
         # to `clear_directory()`.
-        # 2. And otherwise we are checking if the directory is empty and raising an error if it's not,
-        # so we need to make sure all ranks are synchronized on that check before they can proceed
-        # to write to the directory.
+        # 2. Otherwise we validate the existing directory before writing, including clearing an
+        # incomplete checkpoint left by an interrupted save, so all ranks must be synchronized
+        # before any of them proceeds.
         barrier()
 
         if ensure_exists and not is_url(dir):
