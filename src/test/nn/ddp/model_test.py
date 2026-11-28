@@ -1,10 +1,18 @@
 """Tests for ``OLMoDDPModel`` construction and FLOP accounting."""
 
 import pytest
+import torch
+from torch.distributed.device_mesh import init_device_mesh
 
 from olmo_core.config import DType
 from olmo_core.exceptions import OLMoConfigurationError
-from olmo_core.nn.attention import AttentionBackendName, AttentionConfig, AttentionType
+from olmo_core.nn.attention import (
+    AttentionBackendName,
+    AttentionConfig,
+    AttentionType,
+    KimiDeltaAttention,
+    KimiDeltaAttentionConfig,
+)
 from olmo_core.nn.ddp.block import OLMoDDPTransformerBlockConfig
 from olmo_core.nn.layer_norm import LayerNormConfig, LayerNormType
 from olmo_core.nn.lm_head import LMHeadConfig
@@ -16,6 +24,8 @@ from olmo_core.nn.transformer import (
     TransformerBlockType,
     TransformerType,
 )
+from olmo_core.testing.distributed import run_distributed_test
+from olmo_core.testing.utils import requires_fla
 
 
 def _build_model_config(*, d_model: int = 64, n_layers: int = 2) -> OLMoDDPModelConfig:
@@ -56,6 +66,34 @@ def test_moe_v2_model_builds():
     assert len(model.blocks) == 2
     assert any(p.numel() > 0 for p in model.parameters())
     assert model.num_flops_per_token(seq_len=512) > 0
+
+
+def _run_kda_decay_params_stay_fp32():
+    config = _build_model_config(n_layers=1)
+    assert isinstance(config.block, OLMoDDPTransformerBlockConfig)
+    config.block.sequence_mixer = KimiDeltaAttentionConfig(n_heads=4, dtype=DType.float32)
+    model = config.build(init_device="meta")
+    model.init_weights(device=torch.device("cpu"))
+    attention = model.blocks["0"].attention
+    assert isinstance(attention, KimiDeltaAttention)
+    assert attention.A_log.dtype == attention.dt_bias.dtype == torch.float32
+    assert attention.w_q.weight.dtype == attention.q_conv1d.weight.dtype == torch.bfloat16
+
+    with torch.no_grad():
+        attention.A_log.fill_(1.234567)
+        attention.dt_bias.fill_(0.1234567)
+    expected = (attention.A_log.detach().clone(), attention.dt_bias.detach().clone())
+    mesh = init_device_mesh("cpu", (2,))
+    model.apply_dp(dp_mesh=mesh, ep_mesh=None)
+    for param, value in zip((attention.A_log, attention.dt_bias), expected):
+        torch.testing.assert_close(param, value, rtol=0, atol=0)
+
+
+@requires_fla
+def test_kda_decay_params_stay_fp32_during_materialization_and_dp():
+    run_distributed_test(
+        _run_kda_decay_params_stay_fp32, world_size=2, backend="gloo", start_method="spawn"
+    )
 
 
 def test_deepep_rejects_chunk_recompute():

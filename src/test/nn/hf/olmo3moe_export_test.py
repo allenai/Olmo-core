@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 import torch
+from safetensors.torch import load_file
 
 from olmo_core.config import DType
 from olmo_core.exceptions import OLMoConfigurationError
@@ -364,6 +365,35 @@ def test_export_accepts_explicit_default_attention_scale(builder):
         if hasattr(attention, "backend"):
             attention.backend.scale = attention.head_dim**-0.5
     assert get_hf_config(model).to_dict() == expected
+
+
+@requires_fla
+def test_bfloat16_export_preserves_kda_decay_parameters(tmp_path):
+    model = build_hybrid()
+    source = model.state_dict()
+    for layer in (0, 1):
+        for name in ("A_log", "dt_bias"):
+            key = f"blocks.{layer}.attention.{name}"
+            source[key] = torch.full_like(source[key], 1.001, dtype=torch.float32)
+            assert not torch.equal(source[key], source[key].bfloat16().float())
+
+    save_hf_model(tmp_path / "hf", source, model, dtype=DType.bfloat16)
+
+    exported = load_file(tmp_path / "hf" / "model.safetensors")
+    for layer in (0, 1):
+        for name in ("A_log", "dt_bias"):
+            torch.testing.assert_close(
+                exported[f"model.layers.{layer}.self_attn.{name}"],
+                source[f"blocks.{layer}.attention.{name}"],
+                rtol=0,
+                atol=0,
+            )
+    torch.testing.assert_close(
+        exported["model.layers.0.self_attn.q_proj.weight"],
+        source["blocks.0.attention.w_q.weight"].bfloat16(),
+        rtol=0,
+        atol=0,
+    )
 
 
 @requires_fla

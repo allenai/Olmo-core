@@ -28,6 +28,7 @@ from olmo_core.kernels import olmo_symm_mem
 from olmo_core.kernels import symm_mem_vdev2d as symm_mem_vdev2d_kernels
 from olmo_core.utils import mark_dynamic
 
+from ..attention.kda import KimiDeltaAttention
 from ..lm_head import LMOutputWithLoss
 from ..moe.v2.checkpointing import checkpoint_recompute_context_fn
 from ..moe.v2.ep_config import ExpertParallelPath
@@ -727,6 +728,25 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         self.ep_enabled = True
         return shared_pool_to_return
 
+    def _cast_to_fwd_bwd_precision(self) -> None:
+        """Cast the model for training while keeping KDA decay parameters in FP32."""
+        fp32_tensors = set()
+        for module in self.modules():
+            if isinstance(module, KimiDeltaAttention):
+                for param in (module.A_log, module.dt_bias):
+                    fp32_tensors.add(id(param))
+                    if param.grad is not None:
+                        fp32_tensors.add(id(param.grad))
+
+        def cast_tensor(tensor: torch.Tensor) -> torch.Tensor:
+            if id(tensor) in fp32_tensors:
+                return tensor.to(dtype=torch.float32)
+            if tensor.is_floating_point() or tensor.is_complex():
+                return tensor.to(dtype=self._training_dtype)
+            return tensor
+
+        self._apply(cast_tensor)
+
     def apply_dp(
         self,
         dp_mesh: DeviceMesh,
@@ -748,10 +768,7 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
             for n, p in m.named_parameters():
                 ep_sharded_params.add(p)
 
-        # TODO(dtype): broad bf16 casting is a current MoE V2 shortcut. Replace
-        # this with explicit dtype ownership so FP8 state, optimizer main params,
-        # and normal model params are not coupled to a blanket module cast.
-        self.to(self._training_dtype)
+        self._cast_to_fwd_bwd_precision()
         self.disable_mxfp8_expert_anchor_grads()
 
         dp_group = dense_process_group if dense_process_group is not None else dp_mesh.get_group()
@@ -882,9 +899,7 @@ class OLMoDDPModel(olmo_core.nn.transformer.Transformer):
         from olmo_core.nn.attention import Attention
 
         device = device or self.device
-        # TODO(dtype): materialization currently relies on the same broad bf16
-        # cast as apply_dp(); replace with an explicit precision policy.
-        self.to(self._training_dtype)
+        self._cast_to_fwd_bwd_precision()
         self.to_empty(device=device)
         for _, module in self.named_modules():
             if hasattr(module, "reset_parameters"):

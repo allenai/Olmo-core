@@ -39,44 +39,62 @@ def test_refresh_main_params_after_model_load():
     )
 
 
-def _run_aligned_flat_model_buffers():
-    mesh = init_device_mesh("cpu", (2,))
+def _run_aligned_flat_model_buffers(decay_dtype):
+    mesh = init_device_mesh("cpu", (1, 2), mesh_dim_names=("pp", "dp"))
     params = {
-        "gate": nn.Parameter(torch.arange(4, dtype=torch.bfloat16)),
+        "gate": nn.Parameter(torch.full((4,), 1.234567, dtype=decay_dtype)),
         "norm": nn.Parameter(torch.arange(544, dtype=torch.bfloat16)),
-        "scale": nn.Parameter(torch.arange(3, dtype=torch.bfloat16)),
+        "scale": nn.Parameter(torch.full((3,), 0.1234567, dtype=decay_dtype)),
         "projection": nn.Parameter(torch.arange(24, dtype=torch.bfloat16).reshape(4, 6)),
     }
     original = {name: param.detach().clone() for name, param in params.items()}
-    optim = object.__new__(OLMoDDPOptimizer)
-    optim._device = torch.device("cpu")
-    optim._dp_group = mesh.get_group()
-    optim.param_groups = [{"pg": "dp", "named_params": params}]
-    optim.states = {
-        f"{name}.main": distribute_tensor(
-            param.detach().float().reshape(-1),
-            mesh,
-            [Shard(0) if name in ("norm", "projection") else Replicate()],
+
+    def build_optimizer(params):
+        return OLMoDDPOptimizer(
+            [{"pg": "dp", "named_params": params}],
+            world_mesh={"dense": mesh, "moe": None},
+            device=torch.device("cpu"),
+            dp_group=mesh["dp"].get_group(),
+            do_not_shard_tensor_smaller_than=4,
+            lr=6e-6,
+            weight_decay=0.0,
         )
-        for name, param in params.items()
-    }
-    optim._init_flat_model_param_buffers()
+
+    optim = build_optimizer(params)
+    assert optim.states["gate.main"].placements == (Shard(0),)
+    assert optim.states["scale.main"].placements == (Replicate(),)
     for name, param in params.items():
         assert param.data_ptr() % 16 == 0, name
         torch.testing.assert_close(param, original[name], rtol=0, atol=0)
 
     # Padding in model storage must not change packed all-gather offsets or
     # the logical shapes/values used by optimizer state and checkpoints.
-    for main in optim.states.values():
-        main.to_local().add_(8)
-    optim._copy_main_params_to_flat_model_buffers()
+    for param in params.values():
+        param.grad = -torch.ones_like(param)
+    optim.step()
     for name, param in params.items():
-        torch.testing.assert_close(param, original[name] + 8, rtol=0, atol=0)
+        expected = (original[name].float() + 6e-6).to(param.dtype)
+        torch.testing.assert_close(param, expected, rtol=0, atol=torch.finfo(torch.float32).eps)
+        if param.dtype == torch.float32:
+            assert not torch.equal(param, original[name])
+
+    restored_params = {name: nn.Parameter(value.clone()) for name, value in original.items()}
+    restored = build_optimizer(restored_params)
+    restored.load_state_dict(optim.state_dict())
+    restored._copy_main_params_to_model_params()
+    for name, param in params.items():
+        torch.testing.assert_close(restored_params[name], param, rtol=0, atol=0)
+        assert restored.states[f"{name}.step"].to_local().item() == 1
 
 
-def test_flat_model_buffers_preserve_alignment_and_sharded_sync():
+@pytest.mark.parametrize("decay_dtype", [torch.bfloat16, torch.float32])
+def test_flat_model_buffers_preserve_alignment_and_sharded_sync(decay_dtype):
     run_distributed_test(
-        _run_aligned_flat_model_buffers, world_size=2, backend="gloo", start_method="spawn"
+        _run_aligned_flat_model_buffers,
+        func_args=(decay_dtype,),
+        world_size=2,
+        backend="gloo",
+        start_method="spawn",
     )
 
 

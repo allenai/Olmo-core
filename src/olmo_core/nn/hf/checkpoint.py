@@ -14,6 +14,7 @@ from olmo_core.config import DType
 from olmo_core.distributed.utils import barrier, get_fs_local_rank, get_full_tensor
 from olmo_core.doc_utils import beta_feature
 from olmo_core.io import clear_directory, copy_dir, file_exists, is_url
+from olmo_core.nn.attention import KimiDeltaAttention
 from olmo_core.nn.hf.config import (
     get_hf_config,
     get_hybrid_hf_config,
@@ -153,7 +154,8 @@ def save_hf_model(
 
     :param save_dir: Directory in which to save model.
     :param model_state_dict: The OLMo Core model state dict being saved in HF format.
-    :param dtype: The torch dtype that model weights should be saved as.
+    :param dtype: The torch dtype that model weights should be saved as. KDA decay parameters
+        are exported in FP32 when a dtype is requested.
     :param vocab_size: The size of the vocab, defaults to the number of embeddings in the OLMo Core model.
     :param process_group: The process group to use for distributed communication.
     :param work_dir: A local directory that can be used for holding temporary state. Required when
@@ -165,8 +167,16 @@ def save_hf_model(
 
     model_state_dict = {key: get_full_tensor(state) for key, state in model_state_dict.items()}
     if dtype is not None:
+        export_dtype = dtype.as_pt()
+        kda_decay_keys = {
+            f"blocks.{layer}.attention.{name}"
+            for layer, block in model.blocks.items()
+            if isinstance(block.attention, KimiDeltaAttention)
+            for name in ("A_log", "dt_bias")
+        }
         model_state_dict = {
-            key: state.to(dtype=dtype.as_pt()) for key, state in model_state_dict.items()
+            key: state.to(dtype=torch.float32 if key in kda_decay_keys else export_dtype)
+            for key, state in model_state_dict.items()
         }
 
     hf_state_dict: Dict[str, torch.Tensor] = convert_state_to_hf(hf_config, model_state_dict)
